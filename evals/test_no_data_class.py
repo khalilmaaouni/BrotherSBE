@@ -363,6 +363,8 @@ NOT_A_VERDICT = {
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
     ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
     ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities), not a verdict",
+    ("sbe_design.py", "_entity_bullets"): "returns (the entity set, whether a heading declared it), "
+                                          "not a verdict",
     ("sbe_intake.py", "read_answers"): "returns (answers read, answers refused), not a verdict",
     ("sbe_score.py", "_rel"): "returns a path",
     ("sbe_decide.py", "load_table"): "returns (parsed table, load error), not a verdict",
