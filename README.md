@@ -155,7 +155,7 @@ python3 tools/sbe_gate.py --strict .    # enforcing: exits nonzero on any FAIL
 
 ## Learn more
 
-The full rationale, the benchmark evidence behind each gate, and the operating record that motivated them are in [WHITEPAPER.md](WHITEPAPER.md). Start with [SKILL.md](SKILL.md) for the law itself and [SECURITY.md](SECURITY.md) for the data and network posture (no network calls, no analytics, no account, no server).
+The full rationale is the whitepaper, split into three documents in the shape of the sibling repo: [docs/DESIGN.md](docs/DESIGN.md) for the why and what (philosophy, doctrines, benchmarks), [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for the mechanical half (the chassis, the four gates, the file-by-file architecture), and [docs/SETUP.md](docs/SETUP.md) to install. Worked, copy-pasteable guides are in [docs/guides/](docs/guides/). Start with [SKILL.md](SKILL.md) for the law itself and [SECURITY.md](SECURITY.md) for the data and network posture (no network calls, no analytics, no account, no server).
 
 ## License
 
