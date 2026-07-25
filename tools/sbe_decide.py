@@ -87,10 +87,30 @@ def load_table(path, key):
     return tables[key], ""
 
 
+DEFAULT_TABLE_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "tables", "architecture.json")
+
+
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "tables", "architecture.json")
-    key = sys.argv[2] if len(sys.argv) > 2 else "shape"
+    # `sbe_decide.py architecture` is how SKILL.md L12's sentence reads, and the
+    # first argument was treated as a file path unconditionally, so that invocation
+    # printed "cannot read table file architecture: No such file or directory" and
+    # named no tables at all, under a law promising that asking for a table that
+    # does not exist names the tables that do. A first argument that is not a
+    # readable file is read as a table NAME against the shipped file, which is
+    # either the answer or a sentence listing what ships.
+    path, key = DEFAULT_TABLE_FILE, "shape"
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        looks_like_a_path = os.path.isfile(arg) or os.sep in arg or arg.endswith(".json")
+        if looks_like_a_path:
+            # Still a path when it is meant to be one, so a mistyped file name
+            # reports the file it could not read rather than being reported as an
+            # unknown table.
+            path = arg
+            key = sys.argv[2] if len(sys.argv) > 2 else "shape"
+        else:
+            key = arg
     table, err = load_table(path, key)
     if err:
         print("sbe_decide: %s" % err)

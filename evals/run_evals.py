@@ -1175,6 +1175,21 @@ def v4d(root):
                 "SELECT SUM(qty * price) FROM order_lines")
 
 
+@case("a-figure-listed-twice-is-counted-once", "gaterun", "1 figure(s)")
+def v4e(root):
+    # "2 figure(s) each ..." over one object listed twice: the count in the
+    # evidence line is what a reader takes as the amount of work checked.
+    fig = {"label": "gmv", "snapshot_id": "snap-1", "query": "SELECT SUM(a) FROM t",
+           "second_derivation": "SELECT SUM(b) FROM u",
+           "rerun": {"ran": True, "primary": 5, "secondary": 5}}
+    write(root, "numbers-manifest.json", {"figures": [fig, dict(fig)]})
+    out = subprocess.run([sys.executable, GATE, "numbers", root], capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("numbers"):
+            return " ".join(line.split("PASS")[-1].split()[:2]) if "PASS" in line else "not-a-pass"
+    return "no-line"
+
+
 @case("a-figure-with-no-label-is-caught", "numbers", "FAIL")
 def v4(root):
     write(root, "numbers-manifest.json", {"figures": [{
@@ -1470,6 +1485,18 @@ def v30d(root):
     out = subprocess.run([sys.executable, DESIGN, "--strict", "--strict-waivers", root],
                          capture_output=True, text=True, env=e)
     return "blocked" if out.returncode else "clear"
+
+
+@case("asking-for-a-table-family-by-name-names-the-tables-that-ship", "guard", "named")
+def v30g(root):
+    # L12 promises that asking for a table that does not exist names the tables
+    # that do. `sbe_decide.py architecture`, which is how the sentence reads,
+    # treated the argument as a file path and named no tables at all.
+    out = subprocess.run([sys.executable, os.path.join(_REPO, "tools", "sbe_decide.py"),
+                          "architecture"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    if out.returncode == 0:
+        return "exit 0 for a table family that has no table"
+    return "named" if "Tables that ship: shape" in out.stdout else out.stdout.strip()[:80]
 
 
 @case("the-meta-test-lint-sees-a-verdict-in-a-subpackage-and-in-a-lookup-table", "guard", "caught")
@@ -1857,6 +1884,81 @@ def y3(root):
           "## What we are doing\nPublish refund events to a queue and settle asynchronously.\n"
           "## What this costs us\nOne more moving part to operate, and an ordering guarantee.\n"
           "## When we would revisit this\nSub-second settlement becoming a requirement.\n")
+
+
+_ADR_REST = ("## Criteria\nSettlement latency, operational load, auditability.\n"
+             "## Decision\nPublish refund events to a queue and settle asynchronously.\n"
+             "## Consequences\nOne more moving part to operate.\n"
+             "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("an-adr-whose-alternatives-are-prose-paragraphs-passes", "adr", "PASS")
+def y3a(root):
+    # Three of the four ordinary ways to write this FAILed, with a message that
+    # named none of the accepted forms and described an empty heading that was not
+    # there. A gate that rejects correct work is argued with and then switched off.
+    write(root, "03-adr.md",
+          "# ADR\n## Rejected alternatives\n"
+          "We considered a synchronous call to the ledger. We rejected it because it ties "
+          "checkout latency to ledger availability.\n\n"
+          "We considered nightly batch reconciliation. It misses the one business day "
+          "requirement.\n" + _ADR_REST)
+
+
+@case("an-adr-whose-alternatives-are-a-numbered-list-passes", "adr", "PASS")
+def y3b(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Rejected alternatives\n"
+          "1. Synchronous call to the ledger: ties checkout latency to ledger availability.\n"
+          "2. Nightly batch reconciliation: misses the one business day requirement.\n" + _ADR_REST)
+
+
+@case("an-adr-with-one-sub-heading-per-alternative-passes", "adr", "PASS")
+def y3c(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Rejected alternatives\n"
+          "### Synchronous call to the ledger\nTies checkout latency to ledger availability.\n"
+          "### Nightly batch reconciliation\nMisses the one business day requirement.\n" + _ADR_REST)
+
+
+@case("one-alternative-in-any-form-is-still-not-two", "adr", "FAIL")
+def y3d(root):
+    # The control. Accepting more forms must not accept fewer alternatives, and
+    # sub-headings must count once each rather than once per paragraph.
+    write(root, "03-adr.md",
+          "# ADR\n## Rejected alternatives\n"
+          "### Synchronous call to the ledger\nTies checkout latency to ledger availability.\n\n"
+          "It also doubles the blast radius of a ledger outage.\n" + _ADR_REST)
+
+
+@case("an-empty-sub-heading-is-still-not-an-alternative", "adr", "FAIL")
+def y3e(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Rejected alternatives\n### Synchronous call\n### Nightly batch\n" + _ADR_REST)
+
+
+@case("a-data-model-written-as-tables-throughout-passes", "datamodel", "PASS")
+def y3f(root):
+    # Relationships were readable as a table and entities were not, so a data model
+    # written as tables FAILed with "no entity bullets found" over a document
+    # naming every entity and every system of record.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "| Entity | System of record | Notes |\n| --- | --- | --- |\n"
+          "| Customer | system of record: the CRM | core |\n"
+          "| Refund | system of record: the ledger service | derived |\n"
+          "## Relationships\n| From | To | Cardinality |\n| --- | --- | --- |\n"
+          "| Customer | Refund | one-to-many |\n")
+
+
+@case("an-entity-table-row-with-no-system-of-record-still-fails", "datamodel", "FAIL")
+def y3g(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "| Entity | System of record |\n| --- | --- |\n"
+          "| Customer | system of record: the CRM |\n"
+          "| Refund | to be decided |\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
 
 
 @case("an-entity-lifecycle-state-diagram-with-declared-states-passes", "diagrams", "PASS")

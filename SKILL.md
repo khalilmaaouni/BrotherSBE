@@ -110,15 +110,25 @@ The gate between logical and physical is mechanical, and it is L4.
 
 Diagrams are code (Mermaid), committed with the design, diffed in review, in
 `06-diagrams.md`, inside a fenced code block so they diff as source rather than as prose.
-Required set by tier: T2 (the first tier that requires `06-diagrams.md` at all) a context
-diagram plus a workflow or sequence diagram and an entity relationship diagram for the data
-delta; T3 adds system context and container views, the technology map, and the failover
-topology. T1 requires `01-purpose.md` and nothing else, so it has no diagram artifact and
-no required diagram: a sketch there is welcome and is not a gate.
+What a tool checks here, and it is less than this section used to claim: `06-diagrams.md`
+holds at least one fenced diagram whose every node appears somewhere else in the dossier.
+No tool reads the tier when checking diagrams and no tool counts diagram TYPES, so a T2
+dossier carrying a single flowchart passes. This paragraph used to state a required set per
+tier (a context diagram plus a workflow or sequence diagram plus an entity relationship
+diagram at T2, and more at T3) that nothing enforced, which is a law claiming an enforcement
+it does not have, the exact failure this project exists to prevent. The set is worth
+writing and is [human] guidance, not a gate: at T2 and above, a reviewer should expect
+context, a workflow or sequence view, and the data delta, and should say so in review.
+T1 requires `01-purpose.md` and nothing else, so it has no diagram artifact and no required
+diagram: a sketch there is welcome and is not a gate.
 
-Every node is named, every edge says what flows and by what trigger or protocol, and every
-element that appears in a diagram appears somewhere else in the dossier. That last rule is
-L5, and it is what stops a diagram drifting quietly away from the system it claims to show.
+Every element that appears in a diagram appears somewhere else in the dossier. That is L5,
+it is mechanical, and it is what stops a diagram drifting quietly away from the system it
+claims to show. Two neighbouring rules are [human] review and are marked as such rather than
+implied to be enforced: that every node is named, and that every edge says what flows and by
+what trigger or protocol. Nothing parses an edge label for a trigger or a protocol; the
+parser that touches edge labels exists to DISCARD their words so they are not mistaken for
+nodes.
 
 Documentation is brief by default, written for a human to follow in order, commented where
 a choice is non-obvious. Length is sized to the difficulty of the task, never to the effort
@@ -147,10 +157,10 @@ A rule that cannot name an enforcement point is not a law. It is advice, and it 
 
 ### L1. Tier before work
 WHEN: any task arrives that will change code, data, or infrastructure.
-INPUTS: the five intake answers (changes_contract, crosses_boundary, reversible_under_hour, touches_sensitive, consumers), written to `00-intake.json`.
+INPUTS: the five intake answers (changes_contract, crosses_boundary, reversible_under_hour, touches_sensitive, consumers), written to `00-intake.json`. The first four are yes/no and are recorded as a JSON boolean or as one of `y`, `yes`, `true`, `n`, `no`, `false` (case and surrounding space do not matter). The fifth is one of `none`, `some`, `many`. Any other value is REFUSED by name rather than guessed at, because reading these five for truthiness meant an intake answering "n" to every question computed the highest tier and one answering "no" to "is this reversible in under an hour" computed the lowest, which owes no artifact at all.
 RULE: first match wins. touches_sensitive OR not reversible_under_hour, T3. changes_contract OR consumers=many, T2. crosses_boundary OR consumers=some, T1. Otherwise T0. Required artifacts follow the tier: T0 none, T1 `01`, T2 `01 02 03 05 06 07`, T3 all of `01` to `07`.
 OUTPUT: proceed at the computed tier (T0 proceeds with no dossier at all).
-ENFORCED BY: `tools/sbe_intake.py` (compute_tier and required_artifacts), called by `tools/sbe_design.py artifacts`, which RE-DERIVES the tier from the answers stored beside it and fails on a mismatch that carries no override reason. The tier in the file is checked, not believed.
+ENFORCED BY: `tools/sbe_intake.py` (compute_tier, which refuses an answer outside the vocabulary above and names the field and the value it could not read, and required_artifacts, which refuses an unknown tier rather than requiring nothing), called by `tools/sbe_design.py artifacts`, which RE-DERIVES the tier from the answers stored beside it, FAILS an answer it cannot read, and fails a mismatch that carries no override reason. The tier in the file is checked, not believed, and an answer nobody can interpret is not read as a no.
 
 ### L2. Purpose before design
 WHEN: any design artifact past `01-purpose.md` is about to be written, or a T1 and above change is about to be merged.
@@ -162,7 +172,7 @@ ENFORCED BY: `tools/sbe_design.py artifacts` and `tools/sbe_design.py placeholde
 ### L3. Alternatives before decision
 WHEN: any design decision is recorded in `03-adr.md`. Only the architecture shape decision has a table today; the rest are recorded the same way and reasoned by hand.
 INPUTS: `03-adr.md`; where a decision table applies, the output of `tools/sbe_decide.py`.
-RULE: the ADR carries at least two rejected alternatives, a Criteria section naming what decided it, a Decision, Consequences, and a "What would flip this" condition. All five, or it fails. An alternative counts only if it carries at least one line saying why it lost, and that line has to be reviewable: at least two words and eight characters, and not a word that names the absence of a reason, so `- a` and `- b` are two headings rather than two decisions. That threshold is lower than an override's on purpose and by measurement, because at three words it rejected "Fails freshness." and "No isolation.", which are complete reasons an engineer would write. A heading with nothing under it is not an alternative, and alternatives written as bullets under one heading count individually. Criteria, Decision, Consequences and the flip condition each have to carry content too: a heading with nothing under it names nothing, and four empty headings used to satisfy all four. The word "rejected" may sit anywhere in the heading, so `### Option A (rejected): synchronous call` counts, and this is the convention rather than a hidden requirement to start the heading with it. The five headings are matched on a NAMED SET OF SPELLINGS, not on one literal each, because an ADR written in plain English ("What we weighed", "Roads not taken", "What we are doing", "What this costs us", "When we would revisit this") carried every one of the things this law asks for and failed all five checks on vocabulary. The accepted spellings live in `_SECTION_WORDS` in `tools/sbe_design.py`, the FAIL message prints the set for the heading it could not find, and the shipped template uses the first of each.
+RULE: the ADR carries at least two rejected alternatives, a Criteria section naming what decided it, a Decision, Consequences, and a "What would flip this" condition. All five, or it fails. An alternative counts only if it carries at least one line saying why it lost, and that line has to be reviewable: at least two words and eight characters, and not a word that names the absence of a reason, so `- a` and `- b` are two headings rather than two decisions. That threshold is lower than an override's on purpose and by measurement, because at three words it rejected "Fails freshness." and "No isolation.", which are complete reasons an engineer would write. A heading with nothing under it is not an alternative. Four authoring forms are read, and the FAIL message names all four: a bullet list, a numbered list, one sub-heading per alternative (counted once each, however many paragraphs it takes), and prose (one alternative per paragraph). Three of those four used to FAIL over ADRs carrying everything this law asks for, with a message that described an empty heading that was not there, which is a gate that gets argued with and then switched off. Criteria, Decision, Consequences and the flip condition each have to carry content too: a heading with nothing under it names nothing, and four empty headings used to satisfy all four. The word "rejected" may sit anywhere in the heading, so `### Option A (rejected): synchronous call` counts, and this is the convention rather than a hidden requirement to start the heading with it. The five headings are matched on a NAMED SET OF SPELLINGS, not on one literal each, because an ADR written in plain English ("What we weighed", "Roads not taken", "What we are doing", "What this costs us", "When we would revisit this") carried every one of the things this law asks for and failed all five checks on vocabulary. The accepted spellings live in `_SECTION_WORDS` in `tools/sbe_design.py`, the FAIL message prints the set for the heading it could not find, and the shipped template uses the first of each.
 OUTPUT: proceed, or stop and ask.
 ENFORCED BY: `tools/sbe_design.py adr`.
 
@@ -248,7 +258,7 @@ WHEN: the operator overrides the computed tier, in either direction.
 INPUTS: the `override` and `override_reason` fields in `00-intake.json`.
 RULE: an override sets both fields, and they must agree with each other. A tier moved with a null reason is not an override, it is an edit, and it fails. A reason must be reviewable, which means AT LEAST THREE WORDS AND TWELVE CHARACTERS, and must not be one of the tokens this project refuses as a stated value (tbd, n/a, unknown, none, todo, and their siblings, listed as `VACUOUS_VALUES` in `tools/sbe_checks.py` and imported by every tool). That sentence used to be true of one file only: the list was a private constant in `tools/sbe_design.py`, so `todo` was refused as a system of record and accepted as a pinned warehouse snapshot in the same run. It is one list now, in one place, and the honesty meta-test sweeps vacuous tokens over every check in every registry. The threshold is written here so it is not a hidden rule: `"x"` and `"tbd"` used to waive the entire dossier requirement, because any non-empty string restored full belief in a hand-written tier. The evidence line names the written tier, the computed tier, and whether the override raised or lowered it.
 OUTPUT: proceed with a label (the tier, the computed tier, the direction, and the named override), or stop and ask.
-ENFORCED BY: `tools/sbe_intake.py` (the override and override_reason fields it writes into `00-intake.json`) and `tools/sbe_design.py artifacts`, which recomputes the tier from the answers, FAILS a mismatch whose override_reason is missing or too thin to review, and FAILS an `override` field that disagrees with the recorded tier. Whether a reviewable reason is a GOOD reason is not enforced anywhere. This law used to say every override surfaces at the weekly review; nothing did that, `tools/WEEKLY-REVIEW.md` has no override step and no step that reads `00-intake.json`, and a law claiming an enforcement it does not have is the exact failure this project exists to prevent. So the claim is withdrawn rather than dressed up: the mechanical threshold above is the whole of the enforcement today.
+ENFORCED BY: `tools/sbe_design.py artifacts`, and nothing else. `tools/sbe_intake.py` was named here too, and it writes `override` and `override_reason` as null unconditionally and validates neither, so naming it was a naming slip in a law about enforcement honesty. The artifacts check which recomputes the tier from the answers, FAILS a mismatch whose override_reason is missing or too thin to review, and FAILS an `override` field that disagrees with the recorded tier. Whether a reviewable reason is a GOOD reason is not enforced anywhere. This law used to say every override surfaces at the weekly review; nothing did that, `tools/WEEKLY-REVIEW.md` has no override step and no step that reads `00-intake.json`, and a law claiming an enforcement it does not have is the exact failure this project exists to prevent. So the claim is withdrawn rather than dressed up: the mechanical threshold above is the whole of the enforcement today.
 
 ### L16. A session instruction never waives a hard gate
 WHEN: an operator instruction, time pressure, or convenience would skip L7 to L11 on the merge path (the four hard gates plus the silent-failure lints, the five things CI runs under `--strict`).
@@ -262,7 +272,7 @@ WHEN: a session ends, or a milestone lands.
 INPUTS: the telemetry ledger (the session lines of the last 7 days) and the vault session-log filenames and modification dates.
 RULE: every day that carries a session in the ledger carries a session log in the vault, dated either by filename or by modification date. An active day with no log fails.
 OUTPUT: proceed, or stop and ask (write the missing log before the session closes).
-ENFORCED BY: `tools/sbe_score.py` (vault-log-per-active-day, fed by the `tools/sbe_telemetry.py` SessionEnd hook, which writes by hook and not by promise). The rest of the close is human review at `tools/WEEKLY-REVIEW.md`, because no check reads it: updated open items, an updated failures index, a closing scorecard whose every line names its evidence, the self-score cap of 8 with a 9 or 10 needing external evidence named (a passing CI run, a reviewer approval, a reproduced number), NO-DATA as a legal score, and the Remaining and Unverified lists stated rather than implied. The ledger-coverage check in the same tool counts sessions and cannot fail; it is reported, not relied on.
+ENFORCED BY: `tools/sbe_score.py` (vault-log-per-active-day, fed by the `tools/sbe_telemetry.py` SessionEnd hook, which writes by hook and not by promise). The rest of the close is human review at `tools/WEEKLY-REVIEW.md`, because no check reads it: updated open items, an updated failures index, a closing scorecard whose every line names its evidence, the self-score cap of 8 with a 9 or 10 needing external evidence named (a passing CI run, a reviewer approval, a reproduced number), NO-DATA as a legal score, and the Remaining and Unverified lists stated rather than implied. The ledger-coverage check in the same tool counts sessions: it reports NO-DATA when no session is recent, PASS when sessions are, and FAILS when the ledger itself cannot be read, because a ledger holding a line that is not JSON is a broken record rather than an absent one. That last case blocks a merge, since CI runs the scorer under `--strict`. This law used to say the check cannot fail, which was wrong about its own tool in the direction nobody checks for.
 
 ## What is not law
 

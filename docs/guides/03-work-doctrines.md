@@ -490,12 +490,16 @@ five code patterns that hide an error so a wrong result passes for a right one:
 - Swift `try!` (force-try discards the error)
 
 These are gate severity by ratified decision. A genuine, reviewed exemption carries
-a visible marker on the line, so the exemption is auditable in the diff:
+a visible marker on the line, so the exemption is auditable in the diff. One of the
+twelve real exemptions in this repository, quoted from `tools/sbe_telemetry.py:772`:
 
 ```python
-except Exception:  # sbe: allow-silent boundary read; a bad record becomes NO-DATA below, never a pass
-    pass
+        except OSError:  # sbe: allow-silent boundary handler in a non-blocking hook; the miss surfaces as absent data, never as a false pass
 ```
+
+The two quotes either side of this one are verbatim source, and this one used to be
+an invented illustration written in the same frame, which a reader takes for a
+receipt.
 
 The scan is opt-in and scoped to the tree you name, so it never fires on an
 unrelated repo:

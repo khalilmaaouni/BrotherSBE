@@ -169,6 +169,7 @@ def gate_numbers(root):
     unreadable = []
     nothing = []
     checked = 0
+    distinct = set()
     for m in manifests:
         d, err = load_receipt(m)
         if d is None:
@@ -180,6 +181,13 @@ def gate_numbers(root):
             continue
         for fig in figs:
             checked += 1
+            # A figure listed twice was counted twice, so a manifest holding one
+            # object duplicated reported "2 figure(s)". The count in the evidence
+            # line is what a reader takes as the amount of work checked.
+            try:
+                distinct.add(json.dumps(fig, sort_keys=True))
+            except (TypeError, ValueError):
+                distinct.add(repr(fig))
             if not isinstance(fig, dict):
                 problems.append("entry %d in %s is %s, not a figure object"
                                 % (checked, os.path.relpath(m, root), type(fig).__name__))
@@ -253,8 +261,12 @@ def gate_numbers(root):
     # textual difference and passes, and nothing here reads which tables the two
     # queries touch. Overclaiming in the PASS line is this project's own defect
     # class pointed at itself.
+    dupes = checked - len(distinct)
     return "PASS", ("%d figure(s) each pinned to a snapshot, with a second derivation whose text "
-                    "differs beyond case, whitespace and comments, re-run to zero drift" % checked)
+                    "differs beyond case, whitespace and comments, re-run to zero drift%s"
+                    % (len(distinct),
+                       "" if not dupes else
+                       "; %d duplicate manifest entry/entries were counted once" % dupes))
 
 
 def gate_migration(root):

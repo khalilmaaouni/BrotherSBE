@@ -63,6 +63,9 @@ OVERRIDE_MIN_CHARS = 12
 # switched off, and a gate that is off catches nothing at all.
 ALTERNATIVE_MIN_WORDS = 2
 ALTERNATIVE_MIN_CHARS = 8
+# The same floor for an artifact BODY, which had none: see present().
+ARTIFACT_MIN_WORDS = 2
+ARTIFACT_MIN_CHARS = 8
 
 
 def read(root, name):
@@ -104,7 +107,16 @@ def present(root, name):
     filling it in.
     """
     t = read(root, name)
-    return t is not None and bool(_substantive_lines(t)) and not all_vacuous(t)
+    if t is None or not _substantive_lines(t) or all_vacuous(t):
+        return False
+    # And a floor, because there was none at all: `# Purpose\nx\n` cleared a tier
+    # while an override reason and a rejected alternative each carry a
+    # reviewability threshold, on the argument that "any non-empty string" is too
+    # weak for something a human is asked to accept instead of evidence. An
+    # artifact is more than either. The floor is the LOWER of the two thresholds
+    # on purpose: rejecting "Fails freshness." would be rejecting honest work.
+    body = " ".join(l.strip() for l in _substantive_lines(t))
+    return len(body) >= ARTIFACT_MIN_CHARS and len(body.split()) >= ARTIFACT_MIN_WORDS
 
 
 def _override_problem(reason):
@@ -237,9 +249,11 @@ def check_artifacts(root):
         if missing:
             parts.append("missing: %s" % ", ".join(missing))
         if empty:
-            parts.append("present but carrying no content of their own: %s (a zero-byte artifact, "
-                         "or one holding only headings and comments, is the absence of an artifact)"
-                         % ", ".join(empty))
+            parts.append("present but carrying no content of their own: %s (a zero-byte artifact, one "
+                         "holding only headings and comments, one whose every line is a placeholder, "
+                         "or one whose whole body is under %d words and %d characters, is the absence "
+                         "of an artifact)"
+                         % (", ".join(empty), ARTIFACT_MIN_WORDS, ARTIFACT_MIN_CHARS))
         return "FAIL", "tier %s requires %s; %s" % (tier, ", ".join(need), "; ".join(parts))
     return "PASS", ("tier %s: every required artifact present and carrying content%s"
                     % (tier, label))
@@ -343,6 +357,18 @@ _REJECTED_HEADING = re.compile(
     r"\balternatives (?:considered|weighed)\b|\boptions (?:rejected|declined|dropped)\b|"
     r"\bwhy not\b")
 _BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
+# A numbered list is a list. `1.` and `2)` were not read as alternatives at all,
+# while forty lines away the same file already accepts `^\d+[.)]\s+` as a
+# relationship line, so one authoring form was recognised in one artifact and
+# rejected in another for no stated reason.
+_LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+(.*\S)\s*$")
+# The forms an ADR may list its rejected alternatives in. Named here, printed in
+# the FAIL text, and implemented by _rejected_alternatives: a gate that rejects
+# three of the four ways an engineer writes this, with a message describing none
+# of them, is a gate that gets argued with and then switched off.
+ALTERNATIVE_FORMS = ("a bullet list (- or *)", "a numbered list (1. or 2))",
+                     "one sub-heading per alternative, each with a body",
+                     "one paragraph per alternative")
 
 
 def _rejected_alternatives(t):
@@ -353,36 +379,65 @@ def _rejected_alternatives(t):
     while two empty "## Rejected" headings with nothing under either passed. That
     inverts the incentive the rule exists to create, teaching an author to add
     headings rather than alternatives. An alternative counts here only if it
-    carries at least one non-empty line of its own: bullets under a rejected
-    heading count individually, and a heading whose body is prose counts once.
+    carries at least one non-empty line of its own.
+
+    Four authoring forms, because three of the four ordinary ones FAILed while
+    the ADRs carried everything the law asks for: bullets and numbered items count
+    individually; a sub-heading per alternative counts once each, with its body as
+    the reason; and prose counts one alternative per paragraph. An alternative
+    still has to say why it lost, which is what the reviewability threshold below
+    holds, and an empty heading still counts nothing.
     """
-    lines = t.splitlines()
     found = []
-    in_rejected = False
-    body, bullets = [], []
+    level = None           # heading depth of the open rejected section
+    blocks = []            # (title, items, body) for the section and each sub-heading
 
     def close():
-        if not in_rejected:
-            return
-        if bullets:
-            found.extend(bullets)
-        elif any(l.strip() for l in body):
-            found.append(" ".join(l.strip() for l in body if l.strip())[:60])
+        for _title, items, body in blocks:
+            if items:
+                found.extend(items)
+                continue
+            paragraphs, current = [], []
+            for l in body:
+                if l.strip():
+                    current.append(l.strip())
+                elif current:
+                    paragraphs.append(" ".join(current))
+                    current = []
+            if current:
+                paragraphs.append(" ".join(current))
+            if not paragraphs:
+                continue
+            if _title is None:
+                # The section's own body: one alternative per paragraph, which is
+                # how an author who writes prose separates them.
+                found.extend(p[:60] for p in paragraphs)
+            else:
+                # A sub-heading IS one alternative however many paragraphs it
+                # takes to explain. Counting paragraphs here would let one
+                # alternative satisfy the rule that asks for two.
+                found.append(("%s: %s" % (_title, " ".join(paragraphs)))[:60])
+        del blocks[:]
 
-    for line in lines:
+    for line in t.splitlines():
         h = _HEADING.match(line)
         if h:
+            depth, title = len(h.group(1)), h.group(2).strip()
+            if level is not None and depth > level:
+                blocks.append((title, [], []))     # a sub-heading inside the section
+                continue
             close()
-            body, bullets = [], []
-            in_rejected = bool(_REJECTED_HEADING.search(h.group(2).strip()))
+            level = depth if _REJECTED_HEADING.search(title) else None
+            if level is not None:
+                blocks.append((None, [], []))
             continue
-        if not in_rejected:
+        if level is None or not blocks:
             continue
-        b = _BULLET.match(line)
-        if b:
-            bullets.append(b.group(1)[:60])
+        item = _LIST_ITEM.match(line)
+        if item:
+            blocks[-1][1].append(item.group(1)[:60])
         else:
-            body.append(line)
+            blocks[-1][2].append(line)
     close()
     return found
 
@@ -449,8 +504,10 @@ def check_adr(root):
     alternatives = _rejected_alternatives(t)
     rejected = len(alternatives)
     if rejected < 2:
-        problems.append("only %d rejected alternative(s); an ADR needs at least 2, each with at least one line saying why it lost "
-                        "(an empty heading is not an alternative)" % rejected)
+        problems.append("only %d rejected alternative(s) found under a rejected-alternatives heading; "
+                        "an ADR needs at least 2, each with at least one line saying why it lost (an "
+                        "empty heading is not an alternative). Accepted forms: %s"
+                        % (rejected, "; ".join(ALTERNATIVE_FORMS)))
     # The FAIL text above promises "at least one line saying why it lost", and
     # `- a` satisfied it. An override reason carries a reviewability threshold;
     # so does this, and it is the same threshold.
@@ -521,6 +578,35 @@ def _joined_bullets(lines):
     return out
 
 
+def _table_entities(lines):
+    """Entities written as a markdown table row: first cell the name, the rest its meta.
+
+    Relationships were readable as a table and entities were not, so a data model
+    written as tables throughout FAILed with "no entity bullets found" over a
+    document that names every entity and every system of record. The asymmetry was
+    documented, which makes it a stated restriction rather than a silent one, and
+    it is still a gate failing correct work over an authoring form the same file
+    accepts one heading further down.
+
+    The header row and its `---` separator are skipped, exactly as they are for
+    relationships, and a row whose first cell is empty is not an entity.
+    """
+    out, row = {}, 0
+    for line in lines:
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        row += 1
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if row <= 2 or not set(s) - set("|-: "):
+            continue        # header, separator, or a row with nothing in it
+        name = cells[0]
+        if not name or not re.match(r"^[A-Za-z_][\w .\-]*$", name):
+            continue
+        out[name] = " ".join(c for c in cells[1:] if c)
+    return out
+
+
 def _entities(t):
     """Entity bullets from the entity sections of a data model.
 
@@ -548,6 +634,7 @@ def _entities(t):
         # bullet is an entity claim, colon or not: a bullet with no colon is an
         # entity with no system of record, which is the defect, not a non-entity.
         for sec in sections:
+            out.update(_table_entities(sec))
             for line in sec:
                 m = _ENTITY_BULLET.match(line)
                 if m:
@@ -594,8 +681,9 @@ def check_data_model(root):
     problems = []
     ents = _entities(t)
     if not ents:
-        problems.append("no entity bullets found: list each entity as a bullet under a heading that "
-                        "names entities, above the Relationships heading")
+        problems.append("no entity found: list each entity as a bullet, or as a row of a markdown "
+                        "table whose first column is the entity name, under a heading that names "
+                        "entities, above the Relationships heading")
     for name, meta in ents.items():
         if vacuous(name):
             # An entity called TBD is a note to the author. The PASS sentence
