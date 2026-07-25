@@ -1647,7 +1647,12 @@ def y6(root):
 # evidence string with a longer half-life.
 SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-CHECKLIST.md",
                 "docs/guides/01-quickstart.md", "docs/guides/02-the-gates-in-practice.md",
-                "docs/guides/03-the-dossier.md", "docs/guides/04-teams-and-evolution.md",
+                # This entry read "03-the-dossier.md" for a wave, a file that does
+                # not exist, and both guards `continue` past a path they cannot
+                # open, so the whole guide was silently exempt from them. A list
+                # of documents to check is itself evidence, and a name in it that
+                # opens nothing is the absent-file defect in a tuple.
+                "docs/guides/03-work-doctrines.md", "docs/guides/04-teams-and-evolution.md",
                 "docs/guides/05-a-worked-engagement.md", "evals/README.md", "DIGEST.md",
                 "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.md")
 _REPO = os.path.abspath(os.path.join(HERE, ".."))
@@ -1688,6 +1693,92 @@ def dc2(root):
             if got != (checks, regs, scen):
                 wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d scenarios"
                              % (rel, m.group(0), checks, regs, scen))
+    return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
+@case("every-shipped-doc-path-in-this-suite-opens-a-file", "docs", "consistent")
+def dc0(root):
+    missing = [rel for rel in SHIPPED_DOCS if not os.path.isfile(os.path.join(_REPO, rel))]
+    return "consistent" if not missing else "SHIPPED_DOCS names %s, which opens nothing" % missing
+
+
+@case("no-copy-ready-ci-block-shows-fewer-steps-than-the-shipped-workflow", "docs", "consistent")
+def dc3(root):
+    # A reader who copies a CI fence gets what the fence shows. Three docs showed
+    # three steps while the workflow ran six, and the three they omitted were the
+    # regression evals, the honesty meta-test and the tool tests: exactly the
+    # suites whose absence from the merge path this project had just finished
+    # fixing. A prose count and a fence are both claims about a file that ships.
+    import re as _re
+    wf = open(os.path.join(_REPO, ".github/workflows/brothersbe-gates.yml"),
+              errors="replace").read()
+    real = _re.findall(r"^      - name: (.+)$", wf, _re.M)
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        body = open(p, errors="replace").read()
+        for m in _re.finditer(r"(?sm)^```yaml\n(.*?)^```$", body):
+            block = m.group(1)
+            if "sbe_gate.py --strict" not in block:
+                continue
+            shown = _re.findall(r"^\s*- name: (.+)$", block, _re.M)
+            missing = [n for n in real if n not in shown]
+            if missing:
+                wrong.append("%s: a copy-ready CI block omits %d of the %d shipped steps (%s)"
+                             % (rel, len(missing), len(real), "; ".join(missing[:3])))
+    return "consistent" if not wrong else "; ".join(wrong[:3])
+
+
+@case("no-shipped-doc-prints-a-checker-line-the-checker-does-not-produce", "docs", "consistent")
+def dc4(root):
+    # The lint line pasted in guide 02 names the exempted lines BY NUMBER, and
+    # those numbers move whenever anything above them moves: one of them was a
+    # wave stale and pointed at an unrelated statement. Recomputed here rather
+    # than re-audited by eye every wave.
+    import re as _re
+    out = subprocess.run([sys.executable, SCORE, os.path.join(_REPO, "tools")],
+                         capture_output=True, text=True, cwd=_REPO)
+    live = [l for l in out.stdout.splitlines() if l.startswith("silent-failure-lints")]
+    if not live:
+        return "the scorer printed no silent-failure-lints line at all"
+    live = _re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/")
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        for line in open(p, errors="replace").read().splitlines():
+            if not line.startswith("silent-failure-lints"):
+                continue
+            if _re.sub(r"\s+", " ", line) != live:
+                wrong.append("%s pastes a lint line the tool does not produce today" % rel)
+    return "consistent" if not wrong else "; ".join(wrong[:3])
+
+
+@case("no-shipped-doc-prints-a-check-count-the-scorer-does-not-produce", "docs", "consistent")
+def dc5(root):
+    import re as _re
+    scorer = SourceFileLoader("sbe_score_count",
+                              os.path.join(_REPO, "tools", "sbe_score.py")).load_module()
+    n = len(scorer.CHECKS)
+    words = {8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen"}
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        body = open(p, errors="replace").read()
+        # Scoped to the phrasings that are ABOUT the scorer's registry. "Nine
+        # checks green: five design, four gates" counts something else and is
+        # not this eval's business.
+        for m in _re.finditer(r"(\w+) mechanical checks\b|one of (\w+) check lines\b", body):
+            word = (m.group(1) or m.group(2)).lower()
+            if word in words.values() and word != words.get(n):
+                wrong.append("%s: %r but sbe_score.py registers %d checks" % (rel, m.group(0), n))
+            if word.isdigit() and int(word) in words and int(word) != n:
+                wrong.append("%s: %r but sbe_score.py registers %d checks" % (rel, m.group(0), n))
     return "consistent" if not wrong else "; ".join(wrong[:4])
 
 
