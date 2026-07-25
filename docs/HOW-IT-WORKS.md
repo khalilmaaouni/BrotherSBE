@@ -72,13 +72,23 @@ Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
 Asks the five questions, writes `00-intake.json`, prints the tier and the artifact
 list. `compute_tier` is a decision table with first match winning:
 
+Every answer is converted to the meaning it records before any rule reads it, and a
+value outside the accepted vocabulary is refused by name rather than guessed at. Reading
+these five for truthiness is how an intake written in the tool's own `(y/n)` vocabulary
+computed the wrong tier in both directions: five answers of `n` computed T3, because the
+string `n` is truthy, and `"reversible_under_hour": "no"` computed T0, which owes no
+artifact at all.
+
 ```python
 def compute_tier(a):
-    if a.get("touches_sensitive") or not a.get("reversible_under_hour"):
+    v, problems = read_answers(a)
+    if problems:
+        raise UnreadableIntake(problems)
+    if v["touches_sensitive"] or not v["reversible_under_hour"]:
         return "T3"
-    if a.get("changes_contract") or a.get("consumers") == "many":
+    if v["changes_contract"] or v[CONSUMERS] == "many":
         return "T2"
-    if a.get("crosses_boundary") or a.get("consumers") == "some":
+    if v["crosses_boundary"] or v[CONSUMERS] == "some":
         return "T1"
     return "T0"
 ```
@@ -140,16 +150,18 @@ WAIVERS: 5 check(s) were waived by a .sbe-exempt and examined nothing. A waiver 
 Two implementation details are worth knowing before you write a dossier, because
 they decide what the checks can see.
 
-**The entity list is parsed from bullets, inside the entity sections.** `_entities`
-reads bullet lines under any heading whose name contains "entit" and above the
-`Relationships` heading, taking the text before the first colon as the name and the
-rest as its meta, which must contain the words "system of record". Scoping it to
+**The entity list is parsed from bullets or table rows, inside the entity sections.**
+`_entities` reads bullet lines, and rows of a markdown table whose first column is the
+entity name, under any heading whose name contains "entit" and above the
+`Relationships` heading, taking the text before the first colon (or the first cell) as
+the name and the rest as its meta, which must contain the words "system of record".
+Relationships were readable as a table and entities were not, so a data model written
+as tables throughout FAILed over a document that named every entity and every source. Scoping it to
 those headings is what lets a data model carry an honest `## Notes` list without
 each note becoming an entity with no source. A name may contain a hyphen or a dot,
 so `payment-token` is read rather than dropped from the set the verdict asserts
-over. Bullet lines below the Relationships heading are read as relationships and
-must carry a cardinality, so tables and numbered lists are the right shape for
-everything after that point.
+over. Bullet lines, numbered items and table rows below the Relationships heading are all read
+as relationships and must carry a cardinality.
 
 **The diagram check traces against entities AND declared components.** Diagram
 source is read from fenced code blocks only, so prose containing an arrow is not a
