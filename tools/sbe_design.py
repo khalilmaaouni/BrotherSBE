@@ -30,7 +30,7 @@ import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, TIERS, QUESTIONS
-from sbe_checks import Check, run_guarded, stated
+from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -98,9 +98,14 @@ def present(root, name):
     nothing under any of them is the empty-VALUES shape of the same defect, and
     it cleared a tier the same way. The keys being present is not the values
     being filled in.
+
+    And the same argument one level further in again: a file whose every line
+    under its headings reads "TODO" is the template with its marker deleted and
+    nothing written in its place. Filling a section in with a placeholder is not
+    filling it in.
     """
     t = read(root, name)
-    return t is not None and bool(_substantive_lines(t))
+    return t is not None and bool(_substantive_lines(t)) and not all_vacuous(t)
 
 
 def _override_problem(reason):
@@ -171,11 +176,17 @@ def check_artifacts(root):
     # intake carrying all five keys with "" in them re-derived a tier out of five
     # blanks and the gate reported it as computed. compute_tier reads a blank as
     # a no, so a blanked intake silently computed a lower tier than the truth.
-    unanswered = [k for k, _ in QUESTIONS if stated(answers.get(k)) is None]
+    # "none" is the shipped answer to "how many downstream consumers break if it
+    # is wrong", so it is an answer here and nowhere else in this file. Carved
+    # out at the call site rather than removed from the shared list, so a system
+    # of record recorded as "none" is still the absence of one.
+    unanswered = [k for k, _ in QUESTIONS
+                  if answered(answers.get(k), allow=("none",)) is None]
     if unanswered:
         return "NO-DATA", ("00-intake.json records tier %s but leaves %s unanswered, so the tier "
                            "cannot be re-derived from a complete intake. A blank answer is not a "
-                           "no; rerun sbe_intake.py" % (tier, ", ".join(unanswered)))
+                           "no, and neither is the word TBD; rerun sbe_intake.py"
+                           % (tier, ", ".join(unanswered)))
     computed = compute_tier(answers)
     label = ""
     declared = data.get("override")
@@ -236,16 +247,22 @@ def check_placeholder(root):
         t = read(root, name)
         if t is None:
             continue
-        if t.strip() == "":
+        # An empty file carries no unfilled marker, and neither does a file whose
+        # every line says TODO. Both are the shipped template with the marker
+        # deleted and nothing put in its place, which is the state this check
+        # exists to name, so both are the absence of an artifact rather than a
+        # clean scan of one.
+        if t.strip() == "" or all_vacuous(t):
             blank.append(name)
         else:
             found[name] = t
     if not found and not blank:
         return "NO-DATA", "no dossier artifacts here, so nothing to check for unfilled template sections"
     if blank:
-        return "FAIL", ("zero-byte artifact(s): %s. An empty file carries no unfilled-template marker, "
-                        "so passing it would be reporting a clean scan of nothing"
-                        % ", ".join(sorted(blank)))
+        return "FAIL", ("artifact(s) with nothing written in them: %s. A zero-byte file, and a file "
+                        "whose every line under its headings is a placeholder, carry no "
+                        "unfilled-template marker, so passing them would be reporting a clean scan "
+                        "of nothing" % ", ".join(sorted(blank)))
     unfilled = sorted(n for n, t in found.items() if _MARKER_COMMENT.search(t))
     if unfilled:
         return "FAIL", ("still the shipped template, unedited: %s; each carries its %s marker comment, which the template says to "
@@ -254,10 +271,42 @@ def check_placeholder(root):
 
 
 _HEADING = re.compile(r"^(#+)\s*(.*)$")
-# "Rejected" anywhere in the heading, as a word. Requiring the heading to BEGIN
-# with it meant `### Option A (rejected): synchronous call` counted zero, and the
-# convention was written down nowhere outside the template.
-_REJECTED_HEADING = re.compile(r"(?i)\brejected\b")
+# The four sections an ADR owes, and the words an author actually writes for
+# each. The shipped template uses the first spelling of each, and SKILL.md L3
+# names them, but an ADR written in plain English ("What we weighed", "Roads not
+# taken", "What we are doing", "What this costs us", "When we would revisit
+# this") failed all five checks on VOCABULARY while carrying every one of the
+# things the law asks for. That is a gate rejecting correct work, which is how a
+# gate gets switched off, and a gate that is off catches nothing at all. The rule
+# is about the content under the heading; these are the ways of spelling the
+# heading, listed here and in SKILL.md L3 so the set is reviewable and
+# extensible rather than folklore.
+_SECTION_WORDS = {
+    "Criteria": (r"criteri(?:a|on)|what (?:we|i) weighed|how (?:we|i) (?:chose|decided)|"
+                 r"what mattered|decision drivers|forces"),
+    "Decision": (r"decision|what (?:we|i) (?:are doing|chose|decided|will do)|"
+                 r"chosen (?:option|approach)|our choice|the call"),
+    "Consequences": (r"consequences|what this costs|costs?(?: and benefits)?|implications|"
+                     r"what (?:we|i) give up|impact|so what"),
+    "What would flip this": (r"what would flip|what would change (?:our|my|this) mind|"
+                             r"when (?:we|i) would revisit|revisit|reconsider|reversal|"
+                             r"what would reverse"),
+}
+# Matched anywhere in the heading line, not anchored to its first word: an author
+# writes `## When would we revisit this?` as often as `## Revisit`.
+_SECTION_PATTERNS = {label: r"^#+[^\n]*\b(?:%s)" % words for label, words in _SECTION_WORDS.items()}
+# The flip condition may also be a stated line with no heading of its own, and
+# that fallback stays narrow on purpose: a heading is a declaration, a sentence
+# in the middle of a paragraph is not, so only the explicit phrasings count.
+_FLIP_IN_PROSE = r"what would flip|what would change (?:our|my|this) mind|what would reverse"
+# "Rejected" anywhere in the heading, as a word, plus the plain-English ways of
+# saying it. Requiring the heading to BEGIN with the word meant
+# `### Option A (rejected): synchronous call` counted zero, and the convention
+# was written down nowhere outside the template.
+_REJECTED_HEADING = re.compile(
+    r"(?i)\brejected\b|\broads not taken\b|\bnot taken\b|\bruled out\b|\bdiscarded\b|"
+    r"\balternatives (?:considered|weighed)\b|\boptions (?:rejected|declined|dropped)\b|"
+    r"\bwhy not\b")
 _BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 
 
@@ -328,10 +377,11 @@ def _section_body(t, heading_pattern):
     return body
 
 
-def _required_section(t, pattern, label, problems):
-    body = _section_body(t, pattern)
+def _required_section(t, label, problems):
+    body = _section_body(t, _SECTION_PATTERNS[label])
     if body is None:
-        problems.append("no %s section" % label)
+        problems.append("no %s section (this heading is accepted as any of: %s)"
+                        % (label, _SECTION_WORDS[label].replace("|", ", ")))
     elif not [l for l in body if l.strip()]:
         problems.append("the %s heading is present with nothing under it, so it names nothing; a "
                         "heading is a promise of content, not content" % label)
@@ -357,16 +407,19 @@ def check_adr(root):
         problems.append("%d rejected alternative(s) carry no reviewable reason (%s); an alternative "
                         "with no stated reason for losing is a heading, not a decision record"
                         % (len(thin), "; ".join(repr(a[:24]) for a in thin[:3])))
-    _required_section(t, r"^#+\s*criteria", "Criteria", problems)
-    _required_section(t, r"^#+\s*decision", "Decision", problems)
-    _required_section(t, r"^#+\s*consequences", "Consequences", problems)
+    _required_section(t, "Criteria", problems)
+    _required_section(t, "Decision", problems)
+    _required_section(t, "Consequences", problems)
     # The flip condition is accepted as a heading with content or, as before this
     # change, as a stated line anywhere in the document. Only the empty-heading
     # form is new, and only that form is rejected.
-    flip = _section_body(t, r"what would flip")
+    flip_words = _SECTION_WORDS["What would flip this"]
+    flip = _section_body(t, _SECTION_PATTERNS["What would flip this"])
     if flip is None:
-        if not [l for l in t.splitlines() if re.search(r"what would flip", l, re.I) and l.strip()]:
-            problems.append("no 'What would flip this' section; an ADR without it is a tombstone")
+        if not [l for l in t.splitlines() if re.search(_FLIP_IN_PROSE, l, re.I) and l.strip()]:
+            problems.append("no 'What would flip this' section; an ADR without it is a tombstone "
+                            "(this heading is accepted as any of: %s)"
+                            % flip_words.replace("|", ", "))
     elif not [l for l in flip if l.strip()]:
         problems.append("the 'What would flip this' heading is present with nothing under it, so "
                         "the ADR names no condition that would reverse the decision")
@@ -385,6 +438,34 @@ _ENTITY_BULLET = re.compile(r"^\s*[-*]\s*([A-Za-z_][\w .\-]*?)\s*(?::(.*))?$")
 _ENTITY_HEADING = re.compile(r"(?i)entit")
 
 
+def _joined_bullets(lines):
+    """Lines with each bullet's soft-wrapped continuation folded back onto it.
+
+    A false failure, and the worst kind: an entity bullet wrapped at 80 columns
+    lost the half of itself that named its system of record, and the check FAILed
+    with the sentence "entity 'RefundEvent' has no system of record" about a
+    bullet that named one on its second line. An evidence line asserting
+    something the artifact contradicts is this project's own defect class
+    inverted, and wrapping a long line is the ordinary thing an author does.
+
+    A continuation is an indented, non-empty line that is not itself a bullet, a
+    heading, a table row or a fence. Everything else passes through untouched, so
+    a paragraph after a bullet list is still a paragraph.
+    """
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        is_continuation = (
+            out and _BULLET.match(out[-1]) and line[:1] in (" ", "\t") and stripped
+            and not _BULLET.match(line) and not stripped.startswith(("#", "|", "```", ">"))
+            and not re.match(r"^\d+[.)]\s", stripped))
+        if is_continuation:
+            out[-1] = out[-1].rstrip() + " " + stripped
+        else:
+            out.append(line)
+    return out
+
+
 def _entities(t):
     """Entity bullets from the entity sections of a data model.
 
@@ -398,7 +479,7 @@ def _entities(t):
     body = re.split(r"(?im)^#+\s*relationships", t)[0]
     sections = []
     current = None
-    for line in body.splitlines():
+    for line in _joined_bullets(body.splitlines()):
         h = _HEADING.match(line)
         if h:
             current = [] if _ENTITY_HEADING.search(h.group(2)) else None
@@ -417,7 +498,7 @@ def _entities(t):
                 if m:
                     out[m.group(1).strip()] = (m.group(2) or "").strip()
         return out
-    for line in body.splitlines():
+    for line in _joined_bullets(body.splitlines()):
         m = _ENTITY_BULLET.match(line)
         if m and m.group(2) is not None:
             out[m.group(1).strip()] = m.group(2).strip()
@@ -430,9 +511,12 @@ def _entities(t):
 # was present; the value is what the rule is actually about.
 _SOR = re.compile(r"(?i)system of record\s*[:=]?\s*(.+)")
 _NO_SOR = re.compile(r"(?i)\bno\s+system\s+of\s+record\b")
-# Values that name the absence of an answer rather than an answer.
-_EMPTY_VALUES = ("tbd", "tba", "todo", "none", "unknown", "n/a", "na", "?", "??",
-                 "not decided", "undecided", "not known", "unclear", "to be decided")
+# The list of values that name the absence of an answer used to live HERE, as a
+# private constant, and that is precisely how the fourth round of this defect
+# happened: this file refused the token "todo" as a system of record while
+# sbe_gate.py, which never imported it, accepted "TODO" as a pinned warehouse
+# snapshot in the same run. It now lives in sbe_checks.VACUOUS_VALUES, imported
+# by every tool, extended in one place. See the comment beside it there.
 # A cardinality must stand as its own token. Without the guards, "one-to-many-ish"
 # satisfied a substring test, so a sentence explicitly saying the cardinality was
 # undecided cleared the gate that exists to decide it.
@@ -440,9 +524,12 @@ _CARDINALITY = re.compile(r"(?i)(?<![\w-])(%s)(?![\w-])" % "|".join(CARDINALITIE
 
 
 def _stated_value(v):
-    v = v.strip().strip(".;,").strip()
-    v = re.sub(r"^(?:is|was|are)\s+", "", v, flags=re.I).strip()
-    return "" if v.lower() in _EMPTY_VALUES else v
+    """The value this text records, or "" when it names the absence of one.
+
+    A thin wrapper over the shared predicate so the call sites here keep reading
+    in strings rather than in None.
+    """
+    return answered(v) or ""
 
 
 def check_data_model(root):
@@ -455,6 +542,12 @@ def check_data_model(root):
         problems.append("no entity bullets found: list each entity as a bullet under a heading that "
                         "names entities, above the Relationships heading")
     for name, meta in ents.items():
+        if vacuous(name):
+            # An entity called TBD is a note to the author. The PASS sentence
+            # counts entities, so a placeholder counted as one.
+            problems.append("entity %r names no entity; a placeholder in the entity list is counted "
+                            "by the sentence 'N entities, each with a system of record'" % name)
+            continue
         m = _SOR.search(meta)
         if not m or _NO_SOR.search(meta):
             problems.append("entity '%s' has no system of record" % name)
@@ -470,7 +563,10 @@ def check_data_model(root):
     # tell ten checked relationships from none.
     rel_body = _section_body(t, r"^#+\s*relationships")
     rels, table_row = [], 0
-    for line in (rel_body or []):
+    # Folded for the same reason the entity bullets are: a relationship wrapped
+    # at 80 columns kept its name on the first line and its cardinality on the
+    # second, and FAILed as "has no cardinality" against a line that carried one.
+    for line in _joined_bullets(rel_body or []):
         s = line.strip()
         if re.match(r"\s*[-*]\s+", line) or re.match(r"^\d+[.)]\s+", s):
             rels.append(s)
@@ -556,17 +652,20 @@ def _label_text(raw):
 
 
 def _diagram_nodes(t):
-    """(nodes, kinds, skipped) for every fenced diagram in an artifact.
+    """(nodes, kinds, skipped, states) for every fenced diagram in an artifact.
 
     nodes maps a node id to the label written on it, because a node is traceable
     by either. kinds lists the diagram types declared. skipped names every token
     this parser deliberately did not treat as a node, and WHY, because a token
-    dropped in silence is a completeness claim over a truncated set.
+    dropped in silence is a completeness claim over a truncated set. states is
+    the subset of node ids that came out of a state diagram, because a state is
+    neither an entity nor a runtime component and holding it to either was a
+    false failure with no documented way out.
     """
     # HTML comments are not diagram source. Left in, the "-->" that closes one
     # reads as a Mermaid edge and invents a node out of the next word.
     t = re.sub(r"(?s)<!--.*?-->", "", t)
-    nodes, kinds, skipped = {}, [], []
+    nodes, kinds, skipped, states = {}, [], [], set()
 
     def add(nid, label=""):
         if nid in DIRECTIONS and not label and nid not in nodes:
@@ -640,6 +739,7 @@ def _diagram_nodes(t):
                     for g in (m.group(1), m.group(2)):
                         if g != "[*]":
                             add(g)
+                            states.add(g)
                 continue
             if kind == "none":
                 continue
@@ -655,10 +755,11 @@ def _diagram_nodes(t):
                 add(m.group(1))
             for m in _NODE_DEST.finditer(bare):
                 add(m.group(1))
-    return nodes, kinds, sorted(set(skipped))
+    return nodes, kinds, sorted(set(skipped)), states
 
 
 _COMPONENT_HEADING = re.compile(r"(?i)component|runtime|technology map")
+_STATE_HEADING = re.compile(r"(?i)state|status|lifecycle")
 
 
 def _norm(s):
@@ -711,11 +812,56 @@ def _declared_components(root):
     return out
 
 
+def _declared_states(root):
+    """Lifecycle states a state diagram is allowed to name, and where each was declared.
+
+    The third traceability target, and it exists because the second one was
+    being abused. A `stateDiagram-v2` of an entity's lifecycle FAILed by default:
+    a state is not an entity and not a runtime component, no document anywhere
+    told an author how to make one trace, and the only way through was to declare
+    Draft, Placed and Shipped as runtime COMPONENTS. That is exactly the
+    pathology L5 removed for queues (corrupting a model to please a tool),
+    reproduced one diagram type over.
+
+    A state is declared as a bullet under a heading naming states, statuses or a
+    lifecycle, in 05-data-model.md or in 06-diagrams.md itself, or in a
+    `status: draft | placed | shipped` line in the data model. Declared
+    somewhere and traceable, without pretending a state is a service.
+    """
+    out = {}
+    for artifact in (ARTIFACT_FILES["05"], ARTIFACT_FILES["06"]):
+        text = read(root, artifact)
+        if text is None:
+            continue
+        in_states = False
+        for line in _joined_bullets(text.splitlines()):
+            h = _HEADING.match(line)
+            if h:
+                in_states = bool(_STATE_HEADING.search(h.group(2)))
+                continue
+            m = re.match(r"(?i)^\s*[-*|]?\s*(?:status|state|lifecycle)\s*(?:values)?\s*[:=]\s*(.+)$",
+                         line)
+            if m:
+                for token in re.split(r"[,|/]| or | then |->|-->", m.group(1)):
+                    name = token.strip().strip(".;`").strip()
+                    if name and not vacuous(name):
+                        out.setdefault(_norm(name), "%s: %s" % (artifact, name))
+                continue
+            if not in_states:
+                continue
+            b = _BULLET.match(line)
+            if b:
+                name = b.group(1).split(":")[0].strip()
+                if name and not vacuous(name):
+                    out.setdefault(_norm(name), "%s: %s" % (artifact, name))
+    return out
+
+
 def check_diagrams(root):
     t = read(root, ARTIFACT_FILES["06"])
     if t is None:
         return "NO-DATA", "no 06-diagrams.md in this dossier"
-    nodes, kinds, skipped = _diagram_nodes(t)
+    nodes, kinds, skipped, states = _diagram_nodes(t)
     # Every skipped token, on every verdict line. A parser that discards tokens in
     # silence and then reports "all traceable" is asserting completeness over a
     # set it truncated itself.
@@ -740,8 +886,10 @@ def check_diagrams(root):
     model = read(root, ARTIFACT_FILES["05"])
     entities = {_norm(n): n for n in _entities(model)} if model is not None else {}
     components = _declared_components(root)
+    declared_states = _declared_states(root)
     known = dict(components)
     known.update(entities)
+    known.update(declared_states)
     if not known:
         # Without a data model or a component declaration there is nothing to
         # trace against. Reporting PASS here would be the exact defect L5 exists
@@ -760,19 +908,39 @@ def check_diagrams(root):
         return None
 
     orphans = sorted(nid for nid, label in nodes.items() if resolved(nid, label) is None)
+    # A state whose dossier declares no states at all is not an orphan, it is
+    # unmeasured. Reporting FAIL over it rejected a correct entity-lifecycle
+    # diagram and pushed authors to declare their states as runtime components;
+    # reporting PASS over it would be this project's own defect. So the check
+    # says which nodes it could not trace and why, and returns NO-DATA, which
+    # neither blocks a merge nor claims anything.
+    untraced_states = sorted(n for n in orphans if n in states) if not declared_states else []
+    orphans = [n for n in orphans if n not in untraced_states]
     if orphans:
         return "FAIL", ("diagram element(s) appear nowhere else in the dossier: %s. Every node must be an "
                         "entity in %s or a declared component (a row in %s, or a bullet under a Components "
-                        "heading in %s), matched on the node id or on its label%s"
+                        "heading in %s), matched on the node id or on its label. A state diagram's states "
+                        "trace to states declared as bullets under a States, Status or Lifecycle heading, "
+                        "or to a `status: draft | placed | shipped` line in %s%s"
                         % (", ".join(orphans[:6]), ARTIFACT_FILES["05"], ARTIFACT_FILES["04"],
-                           ARTIFACT_FILES["06"], note))
+                           ARTIFACT_FILES["06"], ARTIFACT_FILES["05"], note))
+    if untraced_states:
+        return "NO-DATA", ("%d diagram node(s) in %s, of which %d are lifecycle state(s) this dossier "
+                           "declares nowhere (%s), so their traceability was not checked and this "
+                           "check cannot say every node traces. Declare the states as bullets under a "
+                           "States, Status or Lifecycle heading in %s, or as a `status: draft | placed "
+                           "| shipped` line, and they become traceable%s"
+                           % (len(nodes), ", ".join(sorted(set(kinds))), len(untraced_states),
+                              ", ".join(untraced_states[:6]), ARTIFACT_FILES["05"], note))
     hits = [resolved(nid, label) for nid, label in nodes.items()]
     return "PASS", ("%d diagram node(s) in %s, all traceable: %d to entities in %s, %d to declared "
-                    "components%s"
+                    "components, %d to declared lifecycle states%s"
                     % (len(nodes), ", ".join(sorted(set(kinds))),
                        sum(1 for h in hits if h in entities),
                        ARTIFACT_FILES["05"],
-                       sum(1 for h in hits if h not in entities), note))
+                       sum(1 for h in hits if h in components and h not in entities),
+                       sum(1 for h in hits if h in declared_states and h not in entities
+                           and h not in components), note))
 
 
 # Worked dossier fragments that SHOULD pass. The honesty meta-test hollows these:
@@ -849,6 +1017,64 @@ CHECKS = {
 }
 
 
+def parse_exemption(text):
+    """(checks waived, reason, problem) for a `.sbe-exempt` file.
+
+    Format, and it is not free text any more:
+
+        checks: adr, diagrams
+        reason: this dossier was closed in 2024 and is kept for history; the
+                decision record it points at moved to the archive.
+
+    An exemption used to be a paragraph, and waiving EVERYTHING was what a
+    paragraph did by default: three words of filler switched off all five design
+    checks for a directory, and nothing in the file said which checks the author
+    thought they were waiving. Waiving everything by default is not an exemption,
+    it is an off switch. So the checks are named, one by one, and an author who
+    means all of them says all of them. The reason is held to the same
+    reviewability threshold as a tier override, because an exemption waives
+    strictly more than an override does.
+
+    What this does NOT do, stated plainly rather than implied: it cannot tell a
+    real reason from a well-formed fake one. No mechanical test can. That is why
+    the waiver prints as WAIVED rather than PASS, names every check it covers,
+    and is surfaced in CI as something a human is shown.
+    """
+    checks, reason_lines, seen_reason = [], [], False
+    for line in (text or "").splitlines():
+        m = re.match(r"(?i)^\s*checks\s*:\s*(.*)$", line)
+        if m and not seen_reason:
+            checks.extend(c.strip() for c in re.split(r"[,\s]+", m.group(1)) if c.strip())
+            continue
+        m = re.match(r"(?i)^\s*reason\s*:\s*(.*)$", line)
+        if m:
+            seen_reason = True
+            reason_lines.append(m.group(1))
+            continue
+        if seen_reason:
+            reason_lines.append(line)
+    reason = " ".join(l.strip() for l in reason_lines if l.strip()).strip()
+    if not checks and not seen_reason:
+        return [], (text or "").strip(), (
+            "it names no checks and no reason. An exemption states which of the %d design checks it "
+            "waives and why, as two fields:  checks: %s  and  reason: <at least %d words>. A file of "
+            "free text waives everything by default, which is an off switch and not an exemption"
+            % (len(CHECKS), ", ".join(CHECKS), OVERRIDE_MIN_WORDS))
+    if not checks:
+        return [], reason, ("it records a reason but names no checks; list the ones it waives "
+                            "(checks: %s), because an exemption that names nothing waives everything"
+                            % ", ".join(CHECKS))
+    unknown = [c for c in checks if c not in CHECKS]
+    if unknown:
+        return [], reason, ("it waives %s, which %s not a design check; the checks are %s"
+                            % (", ".join(unknown), "are" if len(unknown) > 1 else "is",
+                               ", ".join(CHECKS)))
+    problem = _reviewability_problem(reason, "exemption reason")
+    if problem:
+        return [], reason, problem
+    return checks, reason, ""
+
+
 def is_dossier(d):
     """A directory holding an intake file or any dossier artifact."""
     try:
@@ -873,21 +1099,25 @@ def find_dossiers(root):
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
         if EXEMPT in fns:
-            reason = (read(dp, EXEMPT) or "").strip()
             # `touch .sbe-exempt` waived all five checks for a dossier and the
             # report printed the sentence ".sbe-exempt names why: no reason
-            # recorded", which asserts a reason while naming its absence. An
-            # exemption waives strictly more than a tier override does, and the
-            # override already had to be reviewable, so this is held to the same
-            # threshold. An exemption that states no reviewable reason does not
-            # exempt: the dossier is checked, and the broken exemption is its own
-            # failure so that nobody discovers it by noticing the gate went quiet.
-            problem = _reviewability_problem(reason, "exemption reason")
+            # recorded", which asserts a reason while naming its absence. Then a
+            # reviewable-length paragraph waived all five without naming one of
+            # them. An exemption waives strictly more than a tier override does,
+            # so it is held to the override's threshold AND has to say what it
+            # waives. An exemption that does neither does not exempt: the dossier
+            # is checked, and the broken exemption is its own failure, so that
+            # nobody discovers it by noticing the gate went quiet.
+            waived, reason, problem = parse_exemption(read(dp, EXEMPT))
             if problem:
                 refused.append((dp, problem))
                 hits.append(dp)
                 continue
-            exempt.append((dp, reason))
+            exempt.append((dp, waived, reason))
+            # A partial exemption still gets checked for everything it did not
+            # waive. Only a dossier that waived every check drops out of the walk.
+            if sorted(waived) != sorted(CHECKS):
+                hits.append(dp)
             continue
         hits.append(dp)
     return hits, exempt, refused
@@ -914,7 +1144,15 @@ def main():
     if configured:
         root = configured
     fails = 0
-    print("BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)")
+    waivers = 0
+    # A waiver is not a pass, so CI must be able to act on one without reading
+    # prose. --strict-waivers turns every waiver into a failure for teams that
+    # want an exemption to expire on contact; without it the run still exits 0
+    # and the shipped workflow surfaces the WAIVED line as an annotation a human
+    # is shown. Either way the machine can tell a waiver from a verdict.
+    strict_waivers = "--strict-waivers" in sys.argv
+    print("BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; "
+          "WAIVED is not a pass either)")
     exempt, refused = [], []
     if os.path.isdir(root) and is_dossier(root):
         targets = [root]
@@ -922,17 +1160,22 @@ def main():
         targets, exempt, refused = find_dossiers(root)
     else:
         targets = []
-    for d, why in exempt:
-        # Printed as a WAIVER, never as a pass and never in silence. The line
-        # names the directory and every check the waiver covers, because an
+    waived_by = {os.path.abspath(d): set(w) for d, w, _ in exempt}
+    for d, waived, why in exempt:
+        # Printed as a WAIVER, never as a pass and never in silence, and marked
+        # so that it cannot be skimmed as one: PASS is a verdict about work that
+        # was examined, and this is a declaration that nothing examined it. The
+        # line names the directory and every check the waiver covers, because an
         # exemption nobody can see is an exemption nobody can withdraw, and a
         # dossier from last year blocking every unrelated merge forever is a gate
         # that gets switched off instead.
-        print("  %-10s %-8s %s" % ("dossier", "WAIVED",
-              "%s: %s waives %s here, stated reason: %s. Nothing below opened a file in that "
-              "directory, so this is a waiver and not a verdict about the work"
-              % (os.path.relpath(d, root), EXEMPT, ", ".join(CHECKS),
-                 " ".join(why.split())[:200])))
+        waivers += len(waived)
+        print("  %-10s %-8s %s" % (">> dossier", "WAIVED",
+              "%s: %s waives %s here (of %d design checks), stated reason: %s. Nothing opened a file "
+              "for %s in that directory, so this is a waiver and not a verdict about the work"
+              % (os.path.relpath(d, root), EXEMPT, ", ".join(sorted(waived)), len(CHECKS),
+                 " ".join(why.split())[:200],
+                 "those checks" if len(waived) < len(CHECKS) else "any check")))
     for d, problem in refused:
         fails += 1
         print("  %-10s %-8s %s" % ("dossier", "FAIL",
@@ -973,11 +1216,23 @@ def main():
     for target in targets:
         if len(targets) > 1 or os.path.abspath(target) != os.path.abspath(root):
             print("  dossier: %s" % os.path.relpath(target, root))
+        skip = waived_by.get(os.path.abspath(target), set())
         for name in which:
+            if name in skip:
+                waivers += 1
+                print("  %-10s %-8s %s" % (">> " + name, "WAIVED",
+                      "%s in %s names this check, so nothing opened a file for it here"
+                      % (EXEMPT, os.path.relpath(target, root))))
+                continue
             verdict, ev = run_guarded(name, CHECKS[name], target)
             if verdict == "FAIL":
                 fails += 1
             print("  %-10s %-8s %s" % (name, verdict, ev))
+    if waivers:
+        print("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
+              "pass; run `--strict --strict-waivers` to make one block a merge." % (waivers, EXEMPT))
+    if strict_waivers and waivers:
+        fails += waivers
     if strict and fails:
         print("STRICT: %d design check(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import Check, run_guarded, stated
+from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -75,9 +75,11 @@ class Ledger:
             # collapsed all eleven checks into one error line at exit 0. A row
             # whose session_id is "" or " " is worse than that: it is hashable, so
             # it silently merged with every other blank-id row and the coverage
-            # check counted them as one session. Both are broken records, and this
-            # is where a broken record is named.
-            if "session_id" in obj and stated(obj.get("session_id")) is None:
+            # check counted them as one session. A session_id of "TODO" or "-" is
+            # the same merge with a value that reads as deliberate, so it goes
+            # through answered() rather than stated(). All of these are broken
+            # records, and this is where a broken record is named.
+            if "session_id" in obj and answered(obj.get("session_id")) is None:
                 self.errors.append("%s:%d records session_id %r, which is not a session identifier"
                                    % (os.path.basename(path), i, obj.get("session_id")))
                 continue
@@ -227,13 +229,14 @@ def check_vault_log_per_active_day(ctx):
     log_days, blank = set(), []
     for f in glob.glob(SESSIONS_GLOB):
         try:
-            # A zero-byte file, and a file holding only its own headings, is not a
-            # session log. Counting either as one let `touch` satisfy the day and
+            # A zero-byte file, a file holding only its own headings, and a file
+            # whose every line under those headings says TODO are all not a
+            # session log. Counting any of them let `touch` satisfy the day and
             # the check then reported "0 days without any log" over a file with
             # nothing written in it.
             body = open(f, errors="replace").read()
-            if not [l for l in body.splitlines()
-                    if l.strip() and not l.lstrip().startswith("#")]:
+            if all_vacuous(body) or not [l for l in body.splitlines()
+                                         if l.strip() and not l.lstrip().startswith("#")]:
                 blank.append(os.path.basename(f))
                 continue
         except OSError:
@@ -445,7 +448,10 @@ def silent_failure_lints(ctx=None):
                 continue
             scanned += 1
             src = "\n".join(lines)
-            if not src.strip():
+            # A file with the right extension holding nothing, or holding only a
+            # placeholder token, carries no source to examine. Reporting either
+            # as "clean" is the same sentence as a PASS over an empty manifest.
+            if not src.strip() or all_vacuous(src) or vacuous(src):
                 empty_files += 1
             file_hits, file_exempt = 0, 0
             for pat, desc in LINT_PATTERNS:
@@ -474,9 +480,9 @@ def silent_failure_lints(ctx=None):
         # Files with the right extensions and nothing in them were opened and
         # reported "clean", which is the same sentence as a PASS over an empty
         # manifest. A scan of empty files examined no source.
-        return "NO-DATA", ("%d file(s) scanned under %s and every one of them is empty, so no line of "
-                           "source was examined and there is nothing to call clean"
-                           % (scanned, root))
+        return "NO-DATA", ("%d file(s) scanned under %s and every one of them is empty or holds "
+                           "nothing but a placeholder, so no line of source was examined and there "
+                           "is nothing to call clean" % (scanned, root))
     if hits:
         return "FAIL", "%d hit(s) in %d file(s) scanned: %s" % (len(hits), scanned, "; ".join(hits[:5]))
     if exempt and all_exempt == scanned:
