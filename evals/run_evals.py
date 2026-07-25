@@ -47,6 +47,39 @@ def case(name, klass, expect):
     return deco
 
 
+# Design-side evals: the tier is computed, not judged.
+from importlib.machinery import SourceFileLoader
+_intake = SourceFileLoader("sbe_intake", os.path.join(HERE, "..", "tools", "sbe_intake.py")).load_module()
+
+
+@case("tier-trivial-when-reversible-and-isolated", "tier", "T0")
+def t1(root):
+    return _intake.compute_tier({"changes_contract": False, "crosses_boundary": False,
+                                 "reversible_under_hour": True, "touches_sensitive": False,
+                                 "consumers": "none"})
+
+
+@case("tier-system-when-sensitive", "tier", "T3")
+def t2(root):
+    return _intake.compute_tier({"changes_contract": False, "crosses_boundary": False,
+                                 "reversible_under_hour": True, "touches_sensitive": True,
+                                 "consumers": "none"})
+
+
+@case("tier-feature-when-contract-changes", "tier", "T2")
+def t3(root):
+    return _intake.compute_tier({"changes_contract": True, "crosses_boundary": False,
+                                 "reversible_under_hour": True, "touches_sensitive": False,
+                                 "consumers": "some"})
+
+
+@case("tier-change-when-one-boundary", "tier", "T1")
+def t4(root):
+    return _intake.compute_tier({"changes_contract": False, "crosses_boundary": True,
+                                 "reversible_under_hour": True, "touches_sensitive": False,
+                                 "consumers": "none"})
+
+
 # 1. The filed model that overstated a five year total against its own components.
 @case("overstated-total-caught", "numbers", "FAIL")
 def c1(root):
@@ -159,8 +192,11 @@ def main():
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
-                fn(d)
-                verdict = run_gate(d, klass)
+                if klass == "tier":
+                    verdict = fn(d)
+                else:
+                    fn(d)
+                    verdict = run_gate(d, klass)
             except Exception as e:
                 verdict = "ERROR:%r" % e
         ok = verdict == expect
