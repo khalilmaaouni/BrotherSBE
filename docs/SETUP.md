@@ -55,7 +55,7 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 python3 evals/run_evals.py
 ```
 
-Thirteen lines, each a real failure class caught by the gate that owns it, ending "13 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+Thirty-seven lines, each a real failure class caught by the check that owns it, ending "37 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory

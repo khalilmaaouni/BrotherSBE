@@ -51,10 +51,10 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-13 evals: 13 passed, 0 regressions.
+37 evals: 37 passed, 0 regressions.
 ```
 
-Thirteen cases, each a real failure class as a fixture. When you change a gate,
+Thirty-seven cases, each a real failure class as a fixture. When you change a gate,
 this suite is what tells you a gate stopped catching its defect. Run it before you
 rely on anything else here.
 
@@ -319,7 +319,7 @@ until the receipt is there and consistent.
 
 - `SKILL.md` section 3 is the law behind the four gates and the override rules
   (an override is named, logged, and never available on the `--strict` CI path).
-- `evals/run_evals.py` is the proof: thirteen planted defects, each caught by its
+- `evals/run_evals.py` is the proof: thirty-seven planted defects, each caught by its
   gate. Read the fixtures to see the exact shape of every receipt.
 - `SECURITY.md` documents the zero-network posture: the tools make no network call,
   write only to the vault you point `BROTHERSBE_VAULT` at (default
