@@ -5,9 +5,9 @@ because it is true and useful, not because it can be verified. The laws, which d
 carry enforcement points, are in [SKILL.md](SKILL.md).
 
 The split is deliberate. A rule stated in a prompt is not a control; a control is a
-check that runs. Mixing the two makes the law file feel stronger than it is, and the
-author of this skill rated the version that mixed them 2.5 out of 5 for exactly that
-reason. So: laws name machinery, practices admit they are judgment.
+check that runs. Mixing the two makes the law file feel stronger than it is, which is
+the failure mode this split exists to prevent. So: laws name machinery, practices
+admit they are judgment.
 
 ## Judgment that resists tabulation
 

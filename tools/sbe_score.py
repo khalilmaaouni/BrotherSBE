@@ -2,8 +2,9 @@
 """BrotherSBE weekly code-graded checks (Anthropic eval guidance: many small
 code-graded checks; LLM judgment only for the residue). Reads the telemetry
 ledger and fence registries; prints PASS / FAIL / NO-DATA per check with the
-evidence inline. Never blocks; always exits 0. Honest outputs only: a check
-without data says NO-DATA, never PASS."""
+evidence inline. Advisory by default (exit 0); `--strict` exits nonzero on any
+FAIL, and on a crash, so CI can block. Honest outputs only: a check without data
+says NO-DATA, never PASS."""
 import json, os, sys, glob, datetime, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -227,5 +228,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print("sbe_score: swallowed error (never blocks): %r" % (e,))
-        sys.exit(0)
+        # A broken checker must not silently waive the gate. In strict mode a crash
+        # blocks, exactly as in sbe_gate.py; advisory mode still never blocks a session.
+        print("sbe_score: error %r" % (e,))
+        sys.exit(1 if "--strict" in sys.argv else 0)
