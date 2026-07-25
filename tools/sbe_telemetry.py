@@ -56,6 +56,9 @@ fld() everywhere.
 """
 import json, os, sys, glob, re, datetime, hashlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sbe_checks import distinct
+
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
 # Default: ~/BrotherSBEVault. Point BROTHERSBE_VAULT anywhere you prefer.
@@ -505,10 +508,17 @@ def cmd_scorecard():
 
 
 def prediction_counts():
-    out = {"sealed": 0, "scored": 0, "hits": 0}
+    """Sealed, scored and hit predictions, counting each DISTINCT row once.
+
+    Five identical rows are one prediction written five times, and they cleared
+    the "at least 5 sealed" threshold. The rule is sbe_checks.distinct(), shared
+    with gate_numbers and the other two thresholds that did not have it.
+    """
+    out = {"sealed": 0, "scored": 0, "hits": 0, "note": ""}
     if not os.path.isfile(OPERATOR_MODEL):
         return out
     in_ledger = False
+    rows = []
     for line in open(OPERATOR_MODEL, errors="replace"):
         if line.startswith("## Prediction ledger"):
             in_ledger = True
@@ -518,11 +528,16 @@ def prediction_counts():
         if in_ledger and line.strip().startswith("20") and "|" in line:
             parts = [p.strip() for p in line.split("|")]
             if len(parts) >= 5 and parts[2] not in ("n/a", ""):
-                out["sealed"] += 1
-                if parts[4].lower().startswith(("yes", "hit", "no", "miss")):
-                    out["scored"] += 1
-                    if parts[4].lower().startswith(("yes", "hit")):
-                        out["hits"] += 1
+                rows.append(parts)
+    unique, dupes = distinct([" | ".join(p) for p in rows])
+    for parts in [p.split(" | ") for p in unique]:
+        out["sealed"] += 1
+        if parts[4].lower().startswith(("yes", "hit", "no", "miss")):
+            out["scored"] += 1
+            if parts[4].lower().startswith(("yes", "hit")):
+                out["hits"] += 1
+    if dupes:
+        out["note"] = "; %d identical ledger row(s) counted once" % dupes
     return out
 
 

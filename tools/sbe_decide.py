@@ -27,7 +27,14 @@ def recommend(table, context):
       unrecognized: one line per supplied choice criterion whose value matched
           none of that criterion's known keys, naming the criterion and the
           value received, so a typo is distinguishable from an omission.
-      flip_condition: table["flip"], unconditionally.
+      flip_condition: the flip condition FOR THE RECOMMENDATION, from
+          table["flips"], falling back to table["flip"] where a recommendation
+          has no entry. One string served the whole table, so the run that
+          recommended `services` already had nine deploying teams and high
+          failure isolation and was handed a flip condition naming two
+          conditions that were already true. A flip condition that is already
+          satisfied can never fire, and L12 promises every non-NO-DATA output
+          carries one.
       scores: the raw tally per option.
     """
     tally = {opt: 0 for opt in table["options"]}
@@ -62,7 +69,9 @@ def recommend(table, context):
             "alternatives": ranked[1:3] if verdict == "OK" else [],
             "deciding_criteria": deciding, "evidence": len(deciding),
             "verdict": verdict, "unrecognized": unrecognized,
-            "flip_condition": table["flip"], "scores": tally}
+            "flip_condition": (table.get("flips", {}).get(ranked[0], table["flip"])
+                               if verdict == "OK" else table["flip"]),
+            "scores": tally}
 
 
 def load_table(path, key):

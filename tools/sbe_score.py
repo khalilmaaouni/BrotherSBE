@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous, prune_dirs
+from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -32,6 +32,16 @@ for _pat in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":"):
         REGISTRIES.extend(glob.glob(os.path.expanduser(_pat.strip()), recursive=True))
 
 CACHE_RATIO_FLOOR = 90.0
+
+# Four checks compared an age with <= or > and none of them had a floor, so a
+# single future-dated row defeated every staleness rule in this file at once:
+# `review-cadence` printed "last review: -1620.2d ago" and called it a PASS, the
+# genuinely stale review in the same ledger was masked because max() picked the
+# future row, and a registry file touched with a future mtime was fresh forever.
+# A timestamp in the future is not a fresh record, it is a BROKEN record, and this
+# project's own rule for a broken record is that it FAILs and names itself.
+AGE_IS_BROKEN = ("a timestamp in the future is not an age; a record dated after now is a broken "
+                 "record, and staleness measured against it would be measured against nothing")
 
 
 class Ledger:
@@ -153,7 +163,15 @@ class Ctx:
     @property
     def recent(self):
         return self._once("recent", lambda: [
-            r for r in self.sessions if (age_days(r.get("ts", "")) or 99) <= 7])
+            r for r in self.sessions
+            if 0 <= (age_days(r.get("ts", "")) if age_days(r.get("ts", "")) is not None else 99) <= 7])
+
+    @property
+    def future(self):
+        """Rows dated after now. An age below zero is not an age; see AGE_IS_BROKEN."""
+        return self._once("future", lambda: [
+            r for r in self.sessions
+            if (age_days(r.get("ts", "")) or 0) < 0])
 
     @property
     def days(self):
@@ -173,6 +191,10 @@ def check_ledger_coverage(ctx):
     bad = ctx.ledger.problem("session coverage")
     if bad:
         return bad
+    if ctx.future:
+        return "FAIL", ("%d session row(s) are dated in the future (%s): %s"
+                        % (len(ctx.future), ", ".join(repr(r.get("ts")) for r in ctx.future[:4]),
+                           AGE_IS_BROKEN))
     if not ctx.recent:
         return "NO-DATA", ("%d ledger line(s), none in the last 7d, so coverage was measured over "
                            "zero recent sessions" % len(ctx.ledger.rows))
@@ -258,13 +280,21 @@ def check_vault_log_per_active_day(ctx):
 
 
 def _registry_lines(ctx, max_age_days=None):
-    """(lines, read, skipped) across the configured registries."""
-    lines, read, skipped = [], 0, []
+    """(lines, read, skipped, ahead) across the configured registries.
+
+    `ahead` names registry files whose mtime is in the future. Without it, one
+    `touch -t 203001010000` made a file fresh forever: every fence in it was
+    younger than two days by arithmetic and the hygiene check said so.
+    """
+    lines, read, skipped, ahead = [], 0, [], []
     for p in ctx.registries:
         try:
             age = (datetime.datetime.now().timestamp() - os.path.getmtime(p)) / 86400
         except OSError:
             skipped.append(os.path.basename(p))
+            continue
+        if age < 0:
+            ahead.append(os.path.basename(p))
             continue
         if max_age_days is not None and age > max_age_days:
             skipped.append(os.path.basename(p))
@@ -277,7 +307,7 @@ def _registry_lines(ctx, max_age_days=None):
         read += 1
         for line in body:
             lines.append((p, age, line.strip()))
-    return lines, read, skipped
+    return lines, read, skipped, ahead
 
 
 def _is_live_fence(s):
@@ -287,7 +317,10 @@ def _is_live_fence(s):
 def check_fence_hygiene(ctx):
     if not ctx.registries:
         return "NO-DATA", "set BROTHERSBE_REGISTRIES to enable; nothing was opened"
-    lines, read, skipped = _registry_lines(ctx)
+    lines, read, skipped, ahead = _registry_lines(ctx)
+    if ahead:
+        return "FAIL", ("%d registry file(s) carry a modification time in the future (%s): %s"
+                        % (len(ahead), ", ".join(sorted(ahead)[:4]), AGE_IS_BROKEN))
     if not read:
         return "NO-DATA", ("%d registry path(s) configured, none readable (%s), so no fence line was "
                            "examined" % (len(ctx.registries), ", ".join(skipped[:4])))
@@ -315,6 +348,11 @@ def check_correction_latency(ctx):
                         "latency was never measured and this check cannot report on it"
                         % (len(undated), len(ctx.corrections.rows),
                            ", ".join(repr(c.get("ts")) for c in undated[:4])))
+    ahead = [c for c in ctx.corrections.rows if age_days(c.get("ts", "")) < 0]
+    if ahead:
+        return "FAIL", ("%d of %d correction candidate(s) are dated in the future (%s): %s"
+                        % (len(ahead), len(ctx.corrections.rows),
+                           ", ".join(repr(c.get("ts")) for c in ahead[:4]), AGE_IS_BROKEN))
     old = [c for c in ctx.corrections.rows if age_days(c.get("ts", "")) > 7]
     return ("PASS" if not old else "FAIL",
             "%d candidate(s) total, %d older than 7d unprocessed"
@@ -332,7 +370,10 @@ def check_budget_vs_tier(ctx):
     if not ctx.registries:
         return "NO-DATA", ("set BROTHERSBE_REGISTRIES to enable; no registry was opened, so no fence "
                            "line was checked for a tier tag")
-    lines, read, skipped = _registry_lines(ctx, max_age_days=7)
+    lines, read, skipped, ahead = _registry_lines(ctx, max_age_days=7)
+    if ahead:
+        return "FAIL", ("%d registry file(s) carry a modification time in the future (%s): %s"
+                        % (len(ahead), ", ".join(sorted(ahead)[:4]), AGE_IS_BROKEN))
     if not read:
         return "NO-DATA", ("%d registry path(s) configured, none touched in the last 7d or none "
                            "readable, so no fence line was checked" % len(ctx.registries))
@@ -357,7 +398,8 @@ def check_prediction_seals(ctx):
     p = prediction_counts()
     if p["sealed"] == 0:
         return "NO-DATA", "%s holds no sealed predictions" % OPERATOR_MODEL
-    return ("PASS" if p["sealed"] >= 5 else "FAIL", "%d sealed (target >= 5)" % p["sealed"])
+    return ("PASS" if p["sealed"] >= 5 else "FAIL",
+            "%d sealed (target >= 5)%s" % (p["sealed"], p.get("note", "")))
 
 
 def check_felt_outcome_ratings(ctx):
@@ -366,13 +408,25 @@ def check_felt_outcome_ratings(ctx):
     rated = [x for x in ctx.ratings.rows if isinstance(x.get("score"), (int, float))]
     if not rated:
         return "NO-DATA", "no scored ratings in %s" % RATINGS
+    # The shared dedupe rule: six copies of one rating are one rating. See
+    # sbe_checks.distinct, and gate_numbers, which learned this first.
+    rated, dupes = distinct(rated)
     return ("PASS" if len(rated) >= 6 else "FAIL",
-            "%d ratings (target >= 6 for alignment 10)" % len(rated))
+            "%d distinct ratings (target >= 6 for alignment 10)%s"
+            % (len(rated), "" if not dupes else
+               "; %d identical row(s) counted once" % dupes))
 
 
 def check_review_cadence(ctx):
     if ctx.reviews.errors:
         return ctx.reviews.problem("review cadence")
+    ahead = [x for x in ctx.reviews.rows if (age_days(x.get("ts", "")) or 0) < 0]
+    if ahead:
+        # Checked BEFORE max(), because max() picks the future row and a genuinely
+        # stale review sitting in the same ledger is masked by it.
+        return "FAIL", ("%d review row(s) are dated in the future (%s): %s"
+                        % (len(ahead), ", ".join(repr(x.get("ts")) for x in ahead[:4]),
+                           AGE_IS_BROKEN))
     last = max((x.get("ts", "") for x in ctx.reviews.rows), default=None)
     a = age_days(last) if last else None
     if a is None:
@@ -384,10 +438,28 @@ def check_review_cadence(ctx):
 # passes for a right one. Scoped to the caller's worktree, opt-in via a path arg
 # or the SBE_LINT_ROOT env var, so the tool never scans unrelated trees. Language
 # builtins and heuristics only, no network, no third-party deps.
+#
+# The conflict-skipping upsert used to be written as
+# `\.execute\([^)]*\).*ON\s+CONFLICT.*DO\s+NOTHING`, which required a Python
+# `.execute(` on the same line. `.sql` is the FIRST non-Python extension L11 says
+# this lint scans and warehouse work is one of the seven work profiles this skill
+# claims, so the one lint aimed at that profile could not fire on that profile's
+# files: the statement in a .sql file, the same statement split over two lines,
+# and the Python form that puts the SQL in a variable were all invisible. It now
+# reads the SQL wherever it is written and in whatever host language, and stops
+# at the statement's semicolon so that a legitimate `ON CONFLICT ... DO UPDATE`
+# in the same file is not swept in with it.
 LINT_PATTERNS = [
     (re.compile(r"except\s*:"), "bare except (catches everything, hides the real error)"),
     (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*pass", re.M), "except-then-pass (swallows the error)"),
-    (re.compile(r"\.execute\([^)]*\).*ON\s+CONFLICT.*DO\s+NOTHING", re.I), "conflict-skipping upsert without a logged skip count"),
+    # Two patterns for one class, because the single pattern that shipped needed a
+    # Python `.execute(` on the same line, and `.sql` is the FIRST non-Python
+    # extension L11 says this lint scans. The one lint aimed at warehouse work
+    # could not fire on a warehouse file: `INSERT ... ON CONFLICT (id) DO NOTHING;`
+    # in a .sql file, the same statement split over two lines, and the Python form
+    # that puts the SQL in a variable were all invisible. The second pattern reads
+    # the SQL wherever it is written, across newlines, and needs no host language.
+    (re.compile(r"(?is)\bon\s+conflict\b[^;]{0,300}?\bdo\s+nothing\b"), "conflict-skipping upsert without a logged skip count"),
     # Fire-and-forget subprocess only: the call starts a statement (result discarded)
     # and carries no check=True. An assigned result (out = subprocess.run(...)) can be
     # inspected, so it is not a silent swallow and is not flagged.
@@ -432,19 +504,31 @@ def silent_failure_lints(ctx=None):
                            "so there is nothing to call clean")
     if not os.path.isdir(root):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
-    hits, exempt = [], []
+    hits, exempt, self_skipped = [], [], []
     scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
+    pruner = Pruner()
     for dp, dns, fns in os.walk(root):
-        # Shared with the other two walkers, and by detection as well as by name:
+        # Shared with the other two walkers, and by CONTENT rather than by name:
         # a virtualenv named .venv-whisper put third-party code through THIS gate,
-        # which is the one gate a .sbe-exempt cannot waive.
-        dns[:] = prune_dirs(dp, dns)
+        # which is the one gate a .sbe-exempt cannot waive, and then pruning by
+        # name meant renaming a directory hid a repository's own source from it.
+        dns[:] = pruner(dp, dns)
         for fn in sorted(fns):
-            if fn == os.path.basename(__file__):
-                continue  # the linter declares the patterns as strings; do not self-match
+            path_here = os.path.join(dp, fn)
+            # The linter declares the patterns as strings, so it must not match
+            # itself. By PATH, not by basename: comparing basenames skipped any
+            # file called sbe_score.py in the CALLER's tree, so a user's own file
+            # with that name was never opened and "1 file(s) scanned, clean" was
+            # printed over a directory holding two, one of which carried a bare
+            # `except: pass`. And the skip is reported, because a completeness
+            # sentence over a set the tool truncated in silence is the class this
+            # gate exists to catch.
+            if os.path.abspath(path_here) == os.path.abspath(__file__):
+                self_skipped.append(os.path.relpath(path_here, root))
+                continue
             if not fn.endswith(SCANNABLE):
                 continue
-            path = os.path.join(dp, fn)
+            path = path_here
             try:
                 lines = open(path, errors="replace").read().splitlines()
             except OSError:
@@ -476,28 +560,37 @@ def silent_failure_lints(ctx=None):
                 with_matches += 1
                 if not file_hits:
                     all_exempt += 1
+    # Everything this scan did NOT open, on every verdict it prints. A pruned
+    # directory and a self-skipped file are both files a "clean" sentence would
+    # otherwise be claiming over.
+    note = pruner.note(lambda f: f.endswith(SCANNABLE))
+    if self_skipped:
+        note += ("; this tool's own source was not scanned (%s), because it declares these "
+                 "patterns as strings and would match itself"
+                 % ", ".join(sorted(self_skipped)))
     if not scanned:
-        return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened"
-                           % (root, " ".join(SCANNABLE)))
+        return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened%s"
+                           % (root, " ".join(SCANNABLE), note))
     if empty_files == scanned:
         # Files with the right extensions and nothing in them were opened and
         # reported "clean", which is the same sentence as a PASS over an empty
         # manifest. A scan of empty files examined no source.
         return "NO-DATA", ("%d file(s) scanned under %s and every one of them is empty or holds "
                            "nothing but a placeholder, so no line of source was examined and there "
-                           "is nothing to call clean" % (scanned, root))
+                           "is nothing to call clean%s" % (scanned, root, note))
     if hits:
-        return "FAIL", "%d hit(s) in %d file(s) scanned: %s" % (len(hits), scanned, "; ".join(hits[:5]))
+        return "FAIL", ("%d hit(s) in %d file(s) scanned: %s%s"
+                        % (len(hits), scanned, "; ".join(hits[:5]), note))
     if exempt and all_exempt == scanned:
         return "NO-DATA", ("%d file(s) scanned under %s and every match in every one of them was "
                            "suppressed by an inline `%s` comment (%s); a scan whose every finding was "
-                           "waived examined nothing it was allowed to report, so it is not clean"
-                           % (scanned, root, EXEMPTION, ", ".join(exempt[:5])))
+                           "waived examined nothing it was allowed to report, so it is not clean%s"
+                           % (scanned, root, EXEMPTION, ", ".join(exempt[:5]), note))
     if exempt:
         return "PASS", ("%d file(s) scanned under %s, 0 unexempted hit(s), %d suppressed by an inline "
-                        "`%s` comment (%s)"
-                        % (scanned, root, len(exempt), EXEMPTION, ", ".join(exempt[:5])))
-    return "PASS", "%d file(s) scanned under %s, clean" % (scanned, root)
+                        "`%s` comment (%s)%s"
+                        % (scanned, root, len(exempt), EXEMPTION, ", ".join(exempt[:5]), note))
+    return "PASS", "%d file(s) scanned under %s, clean%s" % (scanned, root, note)
 
 
 def _rel(p):
@@ -547,7 +640,10 @@ CHECKS = {
                               full_fixture={"files": {_rel(OPERATOR_MODEL): _PREDICTIONS}}),
     "felt-outcome-ratings": Check(
         check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl",
-        full_fixture={"files": {_rel(RATINGS): [{"score": 5} for _ in range(6)]}}),
+        # Six DISTINCT rows. The fixture used to be one row repeated six times,
+        # which is exactly the defect the shared dedupe rule closed: it certified
+        # a threshold by writing the same rating out six times.
+        full_fixture={"files": {_rel(RATINGS): [{"score": s} for s in (5, 4, 3, 2, 1, 0)]}}),
     "review-cadence": Check(
         check_review_cadence, reads=(REVIEWS,), kind="jsonl",
         full_fixture={"files": {_rel(REVIEWS): [{"ts": "%(now)s"}]}}),
