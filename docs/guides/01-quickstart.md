@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-190 evals: 190 passed, 0 regressions.
+199 evals: 199 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -62,7 +62,7 @@ The four gates and the exact receipt each one reads:
 
 | gate | receipt file (found anywhere in the worktree) | what a PASS proves |
 | --- | --- | --- |
-| `numbers` | `numbers-manifest.json` | a decision figure is pinned, independently re-derived, zero drift |
+| `numbers` | `numbers-manifest.json` | a decision figure is pinned, re-derived by a second query differing beyond formatting and comments, zero drift |
 | `migration` | `migration-receipt.json` | forward and reverse both ran against a restore, and recorded row counts match (no row counts recorded is NO-DATA) |
 | `approval` | `APPROVAL` file or an `Approved-by:` commit trailer | a money or partner change carries a human approval bound to a verified signature, or a review id the gate does not resolve |
 | `ran` | `ran-receipt.json` | a SQL or pipeline check actually executed (nonzero duration, zero exit) |
@@ -129,7 +129,7 @@ python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
 ```
 
 The figure is pinned, derived two independent ways, and both derivations returned

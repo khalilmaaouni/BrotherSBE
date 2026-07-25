@@ -95,13 +95,13 @@ python3 ~/.claude/skills/brothersbe/tools/sbe_gate.py numbers
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
 ```
 
 Change `secondary` to `4820109` and the same gate prints
 `FAIL  gmv_q3: DRIFT primary=4820113 secondary=4820109 (zero drift required)`.
 Delete the `snapshot_id` and it prints
-`FAIL  gmv_q3: no snapshot_id (a live warehouse drifts; pin the read)`. Present no
+`FAIL  gmv_q3: no snapshot_id recorded (None); a live warehouse drifts, so pin the read. A placeholder is not a pin`. Present no
 manifest at all and it prints `NO-DATA`, never `PASS`: absent evidence is never a
 pass, which is the honesty law inherited from the chassis.
 
@@ -195,7 +195,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  190 evals: 190 passed, 0 regressions.
+  199 evals: 199 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

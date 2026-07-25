@@ -1140,6 +1140,41 @@ def v3(root):
         "second_derivation": "select 2", "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
 
 
+def _one_figure(root, query, second):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07-25", "query": query,
+        "second_derivation": second, "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
+
+
+@case("a-trailing-semicolon-does-not-make-a-second-derivation", "numbers", "FAIL")
+def v4a(root):
+    # Copying the query into the second field and adding a semicolon bought
+    # "1 figure(s) each with a pinned, independently re-derived, zero-drift check",
+    # the strongest sentence this tool prints. It is the lazy thing, not the
+    # dishonest thing, which is exactly why the gate must not reward it.
+    _one_figure(root, "SELECT SUM(amount) FROM orders", "SELECT SUM(amount) FROM orders;")
+
+
+@case("a-trailing-comment-does-not-make-a-second-derivation", "numbers", "FAIL")
+def v4b(root):
+    _one_figure(root, "SELECT SUM(amount) FROM orders",
+                "SELECT SUM(amount) FROM orders -- rerun 2026-07-25")
+
+
+@case("a-block-comment-and-a-reindent-do-not-make-a-second-derivation", "numbers", "FAIL")
+def v4c(root):
+    _one_figure(root, "SELECT SUM(amount) FROM orders",
+                "/* second pass */ select  sum(amount)\n  from orders")
+
+
+@case("a-genuinely-different-second-derivation-still-passes", "numbers", "PASS")
+def v4d(root):
+    # The control. Normalising more text before comparing must not start failing
+    # the honest case it exists to protect.
+    _one_figure(root, "SELECT SUM(amount) FROM orders",
+                "SELECT SUM(qty * price) FROM order_lines")
+
+
 @case("a-figure-with-no-label-is-caught", "numbers", "FAIL")
 def v4(root):
     write(root, "numbers-manifest.json", {"figures": [{
@@ -2004,7 +2039,114 @@ def dc3(root):
     return "consistent" if not wrong else "; ".join(wrong[:3])
 
 
+_CHECK_LINE = None
+
+
+def _checker_line_re():
+    """The pasted-output line shape: two spaces, a check name, a verdict, evidence."""
+    global _CHECK_LINE
+    import re as _re
+    if _CHECK_LINE is None:
+        names = set()
+        for mod, attr in (("sbe_gate.py", "GATES"), ("sbe_design.py", "CHECKS"),
+                          ("sbe_score.py", "CHECKS")):
+            m = SourceFileLoader(mod[:-3] + "_names", os.path.join(_REPO, "tools", mod)).load_module()
+            names |= set(getattr(m, attr))
+        names |= {"dossier"}          # printed by sbe_design.py's own reporter
+        _CHECK_LINE = _re.compile(r"^  (>> )?(%s)\s+(PASS|FAIL|NO-DATA|WAIVED)\s+(\S.*)$"
+                                  % "|".join(_re.escape(n) for n in sorted(names, key=len, reverse=True)))
+    return _CHECK_LINE
+
+
+def _evidence_templates():
+    """Every sentence the three checkers can print, from their own source.
+
+    The docs paste tool output verbatim, and tool output is built from `%`
+    templates that are string constants in the source. Reading them out with ast
+    is what lets a guard named for ALL checker lines cover all of them: a pasted
+    line whose sentence no template can produce is a line the tool does not
+    produce today. Candidates shorter than this in literal text are dropped,
+    because a template that is mostly `%s` would match anything and a guard that
+    matches anything is the defect this file exists to catch.
+    """
+    import ast as _ast, re as _re
+    out = []
+    for mod in ("sbe_gate.py", "sbe_design.py", "sbe_score.py", "sbe_checks.py"):
+        tree = _ast.parse(open(os.path.join(_REPO, "tools", mod), errors="replace").read())
+        for node in _ast.walk(tree):
+            if not (isinstance(node, _ast.Constant) and isinstance(node.value, str)):
+                continue
+            for piece in [node.value] + node.value.split("; "):
+                text = " ".join(piece.split())
+                literal = _re.sub(r"%[-\d.]*[sdrf%]", "", text)
+                if len(literal.strip()) < 16:
+                    continue
+                pattern = _re.escape(text)
+                pattern = _re.sub(r"%[-\\\d.]*[sdrf]", ".*?", pattern).replace("%%", "%")
+                out.append(_re.compile(pattern))
+    return out
+
+
 @case("no-shipped-doc-prints-a-checker-line-the-checker-does-not-produce", "docs", "consistent")
+def dc7(root):
+    """Every pasted checker line in every shipped doc, against what the tools can print.
+
+    The guard that carried this name recomputed ONE line, from one of the twenty
+    checks, by filtering `if not line.startswith("silent-failure-lints")`. It
+    printed `consistent` and was counted among the suite as evidence for a claim
+    about all shipped docs and all checker lines, while forty-six of the
+    forty-seven pasted lines went unread and three of them were stale. A guard
+    whose name asserts a property it implements over one case is this project's
+    own defect class at the guard layer.
+
+    Exact recomputation is only possible for a line the suite can reproduce (the
+    lint line, in the case below). For the rest, the sentence a checker prints is
+    built from `%` templates that live in its source, so a line no template can
+    produce is a line the tool cannot print. That is checkable over all of them.
+    """
+    import re as _re
+    line_re, templates = _checker_line_re(), _evidence_templates()
+    wrong, seen = [], 0
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        body = open(p, errors="replace").read()
+        quoted = [("inline quote", " ".join(q.split()))
+                  for q in _re.findall(r"`(?:PASS|FAIL|NO-DATA|WAIVED)\s\s+([^`]+)`", body)]
+        for raw in body.splitlines():
+            m = line_re.match(raw.rstrip())
+            if not m:
+                continue
+            seen += 1
+            evidence = " ".join(m.group(4).split())
+            for fragment in [evidence] + evidence.split("; "):
+                if any(rx.fullmatch(fragment) for rx in templates):
+                    break
+            else:
+                wrong.append("%s: %r is not a sentence %s can print today"
+                             % (rel, evidence[:70], m.group(2)))
+        # A checker sentence quoted inline, without its check name, is the same
+        # claim in a smaller font: guide 04 quoted `FAIL  gmv_q3: no snapshot_id
+        # (a live warehouse drifts; pin the read)`, and the sentence the tool
+        # prints today ends "A placeholder is not a pin", which is the clause this
+        # whole fix range exists to be able to print.
+        for _kind, evidence in quoted:
+            seen += 1
+            for fragment in [evidence] + evidence.split("; "):
+                if any(rx.fullmatch(fragment) for rx in templates):
+                    break
+            else:
+                wrong.append("%s: the inline quote %r is not a sentence any checker prints today"
+                             % (rel, evidence[:70]))
+    if not seen:
+        return "this guard found no checker line at all in any shipped doc, so it proved nothing"
+    return "consistent" if not wrong else "%d of %d pasted line(s) stale: %s" % (
+        len(wrong), seen, "; ".join(wrong[:3]))
+
+
+@case("no-shipped-doc-prints-a-silent-failure-lint-line-the-scorer-does-not-produce",
+      "docs", "consistent")
 def dc4(root):
     # The lint line pasted in guide 02 names the exempted lines BY NUMBER, and
     # those numbers move whenever anything above them moves: one of them was a

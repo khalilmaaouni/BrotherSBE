@@ -595,7 +595,7 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
   migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
   approval  FAIL     approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
@@ -631,7 +631,7 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
   migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
   approval  NO-DATA  commit records Reviewed-in: PR-482. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
