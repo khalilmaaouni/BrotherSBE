@@ -88,7 +88,7 @@ if "--tools" in sys.argv:
     RUN_DIR = os.path.abspath(sys.argv[sys.argv.index("--tools") + 1])
 QUIET = "--quiet" in sys.argv
 
-from sbe_checks import Check, prune_dirs  # noqa: E402
+from sbe_checks import Check, Pruner  # noqa: E402
 
 _telemetry = SourceFileLoader("sbe_telemetry",
                               os.path.join(TOOLS_DIR, "sbe_telemetry.py")).load_module()
@@ -115,6 +115,28 @@ EMPTY_VALUES = [("e", "empty-string", ""), ("f", "whitespace", "   "), ("g", "nu
 # three prove the predicate is actually being CALLED, which is what a scenario
 # can prove and a list cannot.
 VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")]
+
+# Round six, and the first axis about ORDER rather than about content. Every
+# sweep above replaces a value with one that says nothing WHEN READ RAW. These
+# replace it with one that says nothing only AFTER the tool reduces it, which is
+# the shape the whole sweep was blind to because the tools tested for vacuity
+# first and reduced afterwards. `second_derivation: "#"` is not blank, is not a
+# vacuity token, survives answered(), and folds to the empty string, and the gate
+# then compared "" against a real query, found them different, and printed "a
+# second derivation whose text differs beyond case, whitespace and comments,
+# re-run to zero drift" over a derivation that computes nothing. Every reduction
+# this project performs (strip comments, strip a currency symbol, parse a number)
+# can manufacture the same hole, so the order is now a scenario and not a habit.
+#
+# These carry no letter and no digit, so they are a non-answer under any reading
+# and can be swept per leaf. The word-bearing case is below, and can only be
+# swept whole, because "-- rerun by hand" is a perfectly good LABEL and only a
+# derivation-shaped field reduces it to nothing.
+REDUCES_TO_NOTHING = [("n", "hash-comment", "#"), ("n", "block-comment", "/* */"),
+                      ("n", "punctuation", ";")]
+# Applied to the whole fixture at once, for the same reason.
+COMMENT_ONLY = [("n", "sql-comment-with-words", "-- rerun on 2026-07-26 by hand, same query"),
+                ("n", "not-a-measurement", "inf")]
 
 # Round five, and the first one that is not about emptiness at all. Every sweep
 # above replaces a value with a value that says NOTHING. This one replaces a
@@ -159,12 +181,24 @@ def tool_sources():
     exactly what made the gap silent. This walks.
     """
     out = []
+    pruner = Pruner()
     for dp, dns, fns in os.walk(TOOLS_DIR):
-        dns[:] = prune_dirs(dp, dns)
+        dns[:] = pruner(dp, dns)
         for fn in fns:
             if fn.endswith(".py"):
                 out.append(os.path.relpath(os.path.join(dp, fn), TOOLS_DIR))
+    hidden = pruner.hidden(lambda f: f.endswith(".py"))
+    if hidden:
+        # A pruned directory holding Python is a directory this test's coverage
+        # claim does not cover, and the claim is printed on every run. Naming it
+        # in the sources list would import somebody else's code; naming it here
+        # is how the count stops being a completeness sentence over a truncated
+        # set. main() turns this into a failure.
+        PRUNED_WITH_SOURCE.extend(hidden)
     return sorted(out)
+
+
+PRUNED_WITH_SOURCE = []
 
 
 def load_tool_modules():
@@ -236,6 +270,12 @@ def _pass_valued_names(tree):
         else:
             continue
         direct = isinstance(value, ast.Constant) and value.value == "PASS"
+        # `_ok = lambda: "PASS"` binds a name to the verdict as surely as
+        # `_ok = "PASS"` does, and a Lambda is not a FunctionDef so the walk below
+        # never inspects one. The name is a verdict name either way.
+        if isinstance(value, ast.Lambda) and any(
+                isinstance(n, ast.Constant) and _spells_pass(n.value) for n in ast.walk(value)):
+            direct = True
         # A container holding the verdict counts too, because the name is then a
         # verdict table and `TABLE["ok"]` is a way of spelling "PASS".
         container = isinstance(value, (ast.Dict, ast.List, ast.Tuple, ast.Set)) and any(
@@ -265,50 +305,89 @@ def _folded_str(node):
     return None
 
 
-def _returns_pass(head, pass_names):
-    """True when this expression can be the verdict PASS.
+def _spells_pass(text):
+    return isinstance(text, str) and text.strip().casefold() == "pass"
 
-    Four shapes now, and the last two are round five. A `BinOp` and a `Subscript`
-    walked straight through: `return "PA" + "SS", ...` and, the one that matters,
-    `_V = {"ok": "PASS"}` with `return _V["ok"], ...`. A verdict lookup table is an
-    ordinary refactor, not an attack, and the day someone writes one this lint
-    stops seeing the file it exists to police, silently, while printing a coverage
-    count that reads complete.
+
+def _mentions_pass(node, pass_names):
+    """True when the verdict PASS is reachable anywhere inside this expression.
+
+    Deliberately generous. Enumerating node types one at a time is the
+    hand-fix-the-instance loop this project exists to break, and it lost five
+    times over: an f-string is a JoinedStr and not a Constant, a name bound by
+    `from sbe_checks import VERDICTS` is bound by no Assign, a lambda is not a
+    FunctionDef, and `"pass".upper()` and `"".join(["PA", "SS"])` are Calls. So
+    this asks the opposite question: is there ANY constant, name or call in here
+    through which the string could arrive.
     """
+    for n in ast.walk(node):
+        if isinstance(n, ast.Constant) and _spells_pass(n.value):
+            return True
+        if isinstance(n, ast.Name) and n.id in pass_names:
+            return True
+        if isinstance(n, ast.Attribute) and n.attr in ("upper", "casefold", "lower", "title",
+                                                       "strip", "format", "join", "replace"):
+            # A string method applied to something that spells pass in any case.
+            if any(isinstance(c, ast.Constant) and _spells_pass(c.value)
+                   for c in ast.walk(n)):
+                return True
+    return False
+
+
+def _returns_pass(head, pass_names):
+    """True when this expression can be the verdict PASS."""
+    if head is None:
+        return False
     if isinstance(head, ast.Constant) and head.value == "PASS":
         return True
     if isinstance(head, ast.Name) and head.id in pass_names:
         return True
     if _folded_str(head) == "PASS":
         return True
-    if isinstance(head, ast.Subscript):
-        # A lookup into anything holding "PASS" anywhere: which key is taken is a
-        # runtime question, and a lint that guesses at it would guess wrong in the
-        # unsafe direction.
-        target = head.value
-        if isinstance(target, ast.Name) and target.id in pass_names:
-            return True
-        for n in ast.walk(target):
-            if isinstance(n, ast.Constant) and n.value == "PASS":
-                return True
-    if isinstance(head, (ast.IfExp, ast.BoolOp)):
-        for n in ast.walk(head):
-            if isinstance(n, ast.Constant) and n.value == "PASS":
-                return True
-            if isinstance(n, ast.Name) and n.id in pass_names:
-                return True
-            if isinstance(n, ast.Subscript) and _returns_pass(n, pass_names):
-                return True
-    return False
+    return _mentions_pass(head, pass_names)
+
+
+# Functions in tools/ that return a 2-tuple and are NOT verdict producers. The
+# lint below is INVERTED: a 2-tuple return whose head this lint cannot prove is
+# always one of FAIL or NO-DATA counts as a possible verdict, because proving a
+# negative about an expression is the only way to stop playing whack-a-mole with
+# spellings of "PASS". Everything genuinely not a verdict is named here with the
+# reason, and the list is printed on every run, so the exemption is reviewable
+# rather than a silent gap.
+NOT_A_VERDICT = {
+    ("sbe_checks.py", "run_guarded"): "the shared runner; it returns whatever the check it wrapped "
+                                      "returned, and every check it can wrap is itself registered",
+    ("sbe_checks.py", "distinct"): "returns (items, duplicate count), not a verdict",
+    ("sbe_checks.py", "answered_as"): "returns a reduced value, never a verdict",
+    ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
+    ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
+    ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
+    ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities), not a verdict",
+    ("sbe_intake.py", "read_answers"): "returns (answers read, answers refused), not a verdict",
+    ("sbe_score.py", "_rel"): "returns a path",
+    ("sbe_decide.py", "load_table"): "returns (parsed table, load error), not a verdict",
+    ("sbe_telemetry.py", "redact"): "returns (masked text, how many masks), not a verdict",
+    ("sbe_telemetry.py", "prediction_counts"): "returns a count table",
+}
 
 
 def pass_returning_functions(mods=None):
-    """Source-level: every function that can return the verdict PASS.
+    """Source-level: every function whose 2-tuple return could be the verdict PASS.
 
     A registry walk covers what is registered. This covers what EXISTS, so a
     verdict-producing path that was never registered is caught by name rather
     than by being quietly outside the walk. Over every .py file in tools/, not
     over `sbe_*.py`: see tool_sources().
+
+    Round six inverted it. The lint used to look FOR the string PASS and five
+    ordinary spellings walked past it, including the exact file and body this
+    file's own docstring cites as its proof case. It now looks for a
+    (verdict, evidence) shape and demands that the head be PROVABLY never PASS:
+    a constant FAIL or NO-DATA, or a conditional between them. Anything else,
+    including anything it cannot read, is a candidate, and the way out is the
+    named allowlist above rather than another node type.
+
+    Returns [(file, function, why it was flagged)].
     """
     out = []
     for fn in tool_sources():
@@ -317,20 +396,47 @@ def pass_returning_functions(mods=None):
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
+            name = node.name
+            if (fn, name) in NOT_A_VERDICT:
+                continue
+            returns = []
             for sub in ast.walk(node):
-                if not isinstance(sub, ast.Return):
-                    continue
-                value = sub.value
-                if isinstance(value, ast.Tuple):
-                    head = value.elts[0] if value.elts else None
+                if isinstance(sub, ast.Return) and sub.value is not None:
+                    returns.append(sub.value)
+            for value in returns:
+                head = None
+                if isinstance(value, ast.Tuple) and len(value.elts) == 2:
+                    head = value.elts[0]
                 elif isinstance(value, ast.Name) and value.id in pass_names:
                     head = value
-                else:
+                elif isinstance(value, ast.Lambda):
+                    continue
+                if head is None:
                     continue
                 if _returns_pass(head, pass_names):
-                    out.append((fn, node.name))
+                    out.append((fn, name, "returns the verdict PASS"))
+                    break
+                if not _provably_not_pass(head, pass_names):
+                    out.append((fn, name, "returns a (verdict, evidence) pair whose verdict this "
+                                          "lint cannot prove is never PASS"))
                     break
     return sorted(set(out))
+
+
+def _provably_not_pass(head, pass_names):
+    """True only when this head is certainly one of the non-PASS verdicts.
+
+    A string constant that is FAIL or NO-DATA, or a conditional or boolean
+    expression built out of nothing but those. Everything else is a candidate,
+    which is the safe direction: a false alarm costs one line in an allowlist and
+    a miss costs the guarantee this whole file exists to make.
+    """
+    if isinstance(head, ast.Constant):
+        return head.value in ("FAIL", "NO-DATA")
+    if isinstance(head, (ast.IfExp, ast.BoolOp)):
+        parts = ([head.body, head.orelse] if isinstance(head, ast.IfExp) else list(head.values))
+        return all(_provably_not_pass(p, pass_names) for p in parts)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +721,10 @@ def hollow_cases(tool, check):
 
     for rel, content in files.items():
         if isinstance(content, (dict, list)):
-            for tag, vname, value in EMPTY_VALUES + VACUOUS_VALUES:
+            for tag, vname, value in COMMENT_ONLY:
+                variant("%s::*|%s" % (rel, vname), tag, rel,
+                        hollowed(content, value, keep_booleans=True))
+            for tag, vname, value in EMPTY_VALUES + VACUOUS_VALUES + REDUCES_TO_NOTHING:
                 variant("%s::*|%s" % (rel, vname), tag, rel,
                         hollowed(content, value, keep_booleans=True))
                 for path in container_paths(content):
@@ -695,6 +804,7 @@ def counts():
 
 def main():
     mods, import_failures = load_tool_modules()
+    del PRUNED_WITH_SOURCE[len(set(PRUNED_WITH_SOURCE)):]
     registries, defects = discover_registries(mods)
     failures = list(import_failures) + list(defects)
     checked = ran = 0
@@ -718,12 +828,16 @@ def main():
     registered_fns = {c.fn for _, _, reg in registries for c in reg.values()
                       if isinstance(c, Check)}
     registered_pairs = {(getattr(f, "__module__", "") + ".py", f.__name__) for f in registered_fns}
-    for fn, name in pass_returning_functions(mods):
+    for fn, name, why in pass_returning_functions(mods):
         if (fn, name) not in registered_pairs:
-            unregistered.append("%s:%s" % (fn, name))
+            unregistered.append("%s:%s (%s)" % (fn, name, why))
     if unregistered:
         failures.append("function(s) that can return the verdict PASS but sit in no registry, so "
                         "no scenario in this file reaches them: %s" % ", ".join(unregistered))
+    for path in sorted(set(PRUNED_WITH_SOURCE)):
+        failures.append("%s was pruned from the walk and holds Python source, so any registry or "
+                        "verdict-producing function in it is outside this test's coverage while "
+                        "the summary line below still counts as if it were not" % path)
 
     for (fn, attr), (tool, reg) in sorted(known.items()):
         print("\n%s.%s  (%d checks discovered)" % (fn, attr, len(reg)))

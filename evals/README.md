@@ -15,13 +15,18 @@ fixture is generalized and carries no private data.
 
 ## The honesty meta-test
 
-`test_no_data_class.py` is not a list of cases. It enumerates the check
-registries in `tools/sbe_gate.py`, `tools/sbe_design.py` and `tools/sbe_score.py`
-and runs the same four scenarios against every entry: an empty directory,
-evidence that declares zero items, valid JSON of the wrong shape, and malformed
-JSON. A check cannot be registered without declaring what it reads and what its
-empty state is, and `sbe_checks.Check` refuses to construct one whose empty state
-is PASS. A check added later is covered without anyone remembering to add it.
+`test_no_data_class.py` is not a list of cases. It discovers every check
+registry by walking every `.py` file under `tools/`, at any depth, rather than by
+naming files: naming files by prefix was itself a defect, because a registry
+added in a new file or a new package sat outside a fixed list and was never run.
+For each check found, it derives its scenarios from that check's own declared
+worked fixture (the WORKING example the check ships), hollowed out mechanically
+in every way a value can be empty: an empty directory, evidence that declares
+zero items, valid JSON of the wrong shape, malformed JSON, and further sweeps
+over subtrees, leaves, lists, and booleans. A check cannot be registered without
+declaring what it reads and what its empty state is, and `sbe_checks.Check`
+refuses to construct one whose empty state is PASS. A check added later is
+covered without anyone remembering to add it.
 
 It also accepts `--tools <dir>`, which runs the same scenarios against a
 different copy of the tools. That is how the before-list was measured: the

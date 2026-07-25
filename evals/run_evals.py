@@ -11,6 +11,7 @@ import fnmatch, json, os, sys, tempfile, subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "..", "tools", "sbe_gate.py")
+INTAKE = os.path.join(HERE, "..", "tools", "sbe_intake.py")
 
 
 DESIGN_CLASSES = ("artifacts", "adr", "datamodel", "diagrams", "placeholder")
@@ -344,9 +345,15 @@ except OSError as e:
     _CHECKS_IMPORT_ERROR = "sbe_checks.py is not in this tree (%s)" % e
 
 
-def _approval_with_sig(root, sig):
+def _approval_with_sig(root, sig, approver="Someone", authors=("Dana Author", "dana@example.com")):
+    """The approval verdict for a signature state, with the approver named.
+
+    `authors` is what git says wrote the commit. It is a separate identity from
+    the approver by default, because self-approval is its own FAIL now and these
+    fixtures are about the SIGNATURE STATE, one variable at a time.
+    """
     original = _gate.git_trailers
-    _gate.git_trailers = lambda r: ("change\n\nApproved-by: Someone", sig)
+    _gate.git_trailers = lambda r: ("change\n\nApproved-by: %s" % approver, sig, list(authors))
     try:
         return _gate.gate_approval(root)[0]
     finally:
@@ -1526,7 +1533,7 @@ def v30f(root):
     original = meta.TOOLS_DIR
     try:
         meta.TOOLS_DIR = tools
-        found = {name for _fn, name in meta.pass_returning_functions()}
+        found = {name for _fn, name, _why in meta.pass_returning_functions()}
         walked = set(meta.tool_sources())
     finally:
         meta.TOOLS_DIR = original
@@ -1646,8 +1653,17 @@ def v37(root):
 # The honest path, at every tier. A gate is only worth having if correct work
 # clears it, so a complete dossier is a fixture too, and it uses the ordinary
 # authoring idioms rather than the ones that happen to suit the parser.
+# The complete-dossier fixtures use a purpose written about the system the rest of
+# the dossier designs. PURPOSE above is a SHAPE fixture ("Problem: x, Users: y")
+# and is deliberately about nothing, which is now a FAIL in its own right: an
+# artifact that names nothing any sibling artifact names is filler.
+DOSSIER_PURPOSE = ("# Purpose\nProblem: refunds settle late and the support desk cannot say why.\n"
+                   "Users: the support desk and the finance close.\n"
+                   "Success: every refund reaches a terminal state within one business day.\n"
+                   "Non-goals: repricing, partial refunds.\n"
+                   "If wrong: a customer waits and nobody can see where the refund stopped.\n")
 DOSSIER = {
-    "01-purpose.md": PURPOSE,
+    "01-purpose.md": DOSSIER_PURPOSE,
     "02-process.md": "# Process\nThe refund is requested, approved, and settled.\n"
                      "Each step names its owner and its failure path.\n",
     "03-adr.md": "# ADR\n## Criteria\nsettlement latency, operational load\n"
@@ -2297,6 +2313,618 @@ def dc5(root):
             if word.isdigit() and int(word) in words and int(word) != n:
                 wrong.append("%s: %r but sbe_score.py registers %d checks" % (rel, m.group(0), n))
     return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
+# ---------------------------------------------------------------------------
+# Round six. Two classes, one structural and one social.
+#
+# STRUCTURAL: every test in this project ran BEFORE its normalization instead of
+# after, so every normalization could manufacture a fresh non-answer that nothing
+# rechecked. `second_derivation: "#"` is not blank, is not a vacuity token,
+# survives answered(), and folds to the empty string, and the gate then printed
+# "a second derivation whose text differs beyond case, whitespace and comments,
+# re-run to zero drift" over a derivation that computes nothing, with both
+# figures the string "inf". Reduce first, test second: sbe_checks.answered_as.
+#
+# SOCIAL: the checks were rejecting honest work. `## Options considered` failed
+# while `## Alternatives considered` passed; MADR, the most widely used ADR
+# template there is, failed outright; `source of truth` failed with the sentence
+# "has no system of record" about a line naming one; `1:N` was "no cardinality";
+# and `pending`, the first state of every payment system in existence, was
+# refused as a placeholder because one shared vacuity list was being applied to
+# domain content as well as to evidence fields. A gate that rejects correct work
+# gets switched off, and a gate that is off catches nothing at all. Each row
+# below is one of those forms, as a fixture.
+# ---------------------------------------------------------------------------
+
+_GOOD_FIG = {"label": "gmv", "snapshot_id": "snap-2026-07",
+             "query": "SELECT SUM(amount) FROM orders",
+             "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+             "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}
+
+
+def _fig(root, **over):
+    fig = json.loads(json.dumps(_GOOD_FIG))
+    for k, v in over.items():
+        if k == "rerun":
+            fig["rerun"].update(v)
+        else:
+            fig[k] = v
+    write(root, "numbers-manifest.json", {"figures": [fig]})
+
+
+@case("a-second-derivation-that-is-only-a-comment-is-not-a-derivation", "numbers", "FAIL")
+def r6a(root):
+    # The reproduction, one character long. `#` is not blank, is not in
+    # VACUOUS_VALUES, and derivation_fold turns it into "".
+    _fig(root, second_derivation="#")
+
+
+@case("a-second-derivation-that-is-a-comment-with-words-in-it-is-not-a-derivation",
+      "numbers", "FAIL")
+def r6b(root):
+    _fig(root, second_derivation="-- rerun on 2026-07-26 by hand, same query")
+
+
+@case("a-primary-derivation-that-is-only-a-comment-is-not-a-derivation", "numbers", "FAIL")
+def r6c(root):
+    # The same hole in the other direction: the FIRST derivation could be a
+    # comment too, and then the second one "differed" from nothing.
+    _fig(root, query="-- see the dashboard")
+
+
+@case("an-infinite-figure-is-not-a-zero-drift-measurement", "numbers", "FAIL")
+def r6d(root):
+    # float() accepts "inf", "Infinity" and "1e400", so two infinities compared
+    # equal and bought the strongest sentence this project prints.
+    _fig(root, rerun={"primary": "inf", "secondary": "inf"})
+
+
+@case("a-not-a-number-figure-is-not-a-measurement", "numbers", "FAIL")
+def r6e(root):
+    _fig(root, rerun={"primary": "nan", "secondary": "nan"})
+
+
+@case("a-negative-row-count-is-not-a-row-count", "migration", "FAIL")
+def r6f(root):
+    # -1 == -1, so "1 row-count comparison(s) matched" was printed about a pair
+    # of counts no table has ever had.
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": -1, "after_reverse": -1}})
+
+
+@case("an-infinite-row-count-is-not-a-row-count", "migration", "FAIL")
+def r6g(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": "inf", "after_reverse": "inf"}})
+
+
+@case("a-fractional-row-count-is-not-a-row-count", "migration", "FAIL")
+def r6h(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": 2.5, "after_reverse": 2.5}})
+
+
+@case("a-zero-row-count-is-still-a-count", "migration", "PASS")
+def r6i(root):
+    # The control. A migration over an empty table counted zero rows and counted
+    # them, and rejecting that would be rejecting honest work.
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": 0, "after_reverse": 0}})
+
+
+@case("self-approval-is-not-approval", "sig", "FAIL")
+def r6j(root):
+    # One person, one key: they authored the commit, signed it, and wrote their
+    # own name into the Approved-by trailer. The gate compared nothing and
+    # printed "signed commit carries Approved-by: Dana Author" over it.
+    return _approval_with_sig(root, "G", approver="Dana Author <dana@example.com>",
+                              authors=("Dana Author", "dana@example.com"))
+
+
+@case("self-approval-by-email-alone-is-not-approval", "sig", "FAIL")
+def r6k(root):
+    return _approval_with_sig(root, "G", approver="dana@example.com",
+                              authors=("Dana Author", "dana@example.com"))
+
+
+@case("a-second-party-approval-still-passes", "sig", "PASS")
+def r6l(root):
+    # The control for the two above: the whole point is a SECOND party, so one
+    # must still pass or the gate is unusable.
+    return _approval_with_sig(root, "G", approver="Sam Reviewer <sam@example.com>",
+                              authors=("Dana Author", "dana@example.com"))
+
+
+# --- the honest forms an engineer writes -----------------------------------
+
+_ADR_BODY = ("- Synchronous call to the ledger: ties checkout latency to ledger availability.\n"
+             "- Nightly batch reconciliation: misses the one business day requirement.\n")
+
+
+def _adr(root, rejected_heading, criteria="## Criteria\nsettlement latency, operational load\n",
+         body=None):
+    write(root, "03-adr.md",
+          "# ADR\n" + criteria + rejected_heading + "\n" + (body if body is not None else _ADR_BODY)
+          + "## Decision\nPublish refund events to a queue and settle asynchronously.\n"
+            "## Consequences\nOne more moving part to operate.\n"
+            "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("adr-heading-options-considered-passes", "adr", "PASS")
+def r6m(root):
+    _adr(root, "## Options considered")
+
+
+@case("adr-heading-considered-options-madr-passes", "adr", "PASS")
+def r6n(root):
+    # The MADR template's own heading. A canonical MADR document failed outright,
+    # and the message listed four accepted FORMS and no accepted WORDS.
+    _adr(root, "## Considered options")
+
+
+@case("adr-heading-alternatives-bare-passes", "adr", "PASS")
+def r6o(root):
+    _adr(root, "## Alternatives")
+
+
+@case("adr-heading-other-options-passes", "adr", "PASS")
+def r6p(root):
+    _adr(root, "## Other options")
+
+
+@case("adr-subheading-not-chosen-passes", "adr", "PASS")
+def r6q(root):
+    _adr(root, "## Alternatives",
+         body="### Not chosen: synchronous ledger call\nTies checkout latency to the ledger.\n"
+              "### Not chosen: nightly batch\nMisses the one business day requirement.\n")
+
+
+@case("adr-subheading-we-did-not-pick-passes", "adr", "PASS")
+def r6r(root):
+    _adr(root, "## Alternatives",
+         body="### We did not pick a synchronous ledger call\nIt ties checkout to the ledger.\n"
+              "### We did not pick nightly batch\nIt misses the one business day requirement.\n")
+
+
+@case("adr-criteria-heading-deciding-factors-passes", "adr", "PASS")
+def r6s(root):
+    _adr(root, "## Rejected alternatives",
+         criteria="## Deciding factors\nsettlement latency, operational load\n")
+
+
+@case("the-same-rejected-alternative-twice-is-one-alternative", "adr", "FAIL")
+def r6t(root):
+    # gate_numbers learned that a figure listed twice is one figure; this
+    # threshold did not, so a copy-paste cleared "an ADR needs at least 2".
+    _adr(root, "## Rejected alternatives",
+         body="- Nightly batch reconciliation: misses the one business day requirement.\n"
+              "- Nightly batch reconciliation: misses the one business day requirement.\n")
+
+
+def _model(root, entities, relationships="## Relationships\n- Customer to Order: one-to-many.\n"):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n" + entities + relationships)
+
+
+@case("datamodel-source-of-truth-passes", "datamodel", "PASS")
+def r6u(root):
+    _model(root, "- Customer: source of truth: the CRM.\n- Order: source of truth: the OMS.\n")
+
+
+@case("datamodel-owner-passes", "datamodel", "PASS")
+def r6v(root):
+    _model(root, "- Customer: owner: the CRM.\n- Order: owner: the OMS.\n")
+
+
+@case("datamodel-sor-abbreviation-passes", "datamodel", "PASS")
+def r6w(root):
+    _model(root, "- Customer: SoR: the CRM.\n- Order: SoR: the OMS.\n")
+
+
+@case("datamodel-mastered-by-passes", "datamodel", "PASS")
+def r6x(root):
+    _model(root, "- Customer: mastered by the CRM.\n- Order: authoritative source: the OMS.\n")
+
+
+@case("datamodel-table-with-a-system-of-record-column-passes", "datamodel", "PASS")
+def r6y(root):
+    # The column says what the cell is. Requiring every cell to restate its own
+    # column header made five entities into five identical FAILs, and the eval
+    # that certified "or as table rows" was written in a shape no author uses.
+    _model(root,
+           "| Entity | System of record | Notes |\n| --- | --- | --- |\n"
+           "| Customer | the CRM | core |\n| Order | the OMS | core |\n")
+
+
+@case("datamodel-a-still-nameless-owner-in-a-table-column-fails", "datamodel", "FAIL")
+def r6z(root):
+    # The control: reading the column must not turn an empty cell into an answer.
+    _model(root,
+           "| Entity | System of record | Notes |\n| --- | --- | --- |\n"
+           "| Customer | TBD | core |\n| Order | the OMS | core |\n")
+
+
+def _cardinality_case(root, token):
+    _model(root, "- Customer: system of record: the CRM.\n- Order: system of record: the OMS.\n",
+           "## Relationships\n- Customer to Order: %s.\n" % token)
+
+
+@case("datamodel-cardinality-1-to-N-passes", "datamodel", "PASS")
+def r6aa(root):
+    _cardinality_case(root, "1:N")
+
+
+@case("datamodel-cardinality-N-to-1-passes", "datamodel", "PASS")
+def r6ab(root):
+    _cardinality_case(root, "N:1")
+
+
+@case("datamodel-cardinality-uml-multiplicity-passes", "datamodel", "PASS")
+def r6ac(root):
+    _cardinality_case(root, "1..*")
+
+
+@case("datamodel-cardinality-1-to-many-hyphenated-passes", "datamodel", "PASS")
+def r6ad(root):
+    _cardinality_case(root, "1-to-many")
+
+
+@case("datamodel-cardinality-one-to-many-spaced-passes", "datamodel", "PASS")
+def r6ae(root):
+    _cardinality_case(root, "one to many")
+
+
+@case("datamodel-an-undecided-cardinality-still-fails", "datamodel", "FAIL")
+def r6af(root):
+    # The control. Widening the notation must not widen it to nothing.
+    _cardinality_case(root, "not decided yet")
+
+
+_STATE_MODEL = ("# Data model\n## Entities\n- Payment: system of record: the ledger.\n"
+                "## Status and lifecycle\nstatus: pending | captured | settled\n"
+                "## Relationships\n- Payment to Payment: one-to-one.\n")
+
+
+@case("pending-is-a-payment-state-not-a-placeholder", "diagrams", "PASS")
+def r6ag(root):
+    # The quotable one. A senior engineer models a payment lifecycle, uses the
+    # word every payment system uses for its first state, and is told the state
+    # "appears nowhere else in the dossier" while it sits declared four lines
+    # above under a heading called Lifecycle, because an internal list of
+    # placeholder tokens like tbd and xxx happens to contain it. The implied fix
+    # was to rename a domain concept to satisfy a linter.
+    write(root, "05-data-model.md", _STATE_MODEL)
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Lifecycle\n```mermaid\nstateDiagram-v2\n"
+          "  [*] --> pending\n  pending --> captured\n  captured --> settled\n```\n")
+
+
+@case("none-is-a-domain-value-not-a-placeholder", "diagrams", "PASS")
+def r6ah(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Shipment: system of record: the WMS.\n"
+          "## Status and lifecycle\nstatus: none | booked | delivered\n"
+          "## Relationships\n- Shipment to Shipment: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Lifecycle\n```mermaid\nstateDiagram-v2\n"
+          "  [*] --> none\n  none --> booked\n  booked --> delivered\n```\n")
+
+
+@case("a-state-called-tbd-is-still-a-placeholder", "diagrams", "FAIL")
+def r6ai(root):
+    # The control for the two above: scoping the list to domain content must not
+    # empty it. `tbd` is a note to the author in any context, so it is not a
+    # declared state however it is written down, the diagram node that names it
+    # does not trace, and the FAIL says which of the orphans name nothing.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Shipment: system of record: the WMS.\n"
+          "## Status and lifecycle\nstatus: tbd | booked\n"
+          "## Relationships\n- Shipment to Shipment: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Lifecycle\n```mermaid\nstateDiagram-v2\n"
+          "  [*] --> tbd\n  tbd --> booked\n```\n")
+
+
+@case("mermaid-c4context-passes", "diagrams", "PASS")
+def r6aj(root):
+    # The canonical Mermaid dialect for the system-context diagram SKILL.md
+    # Phase 5 asks a T2 or T3 author to draw. Read as a flowchart, it turned its
+    # own keywords Person and System into the orphans it then reported.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "- Payment: system of record: the ledger.\n"
+          "## Relationships\n- Customer to Payment: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Context\n```mermaid\nC4Context\n  title Payments\n"
+          "  Enterprise_Boundary(b0, \"Acme\") {\n"
+          "    Person(Customer, \"Customer\", \"a buyer\")\n"
+          "    System(Payment, \"Payment\", \"the payment service\")\n"
+          "  }\n  Rel(Customer, Payment, \"pays with\")\n```\n")
+
+
+@case("mermaid-block-beta-passes", "diagrams", "PASS")
+def r6ak(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "- Payment: system of record: the ledger.\n"
+          "## Relationships\n- Customer to Payment: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Blocks\n```mermaid\nblock-beta\n  columns 2\n  Customer Payment\n```\n")
+
+
+@case("an-unreadable-diagram-dialect-is-nodata-not-a-failure", "diagrams", "NO-DATA")
+def r6al(root):
+    # SKILL.md L5's own rule: a type this tool cannot trace is NO-DATA and not a
+    # failure. Read as a flowchart, an unknown dialect invented orphans out of
+    # its own statement keywords.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to Customer: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Something new\n```mermaid\nzenUmlDiagram\n  A.method(B)\n```\n")
+
+
+# --- discovery: what the walk reaches --------------------------------------
+
+@case("a-stray-intake-in-the-root-does-not-hide-the-dossiers-below-it", "designrun", "blocked")
+def r6am(root):
+    # `if is_dossier(root): targets = [root]` skipped the walk entirely, so one
+    # 00-intake.json in a repository root made every dossier under it invisible
+    # and --strict exited 0 over unedited templates. sbe_intake.py wrote exactly
+    # that file to wherever it was run, and the README says to run it.
+    write(root, "00-intake.json",
+          {"tier": "T0", "answers": TIER_ANSWERS["T0"], "override": None})
+    for name in ("01-purpose.md", "02-process.md", "03-adr.md", "04-technology-map.md",
+                 "05-data-model.md", "06-diagrams.md", "07-verification.md"):
+        write(root, "design/payhook/" + name,
+              "# Section\n<!-- SBE-TEMPLATE-UNFILLED replace this -->\nfill this in please\n")
+    return design_run(root)
+
+
+@case("a-dossier-in-a-directory-called-vendor-is-still-a-dossier", "designrun", "blocked")
+def r6an(root):
+    # Discovery must not depend on what somebody named a directory. `mv plain
+    # vendor` turned two FAILs into two NO-DATAs at exit 0, and the evidence line
+    # said "no directory contains 00-intake.json" about a tree that held one.
+    write(root, "vendor/refunds/00-intake.json",
+          {"tier": "T2", "answers": TIER_ANSWERS["T2"], "override": None})
+    write(root, "vendor/refunds/01-purpose.md", PURPOSE)
+    return design_run(root)
+
+
+@case("a-manifest-in-a-directory-called-vendor-is-still-read", "numbers", "FAIL")
+def r6ao(root):
+    write(root, "vendor/reports/numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "", "query": "SELECT 1",
+        "second_derivation": "SELECT 2", "rerun": {"ran": True, "primary": 1, "secondary": 1}}]})
+
+
+@case("a-real-virtualenv-is-still-pruned-by-its-marker", "lints", "PASS")
+def r6ap(root):
+    # The control for the three above: detection moved from the NAME to the
+    # marker, and the marker still has to work, or the one gate a .sbe-exempt
+    # cannot waive starts failing teams over code they did not write.
+    write(root, "src/app.py", "def f():\n    return 1\n")
+    write(root, "toolchain/pyvenv.cfg", "home = /usr/bin\n")
+    write(root, "toolchain/lib/thirdparty.py",
+          "try:\n    f()\nexcept Exception:\n    pass\n")  # sbe: allow-silent lint FIXTURE, see s5
+    return run_score_lints([root])
+
+
+# --- the artifacts nobody had a content rule for ----------------------------
+
+_UNRELATED = {
+    "01-purpose.md": "# Purpose\nBananas ripen faster beside an apple.\n",
+    "02-process.md": "# Process\nLawnmower maintenance happens each spring.\n",
+    "03-adr.md": DOSSIER["03-adr.md"],
+    "04-technology-map.md": "# Technology map\n| Machine | Make |\n|---|---|\n"
+                            "| Tractor | Fordson |\n",
+    "05-data-model.md": DOSSIER["05-data-model.md"],
+    "06-diagrams.md": DOSSIER["06-diagrams.md"],
+    "07-verification.md": "# Verification\nWe verify Mars by telescope on clear nights.\n",
+}
+
+
+@case("a-t3-dossier-of-unrelated-artifacts-is-not-a-dossier", "artifacts", "FAIL")
+def r6aq(root):
+    # Five of five PASS on a T3 dossier about bananas, lawnmowers, tractors and
+    # Mars. `present()` was the entire content rule for four of the seven
+    # artifacts: two words and eight characters each. Every sentence the report
+    # printed was narrowly true and the dossier as a whole proved nothing.
+    write(root, "00-intake.json", {"tier": "T3", "answers": TIER_ANSWERS["T3"], "override": None})
+    for name, body in _UNRELATED.items():
+        write(root, name, body)
+
+
+@case("a-t3-dossier-about-one-system-still-passes", "artifacts", "PASS")
+def r6ar(root):
+    # The control, and the one that matters more: the coherence rule must not
+    # reject an honest dossier whose artifacts talk about different LAYERS of the
+    # same system.
+    write(root, "00-intake.json", {"tier": "T3", "answers": TIER_ANSWERS["T3"], "override": None})
+    for name, body in DOSSIER.items():
+        write(root, name, body)
+
+
+# --- the lint aimed at SQL, on SQL ------------------------------------------
+
+@case("a-conflict-skipping-upsert-in-a-sql-file-is-caught", "lints", "FAIL")
+def r6as(root):
+    # L11 names .sql first and the pattern needed a Python `.execute(` on the
+    # same line, so the one lint that exists for warehouse work could not fire on
+    # a warehouse file.
+    write(root, "load.sql",
+          "INSERT INTO orders (id, amount)\nSELECT id, amount FROM staging\n"
+          "ON CONFLICT (id) DO NOTHING;\n")
+    return run_score_lints([root])
+
+
+@case("a-conflict-skipping-upsert-split-over-lines-is-caught", "lints", "FAIL")
+def r6at(root):
+    write(root, "load.sql",
+          "INSERT INTO orders (id) SELECT id FROM staging\nON CONFLICT (id)\n  DO NOTHING;\n")
+    return run_score_lints([root])
+
+
+@case("a-conflict-skipping-upsert-in-a-python-variable-is-caught", "lints", "FAIL")
+def r6au(root):
+    write(root, "load.py",
+          "SQL = \"INSERT INTO orders (id) VALUES (1) ON CONFLICT (id) DO NOTHING\"\n"
+          "def load(conn):\n    conn.execute(SQL)\n")
+    return run_score_lints([root])
+
+
+@case("a-real-upsert-that-updates-is-not-a-silent-failure", "lints", "PASS")
+def r6av(root):
+    # The control. ON CONFLICT DO UPDATE is the legitimate upsert and flagging it
+    # would be the false positive that gets the lint switched off.
+    write(root, "load.sql",
+          "INSERT INTO orders (id, amount) VALUES (1, 2)\n"
+          "ON CONFLICT (id) DO UPDATE SET amount = excluded.amount;\n")
+    return run_score_lints([root])
+
+
+@case("the-lint-reads-a-users-own-file-called-sbe-score", "lints", "FAIL")
+def r6aw(root):
+    # The self-skip was a BASENAME comparison against every file in the CALLER's
+    # tree, so a user's own sbe_score.py was never opened and "1 file(s) scanned,
+    # clean" was printed over a directory holding two, one of which swallowed
+    # every error it met.
+    write(root, "clean.py", "def f():\n    return 1\n")
+    write(root, "sbe_score.py",
+          "def g():\n    try:\n        risky()\n    except:\n        pass\n")  # sbe: allow-silent lint FIXTURE, see s5
+    return run_score_lints([root])
+
+
+# --- staleness arithmetic ---------------------------------------------------
+
+def _reviews(root, body):
+    write(root, "99-System/telemetry/reviews.jsonl", body)
+    return root
+
+
+@case("a-review-dated-in-the-future-is-a-broken-record", "score", "FAIL")
+def r6ax(root):
+    # `age_days` returns a negative number for a future timestamp and four checks
+    # compared it with <= or > without a floor, so review-cadence printed
+    # "last review: -1620.2d ago" and called it a PASS, and the genuinely stale
+    # 2020 review in the same ledger was masked because max() picked the future
+    # row.
+    return score_check("review-cadence", _reviews(
+        root, "{\"ts\": \"2020-01-01T00:00:00Z\"}\n{\"ts\": \"2031-01-01T00:00:00Z\"}\n"))
+
+
+@case("a-correction-dated-in-the-future-is-a-broken-record", "score", "FAIL")
+def r6ay(root):
+    write(root, "99-System/telemetry/corrections.jsonl", "{\"ts\": \"2031-01-01T00:00:00Z\"}\n")
+    return score_check("correction-latency", root)
+
+
+@case("a-session-dated-in-the-future-is-a-broken-record", "score", "FAIL")
+def r6az(root):
+    return score_check("ledger-coverage", _ledger(
+        root, "{\"session_id\": \"s1\", \"ts\": \"2031-01-01T00:00:00Z\"}\n"))
+
+
+@case("six-copies-of-one-rating-are-one-rating", "score", "FAIL")
+def r6ba(root):
+    # The dedupe rule gate_numbers learned, applied to the two thresholds in this
+    # file that counted the same row N times.
+    write(root, "99-System/telemetry/ratings.jsonl",
+          "".join("{\"score\": 5}\n" for _ in range(6)))
+    return score_check("felt-outcome-ratings", root)
+
+
+@case("six-distinct-ratings-still-pass", "score", "PASS")
+def r6bb(root):
+    write(root, "99-System/telemetry/ratings.jsonl",
+          "".join("{\"score\": %d}\n" % s for s in (5, 4, 3, 2, 1, 0)))
+    return score_check("felt-outcome-ratings", root)
+
+
+# --- the meta-test's own lint, probed with the spellings that evaded it ------
+
+@case("the-meta-test-lint-sees-five-more-spellings-of-the-verdict-pass", "guard", "caught")
+def r6bc(root):
+    """Five ways to return PASS that the lint could not see, from the review.
+
+    Each was proved against the shipped tree by dropping the function into
+    tools/ and watching the run print 0 failures: an f-string is a JoinedStr and
+    not a Constant; a name bound by `from sbe_checks import VERDICTS` is bound by
+    no Assign; a lambda is not a FunctionDef; `.upper()` and `"".join(...)` are
+    Calls. Enumerating node types is the hand-fix-the-instance loop this project
+    exists to break, so the lint was inverted: a (verdict, evidence) return whose
+    head is not PROVABLY one of FAIL or NO-DATA is a candidate, and the way out
+    is a named allowlist rather than another node type.
+    """
+    meta = SourceFileLoader("meta_probe2",
+                            os.path.join(HERE, "test_no_data_class.py")).load_module()
+    tools = os.path.join(root, "tools")
+    os.makedirs(tools)
+    write(tools, "exotic.py",
+          "from sbe_checks import VERDICTS\n"
+          "_ok = lambda: \"PASS\"\n\n"
+          "def gate_fstring(root):\n"
+          "    return f\"PASS\", \"examined nothing\"\n\n"
+          "def gate_imported_constant(root):\n"
+          "    return VERDICTS[0], \"examined nothing\"\n\n"
+          "def gate_lambda(root):\n"
+          "    return _ok(), \"examined nothing\"\n\n"
+          "def gate_upper(root):\n"
+          "    return \"pass\".upper(), \"examined nothing\"\n\n"
+          "def gate_join(root):\n"
+          "    return \"\".join([\"PA\", \"SS\"]), \"examined nothing\"\n\n"
+          "def gate_indirect(root):\n"
+          "    verdict = compute()\n"
+          "    return verdict, \"examined nothing\"\n\n"
+          "def honest_fail(root):\n"
+          "    return \"FAIL\", \"this one is provably not a pass\"\n")
+    original = meta.TOOLS_DIR
+    try:
+        meta.TOOLS_DIR = tools
+        found = {name for _fn, name, _why in meta.pass_returning_functions()}
+    finally:
+        meta.TOOLS_DIR = original
+    want = {"gate_fstring", "gate_imported_constant", "gate_lambda", "gate_upper",
+            "gate_join", "gate_indirect"}
+    missing = sorted(want - found)
+    if missing:
+        return "the lint did not see %s" % ", ".join(missing)
+    if "honest_fail" in found:
+        return "the lint flagged honest_fail, which provably returns FAIL"
+    return "caught"
+
+
+@case("intake-writes-its-file-into-the-directory-it-was-given", "guard", "written-where-asked")
+def r6bd(root):
+    # It took no path argument, accepted one, ignored it, and wrote to wherever
+    # it was run from, printing a line that reads like it worked.
+    target = os.path.join(root, "design", "payhook")
+    os.makedirs(target)
+    out = subprocess.run([sys.executable, INTAKE, target], input="y\ny\ny\ny\nmany\n",
+                         capture_output=True, text=True, cwd=root)
+    if out.returncode != 0:
+        return "exit %d: %s" % (out.returncode, out.stdout.strip()[:80])
+    if os.path.isfile(os.path.join(root, "00-intake.json")):
+        return "it wrote to the directory it was run from, not the one it was given"
+    return ("written-where-asked" if os.path.isfile(os.path.join(target, "00-intake.json"))
+            else "no 00-intake.json was written anywhere")
+
+
+@case("intake-help-does-not-block-on-stdin", "guard", "help-printed")
+def r6be(root):
+    out = subprocess.run([sys.executable, INTAKE, "--help"], input="",
+                         capture_output=True, text=True, timeout=20)
+    return ("help-printed" if out.returncode == 0 and "usage: sbe_intake.py" in out.stdout
+            else "exit %d: %s" % (out.returncode, (out.stdout + out.stderr).strip()[:80]))
 
 
 def main():
