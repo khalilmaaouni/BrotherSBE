@@ -467,14 +467,17 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md
-  adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
-  datamodel  PASS     5 entities, each with a system of record; every relationship carries cardinality
-  diagrams   PASS     7 diagram node(s), all traceable: 5 to entities in 05-data-model.md, 2 to declared components
+  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
 ```
 
-Read the diagrams line, because it is doing something worth understanding. Five of
-those seven nodes are entities in `05-data-model.md`. The other two, `IntakeService`
+Read the diagrams line, because it is doing two things worth understanding. The tail
+of it names every token the parser treated as diagram syntax rather than as a node,
+on every run, passing or failing: nodes named after direction keywords used to be
+dropped in silence and the PASS then claimed completeness over the set it had
+truncated itself. Then the counts. Five of those seven nodes are entities in `05-data-model.md`. The other two, `IntakeService`
 and `WarehouseLoader`, are not entities and never should be: they are running
 software, and a conceptual data model that lists a nightly job alongside OrderLine is
 a worse data model. They trace because `04-technology-map.md` already declares them
@@ -500,10 +503,10 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
-  artifacts  PASS     tier T3: every required artifact present
-  adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
-  datamodel  PASS     5 entities, each with a system of record; every relationship carries cardinality
-  diagrams   PASS     7 diagram node(s), all traceable: 5 to entities in 05-data-model.md, 2 to declared components
+  artifacts  PASS     tier T3: every required artifact present and carrying content
+  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
 exit: 0
 ```
@@ -691,15 +694,17 @@ python3 "$SBE/tools/sbe_design.py" .
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
-  artifacts  PASS     tier T0: every required artifact present
-  adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
-  datamodel  PASS     3 entities, each with a system of record; every relationship carries cardinality
-  diagrams   PASS     5 diagram node(s), all traceable: 3 to entities in 05-data-model.md, 2 to declared components
+  artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for
+  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality
+  diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction)
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design
 ```
 
-Four green, one red, and the red is the point. The four structural checks pass
-because the example is a coherent system, which is useful while you work: any red
+Three green, one red, and one that opened nothing, which is the point of all three
+colours. `artifacts` says NO-DATA because T0 requires no artifact at all, so it had
+nothing to open: a tier that asks for nothing cannot report that everything it asked
+for is there. The three structural checks pass because the example is a coherent system, which is useful while you work: any red
 you see in them afterwards is yours, an entity that lost its system of record, a
 relationship with no cardinality, a diagram node nothing defines. But four green
 checks on a copied file describing someone else's warehouse is not a design, and
