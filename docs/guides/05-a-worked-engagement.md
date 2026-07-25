@@ -72,7 +72,7 @@ python3 "$SBE/tools/sbe_design.py" artifacts .
 ```
 
 ```
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md
 ```
 
@@ -465,11 +465,11 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 
 ```
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md
   adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
-  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
 ```
 
@@ -502,11 +502,11 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 ```
 
 ```
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  PASS     tier T3: every required artifact present and carrying content
   adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
-  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
 exit: 0
 ```
@@ -611,9 +611,12 @@ Be clear-eyed about which of the two you are using, because they are not equally
 strong. A signature this host verified cannot be produced by an agent that does not
 hold the private key. A `Reviewed-in:` id is a regex match against a commit message
 the agent writes, and nothing resolves it against a review platform, so an agent can
-type one. The gate says exactly that in its own evidence, below. It is used here
-because it is the path that works on a runner with no keyring, and it is a pointer
-for a human to follow rather than proof a review happened. If you need it to be a
+type one. So its verdict is NO-DATA, not PASS, which is the same verdict a signature
+this host could not verify gets, for the same reason: the host cannot check either
+one. NO-DATA neither blocks nor passes, so the keyless path is usable without being
+told something was proved when nothing was. It is used here because it is the path
+that works on a runner with no keyring, and it is a pointer for a human to follow
+rather than proof a review happened. If you need it to be a
 control, add a CI step that queries your review platform for the id and fails when it
 does not exist. Commit with the trailer:
 
@@ -630,27 +633,61 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
   migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
-  approval  PASS     commit records Reviewed-in: PR-482. This gate checked the trailer is present and does not resolve the id against a review platform, so it points a human at a review rather than proving one happened
+  approval  NO-DATA  commit records Reviewed-in: PR-482. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 exit: 0
 ```
 
-Nine checks green: five design, four gates. That is the whole engagement.
+Nine checks accounted for: five design checks PASS, three hard gates PASS, and the
+approval gate NO-DATA, which is the honest verdict for an id nothing resolved. Not
+one of them is silent, and that is the whole engagement.
 
 ---
 
 ## Wiring it so it holds
 
 Advisory tells a session; `--strict` in CI stops a merge. The workflow in this
-repo runs all three tools:
+repo runs all three tools, the three suites that prove they still work, and one
+step that surfaces any design waiver as something a human is shown:
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
       - name: Design checks (dossier completeness) block on failure
-        run: python3 tools/sbe_design.py --strict .
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -q 'WAIVED' design-checks.out; then
+            grep 'WAIVED' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep 'WAIVED' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
 ```
 
 None of it forces ceremony on small work. A T0 change writes no dossier at all,
@@ -693,11 +730,11 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 
 ```
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for
   adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality
-  diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction)
+  diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction)
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design
 ```
 

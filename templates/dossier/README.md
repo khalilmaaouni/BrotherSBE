@@ -34,6 +34,6 @@ says so instead of blessing it.
 ```
 $ cp templates/dossier/*.md design/my-project/
 $ python3 tools/sbe_design.py placeholder design/my-project
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design
 ```

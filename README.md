@@ -43,8 +43,10 @@ A design engagement produces at most seven files in one directory. Templates wit
 ```bash
 python3 tools/sbe_intake.py            # five questions, writes 00-intake.json
 python3 tools/sbe_design.py .          # artifacts, adr, datamodel, diagrams, placeholder
-python3 tools/sbe_decide.py tables/architecture.json shape
+python3 tools/sbe_decide.py tables/architecture.json shape   # asks for each criterion on stdin
 ```
+
+`sbe_decide.py` reads its criteria interactively, so pipe the answers when you run it from a script, a CI job or an agent, where a prompt nobody answers is a hang: `printf 'many\nstrong\nlow\nlow\n' | python3 tools/sbe_decide.py tables/architecture.json shape`.
 
 Architecture shape is scored against named criteria in [`tables/architecture.json`](tables/architecture.json): independently deploying teams, consistency requirement, operational maturity, failure isolation. Every run returns a recommendation, up to two alternatives, the criteria that separated them, and what would flip the decision. A run where no criterion contributed returns NO-DATA with the recommendation suppressed, because a recommendation backed by zero evidence is a guess with a table around it.
 
@@ -54,7 +56,7 @@ Verification comes last, and only four failure classes get structural gates. Eac
 
 - **numbers**: every figure that could reach a decision ships with an independently scripted second derivation, re-run to zero drift against a pinned snapshot.
 - **migration**: forward and reverse both ran against a restored copy, the reverse records a rehearsal run id as a string, and row counts before and after match. A receipt with no row counts is NO-DATA, not a pass: the gate says what it compared instead of asserting a comparison it never made. Stated plainly, because the difference matters: nothing resolves the rehearsal id against a job system, so it is a pointer for a human to follow.
-- **approval**: a declared approval must be bound to more than a name typed into a text field. Two paths, and they are not equally strong. A signed `Approved-by:` commit trailer THIS HOST VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that an id in the right shape sits in the commit message: nothing resolves it, the agent writes commit messages, so an agent can write one. The gate's evidence line says so on every run, and if you need that path to be a control, add a CI step that resolves the id against your review platform. A typed name fails, and a signature the host cannot verify is NO-DATA rather than an approval, so CI needs the signers' public keys. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
+- **approval**: a declared approval must be bound to more than a name typed into a text field. Two paths, and they are not equally strong. A signed `Approved-by:` commit trailer THIS HOST VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that a non-vacuous id sits in the commit message: nothing resolves it, there is no shape check on it, the agent writes commit messages, so an agent can write one. Its verdict is therefore NO-DATA, the same verdict a signature this host could not verify gets and for the same reason, and the evidence line says so on every run. If you need that path to be a control, add a CI step that resolves the id against your review platform. A typed name fails, a `Reviewed-in:` id that is a hyphen fails, and CI needs the signers' public keys for the one path that PASSes. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
 - **ran**: no SQL or pipeline change is done until its reconciliation query or test executed and left a receipt with a zero exit code and a nonzero duration. A check that took no time did not run.
 
 The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed. A receipt that exists and records nothing is also NO-DATA and says so; a receipt that exists and cannot be parsed, including valid JSON of the wrong shape, is a FAIL, because a broken claim is not an absent one. A check that crashes is reported as a FAIL carrying the exception, never as a missing line: a gate that disappears from the report is worse than one that fails. None of that rests on anyone remembering it. Every check is registered with a declaration of what it reads and what its empty state is, `PASS` is refused as an empty state at construction, and [`evals/test_no_data_class.py`](evals/test_no_data_class.py) enumerates those registries rather than a written list, so a check added later is covered the moment it is registered.
@@ -85,7 +87,7 @@ Each gate walks the git worktree for a receipt file and checks it is internally 
  "row_counts": {"before": 100, "after_reverse": 100}}
 ```
 
-**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) plus an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer passes only when the commit signature verifies (`git log` `%G?` in `G`, `U`, or `E`); an unsigned typed name FAILs.
+**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) plus an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer PASSes only when this host verified the commit signature (`git log` `%G?` in `G` or `U`); an unsigned typed name FAILs, and a `Reviewed-in:` id reports NO-DATA because nothing resolves it.
 
 **ran** looks for `ran-receipt.json`:
 
@@ -134,15 +136,40 @@ export BROTHERSBE_VAULT="$HOME/BrotherSBEVault"   # put this in your shell profi
 
 What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). **PreCompact** snapshots the whole worktree (including untracked files) to a private git ref `refs/brothersbe/autosave` and writes a forward-looking resume brief, so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
 
-**4. Wire the checks into CI.** This is what turns them from advisory into blocking. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add the three lines to an existing job:
+**4. Wire the checks into CI.** This is what turns them from advisory into blocking. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
       - name: Design checks (dossier completeness) block on failure
-        run: python3 tools/sbe_design.py --strict .
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -q 'WAIVED' design-checks.out; then
+            grep 'WAIVED' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep 'WAIVED' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
@@ -178,7 +205,7 @@ only worth having if it clears, and the last two are the docs checking their own
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-154 evals: 154 passed, 0 regressions.
+180 evals: 180 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -197,7 +224,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-20 checks discovered from 3 registries in 6 module(s), 398 scenarios run, 0 failure(s).
+20 checks discovered from 3 registries in 7 module(s), 674 scenarios run, 0 failure(s).
 ```
 
 To watch one check on a real change:

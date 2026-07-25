@@ -12,7 +12,8 @@ observation to make on the day, not a claim this document makes on its own behal
 - [ ] Zero private or client terms in any git blob. The history is multi-commit
       (`git rev-list --all --count` reports 23 at the time of writing), so a
       forensic sweep covers every commit, not just the tree at HEAD.
-- [ ] Green: `python3 tools/test_sbe.py` and `python3 evals/run_evals.py` both pass.
+- [ ] Green: `python3 tools/test_sbe.py`, `python3 evals/run_evals.py` and
+      `python3 evals/test_no_data_class.py` all pass.
 - [ ] Self-consistent: `python3 tools/sbe_gate.py --strict .`,
       `python3 tools/sbe_design.py --strict .` and `python3 tools/sbe_score.py --strict .`
       all exit 0 (the skill passes its own gates).
@@ -23,7 +24,15 @@ observation to make on the day, not a claim this document makes on its own behal
       vault and are not here.
 - [ ] The install command in `README.md` and `docs/SETUP.md` resolves. It points at
       a repository that does not exist until this checklist is executed, so it is
-      expected to 404 beforehand and must be re-checked immediately after.
+      expected to 404 beforehand and must be re-checked immediately after:
+      `curl -sS -o /dev/null -w '%{http_code}\n' https://github.com/khalilmaaouni/BrotherSBE`
+      must print 200 once the repo is public.
+- [ ] `git status --porcelain` shows no `.superpowers/` path. That directory holds
+      internal review and planning documents and is now ignored by the ROOT
+      `.gitignore`; it used to be protected only by an untracked ignore file inside
+      itself, which one `git add .` on a fresh clone would have defeated. Confirm
+      with `git check-ignore -v .superpowers/` and `git ls-files .superpowers/`,
+      which must return nothing.
 
 ## The publish step (when the founder chooses)
 1. Create a new PUBLIC GitHub repo named BrotherSBE under the founder's account.

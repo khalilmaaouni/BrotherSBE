@@ -195,7 +195,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  154 evals: 154 passed, 0 regressions.
+  180 evals: 180 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects
@@ -262,18 +262,17 @@ python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py scorecard
 
 At the weekly review (or the moment the pattern is undeniable), the engineer
 distills the candidate into a rule with its reasoning. `LEARNED.md` is human-read
-markdown, so the format is a rule, a `because` clause carrying the underlying
-reason (the weekly review step 5 requires this clause), a date, and a pointer to
-the evidence. They open a branch on the shared repo and add one line:
+markdown, and `memory-template/LEARNED.md` fixes the shape: three lines under the
+`## Laws` heading, newest first, being the LESSON, the RULE, and the BECAUSE
+clause carrying the underlying reason (the weekly review step 5 requires that
+clause). They open a branch on the shared repo and add one entry:
 
 ```markdown
-## Data quality
+## Laws
 
-- Backfill upserts log a skip count; never a bare ON CONFLICT DO NOTHING.
-  because: a backfill that silently drops colliding rows looks identical to one
-  that inserted them, so the loss surfaces weeks later as a reconciliation short.
-  evidence: two incidents (2026-07 reconciliation shortfalls); sbe_score
-  silent-failure lint already flags the pattern per file.
+    LESSON: a backfill silently dropped colliding rows and the shortfall surfaced weeks later.
+    RULE:   backfill upserts log a skip count; never a bare ON CONFLICT DO NOTHING.
+    BECAUSE: a backfill that drops rows looks identical to one that inserted them, so the loss is only visible in a reconciliation that runs much later.
 ```
 
 They push the branch through the GitHub Desktop flow and open a pull request. The
@@ -327,7 +326,7 @@ evolution.
 python3 ~/.claude/skills/brothersbe/tools/sbe_score.py
 ```
 
-`sbe_score.py` runs ten mechanical checks and labels each PASS, FAIL, or NO-DATA:
+`sbe_score.py` runs eleven mechanical checks and labels each PASS, FAIL, or NO-DATA:
 ledger coverage, schema uniformity, cache economy (warm-read ratio floor 90
 percent), a vault log per active day, fence hygiene, correction latency,
 budget-vs-tier tagging, prediction seals, felt-outcome ratings, review cadence,
