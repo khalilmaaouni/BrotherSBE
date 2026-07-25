@@ -297,6 +297,26 @@ def a3(root):
     return "yes" if r["flip_condition"] and len(r["alternatives"]) == 2 else "no"
 
 
+# Discriminates services from event-driven on deploying_teams=3, which only
+# event-driven's range covers (services needs 4+). The many-teams fixture above
+# ties services and event-driven and only resolves by table-order tie-break; if
+# the deploying_teams criterion were broken this fixture would fail where that
+# one would not.
+@case("low-team-count-high-isolation-is-event-driven", "decide", "event-driven")
+def a4(root):
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": 3, "consistency": "eventual",
+                                             "ops_maturity": "high", "failure_isolation": "high"})
+    return r["recommendation"]
+
+
+# An empty context contributes zero criteria: the recommender must say NO-DATA,
+# never a confident guess dressed up as a recommendation.
+@case("empty-context-is-no-data", "decide", "NO-DATA")
+def a5(root):
+    r = _decide.recommend(_TABLES["shape"], {})
+    return r["verdict"]
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
