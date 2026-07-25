@@ -150,8 +150,13 @@ real: you need a way to pin a snapshot (a time-travel read, a materialized copy,
 ## Gate 2: migration
 
 A forward and a reverse migration, both run against a restored copy, the reverse
-carrying a resolvable rehearsal run id, with row counts before and after the reverse
-that match. The gate reads `migration-receipt.json`.
+recording a rehearsal run id as a string, with row counts before and after the reverse
+that were recorded and that match. The gate reads `migration-receipt.json`. Two limits
+stated up front: it does not resolve the rehearsal id against any job system, and a
+receipt with no row counts at all is NO-DATA rather than a pass, because the reverse
+restoring the rows is the half it cannot assert without them. It used to assert it
+anyway, in an evidence line that said "with matching row counts" over a receipt that
+recorded none.
 
 ### The receipt shape (from `gate_migration`)
 
@@ -174,13 +179,12 @@ came back to where it started.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration PASS     forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
 ```
 
 ### Worked FAIL
 
-Here the reverse claims it ran against a restore but carries no run id. Free text is
-not a receipt.
+Here the reverse claims it ran against a restore but records no run id.
 
 ```json
 {
@@ -192,7 +196,7 @@ not a receipt.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration FAIL     reverse: no resolvable rehearsal_run_id (free text is not a receipt)
+  migration FAIL     reverse: no rehearsal_run_id recorded (this gate checks the id is present and is a string, and cannot resolve it against a job system)
 ```
 
 Two other FAIL paths exist and are worth knowing: a leg with
@@ -273,11 +277,15 @@ Reviewed-in: gh_pr_1421
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  approval  PASS     approval bound to platform review gh_pr_1421
+  approval  PASS     commit records Reviewed-in: gh_pr_1421. This gate checked the trailer is present and does not resolve the id against a review platform, so it points a human at a review rather than proving one happened
 ```
 
-A signed commit with `Approved-by:` passes the same way, printing "signed commit
-carries Approved-by: <name>".
+A signed commit with `Approved-by:` passes and prints "signed commit carries
+Approved-by: <name>". The two are not the same strength, and the evidence line is
+where that is stated: the signature path cannot be produced without the private
+key, and the review id is matched by a regex against a commit message the agent
+writes. Add a CI step that resolves the id against your platform if you need the
+second path to be a control.
 
 ### Worked NO-DATA
 
@@ -291,8 +299,11 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
 
 ### What makes the receipt hard to fake
 
-The whole point of this gate is that the agent cannot mint the approval. A typed name
-is exactly what an agent can produce, so a typed name alone FAILs. What clears the gate
+The point of this gate is to raise the cost of minting an approval, and to be honest
+about how far it gets. A typed name is exactly what an agent can produce, so a typed
+name alone FAILs. A `Reviewed-in:` id is also something an agent can produce, which is
+why the evidence line discloses that the id is never resolved. Only the verified
+signature path is beyond an agent that does not hold the key. What clears the gate
 is a binding to an identity the agent does not hold: a cryptographic commit signature
 (the private key is the human's), or a platform review id that points at a review that
 happened in a system the agent cannot post to on the human's behalf. This is the blast
@@ -465,8 +476,14 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     6 file(s) scanned under tools/, clean
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:381, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
 ```
+
+The evidence carries the exemption count and names the lines, because "clean" over
+a set of suppressed hits is the same sentence as a PASS over an empty manifest. If
+every match in every file scanned had been exempted, the verdict would be NO-DATA
+rather than PASS: a scan whose every finding was waived examined nothing it was
+allowed to report.
 
 Two mechanisms make that honest rather than lucky:
 
