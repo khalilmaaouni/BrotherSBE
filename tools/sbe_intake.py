@@ -179,12 +179,21 @@ def main():
     for key, prompt in QUESTIONS:
         answers[key] = ask(key, prompt)
     tier = compute_tier(answers)
+    # Both override fields are null, and null is the honest value here rather
+    # than a placeholder: this writes the tier its own answers COMPUTE, so no
+    # tier was moved, and a non-null override would claim a control nobody
+    # exercised. Overriding is an edit to this file, and the design check FAILs
+    # an override that sets one field and not the other, so the closing line
+    # below says which two fields it takes rather than leaving it to be found.
     out = {"answers": answers, "tier": tier, "override": None, "override_reason": None}
     path = os.path.join(where, "00-intake.json")
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
     print("tier %s (artifacts required: %s) written to %s"
           % (tier, ", ".join(required_artifacts(tier)) or "none", path))
+    print("To override this tier, edit that file and set BOTH \"override\" (the tier you are moving "
+          "to) and \"override_reason\" (at least 3 words and 12 characters). A tier moved with either "
+          "field missing FAILs the design check as an edit rather than an override.")
     sys.exit(0)
 
 

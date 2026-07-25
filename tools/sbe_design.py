@@ -343,17 +343,37 @@ def check_artifacts(root):
         return "FAIL", ("00-intake.json declares override %r but records tier %r; the override field and "
                         "the tier field disagree, so neither can be trusted" % (declared, tier))
     if tier != computed:
+        # A stored tier that differs from the computed one IS an override, and
+        # L15 says an override sets BOTH fields. Only the reason was enforced, so
+        # a file could move a tier with `override` null forever, and null is what
+        # sbe_intake.py writes: the unenforced path was the default path. Both
+        # fields are named here, because the author has to be told which one is
+        # missing and what to write in it.
         reason = data.get("override_reason")
+        missing = []
+        if declared is None:
+            missing.append("its override field is null, so nothing in the file declares the move")
         problem = _override_problem(reason)
         if problem:
-            return "FAIL", ("00-intake.json says tier %s but its own answers compute %s, and %s; "
-                            "a tier moved without a reviewable reason is an edit, not an override (L15). "
-                            "An override reason must be at least %d words and %d characters, because a "
-                            "reason nobody can review is not a control"
-                            % (tier, computed, problem, OVERRIDE_MIN_WORDS, OVERRIDE_MIN_CHARS))
+            missing.append(problem)
+        if missing:
+            return "FAIL", ("00-intake.json says tier %s but its own answers compute %s, and %s; an "
+                            "override sets BOTH fields and they must agree with each other, so this "
+                            "file needs override: %r beside an override_reason of at least %d words "
+                            "and %d characters. A tier moved with either field missing is an edit, "
+                            "not an override (L15)"
+                            % (tier, computed, "; ".join(missing), tier,
+                               OVERRIDE_MIN_WORDS, OVERRIDE_MIN_CHARS))
         direction = "lowering" if TIERS.index(tier) < TIERS.index(computed) else "raising"
         label = ("; declared override %s the tier to %s from computed %s, reason: %s"
                  % (direction, tier, computed, reason.strip()))
+    elif declared is not None:
+        # The fields agree with each other and with the answers, so the override
+        # exercised nothing. Said out loud, because a field carrying a tier reads
+        # like a control that fired, and silence here would let a stale one keep
+        # reading that way.
+        label = ("; the override field records %s, which is the tier these answers compute, so it "
+                 "moved no tier" % declared)
     need = required_artifacts(tier)
     if not need:
         # A tier that requires nothing gives this check nothing to open, and
@@ -370,10 +390,17 @@ def check_artifacts(root):
     # because "this file is empty" and "this file is about something else" are two
     # different sentences and the first one is already printed above.
     unrelated, unmeasured = [], []
+    # Every artifact PRESENT in the dossier, not only the ones this tier requires.
+    # Passing `wanted` meant a T1 purpose brief coherent with the 04-technology-map
+    # sitting beside it FAILed with the sentence "no substantive word in it appears
+    # in any sibling artifact", about a sibling artifact it shares four words with.
+    # A file the author wrote is part of this dossier whether or not the tier
+    # obliged them to write it.
+    siblings = [n for n in ARTIFACT_FILES.values() if read(root, n) is not None]
     for n in wanted:
         if n in missing or n in empty:
             continue
-        problem = _coherence_problem(root, n, wanted)
+        problem = _coherence_problem(root, n, siblings)
         if problem is None:
             unmeasured.append(n)
         elif problem:
@@ -702,9 +729,17 @@ def check_adr(root):
                         "the ADR names no condition that would reverse the decision")
     if problems:
         return "FAIL", "; ".join(problems)
-    return ("PASS", "%d distinct alternatives rejected with a stated reason%s, and criteria, "
+    # What this sentence may claim is what the threshold measured. It used to read
+    # "rejected with a stated reason" over `- Synchronous ledger call` and
+    # `- Nightly batch reconciliation`, two bullets that name two options and give
+    # no reason at all: both clear two words and eight characters, and no rule
+    # here can tell a reason from a longer name. So the count says what was
+    # measured and names the part that is human review.
+    return ("PASS", "%d distinct rejected alternatives, each carrying at least %d words and %d "
+                    "characters of its own text (that the text says why the option lost, rather "
+                    "than restating its name, is human review)%s, and criteria, "
                     "decision, consequences and flip condition each carry content"
-                    % (rejected,
+                    % (rejected, ALTERNATIVE_MIN_WORDS, ALTERNATIVE_MIN_CHARS,
                        "" if not dupes else
                        " (%d duplicate line(s) counted once)" % dupes))
 
@@ -799,14 +834,29 @@ def _table_entities(lines):
     return out
 
 
-def _entities(t):
-    """Entity bullets from the entity sections of a data model.
+def _entity_bullets(t):
+    """(entities, declared): the entity set this document states, and how it was found.
 
-    Scoped to headings that name entities, because "every bullet above the
-    Relationships heading" made an honest `## Notes` list into two entities with
-    no system of record and FAILed a correct data model. Where no heading names
-    entities at all, the pre-Relationships body is still read, but only bullets
-    in `Name: description` form, so a prose bullet is not mistaken for an entity.
+    `declared` is True when a heading whose name contains "entit" scoped the set,
+    which is the form L4 describes and the only form this check will assert an
+    entity COUNT over.
+
+    Scoped to those headings because "every bullet above the Relationships
+    heading" made an honest `## Notes` list into two entities with no system of
+    record and FAILed a correct data model. The fallback for a document that
+    names no such heading (a model whose section is called "Conceptual model",
+    say) used to read every bullet in `Name: description` form, which is the same
+    defect wearing the other face: it read `- Rollout plan: we ship on Tuesday`
+    as an entity, and the same list with an ownership phrase in it bought the
+    sentence "2 entities, each with a system of record" over a file that
+    declares no entity at all.
+
+    So the fallback still reads, because a model without a formal Entities
+    heading should not be exempt from the rule, but it reads only bullets that
+    NAME THE SYSTEM THAT OWNS THEM, which is the one thing every entity bullet
+    in this law has to carry and the one thing a note never does. What it read is
+    printed in the verdict, and the verdict is never better than NO-DATA, because
+    a set this function had to guess at is not a set the evidence line may count.
     """
     out = {}
     body = re.split(r"(?im)^#+\s*relationships", t)[0]
@@ -831,11 +881,33 @@ def _entities(t):
                 m = _ENTITY_BULLET.match(line)
                 if m:
                     out[m.group(1).strip()] = (m.group(2) or "").strip()
-        return out
+        return out, True
     for line in _joined_bullets(body.splitlines()):
         m = _ENTITY_BULLET.match(line)
-        if m and m.group(2) is not None:
+        if m and m.group(2) is not None and _SOR.search(m.group(2)):
             out[m.group(1).strip()] = m.group(2).strip()
+    return out, False
+
+
+def _entities(t):
+    """Every name this document offers as an entity, read the widest way.
+
+    For TRACING (the diagram check and the coherence test), not for the data
+    model check. The two want opposite guesses: a name tracing missed becomes a
+    false orphan and a false FAIL over an honest diagram, while a name the data
+    model check reads by mistake becomes an assertion about a bullet nobody wrote
+    as an entity. So tracing keeps the wide fallback and the check that has to
+    print a count uses `_entity_bullets`, which says which set it got and refuses
+    to count a set it guessed at.
+    """
+    ents, declared = _entity_bullets(t)
+    if declared:
+        return ents
+    out = dict(ents)
+    for line in _joined_bullets(re.split(r"(?im)^#+\s*relationships", t)[0].splitlines()):
+        m = _ENTITY_BULLET.match(line)
+        if m and m.group(2) is not None:
+            out.setdefault(m.group(1).strip(), m.group(2).strip())
     return out
 
 
@@ -895,11 +967,27 @@ def check_data_model(root):
     if t is None:
         return "NO-DATA", "no 05-data-model.md in this dossier"
     problems = []
-    ents = _entities(t)
+    ents, declared_by_heading = _entity_bullets(t)
+    # What this check had to guess at, said in the verdict rather than folded into
+    # a count. See _entity_bullets: a Notes list read as an entity set is the same
+    # defect as a PASS over an empty manifest, one function deeper.
+    read_note = ("" if declared_by_heading else
+                 "; no heading in %s names entities, so the set above was read from the bullet(s) "
+                 "here that name a system that owns them (%s), and a bullet naming none was left as "
+                 "the prose it is. Put them under a heading whose name contains \"entit\" to have "
+                 "this check read them as the entity set"
+                 % (ARTIFACT_FILES["05"], ", ".join(sorted(ents)) or "none"))
     if not ents:
-        problems.append("no entity found: list each entity as a bullet, or as a row of a markdown "
-                        "table whose first column is the entity name, under a heading that names "
-                        "entities, above the Relationships heading")
+        problems.append(
+            "no entity found: list each entity as a bullet, or as a row of a markdown "
+            "table whose first column is the entity name, under a heading that names "
+            "entities, above the Relationships heading"
+            if declared_by_heading else
+            "no entity found: no heading in %s names entities (a heading whose name contains "
+            "\"entit\"), and no bullet above the Relationships heading names the system that owns "
+            "it, so nothing here was read as an entity and a list of notes was left as notes. List "
+            "each entity as a bullet, or as a row of a markdown table whose first column is the "
+            "entity name, under a heading that names entities" % ARTIFACT_FILES["05"])
     for name, meta in ents.items():
         if domain_vacuous(name):
             # An entity called TBD is a note to the author. The PASS sentence
@@ -943,7 +1031,26 @@ def check_data_model(root):
             problems.append("relationship '%s' names no cardinality this tool can read (accepted: "
                             "%s)" % (line[:48], "; ".join(CARDINALITY_FORMS)))
     if problems:
-        return "FAIL", "; ".join(problems[:6])
+        # The truncation is named. Six of eight sourceless entities were printed
+        # and the other two were dropped out of a message that reads as the whole
+        # list, which is the same defect as a count over a set the tool shortened
+        # itself.
+        return "FAIL", ("; ".join(problems[:6])
+                        + ("" if len(problems) <= 6 else
+                           "; and %d more not shown" % (len(problems) - 6))
+                        + (read_note if ents else ""))
+    if not declared_by_heading:
+        # Everything this check asks of an entity holds for the ones it read, and
+        # it still cannot say it read the entity SET rather than a prose list. So
+        # it says that, instead of counting. NO-DATA neither blocks the honest
+        # author nor lends the count a sentence nothing earned.
+        return "NO-DATA", ("%d bullet(s) name a system that owns them and were read as entities (%s), "
+                           "each carrying one, and %d relationship line(s) read; but no heading in %s "
+                           "names entities, so this check cannot say that set is the entity set rather "
+                           "than a prose list, and it does not assert an entity count over one. Put "
+                           "them under a heading whose name contains \"entit\" and this check reads "
+                           "them as the entity set"
+                           % (len(ents), ", ".join(sorted(ents)), len(rels), ARTIFACT_FILES["05"]))
     if not rels:
         return "NO-DATA", ("%d entities, each with a system of record, but no relationship line was "
                            "found (%s), so nothing was checked for cardinality and this check cannot "
@@ -1018,6 +1125,25 @@ _NODE_SOURCE = re.compile(r"([A-Za-z_][\w.-]*)\s*(?:--|==|-\.|~~)")
 _NODE_DEST = re.compile(r"(?:--+>|--+|==+>|-\.-*>|~~+)\s*(?:\|[^|]*\|\s*)?([A-Za-z_][\w.-]*)")
 # `A -- places --> B`: the words of an inline edge label are not nodes.
 _INLINE_EDGE_LABEL = re.compile(r"--\s*[^-|>\n]+?\s*(--+>|--+)")
+
+
+def _strip_edge_labels(s, skipped):
+    """Drop inline edge labels, NAMING each one dropped.
+
+    An edge label is not a node and discarding it is right: L5 says the parser
+    that touches edge labels exists to discard their words so they are not
+    mistaken for nodes. It discarded them in silence, though, and the same law
+    promises that every token read as syntax rather than as a node is named in
+    the evidence line, on every verdict. `C[Customer] -- Ledger --> O[Order]`
+    dropped "Ledger" out of the set the verdict then reported as complete, which
+    is the truncated-set defect that sentence exists to prevent.
+    """
+    def sub(m):
+        label = m.group(0)[2:len(m.group(0)) - len(m.group(1))].strip()
+        if label:
+            skipped.append("%s (an inline edge label, not a node)" % label)
+        return " %s " % m.group(1)
+    return _INLINE_EDGE_LABEL.sub(sub, s)
 # erDiagram relationship line: ENTITY <cardinality> ENTITY : label
 # Cardinality tokens (||--o{, }o--||, ||--||, }|..|{, ...) are built from the
 # characters | o { } . and dash, and at least one of them is never a dash: a run
@@ -1165,7 +1291,7 @@ def _diagram_nodes(t):
                 if word.split(":")[0] in _BLOCK_STATEMENTS or s.startswith("%%"):
                     skipped.append("%s (a %s statement, not a block)" % (word, first))
                     continue
-                s = _INLINE_EDGE_LABEL.sub(lambda m: " %s " % m.group(1), s)
+                s = _strip_edge_labels(s, skipped)
                 for m in _NODE_LABELLED.finditer(s):
                     add(m.group(1), _label_text(m.group(2)))
                 bare = _NODE_LABELLED.sub(" ", s)
@@ -1179,7 +1305,7 @@ def _diagram_nodes(t):
             if word in _FLOW_STATEMENTS or s.startswith("%%"):
                 skipped.append("%s (a %s statement, not a node)" % (word, first))
                 continue
-            s = _INLINE_EDGE_LABEL.sub(lambda m: " %s " % m.group(1), s)
+            s = _strip_edge_labels(s, skipped)
             for m in _NODE_LABELLED.finditer(s):
                 add(m.group(1), _label_text(m.group(2)))
             bare = _NODE_LABELLED.sub(" ", s)
