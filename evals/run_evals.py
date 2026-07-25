@@ -13,8 +13,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "..", "tools", "sbe_gate.py")
 
 
-DESIGN_CLASSES = ("artifacts", "adr", "datamodel", "diagrams")
+DESIGN_CLASSES = ("artifacts", "adr", "datamodel", "diagrams", "placeholder")
 DESIGN = os.path.join(HERE, "..", "tools", "sbe_design.py")
+TEMPLATES = os.path.join(HERE, "..", "templates", "dossier")
 
 
 def run_gate(root, klass):
@@ -129,6 +130,37 @@ def c4b(root):
         "second_derivation": "SELECT SUM(b) FROM t2", "rerun": {"ran": True}}]})
 
 
+# 4c. An empty manifest is the cheapest way to defeat this gate: commit a file
+# with no figures in it and a two-state checker prints PASS over zero figures,
+# in evidence words that claim they were pinned and re-derived. Present but
+# empty is NO-DATA, never a pass.
+@case("empty-figures-manifest-is-nodata", "numbers", "NO-DATA")
+def c4c(root):
+    write(root, "numbers-manifest.json", {"figures": []})
+
+
+# 4d. A manifest that exists and cannot be parsed is a broken claim, not an
+# absent one, so it FAILs rather than falling back to the missing-file NO-DATA.
+@case("malformed-manifest-caught", "numbers", "FAIL")
+def c4d(root):
+    write(root, "numbers-manifest.json", "this is not json at all\n")
+
+
+# 4e. A misspelled key (figure, not figures) must not read as zero problems.
+@case("misspelled-figures-key-is-nodata", "numbers", "NO-DATA")
+def c4e(root):
+    write(root, "numbers-manifest.json", {"figure": [{"label": "revenue"}]})
+
+
+# 4f. A figure with no query at all has nothing for the second derivation to be
+# independent of, so the textual-difference test is vacuous and must not pass.
+@case("figure-with-no-query-caught", "numbers", "FAIL")
+def c4f(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "x", "snapshot_id": "s", "second_derivation": "SELECT SUM(b) FROM t2",
+        "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
+
+
 # 5. A migration whose reverse never ran against a restore.
 @case("untested-reverse-caught", "migration", "FAIL")
 def c5(root):
@@ -202,16 +234,101 @@ def c13(root):
     write(root, "ran-receipt.json", {"checks": [{"name": "row_parity", "exit_code": 1, "duration_ms": 400}]})
 
 
+# 13b. A zero-check receipt is exactly the artifact produced by a session that
+# wants to look done without running anything. Present but empty is NO-DATA.
+@case("empty-checks-receipt-is-nodata", "ran", "NO-DATA")
+def c13b(root):
+    write(root, "ran-receipt.json", {"checks": []})
+
+
+# 13c. An unparseable ran-receipt is a broken claim, so it FAILs.
+@case("malformed-ran-receipt-caught", "ran", "FAIL")
+def c13c(root):
+    write(root, "ran-receipt.json", "<<<garbage>>>\n")
+
+
+# 13d. A key typo (check, not checks) must not read as zero problems.
+@case("misspelled-checks-key-is-nodata", "ran", "NO-DATA")
+def c13d(root):
+    write(root, "ran-receipt.json", {"check": [{"name": "recon"}]})
+
+
+# 13e. An unparseable migration receipt is a broken claim, not an absence.
+@case("malformed-migration-receipt-caught", "migration", "FAIL")
+def c13e(root):
+    write(root, "migration-receipt.json", "{not json\n")
+
+
+# The %G? codes, pinned. These call gate_approval directly with the signature
+# status substituted, because producing a real E needs a signed commit whose key
+# is absent from the keyring, which cannot be built inside a hermetic fixture.
+# The decision under test is the mapping from code to verdict, and that is what
+# is pinned here: G and U are approvals, E is NO-DATA, everything else FAILs.
+_gate = SourceFileLoader("sbe_gate", os.path.join(HERE, "..", "tools", "sbe_gate.py")).load_module()
+
+
+def _approval_with_sig(root, sig):
+    original = _gate.git_trailers
+    _gate.git_trailers = lambda r: ("change\n\nApproved-by: Someone", sig)
+    try:
+        return _gate.gate_approval(root)[0]
+    finally:
+        _gate.git_trailers = original
+
+
+# 13f. E means the signature could not be verified here, which on a runner with
+# no imported keys is the result for EVERY signed commit, including one signed
+# by a key nobody on the team recognises. Accepting it would trust the unknown
+# while rejecting a known key that had merely expired. NO-DATA, not an approval.
+@case("unverifiable-signature-E-is-not-an-approval", "sig", "NO-DATA")
+def c13f(root):
+    return _approval_with_sig(root, "E")
+
+
+@case("verified-signature-G-approval-passes", "sig", "PASS")
+def c13g(root):
+    return _approval_with_sig(root, "G")
+
+
+@case("valid-untrusted-signature-U-approval-passes", "sig", "PASS")
+def c13g2(root):
+    return _approval_with_sig(root, "U")
+
+
+@case("bad-signature-B-is-not-an-approval", "sig", "FAIL")
+def c13h(root):
+    return _approval_with_sig(root, "B")
+
+
+@case("expired-signature-X-is-not-an-approval", "sig", "FAIL")
+def c13h2(root):
+    return _approval_with_sig(root, "X")
+
+
+@case("unsigned-commit-N-is-not-an-approval", "sig", "FAIL")
+def c13h3(root):
+    return _approval_with_sig(root, "N")
+
+
+T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
+              "reversible_under_hour": True, "touches_sensitive": False, "consumers": "some"}
+T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,
+              "reversible_under_hour": True, "touches_sensitive": False, "consumers": "none"}
+T3_ANSWERS = {"changes_contract": True, "crosses_boundary": True,
+              "reversible_under_hour": False, "touches_sensitive": True, "consumers": "many"}
+PURPOSE = "# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n"
+
+
 @case("missing-required-artifact-caught", "artifacts", "FAIL")
 def d1(root):
-    write(root, "00-intake.json", {"tier": "T2", "answers": {}, "override": None})
-    write(root, "01-purpose.md", "# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n")
+    write(root, "00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "01-purpose.md", PURPOSE)
 
 
 @case("complete-t1-dossier-passes", "artifacts", "PASS")
 def d2(root):
-    write(root, "00-intake.json", {"tier": "T1", "answers": {}, "override": None})
-    write(root, "01-purpose.md", "# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n")
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "01-purpose.md", PURPOSE)
 
 
 @case("adr-without-rejected-alternatives-caught", "adr", "FAIL")
@@ -291,6 +408,138 @@ def d12(root):
     write(root, "00-intake.json", {"answers": {}, "override": None})
 
 
+# The trust boundary the whole design gate sits on: the tier written in the file
+# against the tier its own answers compute. Trusting the field made every artifact
+# requirement two keystrokes away.
+@case("tier-lowered-by-hand-without-a-reason-caught", "artifacts", "FAIL")
+def d14(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": T3_ANSWERS,
+                                   "override": None, "override_reason": None})
+
+
+@case("declared-override-with-a-reason-is-honoured", "artifacts", "PASS")
+def d15(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T3_ANSWERS, "override": "T1",
+                                   "override_reason": "read-only backfill, agreed with the data owner"})
+    write(root, "01-purpose.md", PURPOSE)
+
+
+@case("intake-without-answers-is-nodata", "artifacts", "NO-DATA")
+def d16(root):
+    write(root, "00-intake.json", {"tier": "T3", "override": None})
+
+
+@case("malformed-intake-caught", "artifacts", "FAIL")
+def d17(root):
+    write(root, "00-intake.json", "{not json at all\n")
+
+
+# An ADR listing its alternatives as bullets under one heading is the natural
+# authoring form and must pass; two empty headings must not.
+@case("bulleted-rejected-alternatives-pass", "adr", "PASS")
+def d18(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\nlatency, freshness\n"
+                             "## Rejected alternatives\n"
+                             "- Synchronous API call: ties checkout latency to warehouse availability.\n"
+                             "- Nightly batch: fails the freshness requirement.\n"
+                             "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
+                             "## What would flip this\nSub-second freshness becomes a requirement.\n")
+
+
+@case("empty-rejected-headings-caught", "adr", "FAIL")
+def d19(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\nc\n## Rejected\n## Rejected\n"
+                             "## Decision\nd\n## Consequences\ne\n## What would flip this\nf\n")
+
+
+# Prose that says the opposite of what the rule requires must not pass on a
+# substring match: a stated TBD is not a system of record, and "one-to-many-ish"
+# is not a cardinality.
+@case("undecided-system-of-record-caught", "datamodel", "FAIL")
+def d20(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record: TBD\n"
+                                    "- Order: no system of record known yet\n"
+                                    "## Relationships\n- Customer to Order: one-to-many\n")
+
+
+@case("hedged-cardinality-caught", "datamodel", "FAIL")
+def d21(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "## Relationships\n- Customer to Order: this is a one-to-many-ish thing we have not decided\n")
+
+
+# A dossier copied from templates/dossier and never edited must not clear the
+# design gate on someone else's example.
+@case("unedited-copied-template-caught", "placeholder", "FAIL")
+def d22(root):
+    for name in os.listdir(TEMPLATES):
+        if name.endswith(".md") and name[0].isdigit():
+            write(root, name, open(os.path.join(TEMPLATES, name)).read())
+    write(root, "00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+
+
+@case("edited-dossier-has-no-unfilled-marker", "placeholder", "PASS")
+def d23(root):
+    write(root, "01-purpose.md", PURPOSE)
+
+
+@case("no-artifacts-at-all-is-nodata-not-a-pass", "placeholder", "NO-DATA")
+def d24(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": {"reversible_under_hour": True,
+                                                             "consumers": "none"}, "override": None})
+
+
+# The CI wiring case: the documented layout puts the dossier in design/<project>/
+# while CI runs from the repository root. Checking only <root>/00-intake.json
+# reported NO-DATA and exit 0 with a full dossier two directories away.
+@case("dossier-in-a-subdirectory-is-found", "artifacts", "FAIL")
+def d25(root):
+    write(root, "design/orders/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "design/orders/01-purpose.md", PURPOSE)
+
+
+@case("complete-dossier-in-a-subdirectory-passes", "artifacts", "PASS")
+def d26(root):
+    write(root, "design/orders/00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "design/orders/01-purpose.md", PURPOSE)
+
+
+SCORE = os.path.join(HERE, "..", "tools", "sbe_score.py")
+
+
+def run_score_lints(args):
+    out = subprocess.run([sys.executable, SCORE] + args, capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if parts and parts[0] == "silent-failure-lints":
+            return parts[1]
+    return "?"
+
+
+# A lint run that opened no file reported PASS with the evidence word "clean",
+# which asserts the opposite of what happened. Nothing scanned is NO-DATA.
+@case("lints-with-no-root-are-nodata-not-clean", "lints", "NO-DATA")
+def s1(root):
+    return run_score_lints([])
+
+
+@case("lints-on-a-mistyped-path-are-caught", "lints", "FAIL")
+def s2(root):
+    return run_score_lints([os.path.join(root, "no-such-dir")])
+
+
+@case("lints-on-real-source-name-what-was-scanned", "lints", "PASS")
+def s3(root):
+    write(root, "ok.py", "def f():\n    return 1\n")
+    return run_score_lints([root])
+
+
+@case("lints-catch-a-swallowed-error", "lints", "FAIL")
+def s4(root):
+    write(root, "bad.py", "try:\n    f()\nexcept:\n    pass\n")
+    return run_score_lints([root])
+
+
 _decide = SourceFileLoader("sbe_decide", os.path.join(HERE, "..", "tools", "sbe_decide.py")).load_module()
 _TABLES = json.load(open(os.path.join(HERE, "..", "tables", "architecture.json")))
 
@@ -344,12 +593,26 @@ def a6(root):
     return "unrecognized" if r["unrecognized"] and not r["deciding_criteria"] else "fail"
 
 
+# Asking for a decision family that has no table must name the tables that ship,
+# not raise KeyError. One table exists; the laws say so, and so does the tool.
+@case("unknown-table-key-names-what-ships", "decide", "named-error")
+def a7(root):
+    table, err = _decide.load_table(os.path.join(HERE, "..", "tables", "architecture.json"), "storage")
+    return "named-error" if table is None and "shape" in err else "fail"
+
+
+@case("missing-table-file-names-itself", "decide", "named-error")
+def a8(root):
+    table, err = _decide.load_table(os.path.join(root, "nope.json"), "shape")
+    return "named-error" if table is None and "cannot read table file" in err else "fail"
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
-                if klass in ("tier", "decide"):
+                if klass in ("tier", "decide", "sig", "lints"):
                     verdict = fn(d)
                 else:
                     fn(d)
