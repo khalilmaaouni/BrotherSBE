@@ -2927,6 +2927,304 @@ def r6be(root):
             else "exit %d: %s" % (out.returncode, (out.stdout + out.stderr).strip()[:80]))
 
 
+# ---------------------------------------------------------------------------
+# Round 7. Two laws that claimed an enforcement their tool did not deliver, which
+# is this project's own worst failure class rather than an edge case.
+#
+# L15 said an override sets BOTH fields and that they must agree. Only the reason
+# was enforced: a tier differing from the computed one with `override` null took a
+# path nothing checked, and `override: null` is what every intake file the shipped
+# tool writes starts with, so the unenforced path was the default path.
+#
+# L4 said a bullet in some other section "is prose and is not read as an entity".
+# The fallback for a model with no entity heading read exactly that bullet, so an
+# honest Notes list FAILed as two sourceless entities, and the same list with an
+# ownership phrase in it PASSed as "2 entities, each with a system of record" over
+# a file that declares no entity at all.
+
+@case("a-moved-tier-with-a-null-override-field-fails", "artifacts", "FAIL")
+def s7a(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T3_ANSWERS, "override": None,
+                                   "override_reason": "the auditor requires the full dossier"})
+    write(root, "01-purpose.md", PURPOSE)
+
+
+@case("an-incomplete-override-names-both-fields", "evidence", "both-named")
+def s7b(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T3_ANSWERS, "override": None,
+                                   "override_reason": "the auditor requires the full dossier"})
+    write(root, "01-purpose.md", PURPOSE)
+    line = gate_line(root, "artifacts")
+    if line.split()[1:2] != ["FAIL"]:
+        return line
+    return ("both-named" if "override field" in line and "override_reason" in line else line)
+
+
+@case("an-override-field-that-moves-no-tier-is-reported-as-moving-nothing",
+      "evidence", "no-move-stated")
+def s7c(root):
+    # The other direction of "both fields agree": the fields agree with each other
+    # and with the answers, so nothing was overridden. Silence there would let a
+    # stale field read as a control that was exercised.
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": "T1",
+                                   "override_reason": "kept at T1 after the review"})
+    write(root, "01-purpose.md", PURPOSE)
+    line = gate_line(root, "artifacts")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return "no-move-stated" if "moved no tier" in line else line
+
+
+@case("a-notes-list-with-no-entity-heading-is-not-read-as-entities",
+      "evidence", "prose-left-as-prose")
+def s7d(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Notes\n- Rollout plan: we ship on Tuesday behind a flag\n"
+          "- Open question: who owns retention after the migration\n")
+    line = gate_line(root, "datamodel")
+    return ("prose-left-as-prose"
+            if "Rollout plan'" not in line and "no entity" in line else line)
+
+
+@case("a-notes-list-that-names-an-owner-is-not-an-entity-count", "datamodel", "NO-DATA")
+def s7e(root):
+    # The mirror case: the same prose with an ownership phrase in it used to buy
+    # "2 entities, each with a system of record" over a file holding no entity.
+    write(root, "05-data-model.md",
+          "# Data model\n## Notes\n- Rollout plan: owned by the platform team\n"
+          "- Open question: owner: the data guild\n"
+          "## Relationships\n- Customer to Order: one-to-many.\n")
+
+
+@case("a-data-model-with-no-entity-heading-is-still-checked", "datamodel", "FAIL")
+def s7f(root):
+    # The half that must survive the fix: a model whose heading reads "Conceptual
+    # model" is not exempt from the rule just because it never says "entities".
+    write(root, "05-data-model.md",
+          "# Data model\n## Conceptual model\n- Customer: system of record: the CRM.\n"
+          "- Order: system of record: TBD\n"
+          "## Relationships\n- Customer to Order: one-to-many.\n")
+
+
+@case("a-data-model-with-no-entity-heading-says-what-it-read", "evidence", "disclosed")
+def s7g(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Conceptual model\n- Customer: system of record: the CRM.\n"
+          "- Order: system of record: the OMS.\n"
+          "## Relationships\n- Customer to Order: one-to-many.\n")
+    line = gate_line(root, "datamodel")
+    if line.split()[1:2] != ["NO-DATA"]:
+        return line
+    return ("disclosed" if "Customer" in line and "entit" in line else line)
+
+
+@case("a-diagram-still-traces-to-a-model-with-no-entity-heading", "diagrams", "PASS")
+def s7h(root):
+    # Tracing reads the wider set on purpose: a name it does not know produces a
+    # false orphan, so the guess there runs the other way from the data-model
+    # check's. This pins that the scoping fix did not invent orphans.
+    write(root, "05-data-model.md",
+          "# Data model\n## Conceptual model\n- Customer: system of record: the CRM.\n"
+          "- Order: system of record: the OMS.\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Customer --> Order\n```\n")
+
+
+# ---------------------------------------------------------------------------
+# Round 7, second half: the law-by-law sweep. Each of these is a sentence a law
+# printed that its tool did not do, or a tool doing something its law never said.
+# The fix went to whichever side was wrong, and the fixture pins it either way.
+
+def score_lint_line(args):
+    """The whole silent-failure-lints line, so a fixture can pin the EVIDENCE."""
+    out = subprocess.run([sys.executable, SCORE] + args, capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("silent-failure-lints"):
+            return line.strip()
+    return ""
+
+
+@case("a-number-outside-every-range-is-reported-not-dropped", "decide", "reported")
+def w1(root):
+    # It vanished: `deploying_teams=0` produced "no criterion was answered" over a
+    # run that answered one, and beside a second criterion it produced a confident
+    # recommendation with nothing saying half the input had been discarded, while
+    # the type error one line above it was reported.
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": 0, "consistency": "strong"})
+    return "reported" if any("deploying_teams=0" in u for u in r["unrecognized"]) else "dropped"
+
+
+@case("a-flip-condition-belongs-to-the-recommendation-not-the-table", "decide", "its-own")
+def w1b(root):
+    # L12's promise was guarded only by "the string is truthy", so deleting the
+    # per-recommendation lookup and falling back to the one table-wide string
+    # would still have passed CI, which is the defect that string was added to
+    # fix: a run recommending services off nine teams and high isolation was
+    # handed a flip condition naming two conditions that were already true.
+    shared = _TABLES["shape"]["flip"]
+    seen = set()
+    for teams, cons, ops, iso in ((1, "strong", "low", "low"), (9, "eventual", "high", "high"),
+                                  (3, "eventual", "high", "high")):
+        r = _decide.recommend(_TABLES["shape"], {"deploying_teams": teams, "consistency": cons,
+                                                 "ops_maturity": ops, "failure_isolation": iso})
+        if r["flip_condition"] == shared:
+            return "%s was handed the table-wide flip condition" % r["recommendation"]
+        seen.add(r["flip_condition"])
+    return "its-own" if len(seen) == 3 else "two recommendations share one flip condition"
+
+
+@case("a-review-id-of-more-than-one-word-is-a-pointer-not-a-failure", "gaterun", "NO-DATA")
+def w2(root):
+    # `^Reviewed-in:\s*(\S+)$` was a shape rule no law declared: a human-written
+    # id fell past the branch and got the FAIL that says no review id is recorded.
+    git_init(root)
+    open(os.path.join(root, "APPROVAL"), "w").write("touches the partner payout path\n")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm",
+                    "payout batching\n\nReviewed-in: PR 99999 on the payments board"], check=True)
+    out = subprocess.run([sys.executable, GATE, "approval", root], capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("approval"):
+            return line.split()[1]
+    return "no-line"
+
+
+@case("an-exemption-with-no-reason-waives-nothing", "lints", "FAIL")
+def w3(root):
+    # L11 writes the marker as `# sbe: allow-silent <reason>` and the reason was
+    # decoration: the bare marker suppressed the finding, in the one gate a
+    # .sbe-exempt cannot waive.
+    write(root, "bad.py", "try:\n    f()\nexcept:  # sbe" + ": allow-silent\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    return run_score_lints([root])
+
+
+@case("an-exemption-carrying-a-reason-still-waives", "lints", "PASS")
+def w4(root):
+    write(root, "ok.py", "def g():\n    return 2\n")
+    write(root, "bad.py", "try:\n    f()\nexcept:  # sbe" + ": allow-silent boundary read, the "  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+                          "caller handles the absence\n    pass\n")
+    return run_score_lints([root])
+
+
+@case("a-checked-subprocess-call-with-a-nested-call-is-not-a-hit", "lints", "PASS")
+def w5(root):
+    # A lint firing on correct code is how a gate gets switched off: the lookahead
+    # ended at the closing paren of the NESTED call and never saw check=True.
+    write(root, "ok.py", 'import shlex, subprocess\nsubprocess.run(shlex.split("ls -l"), check=True)\n')
+    return run_score_lints([root])
+
+
+@case("a-long-conflict-skipping-upsert-is-still-caught", "lints", "FAIL")
+def w6(root):
+    # The pattern gave up after 300 characters, so the law's "stops at the
+    # statement's semicolon" was false about any statement longer than that.
+    write(root, "up.sql", "INSERT INTO t (id) VALUES (1) ON CONFLICT (id) /* %s */ DO NOTHING;\n"  # sbe: allow-silent this is the lint FIXTURE: the skipping upsert is the defect under test, written into a temp file and never executed here
+          % ("x" * 400))
+    return run_score_lints([root])
+
+
+@case("a-truncated-hit-list-says-how-many-it-did-not-name", "lints", "counted")
+def w7(root):
+    for i in range(7):
+        write(root, "f%d.py" % i, "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    line = score_lint_line([root])
+    return "counted" if "and 2 more not named" in line else line
+
+
+@case("an-empty-file-is-not-counted-as-source-examined", "lints", "named")
+def w8(root):
+    write(root, "empty.py", "")
+    write(root, "ok.py", "def f():\n    return 1\n")
+    line = score_lint_line([root])
+    return "named" if "hold nothing to examine" in line and "empty.py" in line else line
+
+
+@case("an-artifact-coherent-with-a-file-the-tier-did-not-require-passes", "artifacts", "PASS")
+def w9(root):
+    # The sibling set was the TIER-REQUIRED list, so a T1 purpose brief sharing
+    # four words with the 04-technology-map beside it FAILed with the sentence
+    # "no substantive word in it appears in any sibling artifact".
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "01-purpose.md",
+          "# Purpose\nRefund settlement latency must fall under one business day.\n")
+    write(root, "04-technology-map.md",
+          "# Technology map\n| Component | Technology | Owner |\n|---|---|---|\n"
+          "| Widget | Postgres holding refund settlement rows | Platform |\n")
+
+
+@case("an-inline-edge-label-is-named-in-the-skipped-tokens", "evidence", "named")
+def w10(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "- Order: system of record: the OMS.\n")
+    write(root, "06-diagrams.md",
+          "```mermaid\nflowchart LR\n  C[Customer] -- Ledger --> O[Order]\n```\n")
+    line = gate_line(root, "diagrams")
+    return "named" if "Ledger (an inline edge label, not a node)" in line else line
+
+
+@case("a-truncated-entity-failure-says-how-many-it-did-not-show", "evidence", "counted")
+def w11(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n" + "".join("- %s\n" % n for n in
+          ("Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel")))
+    line = gate_line(root, "datamodel")
+    return "counted" if "and 2 more not shown" in line else line
+
+
+@case("the-adr-pass-line-claims-only-what-the-threshold-measured", "evidence", "measured")
+def w12(root):
+    # Two bullets that name two options and give no reason at all cleared the
+    # threshold, and the verdict said "rejected with a stated reason" over them.
+    # No rule here can tell a reason from a longer name, so the sentence says
+    # what it measured and names the rest as human review.
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nlatency, freshness\n## Rejected alternatives\n"
+          "- Synchronous ledger call\n- Nightly batch reconciliation\n"
+          "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
+          "## What would flip this\nSub-second freshness becomes a requirement.\n")
+    line = gate_line(root, "adr")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return ("measured" if "stated reason" not in line and "human review" in line else line)
+
+
+@case("the-lint-numbers-this-repository-prints-are-the-numbers-it-computes",
+      "docs", "consistent")
+def w13(root):
+    """SKILL.md states this repository's own lint run. Both numbers were stale.
+
+    A number in a doc that nothing recomputes is a stale evidence string with a
+    longer half-life, which is the argument the eval-count and checker-line
+    guards beside this one already make. This one recomputes the two numbers L11
+    prints about this repository from a live run.
+    """
+    import re as _re
+    body = open(os.path.join(_REPO, "SKILL.md"), errors="replace").read()
+    m = _re.search(r"(\w+) waived hits and (\w+) files that were scanned and genuinely found clean",
+                   body)
+    if not m:
+        return "SKILL.md no longer states the waived-hit and clean-file counts of its own lint run"
+    # Written either way: the sentence carried spelled-out words for a wave and
+    # digits after, and a guard that reads one form and not the other is a guard
+    # that goes quiet on an edit rather than failing on one.
+    words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+             "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+    def _n(tok):
+        return int(tok) if tok.isdigit() else words.get(tok.lower(), -1)
+    said = (_n(m.group(1)), _n(m.group(2)))
+    out = subprocess.run([sys.executable, SCORE, _REPO], capture_output=True, text=True)
+    line = next((l for l in out.stdout.splitlines()
+                 if l.strip().startswith("silent-failure-lints")), "")
+    waived = _re.search(r"(\d+) suppressed", line)
+    clean = _re.search(r"(\d+) file\(s\) holding no match at all", line)
+    if not waived or not clean:
+        return "the lint line for this repository printed no suppressed or clean-file count"
+    got = (int(waived.group(1)), int(clean.group(1)))
+    return ("consistent" if said == got else
+            "SKILL.md says %r but the run has %d waived hits and %d clean files"
+            % (m.group(0), got[0], got[1]))
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
