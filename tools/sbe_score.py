@@ -46,32 +46,53 @@ LINT_PATTERNS = [
 ]
 
 
+SCANNABLE = (".py", ".sql", ".swift", ".rb", ".js", ".ts", ".go")
+
+
 def silent_failure_lints():
-    """Scan operator source for error-swallowing patterns. Opt-in via a dir arg
-    or SBE_LINT_ROOT. A line carrying `# sbe: allow-silent <reason>` is exempt:
-    the exemption is VISIBLE in the diff and auditable, which is the override
-    philosophy applied to lints (a swallow is legal only when a human named why).
-    The linter's own file is skipped, because a file that defines these patterns
-    as strings would match itself."""
+    """Scan operator source for error-swallowing patterns, returning (verdict, evidence).
+
+    Opt-in via a dir arg or SBE_LINT_ROOT. A line carrying `# sbe: allow-silent
+    <reason>` is exempt: the exemption is VISIBLE in the diff and auditable, which
+    is the override philosophy applied to lints (a swallow is legal only when a
+    human named why). The linter's own file is skipped, because a file that defines
+    these patterns as strings would match itself.
+
+    Three verdicts, not two. A run that opened no file cannot have found anything,
+    so it reports NO-DATA naming the reason and the evidence says what was scanned
+    rather than the word "clean", which asserts the opposite of what happened. A
+    positional argument that is not a directory is a broken invocation and FAILs:
+    silently ignoring a mistyped path was how a permanently green lint that had
+    never opened a file stayed invisible."""
     root = os.environ.get("SBE_LINT_ROOT")
     for a in sys.argv[1:]:
+        if a.startswith("-"):
+            continue
         if os.path.isdir(a):
             root = a
+        else:
+            return "FAIL", ("%r is not a directory, so the lint root was never scanned; a mistyped path "
+                            "must not read as a clean scan" % a)
     if not root:
-        return []  # opt-in: no root, no scan (never a false alarm on an unrelated tree)
+        return "NO-DATA", ("no lint root: pass a directory or set SBE_LINT_ROOT. Nothing was opened, "
+                           "so there is nothing to call clean")
+    if not os.path.isdir(root):
+        return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
     hits = []
+    scanned = 0
     for dp, dns, fns in os.walk(root):
         dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__", ".venv", "venv")]
         for fn in fns:
             if fn == os.path.basename(__file__):
                 continue  # the linter declares the patterns as strings; do not self-match
-            if not fn.endswith((".py", ".sql", ".swift", ".rb", ".js", ".ts", ".go")):
+            if not fn.endswith(SCANNABLE):
                 continue
             path = os.path.join(dp, fn)
             try:
                 lines = open(path, errors="replace").read().splitlines()
             except OSError:
                 continue
+            scanned += 1
             src = "\n".join(lines)
             for pat, desc in LINT_PATTERNS:
                 for m in pat.finditer(src):
@@ -79,7 +100,12 @@ def silent_failure_lints():
                     if "sbe: allow-silent" in lines[ln]:
                         continue  # visible, auditable exemption
                     hits.append("%s:%d %s" % (os.path.relpath(path, root), ln + 1, desc))
-    return hits
+    if not scanned:
+        return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened"
+                           % (root, " ".join(SCANNABLE)))
+    if hits:
+        return "FAIL", "%d hit(s) in %d file(s) scanned: %s" % (len(hits), scanned, "; ".join(hits[:5]))
+    return "PASS", "%d file(s) scanned under %s, clean" % (scanned, root)
 
 
 def main():
@@ -203,10 +229,7 @@ def main():
     # 10. silent-failure lints (BrotherSBE, gate severity by ratified decision):
     # the code patterns that swallow an error so a wrong result looks like a right
     # one. Scans tracked source in the worktree; each hit names its file and line.
-    lint_hits = silent_failure_lints()
-    check("silent-failure-lints",
-          "PASS" if not lint_hits else "FAIL",
-          "clean" if not lint_hits else "%d hit(s): %s" % (len(lint_hits), "; ".join(lint_hits[:5])))
+    check("silent-failure-lints", *silent_failure_lints())
 
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
