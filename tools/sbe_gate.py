@@ -86,7 +86,9 @@ def gate_numbers(root):
             r = fig.get("rerun", {})
             if not r.get("ran"):
                 problems.append("%s: second derivation not marked as re-run" % label)
-            elif r.get("primary") is not None and r.get("secondary") is not None and r["primary"] != r["secondary"]:
+            elif r.get("primary") is None or r.get("secondary") is None:
+                problems.append("%s: rerun marked ran but the primary or secondary value needed to prove zero drift was not recorded" % label)
+            elif r["primary"] != r["secondary"]:
                 problems.append("%s: DRIFT primary=%s secondary=%s (zero drift required)" % (label, r["primary"], r["secondary"]))
     if problems:
         return "FAIL", "; ".join(problems[:6])

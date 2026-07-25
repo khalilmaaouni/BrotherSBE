@@ -118,6 +118,17 @@ def c4(root):
         "rerun": {"ran": True, "primary": 1, "secondary": 1}}]})
 
 
+# 4b. A figure marked rerun ran=true but missing the values needed to prove zero
+# drift (no primary, no secondary) must FAIL, not PASS: a gate that reports
+# "zero-drift check" without the numbers to compare is a figure shipping
+# unverified while the evidence line claims otherwise.
+@case("rerun-marked-ran-with-no-values-caught", "numbers", "FAIL")
+def c4b(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "x", "snapshot_id": "s", "query": "SELECT SUM(a) FROM t",
+        "second_derivation": "SELECT SUM(b) FROM t2", "rerun": {"ran": True}}]})
+
+
 # 5. A migration whose reverse never ran against a restore.
 @case("untested-reverse-caught", "migration", "FAIL")
 def c5(root):
