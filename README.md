@@ -57,9 +57,9 @@ Verification comes last, and only four failure classes get structural gates. Eac
 - **approval**: a declared approval must be bound to more than a name typed into a text field. Two paths, and they are not equally strong. A signed `Approved-by:` commit trailer THIS HOST VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that an id in the right shape sits in the commit message: nothing resolves it, the agent writes commit messages, so an agent can write one. The gate's evidence line says so on every run, and if you need that path to be a control, add a CI step that resolves the id against your review platform. A typed name fails, and a signature the host cannot verify is NO-DATA rather than an approval, so CI needs the signers' public keys. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
 - **ran**: no SQL or pipeline change is done until its reconciliation query or test executed and left a receipt with a zero exit code and a nonzero duration. A check that took no time did not run.
 
-The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed. A receipt that exists and records nothing is also NO-DATA and says so; a receipt that exists and cannot be parsed is a FAIL, because a broken claim is not an absent one.
+The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed. A receipt that exists and records nothing is also NO-DATA and says so; a receipt that exists and cannot be parsed, including valid JSON of the wrong shape, is a FAIL, because a broken claim is not an absent one. A check that crashes is reported as a FAIL carrying the exception, never as a missing line: a gate that disappears from the report is worse than one that fails. None of that rests on anyone remembering it. Every check is registered with a declaration of what it reads and what its empty state is, `PASS` is refused as an empty state at construction, and [`evals/test_no_data_class.py`](evals/test_no_data_class.py) enumerates those registries rather than a written list, so a check added later is covered the moment it is registered.
 
-A companion linter in [`tools/sbe_score.py`](tools/sbe_score.py) catches the code patterns that swallow an error so a wrong result passes for a right one (bare except, except-then-pass, discarded subprocess result, conflict-skipping upsert, force-try). A reviewed exemption carries a visible `# sbe: allow-silent <reason>` marker, so the swallow is auditable in the diff.
+A companion linter in [`tools/sbe_score.py`](tools/sbe_score.py) catches the code patterns that swallow an error so a wrong result passes for a right one (bare except, except-then-pass, discarded subprocess result, conflict-skipping upsert, force-try). A reviewed exemption carries a visible `# sbe: allow-silent <reason>` marker, so the swallow is auditable in the diff, and the count of exemptions is printed in the verdict's evidence. A scan whose every finding in every file was waived reports NO-DATA rather than "clean".
 
 ### What a gate actually reads
 
@@ -143,9 +143,17 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
         run: python3 tools/sbe_design.py --strict .
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
 ```
 
-The approval gate reads commit trailers and signatures, so the checkout step needs `fetch-depth: 0`. All three tools are standard-library Python, no dependencies to install.
+The last three matter as much as the first three. The gates are worth what their tests are worth, and a fixture no merge runs is documentation rather than a gate.
+
+The approval gate reads commit trailers and signatures, so the checkout step needs `fetch-depth: 0`. Everything here is standard-library Python, no dependencies to install.
 
 Invoke the skill with `/brothersbe` at the start of any backend, infrastructure, or data engineering task.
 
