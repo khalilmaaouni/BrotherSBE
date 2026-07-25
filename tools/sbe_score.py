@@ -459,16 +459,42 @@ LINT_PATTERNS = [
     # in a .sql file, the same statement split over two lines, and the Python form
     # that puts the SQL in a variable were all invisible. The second pattern reads
     # the SQL wherever it is written, across newlines, and needs no host language.
-    (re.compile(r"(?is)\bon\s+conflict\b[^;]{0,300}?\bdo\s+nothing\b"), "conflict-skipping upsert without a logged skip count"),
+    # No character budget between the two halves: `[^;]{0,300}?` gave up after
+    # 300 characters, so one long INSERT ... ON CONFLICT ... DO NOTHING statement
+    # was reported clean while the law said the pattern "stops at the statement's
+    # semicolon". `[^;]` already stops there, which is the whole bound this needs.
+    (re.compile(r"(?is)\bon\s+conflict\b[^;]*?\bdo\s+nothing\b"), "conflict-skipping upsert without a logged skip count"),
     # Fire-and-forget subprocess only: the call starts a statement (result discarded)
     # and carries no check=True. An assigned result (out = subprocess.run(...)) can be
     # inspected, so it is not a silent swallow and is not flagged.
-    (re.compile(r"^[ \t]*subprocess\.(run|call|Popen)\((?![^)]*check\s*=\s*True)", re.M), "discarded subprocess result without check=True (exit code is swallowed)"),
+    # The lookahead reads the whole call, not up to the first `)`. `[^)]*` ended
+    # at the closing paren of a NESTED call, so
+    # `subprocess.run(shlex.split(cmd), check=True)` was reported as a swallowed
+    # exit code: a lint firing on correct code is how a gate gets switched off.
+    # Two levels of nesting are matched, which covers the forms people write; a
+    # third would still be a false positive and the `# sbe: allow-silent` escape
+    # is the honest answer to that, in the diff where a reader sees it.
+    (re.compile(r"^[ \t]*subprocess\.(run|call|Popen)\("
+                r"(?!(?:[^()]|\((?:[^()]|\([^()]*\))*\))*check\s*=\s*True)", re.M),
+     "discarded subprocess result without check=True (exit code is swallowed)"),
     (re.compile(r"try\s*!"), "force-try (Swift try! discards the error)"),
 ]
 
 SCANNABLE = (".py", ".sql", ".swift", ".rb", ".js", ".ts", ".go")
 EXEMPTION = "sbe: allow-silent"
+# How many of a list this evidence line prints before it says how many it did not.
+NAMED_IN_EVIDENCE = 5
+
+
+def _first_named(items, sep="; ", n=NAMED_IN_EVIDENCE):
+    """The first n items, and how many were not named.
+
+    L11's OUTPUT says each hit names its file and line. Six hits printed five and
+    the sixth vanished out of a sentence that reads as the whole list, which is
+    the truncated-set defect this project keeps finding one level lower.
+    """
+    shown = sep.join(items[:n])
+    return shown if len(items) <= n else shown + "%sand %d more not named" % (sep, len(items) - n)
 
 
 def silent_failure_lints(ctx=None):
@@ -504,7 +530,7 @@ def silent_failure_lints(ctx=None):
                            "so there is nothing to call clean")
     if not os.path.isdir(root):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
-    hits, exempt, self_skipped = [], [], []
+    hits, exempt, self_skipped, empties = [], [], [], []
     scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
     pruner = Pruner()
     for dp, dns, fns in os.walk(root):
@@ -540,6 +566,7 @@ def silent_failure_lints(ctx=None):
             # as "clean" is the same sentence as a PASS over an empty manifest.
             if not src.strip() or all_vacuous(src) or vacuous(src):
                 empty_files += 1
+                empties.append(os.path.relpath(path, root))
             file_hits, file_exempt = 0, 0
             for pat, desc in LINT_PATTERNS:
                 for m in pat.finditer(src):
@@ -550,12 +577,26 @@ def silent_failure_lints(ctx=None):
                     # `pass` line, and reading only the first line of the match
                     # made the documented escape hatch look broken.
                     span = lines[first:last + 1]
-                    if any(EXEMPTION in l for l in span):
+                    # The reason is the exemption. L11 writes the marker as
+                    # `# sbe: allow-silent <reason>` and the reason was
+                    # decoration: a bare marker suppressed the finding, which is
+                    # an off switch rather than a reviewed exception, and it is
+                    # the one gate a .sbe-exempt cannot waive. Read with the
+                    # shared answered(), so `# sbe: allow-silent tbd` is refused
+                    # here for the same reason "tbd" is refused as a snapshot id.
+                    marked = [l for l in span if EXEMPTION in l]
+                    reason = next((r for r in (answered(l.split(EXEMPTION, 1)[1]) for l in marked)
+                                   if r), None)
+                    if marked and reason:
                         file_exempt += 1
                         exempt.append("%s:%d" % (os.path.relpath(path, root), first + 1))
                         continue
                     file_hits += 1
-                    hits.append("%s:%d %s" % (os.path.relpath(path, root), first + 1, desc))
+                    hits.append("%s:%d %s%s"
+                                % (os.path.relpath(path, root), first + 1, desc,
+                                   "" if not marked else
+                                   " (an `%s` marker with no reason after it waives nothing; write "
+                                   "what makes this swallow legal)" % EXEMPTION))
             if file_hits or file_exempt:
                 with_matches += 1
                 if not file_hits:
@@ -578,18 +619,32 @@ def silent_failure_lints(ctx=None):
         return "NO-DATA", ("%d file(s) scanned under %s and every one of them is empty or holds "
                            "nothing but a placeholder, so no line of source was examined and there "
                            "is nothing to call clean%s" % (scanned, root, note))
+    # A file with nothing in it is not source anybody examined, and in a MIXED run
+    # it was counted inside "N file(s) scanned, clean" with nothing saying so. The
+    # all-empty run already had its own verdict; this is the same sentence for the
+    # rest of the runs.
+    if empties:
+        note += ("; %d of the %d file(s) scanned hold nothing to examine (%s), so the count above is "
+                 "not a count of files with source in them"
+                 % (len(empties), scanned, _first_named(empties, ", ")))
     if hits:
         return "FAIL", ("%d hit(s) in %d file(s) scanned: %s%s"
-                        % (len(hits), scanned, "; ".join(hits[:5]), note))
+                        % (len(hits), scanned, _first_named(hits), note))
     if exempt and all_exempt == scanned:
         return "NO-DATA", ("%d file(s) scanned under %s and every match in every one of them was "
                            "suppressed by an inline `%s` comment (%s); a scan whose every finding was "
                            "waived examined nothing it was allowed to report, so it is not clean%s"
-                           % (scanned, root, EXEMPTION, ", ".join(exempt[:5]), note))
+                           % (scanned, root, EXEMPTION, _first_named(exempt, ", "), note))
     if exempt:
+        # The clean-file count is the whole argument for PASS here rather than the
+        # NO-DATA one branch up: source WAS examined and found clean somewhere.
+        # It was left to the reader to work out from a truncated list of waived
+        # lines, and SKILL.md's sentence about this repository's own run had it
+        # wrong in both numbers for as long as nothing printed it.
         return "PASS", ("%d file(s) scanned under %s, 0 unexempted hit(s), %d suppressed by an inline "
-                        "`%s` comment (%s)%s"
-                        % (scanned, root, len(exempt), EXEMPTION, ", ".join(exempt[:5]), note))
+                        "`%s` comment (%s), %d file(s) holding no match at all%s"
+                        % (scanned, root, len(exempt), EXEMPTION, _first_named(exempt, ", "),
+                           scanned - with_matches, note))
     return "PASS", "%d file(s) scanned under %s, clean%s" % (scanned, root, note)
 
 

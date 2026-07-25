@@ -52,6 +52,18 @@ def recommend(table, context):
             for opt, (lo, hi) in crit["scores"].items():
                 if lo <= val <= hi:
                     winners.append(opt)
+            if not winners:
+                # A number outside every range this criterion scores was DROPPED,
+                # silently: `deploying_teams=0` produced "no criterion was
+                # answered" over a run that answered one, and beside a second
+                # criterion it produced a confident recommendation with nothing
+                # anywhere saying half the input had been discarded. The type
+                # error two lines up was reported and this was not, which is the
+                # same value in the same field getting two different honesties.
+                unrecognized.append("%s=%s is outside every range this criterion scores (%s)"
+                                    % (crit["name"], val,
+                                       ", ".join("%s: %s to %s" % (opt, lo, hi)
+                                                 for opt, (lo, hi) in crit["scores"].items())))
         else:
             key = str(val)
             if key not in crit["scores"]:
