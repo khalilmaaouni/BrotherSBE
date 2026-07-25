@@ -104,38 +104,59 @@ python3 tools/sbe_design.py --strict .     # enforcing
 ```
 
 Where it looks matters as much as what it checks. A directory holding a dossier is
-checked directly. Anything else is a search root, walked for directories containing
-`00-intake.json`, because the documented layout puts dossiers in `design/<project>/`
-while CI runs from the repository root. Set `SBE_DOSSIER_ROOT` when a repository is
-supposed to carry a dossier: a declared root holding none is then a FAIL rather than
-a report.
+checked directly. Anything else is a search root, walked for every directory holding
+`00-intake.json` OR any of `01` through `07`, because the documented layout puts
+dossiers in `design/<project>/` while CI runs from the repository root. Anchoring on
+the intake file alone was a bypass: deleting it made a directory of seven filled-in
+artifacts invisible, and `--strict` exited 0. A dossier found without its intake now
+FAILs, naming it, because without a tier nothing can say which artifacts are owed.
 
-On this repository, which carries no dossier at all, the search finds nothing and
-says so, and the exit code is 0:
+Set `SBE_DOSSIER_ROOT` when a repository is supposed to carry a dossier: a declared
+root holding none is then a FAIL rather than a report. A directory that holds
+dossier-shaped files without being live design work carries a `.sbe-exempt` file
+whose contents say why, and that reason is printed on every run, so an exemption
+nobody can see is not possible.
+
+On this repository, which carries the shipped templates and no real dossier, the run
+looks like this, and the exit code is 0. Every check prints a line even with nothing
+to open: a check that prints nothing is indistinguishable from a check that was
+deleted.
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
-  dossier    NO-DATA  no dossier found under .: no directory contains 00-intake.json. If this repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and this becomes a FAIL instead of a report
+  dossier    NO-DATA  templates/dossier is exempt (.sbe-exempt names why: These are the shipped dossier TEMPLATES, not a dossier. They carry the), so no check opened a file there
+  dossier    NO-DATA  no dossier found under .: no directory contains 00-intake.json or any of 01 through 07. If this repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and this becomes a FAIL instead of a report
+  artifacts  NO-DATA  no dossier under ., so this check opened no file
+  adr        NO-DATA  no dossier under ., so this check opened no file
+  datamodel  NO-DATA  no dossier under ., so this check opened no file
+  diagrams   NO-DATA  no dossier under ., so this check opened no file
+  placeholder NO-DATA  no dossier under ., so this check opened no file
 ```
 
 Two implementation details are worth knowing before you write a dossier, because
 they decide what the checks can see.
 
-**The entity list is parsed from bullets.** `_entities` reads bullet lines in
-`05-data-model.md` above the `Relationships` heading, taking the text before the
-first colon as the name and the rest as its meta, which must contain the words
-"system of record". Bullet lines below the Relationships heading are read as
-relationships and must carry a cardinality, so tables and numbered lists are the
-right shape for everything after that point.
+**The entity list is parsed from bullets, inside the entity sections.** `_entities`
+reads bullet lines under any heading whose name contains "entit" and above the
+`Relationships` heading, taking the text before the first colon as the name and the
+rest as its meta, which must contain the words "system of record". Scoping it to
+those headings is what lets a data model carry an honest `## Notes` list without
+each note becoming an entity with no source. A name may contain a hyphen or a dot,
+so `payment-token` is read rather than dropped from the set the verdict asserts
+over. Bullet lines below the Relationships heading are read as relationships and
+must carry a cardinality, so tables and numbered lists are the right shape for
+everything after that point.
 
-**The diagram check traces against that same entity list.** A node in
-`06-diagrams.md` that is not in the list is an orphan and fails by name. If a
-diagram legitimately names a runtime component, declare it in `05-data-model.md`
-with a system of record, under its own heading, exactly as
-[guide 05](guides/05-a-worked-engagement.md) does. Declaring it anywhere else does
-not work: the datamodel check then fails the component for having no system of
-record. And when `05-data-model.md` has no entities at
-all, the diagram check returns NO-DATA rather than PASS, because an empty known set
+**The diagram check traces against entities AND declared components.** Diagram
+source is read from fenced code blocks only, so prose containing an arrow is not a
+diagram. A node that is neither an entity in `05-data-model.md` nor a declared
+runtime component is an orphan and fails by name. A runtime component is declared
+in the first column of a table in `04-technology-map.md`, or as a bullet under a
+Components heading in `06-diagrams.md` itself. It used to have to be declared as an
+ENTITY in the data model, which taught authors to put queues and services in the
+conceptual model to satisfy a diagram check: the model was corrupted to please the
+tool. When there is nothing to trace against at all, no entities and no declared
+components, the check returns NO-DATA rather than PASS, because an empty known set
 would make every invented node look traceable, which is the exact defect the check
 exists to catch.
 

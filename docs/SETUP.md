@@ -77,7 +77,7 @@ Three steps, not two. The first blocks on a failed hard gate (a number with no r
 
 Two settings decide whether those steps can see anything.
 
-**`SBE_DOSSIER_ROOT`.** The design step is given the checkout root, and from there it walks for every directory holding a `00-intake.json`, which is what lets it reach a dossier in `design/<project>/`. Left empty, finding none is NO-DATA and the step passes, because a change that needs no dossier should not be blocked for not having one. Set it to where your dossiers live once the repository is supposed to carry one, and a declared root holding none becomes a FAIL:
+**`SBE_DOSSIER_ROOT`.** The design step is given the checkout root, and from there it walks for every directory holding a `00-intake.json` or any of `01` through `07`, which is what lets it reach a dossier in `design/<project>/` and what stops a deleted intake file from hiding one. Left empty, finding none is NO-DATA and the step passes, because a change that needs no dossier should not be blocked for not having one, and a T0 change needs none. Set it to where your dossiers live once the repository is supposed to carry one, and a declared root holding none becomes a FAIL. One caveat worth knowing before you set it: a repository that mixes T0 work with dossier work should leave it empty, because a declared root plus a legitimately dossier-free change is a FAIL by design. A directory holding dossier-shaped files that are not live design work (a template library, a finished project) carries a `.sbe-exempt` file whose contents say why, printed on every run:
 
 ```yaml
 env:
@@ -92,7 +92,7 @@ env:
 # or use the keyless path, a Reviewed-in: <review id> trailer on the commit
 ```
 
-Doing neither is legal and honest: approvals then report NO-DATA in CI, and the binding is enforced wherever your review platform enforces it.
+Doing neither is legal and honest: approvals then report NO-DATA in CI, and the binding is enforced wherever your review platform enforces it. Note which of the two paths you are on. The signature path is forgery-resistant: an agent without the private key cannot produce it. The `Reviewed-in:` path is not, because nothing resolves the id and the agent writes the commit message. The gate says so in its own evidence on every run. If you want that path to be a control rather than a pointer, add a step that queries your review platform for the id and fails when it does not exist.
 
 ## What you get, and what you do not
 

@@ -63,12 +63,14 @@ The four gates and the exact receipt each one reads:
 | gate | receipt file (found anywhere in the worktree) | what a PASS proves |
 | --- | --- | --- |
 | `numbers` | `numbers-manifest.json` | a decision figure is pinned, independently re-derived, zero drift |
-| `migration` | `migration-receipt.json` | forward and reverse both ran against a restore, row counts match |
-| `approval` | `APPROVAL` file or an `Approved-by:` commit trailer | a money or partner change carries an unforgeable human approval |
+| `migration` | `migration-receipt.json` | forward and reverse both ran against a restore, and recorded row counts match (no row counts recorded is NO-DATA) |
+| `approval` | `APPROVAL` file or an `Approved-by:` commit trailer | a money or partner change carries a human approval bound to a verified signature, or a review id the gate does not resolve |
 | `ran` | `ran-receipt.json` | a SQL or pipeline check actually executed (nonzero duration, zero exit) |
 
 The gate resolves its root to your git worktree top and walks the tree for these
-filenames (it skips `.git`). Put a receipt at the repo root, or beside the model or
+filenames, skipping `.git`, `node_modules`, `__pycache__`, `.venv`, `venv` and
+`vendor` by directory name (matching `.git` as a substring of the path had also
+hidden `.github/` from all four gates). Put a receipt at the repo root, or beside the model or
 migration it belongs to; both are found.
 
 ---
@@ -282,12 +284,18 @@ name: BrotherSBE gates
 on: [pull_request]
 env:
   # Where your dossiers live. Empty means "search the whole checkout": every
-  # directory holding a 00-intake.json is found and checked. That is what makes
-  # the design checks reach a dossier in design/<project>/ instead of opening
-  # only <root>/00-intake.json and reporting nothing while a full dossier sits
-  # two directories away. Set it (for example to `design`) once this repository
-  # is supposed to carry a dossier: a declared root holding none is then a FAIL,
-  # not an absence.
+  # directory holding a 00-intake.json OR any of 01 through 07 is found and
+  # checked. That is what makes the design checks reach a dossier in
+  # design/<project>/ instead of opening only <root>/00-intake.json and reporting
+  # nothing while a full dossier sits two directories away, and it is also why
+  # deleting the intake file no longer hides a dossier: that FAILs, naming the
+  # missing intake. Set it (for example to `design`) once this repository is
+  # supposed to carry a dossier: a declared root holding none is then a FAIL, not
+  # an absence. Leave it empty in a repository that mixes T0 work with dossier
+  # work, because a declared root plus a legitimately dossier-free change FAILs
+  # by design. A directory holding dossier-shaped files that are not live design
+  # work (a template library, a finished project) carries a .sbe-exempt file
+  # whose contents say why, and that reason prints on every run.
   SBE_DOSSIER_ROOT: ''
 jobs:
   gates:
@@ -314,6 +322,15 @@ jobs:
         run: python3 tools/sbe_design.py --strict .
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
 ```
 
 Why the two settings matter:

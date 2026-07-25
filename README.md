@@ -53,8 +53,8 @@ Architecture shape is scored against named criteria in [`tables/architecture.jso
 Verification comes last, and only four failure classes get structural gates. Each fails silently: a wrong result looks exactly like a right one, and detection latency runs from minutes to never.
 
 - **numbers**: every figure that could reach a decision ships with an independently scripted second derivation, re-run to zero drift against a pinned snapshot.
-- **migration**: forward and reverse both ran against a restored copy, the reverse carries a resolvable rehearsal run id, and row counts before and after match.
-- **approval**: a declared approval must be bound to an identity the agent cannot forge (a signed `Approved-by:` commit trailer this host verified, or a recorded `Reviewed-in:` review id). A typed name fails, and a signature the host cannot verify is NO-DATA rather than an approval, so CI needs the signers' public keys or the keyless `Reviewed-in:` path. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
+- **migration**: forward and reverse both ran against a restored copy, the reverse records a rehearsal run id as a string, and row counts before and after match. A receipt with no row counts is NO-DATA, not a pass: the gate says what it compared instead of asserting a comparison it never made. Stated plainly, because the difference matters: nothing resolves the rehearsal id against a job system, so it is a pointer for a human to follow.
+- **approval**: a declared approval must be bound to more than a name typed into a text field. Two paths, and they are not equally strong. A signed `Approved-by:` commit trailer THIS HOST VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that an id in the right shape sits in the commit message: nothing resolves it, the agent writes commit messages, so an agent can write one. The gate's evidence line says so on every run, and if you need that path to be a control, add a CI step that resolves the id against your review platform. A typed name fails, and a signature the host cannot verify is NO-DATA rather than an approval, so CI needs the signers' public keys. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
 - **ran**: no SQL or pipeline change is done until its reconciliation query or test executed and left a receipt with a zero exit code and a nonzero duration. A check that took no time did not run.
 
 The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed. A receipt that exists and records nothing is also NO-DATA and says so; a receipt that exists and cannot be parsed is a FAIL, because a broken claim is not an absent one.
@@ -157,20 +157,35 @@ Run the eval bed. Each case is a real failure class turned into a fixture with a
 python3 evals/run_evals.py
 ```
 
-Expected tail:
+The last eight lines of the run, verbatim:
 
 ```
-  small-team-strong-consistency-is-not-microservices want=modular monolith got=modular monolith ok
-  many-teams-high-isolation-is-services  want=services got=services ok
-  recommendation-always-names-a-flip-condition want=yes      got=yes      ok
-  low-team-count-high-isolation-is-event-driven want=event-driven got=event-driven ok
-  empty-context-is-no-data               want=NO-DATA  got=NO-DATA  ok
-  non-numeric-number-criterion-is-unrecognized want=unrecognized got=unrecognized ok
+  zero-corrections-is-not-a-latency-pass want=NO-DATA  got=NO-DATA  ok
+  a-malformed-ledger-line-is-a-fail      want=FAIL     got=FAIL     ok
+  a-ledger-line-of-the-wrong-type-is-a-fail want=FAIL     got=FAIL     ok
+  a-malformed-ledger-does-not-delete-the-other-checks want=NO-DATA  got=NO-DATA  ok
+  budget-vs-tier-does-not-score-the-skills-own-registry want=NO-DATA  got=NO-DATA  ok
+  an-all-exempted-scan-is-not-clean      want=NO-DATA  got=NO-DATA  ok
+  an-exemption-on-the-pass-line-is-honoured want=PASS     got=PASS     ok
 
-70 evals: 70 passed, 0 regressions.
+110 evals: 110 passed, 0 regressions.
 ```
 
-The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself. To watch one check on a real change:
+The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
+
+Then run the honesty meta-test, which is the one that keeps the rest honest. It does not carry a list of checks: it enumerates the check registries in the three tools and runs the same four scenarios against every entry, so a check added later is covered without anyone remembering.
+
+```bash
+python3 evals/test_no_data_class.py
+```
+
+Its last line, verbatim:
+
+```
+20 checks enumerated from 3 registries, 77 scenarios run, 0 failure(s).
+```
+
+To watch one check on a real change:
 
 ```bash
 python3 tools/sbe_design.py .           # the five design checks, advisory

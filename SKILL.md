@@ -109,9 +109,12 @@ The gate between logical and physical is mechanical, and it is L4.
 ## Phase 5. Expression (diagrams and documentation)
 
 Diagrams are code (Mermaid), committed with the design, diffed in review, in
-`06-diagrams.md`. Required set by tier: T1 one context diagram; T2 adds a workflow or
-sequence diagram and an entity relationship diagram for the data delta; T3 adds system
-context and container views, the technology map, and the failover topology.
+`06-diagrams.md`, inside a fenced code block so they diff as source rather than as prose.
+Required set by tier: T2 (the first tier that requires `06-diagrams.md` at all) a context
+diagram plus a workflow or sequence diagram and an entity relationship diagram for the data
+delta; T3 adds system context and container views, the technology map, and the failover
+topology. T1 requires `01-purpose.md` and nothing else, so it has no diagram artifact and
+no required diagram: a sketch there is welcome and is not a gate.
 
 Every node is named, every edge says what flows and by what trigger or protocol, and every
 element that appears in a diagram appears somewhere else in the dossier. That last rule is
@@ -152,28 +155,28 @@ ENFORCED BY: `tools/sbe_intake.py` (compute_tier and required_artifacts), called
 ### L2. Purpose before design
 WHEN: any design artifact past `01-purpose.md` is about to be written, or a T1 and above change is about to be merged.
 INPUTS: `00-intake.json` (the tier), the files present in the dossier directory.
-RULE: every artifact required by the tier exists, and none of them is still the shipped template. A missing tier, or no intake file at all, is NO-DATA, not a pass. An artifact still carrying its `SBE-TEMPLATE-UNFILLED` marker is a copied example, not a design, and fails.
-OUTPUT: proceed, or stop and ask (naming the missing or unfilled artifact by filename).
-ENFORCED BY: `tools/sbe_design.py artifacts` and `tools/sbe_design.py placeholder` (advisory in session, `--strict` in CI). Both run over every directory holding a `00-intake.json` under the path given, so a dossier in `design/<project>/` is reached when CI runs from the repository root.
+RULE: every artifact required by the tier exists, is not empty, and is not still the shipped template. A zero-byte artifact is the absence of an artifact: `touch 01-purpose.md` does not clear tier T1. An intake file with no tier is NO-DATA, not a pass. A directory carrying dossier artifacts with NO intake file FAILS, naming the missing intake: without it there is no tier, and without a tier nothing can say which artifacts are owed. An artifact still carrying its `SBE-TEMPLATE-UNFILLED` marker comment is a copied example, not a design, and fails.
+OUTPUT: proceed, or stop and ask (naming the missing, empty, or unfilled artifact by filename).
+ENFORCED BY: `tools/sbe_design.py artifacts` and `tools/sbe_design.py placeholder` (advisory in session, `--strict` in CI). A directory is a dossier if it holds `00-intake.json` OR any of `01` through `07`, so a dossier in `design/<project>/` is reached when CI runs from the repository root and deleting the intake file does not make the dossier invisible. The same discovery feeds L3, L4 and L5: they check the dossiers this walk finds. A dossier that is history rather than live work carries a `.sbe-exempt` file naming why, and is reported with that reason rather than blocking every unrelated merge forever.
 
 ### L3. Alternatives before decision
 WHEN: any design decision is recorded in `03-adr.md`. Only the architecture shape decision has a table today; the rest are recorded the same way and reasoned by hand.
 INPUTS: `03-adr.md`; where a decision table applies, the output of `tools/sbe_decide.py`.
-RULE: the ADR carries at least two rejected alternatives, a Criteria section naming what decided it, a Decision, Consequences, and a "What would flip this" condition. All five, or it fails. An alternative counts only if it carries at least one line saying why it lost: a heading with nothing under it is not an alternative, and alternatives written as bullets under one heading count individually.
+RULE: the ADR carries at least two rejected alternatives, a Criteria section naming what decided it, a Decision, Consequences, and a "What would flip this" condition. All five, or it fails. An alternative counts only if it carries at least one line saying why it lost: a heading with nothing under it is not an alternative, and alternatives written as bullets under one heading count individually. The word "rejected" may sit anywhere in the heading, so `### Option A (rejected): synchronous call` counts, and this is the convention rather than a hidden requirement to start the heading with it.
 OUTPUT: proceed, or stop and ask.
 ENFORCED BY: `tools/sbe_design.py adr`.
 
 ### L4. Cardinality and system of record before the physical model
 WHEN: a physical model, migration, or DDL is about to be written.
-INPUTS: `05-data-model.md`: the entity list and the Relationships section.
-RULE: every entity names a system of record WITH A VALUE, and every relationship carries one of one-to-one, one-to-many, many-to-one, many-to-many as a standalone token. An entity whose system of record is TBD, unknown, or explicitly absent fails exactly as one that names none, and a hedged cardinality ("one-to-many-ish") is not a cardinality. No entities at all is a fail, not a pass.
+INPUTS: `05-data-model.md`: the bullets under the headings that name entities, and the Relationships section.
+RULE: every entity names a system of record WITH A VALUE, and every relationship carries one of one-to-one, one-to-many, many-to-one, many-to-many as a standalone token. An entity whose system of record is TBD, unknown, or explicitly absent fails exactly as one that names none, and a hedged cardinality ("one-to-many-ish") is not a cardinality. No entities at all is a fail, not a pass. Entities live in bullets under a heading whose name contains "entit"; a bullet in some other section (a Notes list, say) is prose and is not read as an entity. An entity name may carry a hyphen or a dot, so `payment-token` and `pii.profile` are read rather than silently dropped from the set the verdict then asserts over.
 OUTPUT: proceed, or stop and ask (the failure names the entity or relationship).
 ENFORCED BY: `tools/sbe_design.py datamodel`.
 
 ### L5. Diagrams trace to the dossier
 WHEN: a diagram is added or changed in `06-diagrams.md`.
-INPUTS: the diagram source, and the entity list in `05-data-model.md`.
-RULE: at least one diagram node exists, and no node names something the data model never defines. Runtime components that belong in a diagram are declared in `05-data-model.md` under their own heading, each naming where it lives, which is how a container view clears this rule. A diagram artifact with no diagram in it is a defect, not an absence.
+INPUTS: the Mermaid source inside the fenced code blocks of `06-diagrams.md`, the entity list in `05-data-model.md`, and the declared runtime components (the first column of the tables in `04-technology-map.md`, and bullets under a Components heading in `06-diagrams.md`).
+RULE: at least one diagram node exists inside a fenced block, and every node is either an entity in the data model or a declared runtime component. A service, a queue or an external system is a COMPONENT, not an entity: it is declared as a component and traced as one. Requiring every node to be an entity taught authors to add queues to the conceptual data model to satisfy a diagram check, which corrupts the model to please the tool. Prose outside a fenced block is not diagram source. A diagram artifact with no diagram in it is a defect, not an absence.
 OUTPUT: proceed, or stop and ask (the failure names the orphan nodes).
 ENFORCED BY: `tools/sbe_design.py diagrams`.
 
@@ -194,16 +197,16 @@ ENFORCED BY: `tools/sbe_gate.py numbers`.
 ### L8. Migrations
 WHEN: a schema migration is part of the change.
 INPUTS: `migration-receipt.json`: the forward leg, the reverse leg, row counts before and after.
-RULE: both legs ran against a restored copy, the reverse carries a resolvable rehearsal_run_id (free text is not a receipt), and the row count before matches the count after the reverse.
+RULE: both legs ran against a restored copy, the reverse records a rehearsal_run_id as a string, and the row count before matches the count after the reverse. A receipt with no row_counts is NO-DATA and says so: the reverse restoring the rows is the half the gate cannot assert without them, and it used to assert it anyway. A row_counts block carrying one side and not the other FAILS, because a half-recorded count claims a comparison and does not produce it. An empty receipt is NO-DATA, never a pass.
 OUTPUT: proceed, or refuse to call the migration done.
-ENFORCED BY: `tools/sbe_gate.py migration`.
+ENFORCED BY: `tools/sbe_gate.py migration`, for presence and shape only. Stated rather than implied: the gate checks that a rehearsal_run_id is present and is a string. It does NOT resolve the id against a job system, so free text in the right shape satisfies it. Resolving it is a job for CI against your own orchestrator, and until that exists this is a pointer for a human to follow, not proof the rehearsal ran.
 
 ### L9. Money and partner paths
 WHEN: the change touches money movement, a partner-facing path, or partner data.
 INPUTS: the `APPROVAL` file, the HEAD commit trailers, the commit signature status.
-RULE: approval is bound to an identity the agent cannot forge: a signed commit with an `Approved-by:` trailer, or a recorded `Reviewed-in:` platform review id. A typed name with neither fails. No approval claim and no APPROVAL file is NO-DATA.
+RULE: approval is bound to something stronger than a name typed into a text field, and the two paths are NOT equally strong. A signed commit with an `Approved-by:` trailer whose signature the host VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that an id in the right shape is in the commit message; nothing resolves it, and the agent writes the commit message, so an agent CAN write one. A typed name with neither fails. No approval claim and no APPROVAL file is NO-DATA.
 OUTPUT: proceed, or refuse.
-ENFORCED BY: `tools/sbe_gate.py approval`, for the binding only. The gate verifies an approval that was DECLARED; nothing detects that a change needed one, so the declaration is human review. Two further limits, stated rather than inferred: a signature counts only if the host running the gate verified it, so CI must import the approvers' public keys or the team uses the keyless `Reviewed-in:` path, and a signature the host cannot check is NO-DATA rather than an approval.
+ENFORCED BY: `tools/sbe_gate.py approval`, for the binding only, and only as far as the paragraph above says. Three limits, stated rather than inferred. First, the gate verifies an approval that was DECLARED; nothing detects that a change needed one, so the declaration is human review. Second, a signature counts only if the host running the gate verified it, so CI must import the approvers' public keys, and a signature the host cannot check is NO-DATA rather than an approval. Third, the `Reviewed-in:` path is not forgery-resistant and the gate's own evidence line says so on every run. If you need it to be a control, add a CI step that resolves the id against your review platform and fails when it does not exist. Until you do, it is a pointer, and this law calls it one.
 
 ### L10. Ran
 WHEN: a SQL change, pipeline change, or reconciliation is called done.
@@ -214,10 +217,10 @@ ENFORCED BY: `tools/sbe_gate.py ran`.
 
 ### L11. Silent-failure lints
 WHEN: source is written or changed in the operator's worktree.
-INPUTS: tracked `.py .sql .swift .rb .js .ts .go` files under the lint root (`SBE_LINT_ROOT` or a directory argument).
-RULE: no bare except, except-then-pass, discarded subprocess result without check=True, conflict-skipping upsert without a logged skip count, or force-try. A line carrying `# sbe: allow-silent <reason>` is exempt, because the exemption is then visible in the diff and auditable.
+INPUTS: every `.py .sql .swift .rb .js .ts .go` file under the lint root (`SBE_LINT_ROOT` or a directory argument). Nothing consults git, so untracked files are scanned too.
+RULE: no bare except, except-then-pass, discarded subprocess result without check=True, conflict-skipping upsert, or force-try. A line carrying `# sbe: allow-silent <reason>` anywhere in the matched lines is exempt, because the exemption is then visible in the diff and auditable.
 OUTPUT: proceed, or stop and ask (each hit names its file and line).
-ENFORCED BY: `tools/sbe_score.py` (the silent-failure-lints check), run under `--strict` in `.github/workflows/brothersbe-gates.yml`, which makes it the fifth non-waivable gate on the merge path. A run that opened no file reports NO-DATA naming why, never "clean".
+ENFORCED BY: `tools/sbe_score.py` (the silent-failure-lints check), run under `--strict` in `.github/workflows/brothersbe-gates.yml`, which makes it the fifth non-waivable gate on the merge path. Two honest narrowings: the shipped patterns are textual, so the upsert pattern flags a conflict-skipping upsert whether or not a skip count is logged, and nothing anywhere counts skips. A run that opened no file reports NO-DATA naming why, never "clean", and a run where every match in every file scanned was waived by an exemption is NO-DATA too, with the waived lines named: a scan whose every finding was suppressed examined nothing it was allowed to report.
 
 ### L12. A recommendation with no evidence is NO-DATA
 WHEN: a decision table is consulted. One table ships, the architecture shape table; integration, storage, consistency and failover are human review until their tables land with fixtures.
@@ -228,7 +231,7 @@ ENFORCED BY: `tools/sbe_decide.py` (recommend), fixtures in `evals/run_evals.py`
 
 ### L13. One writer per file
 WHEN: any writer (agent, subagent, or parallel session) is about to be dispatched against a worktree.
-INPUTS: the fence lines in STATE.md and in the registries named by `BROTHERSBE_REGISTRIES`: their tier tag, their open or closed marker, and the registry file's modification time.
+INPUTS: the fence lines in the registries named by `BROTHERSBE_REGISTRIES`, and nothing else: their tier tag, their open or closed marker, and the registry file's modification time. The check used to append the skill's own STATE.md to that list on every run, so an operator with no registries configured got a green fence-discipline line sourced from the author's machine.
 RULE: every fence line still reading live (no LANDED or ADOPTED marker) in a registry touched in the last 7 days carries a tier tag, one of `tier T1`, `tier T2`, `tier T3`. An untagged live fence line fails. A registry holding a live fence line and untouched for more than 2 days is stale, and stale fails. Registries unset is NO-DATA, never a pass. The check only recognizes a fence line as live if the line itself contains the word "agent": a fence line that names a writer some other way (for example "writer W1 on src/foo.py") is invisible to this check and neither passes nor fails, it is simply not seen.
 OUTPUT: proceed, or stop and ask (tag the fence, or close the stale one).
 ENFORCED BY: `tools/sbe_score.py` (fence-hygiene and budget-vs-tier, over the registries named in `BROTHERSBE_REGISTRIES`; unset, they report NO-DATA rather than guessing). The rest of the fence discipline is human review, because nothing here computes it: writing the fence line before the writer launches, carrying objective, output format, tool guidance, boundaries, termination, file scope, ids, TTL and a runnable done-check; queueing rather than running in parallel when two writers overlap in file scope (no check compares scopes); closing a fence only with an inline evidence block, the command and its last lines; and after any agent kill, assessing git status and resuming by id rather than respawning a live writer.
@@ -243,16 +246,16 @@ ENFORCED BY: human review, plus whatever access control the estate already has. 
 ### L15. An override is named and logged
 WHEN: the operator overrides the computed tier, in either direction.
 INPUTS: the `override` and `override_reason` fields in `00-intake.json`.
-RULE: an override sets both fields. A tier moved with a null reason is not an override, it is an edit, and it is treated as the computed tier. Every override surfaces at the weekly review.
-OUTPUT: proceed with a label (the tier plus the named override), or stop and ask.
-ENFORCED BY: `tools/sbe_intake.py` (the override and override_reason fields it writes into `00-intake.json`) and `tools/sbe_design.py artifacts`, which recomputes the tier from the answers and FAILS a mismatch carrying no override_reason, naming both the written tier and the computed one. Whether the reason is a good one is human review at `tools/WEEKLY-REVIEW.md`.
+RULE: an override sets both fields, and they must agree with each other. A tier moved with a null reason is not an override, it is an edit, and it fails. A reason must be reviewable, which means AT LEAST THREE WORDS AND TWELVE CHARACTERS, and must not be one of the tokens this project already refuses as a stated value (tbd, n/a, unknown, none, todo, and their siblings). The threshold is written here so it is not a hidden rule: `"x"` and `"tbd"` used to waive the entire dossier requirement, because any non-empty string restored full belief in a hand-written tier. The evidence line names the written tier, the computed tier, and whether the override raised or lowered it.
+OUTPUT: proceed with a label (the tier, the computed tier, the direction, and the named override), or stop and ask.
+ENFORCED BY: `tools/sbe_intake.py` (the override and override_reason fields it writes into `00-intake.json`) and `tools/sbe_design.py artifacts`, which recomputes the tier from the answers, FAILS a mismatch whose override_reason is missing or too thin to review, and FAILS an `override` field that disagrees with the recorded tier. Whether a reviewable reason is a GOOD reason is not enforced anywhere. This law used to say every override surfaces at the weekly review; nothing did that, `tools/WEEKLY-REVIEW.md` has no override step and no step that reads `00-intake.json`, and a law claiming an enforcement it does not have is the exact failure this project exists to prevent. So the claim is withdrawn rather than dressed up: the mechanical threshold above is the whole of the enforcement today.
 
 ### L16. A session instruction never waives a hard gate
 WHEN: an operator instruction, time pressure, or convenience would skip L7 to L11 on the merge path (the four hard gates plus the silent-failure lints, the five things CI runs under `--strict`).
 INPUTS: the CI workflow, the gate config, the requested exception.
 RULE: session overrides exist for defaults, never for hard gates. On the CI path, `--strict` is not overridable by a session at all: it changes only by a human editing the gate config in a reviewed change. In session, the gate still runs, and unclear output is labeled UNVERIFIED with the reason.
 OUTPUT: refuse (and say what would make the gate pass).
-ENFORCED BY: `.github/workflows/brothersbe-gates.yml` (runs `tools/sbe_gate.py --strict`, `tools/sbe_design.py --strict` and `tools/sbe_score.py --strict` on every pull request).
+ENFORCED BY: `.github/workflows/brothersbe-gates.yml` (runs `tools/sbe_gate.py --strict`, `tools/sbe_design.py --strict`, `tools/sbe_score.py --strict`, `evals/run_evals.py`, `evals/test_no_data_class.py` and `tools/test_sbe.py` on every pull request), with one condition stated wherever this workflow is named: the file guards nothing until an operator copies it into the repository they want guarded. Cloning the skill gives you the tools, not the enforcement.
 
 ### L17. The run closes on disk
 WHEN: a session ends, or a milestone lands.
