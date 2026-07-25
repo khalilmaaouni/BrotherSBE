@@ -44,6 +44,9 @@ declares and hollows it out, mechanically, in every way a value can be empty:
   s  for a markdown artifact: every heading kept, the body under one heading
      dropped, one heading at a time. This is the text-shaped version of "the keys
      are all there and the values are all empty".
+  t  every BOOLEAN leaf replaced by a well-formed word meaning the OPPOSITE
+     ("no"/"false" for a true, "yes"/"true" for a false) -> never PASS. The one
+     axis here that is not emptiness at all: see OPPOSITE_WORDS below.
 
 Booleans are preserved by the whole-fixture and subtree sweeps and emptied only
 by the leaf sweep, on purpose. In a receipt a boolean is the CLAIM ("the reverse
@@ -51,8 +54,9 @@ ran against a restore") and a string or a number is the EVIDENCE for it. Emptyin
 the evidence while leaving the claim standing is the precise shape a fabricated
 receipt has, and it is the shape three rounds of review kept finding.
 
-Registries are DISCOVERED, not listed. Every tools/sbe_*.py module is imported
-and every module-level dict of Checks in it is a registry. A registry this test
+Registries are DISCOVERED, not listed. Every Python module anywhere under
+tools/ is imported, at any depth, and every module-level dict of Checks in it is
+a registry. A registry this test
 does not know how to invoke is a FAILURE, not a skip, so a fourth tool added next
 year cannot be silently uncovered. A source-level lint additionally requires that
 every function anywhere in tools/ that can return the literal verdict "PASS" is
@@ -84,7 +88,7 @@ if "--tools" in sys.argv:
     RUN_DIR = os.path.abspath(sys.argv[sys.argv.index("--tools") + 1])
 QUIET = "--quiet" in sys.argv
 
-from sbe_checks import Check  # noqa: E402
+from sbe_checks import Check, prune_dirs  # noqa: E402
 
 _telemetry = SourceFileLoader("sbe_telemetry",
                               os.path.join(TOOLS_DIR, "sbe_telemetry.py")).load_module()
@@ -138,7 +142,7 @@ OPPOSITE_WORDS = {True: ("no", "false"), False: ("yes", "true")}
 # ---------------------------------------------------------------------------
 
 def tool_sources():
-    """Every Python file in tools/, by name.
+    """Every Python file ANYWHERE under tools/, as a path relative to it.
 
     NOT `sbe_*.py`. The prefix filter was a hole and it was proved: a registry
     shipped as `tools/quality.py` holding a check whose body was
@@ -146,8 +150,21 @@ def tool_sources():
     to the registry walk AND to the source lint, and this file printed
     "20 checks discovered ... 0 failure(s)" over twenty-one checks and exited 0.
     Discovery must not depend on what somebody named a file.
+
+    And then it depended on what somebody named a DIRECTORY. `os.listdir` is one
+    level deep, so the same shadow check moved into `tools/quality/extra.py` was
+    invisible to both mechanisms again, while the summary line still read
+    "20 checks discovered ... 0 failure(s)" over twenty-one. Adding a package is
+    the ordinary way a tools directory grows, and the printed coverage count is
+    exactly what made the gap silent. This walks.
     """
-    return [fn for fn in sorted(os.listdir(TOOLS_DIR)) if fn.endswith(".py")]
+    out = []
+    for dp, dns, fns in os.walk(TOOLS_DIR):
+        dns[:] = prune_dirs(dp, dns)
+        for fn in fns:
+            if fn.endswith(".py"):
+                out.append(os.path.relpath(os.path.join(dp, fn), TOOLS_DIR))
+    return sorted(out)
 
 
 def load_tool_modules():
@@ -159,7 +176,7 @@ def load_tool_modules():
     """
     mods, failures = {}, []
     for fn in tool_sources():
-        if fn == "sbe_checks.py":
+        if os.path.basename(fn) == "sbe_checks.py":
             # Reloading it would rebind sbe_checks.Check to a second, unequal
             # class, and every isinstance(x, Check) below would then be false
             # against registries that had already imported the first one. This is
@@ -167,7 +184,10 @@ def load_tool_modules():
             # lint below still reads it, so a check hiding there is still caught.
             continue
         try:
-            mods[fn] = SourceFileLoader(fn[:-3], os.path.join(TOOLS_DIR, fn)).load_module()
+            # The module name carries the subdirectory, so tools/a/x.py and
+            # tools/b/x.py are two modules here rather than one shadowing the other.
+            modname = fn[:-3].replace(os.sep, ".")
+            mods[fn] = SourceFileLoader(modname, os.path.join(TOOLS_DIR, fn)).load_module()
         except Exception as e:
             failures.append("tools/%s could not be imported (%s: %s), so any registry in it went "
                             "unwalked. A module this test cannot reach is a failure, never a skip"
@@ -215,7 +235,12 @@ def _pass_valued_names(tree):
             targets, value = [node.target], node.value
         else:
             continue
-        if not (isinstance(value, ast.Constant) and value.value == "PASS"):
+        direct = isinstance(value, ast.Constant) and value.value == "PASS"
+        # A container holding the verdict counts too, because the name is then a
+        # verdict table and `TABLE["ok"]` is a way of spelling "PASS".
+        container = isinstance(value, (ast.Dict, ast.List, ast.Tuple, ast.Set)) and any(
+            isinstance(n, ast.Constant) and n.value == "PASS" for n in ast.walk(value))
+        if not (direct or container):
             continue
         for t in targets:
             if isinstance(t, ast.Name):
@@ -223,17 +248,56 @@ def _pass_valued_names(tree):
     return names
 
 
+def _folded_str(node):
+    """The string this expression evaluates to, or None if it is not a constant one.
+
+    Only string constants and `+` between them. `"PA" + "SS"` is deliberate
+    obfuscation and weighted lightly, but the lint that claims to find every path
+    that can return PASS has to be able to say so, and folding two constants is
+    cheaper than arguing about whether anyone would write it.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _folded_str(node.left), _folded_str(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
 def _returns_pass(head, pass_names):
-    """True when this expression can be the verdict PASS."""
+    """True when this expression can be the verdict PASS.
+
+    Four shapes now, and the last two are round five. A `BinOp` and a `Subscript`
+    walked straight through: `return "PA" + "SS", ...` and, the one that matters,
+    `_V = {"ok": "PASS"}` with `return _V["ok"], ...`. A verdict lookup table is an
+    ordinary refactor, not an attack, and the day someone writes one this lint
+    stops seeing the file it exists to police, silently, while printing a coverage
+    count that reads complete.
+    """
     if isinstance(head, ast.Constant) and head.value == "PASS":
         return True
     if isinstance(head, ast.Name) and head.id in pass_names:
         return True
+    if _folded_str(head) == "PASS":
+        return True
+    if isinstance(head, ast.Subscript):
+        # A lookup into anything holding "PASS" anywhere: which key is taken is a
+        # runtime question, and a lint that guesses at it would guess wrong in the
+        # unsafe direction.
+        target = head.value
+        if isinstance(target, ast.Name) and target.id in pass_names:
+            return True
+        for n in ast.walk(target):
+            if isinstance(n, ast.Constant) and n.value == "PASS":
+                return True
     if isinstance(head, (ast.IfExp, ast.BoolOp)):
         for n in ast.walk(head):
             if isinstance(n, ast.Constant) and n.value == "PASS":
                 return True
             if isinstance(n, ast.Name) and n.id in pass_names:
+                return True
+            if isinstance(n, ast.Subscript) and _returns_pass(n, pass_names):
                 return True
     return False
 
