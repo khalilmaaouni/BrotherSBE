@@ -223,17 +223,22 @@ out of band: a staging environment loaded from a recent production backup, or a
 restore job the migration rehearsal targets. The gate verifies the receipt of that
 rehearsal, not the rehearsal itself. This is priced here plainly: no restore
 environment, no honest migration receipt. The gate does not pretend the restore is
-free, and it does not let you skip it by writing `true` into a field, because the
-`rehearsal_run_id` has to point at a run that happened.
+free. The `rehearsal_run_id` has to be recorded as a string, so writing `true` into
+that field FAILs, but the gate cannot resolve the id: it checks the shape of the
+receipt, and a human follows the pointer.
 
 ---
 
 ## Gate 3: approval
 
-A change on a money or partner-facing path carries a named human approval bound to an
-identity the agent cannot forge: a signed commit trailer, or a recorded platform review
-id. A bare typed name FAILs. The gate reads an `APPROVAL` file and the HEAD commit
-trailers.
+A change on a money or partner-facing path carries a named human approval bound to more
+than a typed name: a signed commit trailer whose signature this host verified, or a
+recorded platform review id. The two are not equally strong. The signature cannot be
+produced by an agent that does not hold the key. The review id is matched by a regex
+against the commit message the agent writes, and nothing resolves it against a review
+platform, so it is a pointer for a human to follow. The gate says which of the two it
+got, in the evidence, on every run. A bare typed name FAILs. The gate reads an `APPROVAL`
+file and the HEAD commit trailers.
 
 ### What the gate reads (from `gate_approval`)
 

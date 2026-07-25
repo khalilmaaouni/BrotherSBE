@@ -5,12 +5,18 @@ name: BrotherSBE gates
 on: [pull_request]
 env:
   # Where your dossiers live. Empty means "search the whole checkout": every
-  # directory holding a 00-intake.json is found and checked. That is what makes
-  # the design checks reach a dossier in design/<project>/ instead of opening
-  # only <root>/00-intake.json and reporting nothing while a full dossier sits
-  # two directories away. Set it (for example to `design`) once this repository
-  # is supposed to carry a dossier: a declared root holding none is then a FAIL,
-  # not an absence.
+  # directory holding a 00-intake.json OR any of 01 through 07 is found and
+  # checked. That is what makes the design checks reach a dossier in
+  # design/<project>/ instead of opening only <root>/00-intake.json and reporting
+  # nothing while a full dossier sits two directories away, and it is also why
+  # deleting the intake file no longer hides a dossier: that FAILs, naming the
+  # missing intake. Set it (for example to `design`) once this repository is
+  # supposed to carry a dossier: a declared root holding none is then a FAIL, not
+  # an absence. Leave it empty in a repository that mixes T0 work with dossier
+  # work, because a declared root plus a legitimately dossier-free change FAILs
+  # by design. A directory holding dossier-shaped files that are not live design
+  # work (a template library, a finished project) carries a .sbe-exempt file
+  # whose contents say why, and that reason prints on every run.
   SBE_DOSSIER_ROOT: ''
 jobs:
   gates:

@@ -15,9 +15,11 @@ its intake now FAILs and names the missing file, because without the intake ther
 no tier and without a tier there is nothing to require.
 
 Set SBE_DOSSIER_ROOT when a repository is supposed to carry a dossier, and a search
-that finds none there becomes a FAIL instead of an absence. A dossier that is
-history rather than live work carries a `.sbe-archived` file naming why, and is
-reported as archived instead of blocking every unrelated merge forever.
+that finds none there becomes a FAIL instead of an absence. A directory that holds
+dossier-shaped files without being live design work (the shipped templates, a
+finished project's dossier from two years ago) carries a `.sbe-exempt` file whose
+contents say why, and the report prints that reason on every run instead of the
+directory blocking every unrelated merge forever.
 """
 import json, os, re, sys
 
@@ -37,7 +39,13 @@ INTAKE = "00-intake.json"
 # artifact named, rather than clearing the design gate on someone else's example.
 UNFILLED_MARKER = "SBE-TEMPLATE-UNFILLED"
 SKIP_DIRS = (".git", "node_modules", "__pycache__", ".venv", "venv", "vendor")
-ARCHIVED = ".sbe-archived"
+# One visible exemption, with its reason inside the file and printed on every run.
+# A directory can hold dossier-shaped files without being live design work: the
+# shipped templates in templates/dossier/ are the obvious case, and a finished
+# project's dossier from last year is the other. Both need to be skippable, and
+# neither may be skippable quietly, so the reason is the file's contents and the
+# report prints it. There is no env-var list and no hardcoded path.
+EXEMPT = ".sbe-exempt"
 # An override reason has to be reviewable by a human, so it has to be at least a
 # sentence. "tbd" and "x" cleared the entire dossier requirement. The threshold is
 # stated here, in SKILL.md L15, and in the FAIL text, so it is not a hidden rule.
@@ -517,16 +525,16 @@ def find_dossiers(root):
     directory a dossier; check_artifacts then FAILs it by name for the missing
     intake, because the tier cannot be established without it.
     """
-    hits, archived = [], []
+    hits, exempt = [], []
     for dp, dns, fns in os.walk(root):
         dns[:] = sorted(d for d in dns if d not in SKIP_DIRS)
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
-        if ARCHIVED in fns:
-            archived.append(dp)
+        if EXEMPT in fns:
+            exempt.append((dp, (read(dp, EXEMPT) or "").strip() or "no reason recorded"))
             continue
         hits.append(dp)
-    return hits, archived
+    return hits, exempt
 
 
 def main():
@@ -551,18 +559,20 @@ def main():
         root = configured
     fails = 0
     print("BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)")
-    archived = []
+    exempt = []
     if os.path.isdir(root) and is_dossier(root):
         targets = [root]
     elif os.path.isdir(root):
-        targets, archived = find_dossiers(root)
+        targets, exempt = find_dossiers(root)
     else:
         targets = []
-    for d in archived:
+    for d, why in exempt:
+        # Printed, never silent. An exemption nobody sees is an exemption nobody
+        # can withdraw, and a dossier from last year blocking every unrelated
+        # merge forever is a gate that gets switched off instead.
         print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
-              "%s carries %s, so it is history and is not checked. An unfinished dossier from last "
-              "year blocking every unrelated merge forever is a gate that gets switched off"
-              % (os.path.relpath(d, root), ARCHIVED)))
+              "%s is exempt (%s names why: %s), so no check opened a file there"
+              % (os.path.relpath(d, root), EXEMPT, why.splitlines()[0][:120])))
     if not targets:
         if configured:
             fails += 1

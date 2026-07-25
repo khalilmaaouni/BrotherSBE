@@ -127,17 +127,19 @@ reported but did not run is the exact lie this gate exists to catch.
 ```
 
 `sbe_gate.py migration` fails a reverse that never ran against a restored copy, a
-reverse whose `rehearsal_run_id` is missing (free text is not a receipt), or a
+reverse whose `rehearsal_run_id` is missing or is not a string, or a
 `row_counts` where `after_reverse` does not equal `before` (the reverse dropped
 rows). A migration without a tested reverse is a one-way door.
 
 ### 2d. A money or partner path with a real approval
 
 The change carries an `APPROVAL` file declaring it touches a billing or partner
-path, and the approval is bound to an identity the agent cannot forge: a signed
-commit trailer (`Approved-by:` on a commit whose signature verifies as G, U, or
-E) or a recorded platform review id (`Reviewed-in:`). `sbe_gate.py approval`
-fails a bare typed name: "a name in a text field is not a control."
+path, and the approval is bound to more than a typed name: a signed commit
+trailer (`Approved-by:` on a commit whose signature verifies as G or U here; E
+means this host could not check it, which is NO-DATA and not an approval) or a
+recorded platform review id (`Reviewed-in:`), which nothing resolves and which
+the gate's evidence line describes as a pointer rather than proof. `sbe_gate.py
+approval` fails a bare typed name: "a name in a text field is not a control."
 
 ### 2e. Advisory in the session, enforcing in CI
 

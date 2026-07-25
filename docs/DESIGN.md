@@ -252,10 +252,13 @@ verification is structural rather than advisory.
   derivation, textually different from the first, re-run to zero drift against a
   pinned snapshot.
 - **Migrations.** Forward and reverse both ran against a restored copy, the reverse
-  carries a resolvable rehearsal id, and the row counts match.
-- **Money and partner paths.** Approval bound to an identity the agent cannot
-  forge: a signed `Approved-by:` trailer or a recorded platform review id. A typed
-  name fails.
+  records a rehearsal id as a string, and the row counts were recorded and match. A
+  receipt with no row counts is NO-DATA: the gate reports what it compared rather
+  than asserting a comparison it never made. Nothing resolves the rehearsal id.
+- **Money and partner paths.** Approval bound to more than a typed name: a signed
+  `Approved-by:` trailer this host verified, which an agent cannot forge, or a
+  recorded platform review id, which it can, because nothing resolves the id. A
+  typed name alone fails, and the gate's evidence names which of the two it got.
 - **Ran.** No SQL or pipeline change is done until its check executed and left a
   receipt with a zero exit code and a nonzero duration. A check that took no time
   did not run.

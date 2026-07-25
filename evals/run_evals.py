@@ -791,10 +791,10 @@ def x2(root):
     return design_run(root)
 
 
-@case("an-archived-dossier-does-not-block-an-unrelated-merge", "designrun", "clear")
+@case("an-exempt-dossier-does-not-block-an-unrelated-merge", "designrun", "clear")
 def x3(root):
     write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
-    write(root, "design/legacy/.sbe-archived", "closed 2024, kept for history\n")
+    write(root, "design/legacy/.sbe-exempt", "closed two years ago, kept for history\n")
     return design_run(root)
 
 

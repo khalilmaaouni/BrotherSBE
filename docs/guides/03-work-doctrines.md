@@ -355,9 +355,13 @@ separately, so the control survives a bad prompt.
 
 - **HARD (approval, class 2):** any change touching money or a partner path (and,
   by the blast-radius rule, production apply) carries a named human approval bound
-  to an identity the agent cannot forge. The approval gate accepts exactly two
-  forms: a signed commit trailer, or a recorded platform review id. A typed name
-  FAILS.
+  to more than a typed name. The approval gate accepts exactly two forms, and they
+  are not equally strong: a signed commit trailer whose signature this host
+  verified, which an agent cannot produce without the private key, or a recorded
+  platform review id, which nothing resolves and an agent therefore CAN type. A
+  typed name alone FAILS. Use the signature path where the approval has to hold
+  against the agent itself; use the review id where you have a CI step that
+  resolves it, or knowing it is a pointer rather than a control.
 
   ```
   # in the commit message body, on a GPG-signed commit:
@@ -398,7 +402,8 @@ copy of production-shaped data, with row counts captured either side.
 
 **Decides / refuses.** BrotherSBE does not call a migration done on inspection.
 Forward and reverse both run against a restore, and the reverse carries a
-resolvable rehearsal run id (free text is not a receipt).
+rehearsal run id recorded as a string. Nothing resolves that id against a job
+system, so it points a human at a rehearsal rather than proving one ran.
 
 **Gate. HARD (migration, class 2).** The receipt is a `migration-receipt.json`:
 
