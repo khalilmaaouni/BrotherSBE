@@ -126,12 +126,18 @@ def check_diagrams(root):
     t = read(root, ARTIFACT_FILES["06"])
     if t is None:
         return "NO-DATA", "no 06-diagrams.md in this dossier"
-    model = read(root, ARTIFACT_FILES["05"]) or ""
-    known = set(_entities(model))
     nodes = _diagram_nodes(t)
     if not nodes:
         return "FAIL", "no diagram nodes found; a diagram artifact with no diagram is a defect"
-    orphans = sorted(n for n in nodes if known and n not in known)
+    model = read(root, ARTIFACT_FILES["05"])
+    known = set(_entities(model)) if model is not None else set()
+    if not known:
+        # Without a data model there is nothing to trace against. Reporting PASS
+        # here would be the exact defect L5 exists to catch: an empty known set
+        # makes every invented node look traceable.
+        return "NO-DATA", ("%d diagram node(s), but tracing cannot be verified without "
+                           "entities in %s" % (len(nodes), ARTIFACT_FILES["05"]))
+    orphans = sorted(n for n in nodes if n not in known)
     if orphans:
         return "FAIL", "diagram element(s) appear nowhere else in the dossier: %s" % ", ".join(orphans[:6])
     return "PASS", "%d diagram node(s), all traceable to dossier artifacts" % len(nodes)

@@ -266,6 +266,14 @@ def d11(root):
     write(root, "06-diagrams.md", "```mermaid\nerDiagram\n  CUSTOMER ||--o{ ORDER : places\n```\n")
 
 
+# 13. A diagram with no data model to trace against must be NO-DATA, never PASS:
+# with an empty known-entity set every invented node looks traceable, which is the
+# defect L5 exists to catch.
+@case("diagram-without-data-model-is-nodata", "diagrams", "NO-DATA")
+def d13(root):
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Invented --> AlsoInvented\n```\n")
+
+
 # 12. An intake file with no tier key must be NO-DATA, never a silent PASS.
 @case("missing-tier-is-nodata", "artifacts", "NO-DATA")
 def d12(root):

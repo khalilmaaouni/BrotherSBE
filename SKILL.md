@@ -21,8 +21,7 @@ Two rules hold this file together.
 1. **Design comes before verification.** The expensive mistakes are made while deciding
    what to build, how the process runs, what shape the system takes, and how the data is
    modeled. Checking the result at the end catches none of them. The phases below run in
-   order, each gating the next, and verification is last because it is last, not because
-   it is least.
+   order, each gating the next, with verification last.
 2. **An agent earns trust in exact proportion to how mechanically its output can be
    checked.** Not by fluency, not by model quality. Every law in this file is that rule
    applied to one part of the job, which is why every law names the thing that enforces it.
@@ -54,8 +53,7 @@ artifact is `01-purpose.md` (template in `templates/dossier/`): problem stated w
 solution inside it, users and what they do today instead, observable success criteria,
 explicit non-goals, and the blast radius named.
 
-A purpose brief that cannot say what breaks if it is wrong has not been written yet. That
-sentence is what sizes everything downstream, including the tier.
+What breaks if it is wrong is what sizes everything downstream, including the tier.
 
 ## Phase 2. Process and workflow
 
@@ -65,8 +63,7 @@ An architecture is a machine for running a process, so the process is drawn firs
 
 The artifact is `02-process.md`. Every step names an actor, a trigger, and what happens
 when it fails. Every handoff names both sides and the contract between them (what is
-handed over, and the timing or acknowledgement expected). A step with no exception path is
-a step nobody has thought about yet.
+handed over, and the timing or acknowledgement expected).
 
 ## Phase 3. Architecture
 
@@ -83,9 +80,7 @@ that separated them, and what would flip the decision. That output is the body o
 `03-adr.md`. Alongside it, `04-technology-map.md` names, per component, the technology, the
 owner, the failure mode, and the recovery path, plus the source systems, their availability
 expectations, their failover, and the recovery time and recovery point objectives with the
-drill that proves them.
-
-Reliability, repeatability, and coherence are chosen here. They are not bolted on later.
+drill that proves them. Reliability, repeatability, and coherence are chosen at this phase.
 
 ## Phase 4. Data
 
@@ -132,8 +127,7 @@ advisory in a session and enforcing (`--strict`, exits nonzero) in CI. Output th
 cleared its gate carries the label UNVERIFIED next to the item itself, not in a footnote.
 The design side runs the same way through `tools/sbe_design.py`, and the weekly code-graded
 checks through `tools/sbe_score.py`. The plan for all of it is `07-verification.md`: every
-claim the design makes names the check that will prove it, and when that check runs. A
-claim with no check is a hope.
+claim the design makes names the check that will prove it, and when that check runs.
 
 ## The laws
 
@@ -190,8 +184,8 @@ ENFORCED BY: human review. No script can detect an ambiguity that would change a
 ### L7. Numbers
 WHEN: a figure is produced that could reach a decision.
 INPUTS: `numbers-manifest.json`: per figure, the query, a second derivation, a snapshot id, and the re-run record.
-RULE: each figure has a pinned snapshot_id, a second derivation that is textually different from the first (identical text is not independent), a re-run marked as having run, and zero drift between the two results. Any miss fails. No manifest at all is NO-DATA.
-OUTPUT: proceed, proceed with the label UNVERIFIED, or refuse to present the figure as a result.
+RULE: a figure clears on four conditions together: a pinned snapshot_id, a second derivation textually different from the first (identical text is not independent), a re-run marked as having run, and zero drift between the two results. All four hold, proceed. No manifest at all is NO-DATA, and the figure may still be shown carrying the label UNVERIFIED next to itself. A figure recorded in the manifest that misses any one of the four fails, and a failed figure is not presented as a result.
+OUTPUT: proceed (all four hold), proceed with the label UNVERIFIED (NO-DATA, no manifest), or refuse to present the figure as a result (a recorded figure missing any of the four).
 ENFORCED BY: `tools/sbe_gate.py numbers`.
 
 ### L8. Migrations
@@ -231,15 +225,15 @@ ENFORCED BY: `tools/sbe_decide.py` (recommend), fixtures in `evals/run_evals.py`
 
 ### L13. One writer per file
 WHEN: any writer (agent, subagent, or parallel session) is about to be dispatched against a worktree.
-INPUTS: the fence registry in STATE.md: file scope, ids, lease TTL, effort tier, done-check.
-RULE: the fence line is written to STATE.md before the writer launches, carrying objective, output format, tool guidance, boundaries, termination, file scope, ids, TTL, tier tag, and a runnable done-check. Overlapping scope means queue, never parallel. A fence closes only with an inline evidence block: the command and its last lines. After any agent kill, edits in the tree stay: assess git status, resume by id, never respawn a live writer.
-OUTPUT: proceed, or stop and ask (queue behind the open fence).
-ENFORCED BY: `tools/sbe_score.py` (fence-hygiene and budget-vs-tier checks, over the registries named in `BROTHERSBE_REGISTRIES`; unset, they report NO-DATA rather than guessing).
+INPUTS: the fence lines in STATE.md and in the registries named by `BROTHERSBE_REGISTRIES`: their tier tag, their open or closed marker, and the registry file's modification time.
+RULE: every fence line still reading live (no LANDED or ADOPTED marker) in a registry touched in the last 7 days carries a tier tag, one of `tier T1`, `tier T2`, `tier T3`. An untagged live fence line fails. A registry holding a live fence line and untouched for more than 2 days is stale, and stale fails. Registries unset is NO-DATA, never a pass.
+OUTPUT: proceed, or stop and ask (tag the fence, or close the stale one).
+ENFORCED BY: `tools/sbe_score.py` (fence-hygiene and budget-vs-tier, over the registries named in `BROTHERSBE_REGISTRIES`; unset, they report NO-DATA rather than guessing). The rest of the fence discipline is human review, because nothing here computes it: writing the fence line before the writer launches, carrying objective, output format, tool guidance, boundaries, termination, file scope, ids, TTL and a runnable done-check; queueing rather than running in parallel when two writers overlap in file scope (no check compares scopes); closing a fence only with an inline evidence block, the command and its last lines; and after any agent kill, assessing git status and resuming by id rather than respawning a live writer.
 
 ### L14. Blast radius: no apply rights on production state
-WHEN: the action would apply to production state: a database, an infrastructure apply, a deploy, a partner endpoint, or a destructive operation.
-INPUTS: the target of the command, and whether it is production state.
-RULE: the agent drafts, a human applies. Credentials are never typed, stored, or logged. A destructive operation prints exactly what it will affect and waits for explicit confirmation.
+WHEN: a command or change is about to be applied, rather than drafted.
+INPUTS: the command text, its target (host, database, account, endpoint, or environment), and the credentials it would use.
+RULE: production state is exactly this list: a live database (any database serving real users or real reporting), an infrastructure apply (terraform apply, a cloud console change, a cluster mutation), a deploy or release to a live environment, a partner-facing endpoint, a payment or money-movement path, and any destructive operation on data or infrastructure that is not reversible inside an hour. If the target is any one of those, the agent does not run the command: it produces the exact command, the expected effect, and the rollback, for a human to run. If the target is none of those, the agent may run it. In either case the agent never types, stores, echoes, or logs a credential, and a destructive operation prints exactly what it will affect (the target listing, the row count, the file list) before a human is asked to confirm.
 OUTPUT: proceed with a draft and the exact command for the human to run, or refuse.
 ENFORCED BY: human review, plus whatever access control the estate already has. This one is honest about its limits: nothing in this repository can revoke a credential the operator's shell already holds, and the approval gate in L9 covers only the money and partner slice of it, after the fact.
 
@@ -259,10 +253,10 @@ ENFORCED BY: `.github/workflows/brothersbe-gates.yml` (runs `tools/sbe_gate.py -
 
 ### L17. The run closes on disk
 WHEN: a session ends, or a milestone lands.
-INPUTS: the telemetry ledger, the vault session logs, `RUBRIC.md`.
-RULE: session end writes a session log, updated open items, and updated failures, and the run closes with a scorecard whose every line names its evidence. Self-scores cap at 8; a 9 or 10 needs external evidence named (a passing CI run, a reviewer approval, a reproduced number). NO-DATA is a legal score and never a pass. The closing Remaining and Unverified lists are stated, not implied.
-OUTPUT: proceed (the session is not done until the write lands).
-ENFORCED BY: `tools/sbe_score.py` (vault-log-per-active-day and ledger-coverage, fed by the `tools/sbe_telemetry.py` SessionEnd hook, which writes by hook and not by promise).
+INPUTS: the telemetry ledger (the session lines of the last 7 days) and the vault session-log filenames and modification dates.
+RULE: every day that carries a session in the ledger carries a session log in the vault, dated either by filename or by modification date. An active day with no log fails. No sessions in the ledger at all is NO-DATA, never a pass.
+OUTPUT: proceed, or stop and ask (write the missing log before the session closes).
+ENFORCED BY: `tools/sbe_score.py` (vault-log-per-active-day, fed by the `tools/sbe_telemetry.py` SessionEnd hook, which writes by hook and not by promise). The rest of the close is human review at `tools/WEEKLY-REVIEW.md`, because no check reads it: updated open items, an updated failures index, a closing scorecard whose every line names its evidence, the self-score cap of 8 with a 9 or 10 needing external evidence named (a passing CI run, a reviewer approval, a reproduced number), NO-DATA as a legal score, and the Remaining and Unverified lists stated rather than implied. The ledger-coverage check in the same tool counts sessions and cannot fail; it is reported, not relied on.
 
 ## What is not law
 
