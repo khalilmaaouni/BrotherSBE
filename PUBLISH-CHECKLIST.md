@@ -38,9 +38,9 @@ observation to make on the day, not a claim this document makes on its own behal
       expected to 404 beforehand and must be re-checked immediately after:
       `curl -sS -o /dev/null -w '%{http_code}\n' https://github.com/khalilmaaouni/BrotherSBE`
       must print 200 once the repo is public.
-- [ ] `git ls-files docs/superpowers/` returns nothing. That directory held a spec
-      opening "Status: awaiting approval. Nothing is built until this is approved."
-      and a 963-line agent task list, in a repository where the thing is built. The
+- [ ] `git ls-files docs/superpowers/` returns nothing. That directory held an
+      unratified design spec and a long agent task list naming private tooling a
+      reader does not have, in a repository where the thing is already built. The
       root `.gitignore` comment said "Internal review and planning notes, never
       shipped" over a rule covering `.superpowers/` only, and a directory one
       character different shipped exactly that category. Both are ignored now.
