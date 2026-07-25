@@ -4,13 +4,22 @@ code-graded checks; LLM judgment only for the residue). Reads the telemetry
 ledger and fence registries; prints PASS / FAIL / NO-DATA per check with the
 evidence inline. Advisory by default (exit 0); `--strict` exits nonzero on any
 FAIL, and on a crash, so CI can block. Honest outputs only: a check without data
-says NO-DATA, never PASS."""
+says NO-DATA, never PASS.
+
+Every check is registered in CHECKS with a declaration of the evidence it opens
+(see sbe_checks.py). Three of these checks used to read `PASS if not <empty list>`,
+so a fresh checkout with an empty ledger printed "0 pre-schema-2 lines remain PASS"
+and two more like it: the project's headline law inverted inside the project's own
+scorer, in its default state. A corpus with no rows supports no verdict about
+compliance, so those checks now say NO-DATA and name the file they found nothing in.
+"""
 import json, os, sys, glob, datetime, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
-                          read_jsonl, age_days, fld, OUT_KEYS, prediction_counts,
+                          OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
+from sbe_checks import Check, run_guarded
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -23,11 +32,255 @@ for _pat in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":"):
         REGISTRIES.extend(glob.glob(os.path.expanduser(_pat.strip()), recursive=True))
 
 CACHE_RATIO_FLOOR = 90.0
-results = []
 
 
-def check(name, verdict, evidence):
-    results.append((name, verdict, evidence))
+class Ledger:
+    """A JSONL evidence file, read so that its three states stay distinguishable.
+
+    sbe_telemetry.read_jsonl skips a line it cannot parse, which is right for the
+    hook write path (one corrupt line must not lose the rest) and wrong for a
+    check: a ledger of unparseable lines read as a ledger of zero lines, and zero
+    lines read as compliance. Here, absent is NO-DATA, present-and-empty is
+    NO-DATA naming the file, and present-and-unreadable is a FAIL, because a
+    broken record is a broken claim and not an absence.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.exists = os.path.isfile(path)
+        self.rows = []
+        self.errors = []
+        if not self.exists:
+            return
+        try:
+            raw_lines = open(path, errors="replace").read().splitlines()
+        except OSError as e:
+            self.errors.append("%s cannot be read (%s)" % (path, type(e).__name__))
+            return
+        for i, raw in enumerate(raw_lines, 1):
+            if not raw.strip():
+                continue
+            try:
+                obj = json.loads(raw)
+            except ValueError:
+                self.errors.append("%s:%d is not valid JSON" % (os.path.basename(path), i))
+                continue
+            if not isinstance(obj, dict):
+                self.errors.append("%s:%d is a JSON %s, not an object"
+                                   % (os.path.basename(path), i, type(obj).__name__))
+                continue
+            self.rows.append(obj)
+
+    def problem(self, what):
+        """(verdict, evidence) when this ledger cannot support a verdict, else None."""
+        if self.errors:
+            return "FAIL", ("%s cannot be scored: %s. A ledger that cannot be read is a broken "
+                            "record, not an absent one" % (what, "; ".join(self.errors[:4])))
+        if not self.exists:
+            return "NO-DATA", ("no %s, so nothing was opened and there is no %s to report on"
+                               % (self.path, what))
+        if not self.rows:
+            return "NO-DATA", ("%s exists and holds no lines, so %s was measured over zero rows; "
+                               "a corpus with nothing in it supports no verdict" % (self.path, what))
+        return None
+
+
+class Ctx:
+    """Everything the checks read, resolved once, so a check takes an argument
+    instead of reaching for a module global. The meta-test builds one of these
+    against a throwaway vault."""
+
+    def __init__(self):
+        self.ledger = Ledger(LEDGER)
+        self.ratings = Ledger(RATINGS)
+        self.reviews = Ledger(REVIEWS)
+        self.corrections = Ledger(CORRECTIONS)
+        self.registries = REGISTRIES
+        rows = real_sessions(self.ledger.rows)
+        self.recent = [r for r in rows if (age_days(r.get("ts", "")) or 99) <= 7]
+        self.sessions = rows
+        self.days = {}
+        for r in self.recent:
+            self.days[r.get("ts", "")[:10]] = self.days.get(r.get("ts", "")[:10], 0) + 1
+
+
+# --------------------------------------------------------------------------
+# The checks. One function each, (verdict, evidence) out, no printing.
+# --------------------------------------------------------------------------
+
+def check_ledger_coverage(ctx):
+    bad = ctx.ledger.problem("session coverage")
+    if bad:
+        return bad
+    if not ctx.recent:
+        return "NO-DATA", ("%d ledger line(s), none in the last 7d, so coverage was measured over "
+                           "zero recent sessions" % len(ctx.ledger.rows))
+    return "PASS", "%d sessions across %d active days last 7d" % (len(ctx.recent), len(ctx.days))
+
+
+def check_schema_uniform(ctx):
+    bad = ctx.ledger.problem("schema uniformity")
+    if bad:
+        return bad
+    old = [r for r in ctx.ledger.rows if r.get("schema") != 2]
+    if old:
+        return "FAIL", "%d of %d lines are pre-schema-2" % (len(old), len(ctx.ledger.rows))
+    return "PASS", "%d ledger line(s) read, 0 pre-schema-2 lines remain" % len(ctx.ledger.rows)
+
+
+def check_cache_economy(ctx):
+    bad = ctx.ledger.problem("cache economy")
+    if bad:
+        return bad
+    flagged, measured = [], 0
+    for r in ctx.recent:
+        cr, cw = r.get("cache_read", 0), r.get("cache_write", 0)
+        if cr + cw > 0:
+            measured += 1
+            ratio = 100.0 * cr / (cr + cw)
+            if ratio < CACHE_RATIO_FLOOR:
+                flagged.append("%s %.0f%%" % (r.get("session_id", "?")[:8], ratio))
+    if not measured:
+        return "NO-DATA", "no sessions with cache fields last 7d"
+    return ("PASS" if not flagged else "FAIL",
+            "%d/%d sessions >= %.0f%% warm-read; below floor: %s"
+            % (measured - len(flagged), measured, CACHE_RATIO_FLOOR, flagged or "none"))
+
+
+def check_vault_log_per_active_day(ctx):
+    bad = ctx.ledger.problem("session logs per active day")
+    if bad:
+        return bad
+    if not ctx.days:
+        return "NO-DATA", ("no active days in the last 7d, so no day was checked for a session log; "
+                           "'no missing logs' over zero days is not compliance")
+    # filename date OR mtime date counts, so a dated backfill note clears an old miss
+    log_days = set()
+    for f in glob.glob(SESSIONS_GLOB):
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})", os.path.basename(f))
+        if m:
+            log_days.add(m.group(1))
+        try:
+            log_days.add(datetime.date.fromtimestamp(os.path.getmtime(f)).isoformat())
+        except OSError:
+            continue
+    missing = sorted(d for d in ctx.days if d not in log_days)
+    return ("PASS" if not missing else "FAIL",
+            "%d active day(s) checked against %d dated session log(s); days without any log: %s"
+            % (len(ctx.days), len(log_days), missing or "none"))
+
+
+def _registry_lines(ctx, max_age_days=None):
+    """(lines, read, skipped) across the configured registries."""
+    lines, read, skipped = [], 0, []
+    for p in ctx.registries:
+        try:
+            age = (datetime.datetime.now().timestamp() - os.path.getmtime(p)) / 86400
+        except OSError:
+            skipped.append(os.path.basename(p))
+            continue
+        if max_age_days is not None and age > max_age_days:
+            skipped.append(os.path.basename(p))
+            continue
+        try:
+            body = open(p, errors="replace").read().splitlines()
+        except OSError:
+            skipped.append(os.path.basename(p))
+            continue
+        read += 1
+        for line in body:
+            lines.append((p, age, line.strip()))
+    return lines, read, skipped
+
+
+def _is_live_fence(s):
+    return s.startswith("- ") and "agent" in s.lower() and "LANDED" not in s and "ADOPTED" not in s
+
+
+def check_fence_hygiene(ctx):
+    if not ctx.registries:
+        return "NO-DATA", "set BROTHERSBE_REGISTRIES to enable; nothing was opened"
+    lines, read, skipped = _registry_lines(ctx)
+    if not read:
+        return "NO-DATA", ("%d registry path(s) configured, none readable (%s), so no fence line was "
+                           "examined" % (len(ctx.registries), ", ".join(skipped[:4])))
+    stale = sorted({os.path.basename(p) for p, age, s in lines if _is_live_fence(s) and age > 2})
+    fences = sum(1 for _, _, s in lines if _is_live_fence(s))
+    if not fences:
+        return "NO-DATA", ("%d registry file(s) read, none carrying a fence line, so staleness was "
+                           "measured over zero fences" % read)
+    return ("PASS" if not stale else "FAIL",
+            "%d fence line(s) in %d registry file(s); live-looking fences older than 2d in: %s"
+            % (fences, read, stale or "none"))
+
+
+def check_correction_latency(ctx):
+    bad = ctx.corrections.problem("correction latency")
+    if bad:
+        return bad
+    old = [c for c in ctx.corrections.rows if (age_days(c.get("ts", "")) or 0) > 7]
+    return ("PASS" if not old else "FAIL",
+            "%d candidate(s) total, %d older than 7d unprocessed"
+            % (len(ctx.corrections.rows), len(old)))
+
+
+def check_budget_vs_tier(ctx):
+    """Every recent live fence line carries its declared tier.
+
+    This used to append the skill's OWN STATE.md to the registry list on every
+    run, so pointing the scorer at an unrelated empty directory printed a green
+    fence-discipline line sourced from the author's machine. It reads the
+    configured registries and nothing else.
+    """
+    if not ctx.registries:
+        return "NO-DATA", ("set BROTHERSBE_REGISTRIES to enable; no registry was opened, so no fence "
+                           "line was checked for a tier tag")
+    lines, read, skipped = _registry_lines(ctx, max_age_days=7)
+    if not read:
+        return "NO-DATA", ("%d registry path(s) configured, none touched in the last 7d or none "
+                           "readable, so no fence line was checked" % len(ctx.registries))
+    tagged, untagged = 0, []
+    for p, _, s in lines:
+        if not _is_live_fence(s):
+            continue
+        if re.search(r"\btier T[123]\b", s):
+            tagged += 1
+        else:
+            untagged.append(os.path.basename(p))
+    if tagged + len(untagged) == 0:
+        return "NO-DATA", "no fence lines in the %d registry file(s) touched last 7d" % read
+    return ("PASS" if not untagged else "FAIL",
+            "%d recent fence line(s) tier-tagged across %d registry file(s), untagged in: %s"
+            % (tagged, read, sorted(set(untagged)) or "none"))
+
+
+def check_prediction_seals(ctx):
+    if not os.path.isfile(OPERATOR_MODEL):
+        return "NO-DATA", "no %s, so no prediction ledger was opened" % OPERATOR_MODEL
+    p = prediction_counts()
+    if p["sealed"] == 0:
+        return "NO-DATA", "%s holds no sealed predictions" % OPERATOR_MODEL
+    return ("PASS" if p["sealed"] >= 5 else "FAIL", "%d sealed (target >= 5)" % p["sealed"])
+
+
+def check_felt_outcome_ratings(ctx):
+    if ctx.ratings.errors:
+        return ctx.ratings.problem("felt-outcome ratings")
+    rated = [x for x in ctx.ratings.rows if isinstance(x.get("score"), (int, float))]
+    if not rated:
+        return "NO-DATA", "no scored ratings in %s" % RATINGS
+    return ("PASS" if len(rated) >= 6 else "FAIL",
+            "%d ratings (target >= 6 for alignment 10)" % len(rated))
+
+
+def check_review_cadence(ctx):
+    if ctx.reviews.errors:
+        return ctx.reviews.problem("review cadence")
+    last = max((x.get("ts", "") for x in ctx.reviews.rows), default=None)
+    a = age_days(last) if last else None
+    if a is None:
+        return "NO-DATA", "no review recorded in %s" % REVIEWS
+    return ("PASS" if a <= 7 else "FAIL", "last review: %.1fd ago" % a)
 
 
 # BrotherSBE silent-failure lints: patterns that hide an error so a wrong result
@@ -45,11 +298,11 @@ LINT_PATTERNS = [
     (re.compile(r"try\s*!"), "force-try (Swift try! discards the error)"),
 ]
 
-
 SCANNABLE = (".py", ".sql", ".swift", ".rb", ".js", ".ts", ".go")
+EXEMPTION = "sbe: allow-silent"
 
 
-def silent_failure_lints():
+def silent_failure_lints(ctx=None):
     """Scan operator source for error-swallowing patterns, returning (verdict, evidence).
 
     Opt-in via a dir arg or SBE_LINT_ROOT. A line carrying `# sbe: allow-silent
@@ -61,9 +314,13 @@ def silent_failure_lints():
     Three verdicts, not two. A run that opened no file cannot have found anything,
     so it reports NO-DATA naming the reason and the evidence says what was scanned
     rather than the word "clean", which asserts the opposite of what happened. A
-    positional argument that is not a directory is a broken invocation and FAILs:
-    silently ignoring a mistyped path was how a permanently green lint that had
-    never opened a file stayed invisible."""
+    file whose every match was exempted was examined and found nothing of its own,
+    so when that is true of every file scanned the verdict is NO-DATA too, and the
+    exemption count is in the evidence either way: "clean" over a set of suppressed
+    hits is the same sentence as a PASS over an empty manifest. A positional
+    argument that is not a directory is a broken invocation and FAILs: silently
+    ignoring a mistyped path was how a permanently green lint that had never opened
+    a file stayed invisible."""
     root = os.environ.get("SBE_LINT_ROOT")
     for a in sys.argv[1:]:
         if a.startswith("-"):
@@ -78,11 +335,11 @@ def silent_failure_lints():
                            "so there is nothing to call clean")
     if not os.path.isdir(root):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
-    hits = []
-    scanned = 0
+    hits, exempt = [], []
+    scanned, with_matches, all_exempt = 0, 0, 0
     for dp, dns, fns in os.walk(root):
         dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__", ".venv", "venv")]
-        for fn in fns:
+        for fn in sorted(fns):
             if fn == os.path.basename(__file__):
                 continue  # the linter declares the patterns as strings; do not self-match
             if not fn.endswith(SCANNABLE):
@@ -94,143 +351,65 @@ def silent_failure_lints():
                 continue
             scanned += 1
             src = "\n".join(lines)
+            file_hits, file_exempt = 0, 0
             for pat, desc in LINT_PATTERNS:
                 for m in pat.finditer(src):
-                    ln = src[:m.start()].count("\n")
-                    if "sbe: allow-silent" in lines[ln]:
-                        continue  # visible, auditable exemption
-                    hits.append("%s:%d %s" % (os.path.relpath(path, root), ln + 1, desc))
+                    first = src[:m.start()].count("\n")
+                    last = first + src[m.start():m.end()].count("\n")
+                    # The exemption may sit on any line the match spans: on an
+                    # except-then-pass, the natural place to write it is the
+                    # `pass` line, and reading only the first line of the match
+                    # made the documented escape hatch look broken.
+                    span = lines[first:last + 1]
+                    if any(EXEMPTION in l for l in span):
+                        file_exempt += 1
+                        exempt.append("%s:%d" % (os.path.relpath(path, root), first + 1))
+                        continue
+                    file_hits += 1
+                    hits.append("%s:%d %s" % (os.path.relpath(path, root), first + 1, desc))
+            if file_hits or file_exempt:
+                with_matches += 1
+                if not file_hits:
+                    all_exempt += 1
     if not scanned:
         return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened"
                            % (root, " ".join(SCANNABLE)))
     if hits:
         return "FAIL", "%d hit(s) in %d file(s) scanned: %s" % (len(hits), scanned, "; ".join(hits[:5]))
+    if exempt and all_exempt == scanned:
+        return "NO-DATA", ("%d file(s) scanned under %s and every match in every one of them was "
+                           "suppressed by an inline `%s` comment (%s); a scan whose every finding was "
+                           "waived examined nothing it was allowed to report, so it is not clean"
+                           % (scanned, root, EXEMPTION, ", ".join(exempt[:5])))
+    if exempt:
+        return "PASS", ("%d file(s) scanned under %s, 0 unexempted hit(s), %d suppressed by an inline "
+                        "`%s` comment (%s)"
+                        % (scanned, root, len(exempt), EXEMPTION, ", ".join(exempt[:5])))
     return "PASS", "%d file(s) scanned under %s, clean" % (scanned, root)
 
 
+CHECKS = {
+    "ledger-coverage": Check(check_ledger_coverage, reads=(LEDGER,), kind="jsonl"),
+    "schema-2-uniform": Check(check_schema_uniform, reads=(LEDGER,), kind="jsonl"),
+    "cache-economy": Check(check_cache_economy, reads=(LEDGER,), kind="jsonl"),
+    "vault-log-per-active-day": Check(check_vault_log_per_active_day, reads=(LEDGER,), kind="jsonl"),
+    "fence-hygiene": Check(check_fence_hygiene, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
+                           empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"}),
+    "correction-latency": Check(check_correction_latency, reads=(CORRECTIONS,), kind="jsonl"),
+    "budget-vs-tier": Check(check_budget_vs_tier, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
+                            empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"}),
+    "prediction-seals": Check(check_prediction_seals, reads=(OPERATOR_MODEL,), kind="text"),
+    "felt-outcome-ratings": Check(check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl"),
+    "review-cadence": Check(check_review_cadence, reads=(REVIEWS,), kind="jsonl"),
+    "silent-failure-lints": Check(silent_failure_lints, reads=("SBE_LINT_ROOT",), kind="tree",
+                                  empty_fixture={"files": {"notes.txt": "no scannable source here\n"},
+                                                 "value": "%(dir)s"}),
+}
+
+
 def main():
-    led = read_jsonl(LEDGER)
-    # real_sessions everywhere: scorecard, nag, and these checks must all mean
-    # the same thing by "session" (weekly-review-1 law, extended here 2026-07-23)
-    rows = real_sessions(led)
-    recent = [r for r in rows if (age_days(r.get("ts", "")) or 99) <= 7]
-
-    # 1. ledger coverage: lines per active day (can only measure what exists)
-    days = {}
-    for r in recent:
-        days.setdefault(r.get("ts", "")[:10], 0)
-        days[r.get("ts", "")[:10]] += 1
-    check("ledger-coverage", "NO-DATA" if not recent else "PASS",
-          "%d sessions across %d active days last 7d" % (len(recent), len(days)))
-
-    # 2. schema uniformity
-    old = [r for r in led if r.get("schema") != 2]
-    check("schema-2-uniform", "PASS" if not old else "FAIL",
-          "%d pre-schema-2 lines remain" % len(old))
-
-    # 3. cache economy per session
-    flagged = []
-    measured = 0
-    for r in recent:
-        cr, cw = r.get("cache_read", 0), r.get("cache_write", 0)
-        if cr + cw > 0:
-            measured += 1
-            ratio = 100.0 * cr / (cr + cw)
-            if ratio < CACHE_RATIO_FLOOR:
-                flagged.append("%s %.0f%%" % (r.get("session_id", "?")[:8], ratio))
-    if not measured:
-        check("cache-economy", "NO-DATA", "no sessions with cache fields last 7d")
-    else:
-        check("cache-economy", "PASS" if not flagged else "FAIL",
-              "%d/%d sessions >= %.0f%% warm-read; below floor: %s"
-              % (measured - len(flagged), measured, CACHE_RATIO_FLOOR, flagged or "none"))
-
-    # 4. vault log per active day (filename date OR mtime date counts, so a
-    # dated backfill note clears an old miss; interim-score fix 2026-07-23)
-    log_days = set()
-    for f in glob.glob(SESSIONS_GLOB):
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})", os.path.basename(f))
-        if m:
-            log_days.add(m.group(1))
-        try:
-            log_days.add(datetime.date.fromtimestamp(os.path.getmtime(f)).isoformat())
-        except OSError:
-            continue
-    missing = [d for d in days if d not in log_days]
-    check("vault-log-per-active-day", "PASS" if not missing else "FAIL",
-          "active days without any vault session log: %s" % (missing or "none"))
-
-    # 5. fence hygiene across registries
-    if not REGISTRIES:
-        check("fence-hygiene", "NO-DATA", "set BROTHERSBE_REGISTRIES to enable")
-    stale = []
-    for p in REGISTRIES:
-        try:
-            age = (datetime.datetime.now().timestamp() - os.path.getmtime(p)) / 86400
-        except OSError:
-            continue
-        for line in open(p, errors="replace"):
-            s = line.strip()
-            if s.startswith("- ") and "agent" in s.lower() and "LANDED" not in s and "ADOPTED" not in s and age > 2:
-                stale.append(os.path.basename(p))
-                break
-    if REGISTRIES:
-        check("fence-hygiene", "PASS" if not stale else "FAIL",
-              "registries with live-looking fences older than 2d: %s" % (stale or "none"))
-
-    # 6. corrections pipeline
-    corr = read_jsonl(CORRECTIONS)
-    old_corr = [c for c in corr if (age_days(c.get("ts", "")) or 0) > 7]
-    check("correction-latency", "PASS" if not old_corr else "FAIL",
-          "%d candidates total, %d older than 7d unprocessed" % (len(corr), len(old_corr)))
-
-    # 7. budget vs declared tier: scan fence lines in registries touched the
-    # last 7d (older registries predate the tier law and are not judged by it).
-    # PASS needs every recent live fence line tier-tagged; the spend comparison
-    # itself stays a weekly-review judgment. (interim-score fix 2026-07-23)
-    tagged, untagged = 0, []
-    skill_state = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "STATE.md")
-    for p in REGISTRIES + [skill_state]:
-        try:
-            if (datetime.datetime.now().timestamp() - os.path.getmtime(p)) / 86400 > 7:
-                continue
-        except OSError:
-            continue
-        for line in open(p, errors="replace"):
-            s = line.strip()
-            if s.startswith("- ") and "agent" in s.lower() and "LANDED" not in s and "ADOPTED" not in s:
-                if re.search(r"\btier T[123]\b", s):
-                    tagged += 1
-                else:
-                    untagged.append(os.path.basename(p))
-    if tagged + len(untagged) == 0:
-        check("budget-vs-tier", "NO-DATA", "no fence lines in registries touched last 7d")
-    else:
-        check("budget-vs-tier", "PASS" if not untagged else "FAIL",
-              "%d recent fence lines tier-tagged, untagged in: %s"
-              % (tagged, sorted(set(untagged)) or "none"))
-
-    # 8. predictions and ratings (external-evidence feeds)
-    p = prediction_counts()
-    rated = [x for x in read_jsonl(RATINGS) if isinstance(x.get("score"), (int, float))]
-    check("prediction-seals", "PASS" if p["sealed"] >= 5 else ("NO-DATA" if p["sealed"] == 0 else "FAIL"),
-          "%d sealed (target >= 5)" % p["sealed"])
-    check("felt-outcome-ratings", "PASS" if len(rated) >= 6 else ("NO-DATA" if not rated else "FAIL"),
-          "%d ratings (target >= 6 for alignment 10)" % len(rated))
-
-    # 9. weekly review cadence
-    reviews = read_jsonl(REVIEWS)
-    last = max((x.get("ts", "") for x in reviews), default=None)
-    a = age_days(last) if last else None
-    check("review-cadence", "PASS" if (a is not None and a <= 7) else ("NO-DATA" if a is None else "FAIL"),
-          "last review: %s" % (("%.1fd ago" % a) if a is not None else "never"))
-
-    # 10. silent-failure lints (BrotherSBE, gate severity by ratified decision):
-    # the code patterns that swallow an error so a wrong result looks like a right
-    # one. Scans tracked source in the worktree; each hit names its file and line.
-    check("silent-failure-lints", *silent_failure_lints())
-
+    ctx = Ctx()
+    results = [(name, ) + run_guarded(name, CHECKS[name], ctx) for name in CHECKS]
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
     for n, v, e in results:

@@ -16,13 +16,23 @@ The classes (ratified 2026-07-24):
   migration A forward and a reverse migration, both with a receipt showing they
             ran against a restored copy, the reverse receipt carrying a resolvable
             rehearsal run id (not free text), and matching row-count checks.
-  approval  Money or partner-facing change carries a named human approval bound to
-            an identity the agent cannot forge: a signed commit trailer whose
-            signature this host actually VERIFIED, or a recorded platform review
-            id. A bare typed name FAILS. A signature the host cannot check (git
+  approval  Money or partner-facing change carries a named human approval bound
+            to something stronger than a typed name. Two paths, and they are NOT
+            equally strong, so this says exactly what each one proves:
+              Approved-by: with a signature THIS HOST verified (git %G? = G or U)
+                proves a key holder signed the commit. The agent cannot produce
+                this without the private key.
+              Reviewed-in: <review id> proves only that an id in the right shape
+                was written into the commit message. This gate does not resolve
+                it against any platform, so an agent can type one. It is a
+                pointer for a human to follow, not a forgery-resistant control.
+                Resolve it in CI (a job that queries your review platform for
+                that id) if you need it to be one.
+            A bare typed name FAILS. A signature the host cannot check (git
             %G? = E, the normal result on a runner with no imported keys) is
             NO-DATA, never an approval: CI must import the signer's public keys,
-            or the team standardises on the keyless Reviewed-in: path.
+            or the team standardises on the weaker keyless Reviewed-in: path
+            knowing what it does and does not prove.
   ran       No SQL or pipeline change is done until its reconciliation query or
             test executed: a receipt with a nonzero-duration run and an exit code.
 
@@ -40,24 +50,40 @@ the operating record proves pasted receipts get invented.
 """
 import json, os, sys, re, subprocess, hashlib
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sbe_checks import Check, run_guarded
+
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
 APPROVAL_FILE = "APPROVAL"
 RAN_RECEIPT = "ran-receipt.json"
+SKIP_DIRS = (".git", "node_modules", "__pycache__", ".venv", "venv", "vendor")
 
 
-def load_json(path):
-    """Parse a receipt. None means the file exists but could not be read or parsed.
+def load_receipt(path):
+    """Parse a receipt into (object, error).
 
-    The caller must not coerce that None into an empty dict. A receipt that
-    cannot be read is a broken claim, not an absent one: it FAILS. Absence of
-    the file is NO-DATA, and the two are decided in different places on purpose.
+    error is non-empty when the file exists but is not a usable receipt, and the
+    caller turns that into a FAIL: a receipt that cannot be read is a broken
+    claim, not an absent one. Absence of the file is NO-DATA, decided elsewhere
+    on purpose.
+
+    Valid JSON of the wrong TYPE is a broken claim too, and it used to be the
+    hole: `json.load` returned a list or a string happily, the gate called .get
+    on it, the exception escaped to the top-level handler, every gate after it
+    never ran, nothing printed a verdict for any of them, and advisory mode
+    exited 0. A crash that deletes a gate is the absent-check defect wearing a
+    traceback. The type is checked here, once, where the file is opened.
     """
     try:
         with open(path) as f:
-            return json.load(f)
-    except Exception:
-        return None
+            obj = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, "not readable as JSON (%s)" % type(e).__name__
+    if not isinstance(obj, dict):
+        return None, ("top-level JSON is %s, not an object; a receipt is a JSON object"
+                      % type(obj).__name__)
+    return obj, ""
 
 
 def _items(d, key):
@@ -81,12 +107,30 @@ def _items(d, key):
 
 def find(root, name):
     hits = []
-    for dp, _, fns in os.walk(root):
-        if ".git" in dp:
-            continue
+    for dp, dns, fns in os.walk(root):
+        # Match directory NAMES, not a substring of the path: `.git` as a
+        # substring test also hid `.github/`, so the workflow that wires these
+        # gates into CI was invisible to every one of them.
+        dns[:] = sorted(d for d in dns if d not in SKIP_DIRS)
         if name in fns:
             hits.append(os.path.join(dp, name))
     return hits
+
+
+def _partial(nothing, checked, kind, unit):
+    """Evidence for a run where some receipts held items and some declared none.
+
+    Reporting PASS here was the headline fix surviving in a repository with more
+    than one deliverable, which is the normal case: the note naming the empty
+    receipt was computed, collected, and then discarded unless EVERY receipt was
+    empty. One good manifest anywhere in the tree restored the old behaviour for
+    all the rest. A verdict covers every receipt it walked or it names the ones
+    it could not cover.
+    """
+    return ("NO-DATA", "%d %s verified, but %d %s present that declares none (%s); "
+                       "the verdict cannot cover a receipt with nothing in it, so it says so "
+                       "instead of passing over it"
+            % (checked, unit, len(nothing), kind, "; ".join(nothing[:4])))
 
 
 def git_trailers(root):
@@ -109,9 +153,9 @@ def gate_numbers(root):
     nothing = []
     checked = 0
     for m in manifests:
-        d = load_json(m)
+        d, err = load_receipt(m)
         if d is None:
-            unreadable.append(os.path.relpath(m, root))
+            unreadable.append("%s: %s" % (os.path.relpath(m, root), err))
             continue
         figs, note = _items(d, "figures")
         if not figs:
@@ -119,6 +163,10 @@ def gate_numbers(root):
             continue
         for fig in figs:
             checked += 1
+            if not isinstance(fig, dict):
+                problems.append("entry %d in %s is %s, not a figure object"
+                                % (checked, os.path.relpath(m, root), type(fig).__name__))
+                continue
             label = fig.get("label", "?")
             if not fig.get("snapshot_id"):
                 problems.append("%s: no snapshot_id (a live warehouse drifts; pin the read)" % label)
@@ -144,6 +192,8 @@ def gate_numbers(root):
     if not checked:
         return "NO-DATA", ("manifest present but records no figures (%s); an empty manifest proves nothing, so it is NO-DATA, never a pass"
                            % "; ".join(nothing))
+    if nothing:
+        return _partial(nothing, checked, "manifest", "figure(s)")
     return "PASS", "%d figure(s) each with a pinned, independently re-derived, zero-drift check" % checked
 
 
@@ -153,26 +203,72 @@ def gate_migration(root):
         return "NO-DATA", "no migration in this change, or no migration-receipt.json"
     problems = []
     unreadable = []
+    nothing = []
+    checked = 0      # receipts that recorded both legs
+    compared = 0     # row-count comparisons actually made
     for m in receipts:
-        d = load_json(m)
+        rel = os.path.relpath(m, root)
+        d, err = load_receipt(m)
         if d is None:
-            unreadable.append(os.path.relpath(m, root))
+            unreadable.append("%s: %s" % (rel, err))
+            continue
+        legs = {k: d.get(k) for k in ("forward", "reverse")}
+        if all(v is None for v in legs.values()) and "row_counts" not in d:
+            other = ", ".join(sorted(d)) or "nothing at all"
+            nothing.append("%s: no forward and no reverse leg recorded; top-level keys present: %s"
+                           % (rel, other))
             continue
         for direction in ("forward", "reverse"):
-            leg = d.get(direction, {})
+            leg = legs[direction]
+            if not isinstance(leg, dict):
+                problems.append("%s: %s leg is %s, not an object" % (rel, direction, type(leg).__name__))
+                continue
             if not leg.get("ran_against_restore"):
                 problems.append("%s: not run against a restored copy" % direction)
             if direction == "reverse" and not leg.get("rehearsal_run_id"):
-                problems.append("reverse: no resolvable rehearsal_run_id (free text is not a receipt)")
-        rc = d.get("row_counts", {})
-        if rc.get("before") is not None and rc.get("after_reverse") is not None and rc["before"] != rc["after_reverse"]:
-            problems.append("reverse did not restore row count: before=%s after=%s" % (rc["before"], rc["after_reverse"]))
+                problems.append("reverse: no rehearsal_run_id recorded (this gate checks the id is "
+                                "present and is a string, and cannot resolve it against a job system)")
+            elif direction == "reverse" and not isinstance(leg.get("rehearsal_run_id"), str):
+                problems.append("reverse: rehearsal_run_id is %s, not a run id string"
+                                % type(leg.get("rehearsal_run_id")).__name__)
+        checked += 1
+        # The row counts are the half that used to be asserted without being read.
+        # A receipt with no row_counts had the comparison skipped and the PASS
+        # evidence still said "with matching row counts": a sentence about work
+        # nothing did. Absent counts are an absence (NO-DATA). Half a count is a
+        # broken claim (FAIL), because recording `before` and not `after_reverse`
+        # says a count was taken and then does not produce it.
+        rc = d.get("row_counts")
+        if rc is None:
+            nothing.append("%s: both legs recorded but no row_counts, so nothing compared the rows "
+                           "the reverse was supposed to restore" % rel)
+        elif not isinstance(rc, dict):
+            problems.append("%s: row_counts is %s, not an object" % (rel, type(rc).__name__))
+        elif rc.get("before") is None or rc.get("after_reverse") is None:
+            have = ", ".join(sorted(k for k in rc if rc.get(k) is not None)) or "neither"
+            problems.append("%s: row_counts records %s; a half-recorded count proves nothing, "
+                            "both before and after_reverse are required" % (rel, have))
+        else:
+            compared += 1
+            if rc["before"] != rc["after_reverse"]:
+                problems.append("reverse did not restore row count: before=%s after=%s"
+                                % (rc["before"], rc["after_reverse"]))
     if unreadable:
         return "FAIL", ("migration receipt present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
                         % ", ".join(unreadable))
     if problems:
         return "FAIL", "; ".join(problems[:6])
-    return "PASS", "forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id"
+    if not checked:
+        return "NO-DATA", ("migration receipt present but records no migration (%s); an empty receipt "
+                           "proves nothing, so it is NO-DATA, never a pass" % "; ".join(nothing))
+    if nothing:
+        return "NO-DATA", ("%d receipt(s) with both legs run against a restore, but %d recorded no row "
+                           "counts (%s); the reverse restoring the rows is the half this gate cannot "
+                           "assert, so it does not"
+                           % (checked, len(nothing), "; ".join(nothing[:4])))
+    return "PASS", ("%d receipt(s): forward and reverse both ran against a restore, %d row-count "
+                    "comparison(s) matched, and a rehearsal id string is recorded"
+                    % (checked, compared))
 
 
 def gate_approval(root):
@@ -193,7 +289,14 @@ def gate_approval(root):
     if trailer and sig in ("G", "U"):
         return "PASS", "signed commit carries Approved-by: %s" % trailer.group(1).strip()
     if review_id:
-        return "PASS", "approval bound to platform review %s" % review_id.group(1)
+        # Say what this proves, in the evidence line, every time. The id is not
+        # resolved against any platform: this gate reads the commit message the
+        # agent wrote. Claiming more than that in the evidence string is the same
+        # defect as claiming a row count nothing compared.
+        return "PASS", ("commit records Reviewed-in: %s. This gate checked the trailer is present "
+                        "and does not resolve the id against a review platform, so it points a "
+                        "human at a review rather than proving one happened"
+                        % review_id.group(1))
     if trailer and sig == "E":
         return "NO-DATA", ("signature present but this host could not verify it (git %G? = E): import the signer's public key "
                            "into the verifying keyring, or use a Reviewed-in: review id, which needs no keyring. "
@@ -210,9 +313,9 @@ def gate_ran(root):
     nothing = []
     checked = 0
     for m in receipts:
-        d = load_json(m)
+        d, err = load_receipt(m)
         if d is None:
-            unreadable.append(os.path.relpath(m, root))
+            unreadable.append("%s: %s" % (os.path.relpath(m, root), err))
             continue
         chks, note = _items(d, "checks")
         if not chks:
@@ -220,6 +323,10 @@ def gate_ran(root):
             continue
         for chk in chks:
             checked += 1
+            if not isinstance(chk, dict):
+                problems.append("entry %d in %s is %s, not a check object"
+                                % (checked, os.path.relpath(m, root), type(chk).__name__))
+                continue
             name = chk.get("name", "?")
             if chk.get("exit_code") is None:
                 problems.append("%s: no exit code recorded (was it actually run?)" % name)
@@ -235,11 +342,27 @@ def gate_ran(root):
     if not checked:
         return "NO-DATA", ("ran-receipt present but records no checks (%s); a receipt with nothing in it is exactly what a run that never happened produces, so it is NO-DATA, never a pass"
                            % "; ".join(nothing))
+    if nothing:
+        return _partial(nothing, checked, "ran-receipt", "check(s)")
     return "PASS", "%d recorded check(s), each with a zero exit and a nonzero duration" % checked
 
 
-GATES = {"numbers": gate_numbers, "migration": gate_migration,
-         "approval": gate_approval, "ran": gate_ran}
+# The registry is the contract. Each gate declares the evidence it opens and what
+# its empty state is, and evals/test_no_data_class.py enumerates exactly this dict:
+# a gate added later is covered by the meta-test the moment it is registered,
+# because it cannot be registered without the declaration.
+GATES = {
+    "numbers": Check(gate_numbers, reads=(MANIFEST,), kind="json", item_key="figures"),
+    "migration": Check(gate_migration, reads=(MIGRATION_RECEIPT,), kind="json"),
+    "approval": Check(
+        gate_approval, reads=(APPROVAL_FILE,), kind="git", empty_expect="FAIL",
+        empty_fixture="",
+        empty_note="the presence of an APPROVAL file IS the claim that this change touches a "
+                   "money or partner path. An empty one is that claim with no identity behind "
+                   "it, which is a broken claim and not an absence, so it FAILs rather than "
+                   "reporting NO-DATA"),
+    "ran": Check(gate_ran, reads=(RAN_RECEIPT,), kind="json", item_key="checks"),
+}
 
 
 def main():
@@ -255,12 +378,15 @@ def main():
     try:
         root = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"],
                               capture_output=True, text=True, timeout=10).stdout.strip() or root
-    except Exception:  # sbe: allow-silent boundary read of a possibly-malformed receipt; a bad receipt becomes NO-DATA or FAIL below, never a pass
+    except Exception:  # sbe: allow-silent not a git worktree; root stays as given and every gate below still runs and still prints
         pass
     fails = 0
     print("BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)")
     for name in which:
-        verdict, ev = GATES[name](root)
+        # Guarded per gate: a crash inside one gate used to abort the loop, so
+        # every gate after it printed nothing at all and advisory mode exited 0.
+        # A gate that vanishes is worse than a gate that fails.
+        verdict, ev = run_guarded(name, GATES[name], root)
         if verdict == "FAIL":
             fails += 1
         print("  %-9s %-8s %s" % (name, verdict, ev))
