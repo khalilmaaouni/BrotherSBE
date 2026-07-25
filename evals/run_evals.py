@@ -265,6 +265,14 @@ def c13e(root):
 # The decision under test is the mapping from code to verdict, and that is what
 # is pinned here: G and U are approvals, E is NO-DATA, everything else FAILs.
 _gate = SourceFileLoader("sbe_gate", os.path.join(HERE, "..", "tools", "sbe_gate.py")).load_module()
+try:
+    _checks = SourceFileLoader("sbe_checks", os.path.join(HERE, "..", "tools", "sbe_checks.py")).load_module()
+except OSError as e:
+    # This suite is run against older trees on purpose, to measure what it would
+    # have caught. A tree with no sbe_checks.py is one of them, and the fixture
+    # that needs it reports that rather than taking the whole run down.
+    _checks = None
+    _CHECKS_IMPORT_ERROR = "sbe_checks.py is not in this tree (%s)" % e
 
 
 def _approval_with_sig(root, sig):
@@ -607,12 +615,410 @@ def a8(root):
     return "named-error" if table is None and "cannot read table file" in err else "fail"
 
 
+# ---------------------------------------------------------------------------
+# Second wave. The defect these pin is one defect: a verdict that asserts
+# something the tool never inspected. The first wave fixed six named instances
+# of it and a re-review found four more alive in the files that wave edited, so
+# every fixture below is either a new instance of that class or the positive
+# path of a behaviour that had none.
+# ---------------------------------------------------------------------------
+
+def gate_line(root, klass):
+    """The whole verdict line, so a fixture can pin the EVIDENCE and not only the
+    verdict. A gate that says PASS for the right reason and a gate that says PASS
+    while claiming work nobody did are the same string to a verdict-only test."""
+    script = DESIGN if klass in DESIGN_CLASSES else GATE
+    out = subprocess.run([sys.executable, script, klass, root], capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == klass:
+            return line.strip()
+    return ""
+
+
+def design_run(root, env=None):
+    """--strict from a search root: 'blocked' or 'clear'. Some behaviour only
+    exists at the top level (which dossiers are walked, what --strict does with
+    them) and a per-check runner cannot see it."""
+    e = dict(os.environ)
+    e["SBE_DOSSIER_ROOT"] = ""
+    e.update(env or {})
+    out = subprocess.run([sys.executable, DESIGN, "--strict", root],
+                         capture_output=True, text=True, env=e)
+    return "blocked" if out.returncode else "clear"
+
+
+# 14. The migration gate asserted "with matching row counts" over receipts that
+# recorded none: the comparison was skipped when the key was absent and the
+# evidence string said it happened anyway.
+@case("migration-with-no-row-counts-is-nodata", "migration", "NO-DATA")
+def m1(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "rehearse-991"}})
+
+
+@case("half-a-row-count-is-caught", "migration", "FAIL")
+def m2(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job_1"},
+        "row_counts": {"before": 100}})
+
+
+@case("empty-migration-receipt-is-nodata", "migration", "NO-DATA")
+def m3(root):
+    write(root, "migration-receipt.json", {})
+
+
+# A rehearsal id that is a boolean satisfied a bare truthiness test while the
+# evidence line called it resolvable.
+@case("non-string-rehearsal-id-is-caught", "migration", "FAIL")
+def m4(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": True},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+
+
+@case("sound-migration-evidence-counts-what-it-compared", "evidence", "counted")
+def m5(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job_8842"},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+    line = gate_line(root, "migration")
+    return "counted" if "1 row-count comparison(s) matched" in line else line
+
+
+# 15. Valid JSON of the wrong TYPE crashed the tool inside the gate loop, so the
+# crashing gate and every gate after it printed no verdict at all and advisory
+# mode exited 0. A gate that vanishes is worse than a gate that fails.
+@case("wrong-type-manifest-is-caught", "numbers", "FAIL")
+def w1(root):
+    write(root, "numbers-manifest.json", "[{\"figures\": []}]\n")
+
+
+@case("wrong-type-ran-receipt-is-caught", "ran", "FAIL")
+def w2(root):
+    write(root, "ran-receipt.json", "\"a string\"\n")
+
+
+@case("wrong-type-migration-receipt-is-caught", "migration", "FAIL")
+def w3(root):
+    write(root, "migration-receipt.json", "42\n")
+
+
+@case("non-object-figure-entry-is-caught", "numbers", "FAIL")
+def w4(root):
+    write(root, "numbers-manifest.json", {"figures": ["just a string"]})
+
+
+@case("a-crashing-check-fails-instead-of-disappearing", "guard", "FAIL")
+def w5(root):
+    if _checks is None:
+        return _CHECKS_IMPORT_ERROR
+
+    def boom(_):
+        raise RuntimeError("the receipt reader exploded")
+    verdict, ev = _checks.run_guarded("boom", boom, root)
+    return verdict if "exploded" in ev else "evidence lost the exception"
+
+
+# 16. The empty-manifest fix held only while the empty manifest was the ONLY
+# one: the note naming it was collected and then discarded unless every manifest
+# was empty, so one good deliverable anywhere in the tree restored the old
+# behaviour for all the rest. A repository with more than one deliverable is the
+# normal case.
+GOOD_FIGURE = {"figures": [{
+    "label": "gmv", "snapshot_id": "snap_2026_07",
+    "query": "SELECT SUM(amount) FROM orders", "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+    "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]}
+GOOD_CHECK = {"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": 812}]}
+
+
+@case("one-empty-manifest-among-good-ones-is-nodata", "numbers", "NO-DATA")
+def p1(root):
+    write(root, "a/numbers-manifest.json", GOOD_FIGURE)
+    write(root, "b/numbers-manifest.json", {"figures": []})
+
+
+@case("one-misspelled-manifest-among-good-ones-is-nodata", "numbers", "NO-DATA")
+def p2(root):
+    write(root, "a/numbers-manifest.json", GOOD_FIGURE)
+    write(root, "b/numbers-manifest.json", {"figuers": [{"label": "typo key"}]})
+
+
+@case("one-empty-ran-receipt-among-good-ones-is-nodata", "ran", "NO-DATA")
+def p3(root):
+    write(root, "a/ran-receipt.json", GOOD_CHECK)
+    write(root, "b/ran-receipt.json", {"checks": []})
+
+
+@case("two-good-manifests-still-pass", "numbers", "PASS")
+def p4(root):
+    write(root, "a/numbers-manifest.json", GOOD_FIGURE)
+    write(root, "b/numbers-manifest.json", GOOD_FIGURE)
+
+
+# 17. The approval gate's Reviewed-in path is an unvalidated regex match against
+# a commit message the agent writes. The law used to call approval "bound to an
+# identity the agent cannot forge". The tool is what it is; the evidence line now
+# says so, and this pins that it keeps saying so.
+@case("reviewed-in-evidence-does-not-claim-a-resolved-review", "evidence", "disclosed")
+def ap1(root):
+    write(root, "APPROVAL", "touches partner billing path\n")
+    git_init(root)
+    open(os.path.join(root, "x"), "w").write("1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "payout batching\n\nReviewed-in: PR-99999"], check=True)
+    line = gate_line(root, "approval")
+    return "disclosed" if "does not resolve the id" in line else line
+
+
+# 18. The one-file-deletion bypass. Seven filled artifacts with the intake
+# removed were never opened from the repository root, and --strict exited 0.
+@case("dossier-without-its-intake-is-caught", "artifacts", "FAIL")
+def x1(root):
+    write(root, "01-purpose.md", PURPOSE)
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n")
+
+
+@case("dossier-without-its-intake-in-a-subdirectory-is-found", "designrun", "blocked")
+def x2(root):
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/03-adr.md", "# ADR\n")
+    return design_run(root)
+
+
+@case("an-archived-dossier-does-not-block-an-unrelated-merge", "designrun", "clear")
+def x3(root):
+    write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "design/legacy/.sbe-archived", "closed 2024, kept for history\n")
+    return design_run(root)
+
+
+# 19. A one-character override reason waived the entire dossier requirement.
+@case("one-character-override-reason-is-not-an-override", "artifacts", "FAIL")
+def o1(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": T3_ANSWERS,
+                                   "override": "T0", "override_reason": "x"})
+
+
+@case("override-reason-that-says-tbd-is-not-an-override", "artifacts", "FAIL")
+def o2(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": T3_ANSWERS,
+                                   "override": "T0", "override_reason": "  tbd "})
+
+
+@case("override-field-disagreeing-with-the-tier-is-caught", "artifacts", "FAIL")
+def o3(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T3_ANSWERS, "override": "T2",
+                                   "override_reason": "read-only backfill, agreed with the data owner"})
+    write(root, "01-purpose.md", PURPOSE)
+
+
+# The positive path of the tier recompute had no fixture that could fail: with a
+# valid reason the written tier is used, which is what the code did before the
+# recompute existed too. What the recompute adds is the DISCLOSURE, so that is
+# what this pins.
+@case("an-honoured-override-names-the-tier-it-was-lowered-from", "evidence", "labelled")
+def o4(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T3_ANSWERS, "override": "T1",
+                                   "override_reason": "read-only backfill, agreed with the data owner"})
+    write(root, "01-purpose.md", PURPOSE)
+    line = gate_line(root, "artifacts")
+    return "labelled" if ("lowering the tier to T1 from computed T3" in line
+                          and line.split()[1] == "PASS") else line
+
+
+# 20. `touch 01-purpose.md` cleared tier T1, and the placeholder check passed the
+# same empty file because a file with nothing in it carries no marker.
+@case("zero-byte-artifact-does-not-clear-a-tier", "artifacts", "FAIL")
+def z1(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "01-purpose.md", "")
+
+
+@case("zero-byte-artifact-is-not-an-edited-dossier", "placeholder", "FAIL")
+def z2(root):
+    write(root, "01-purpose.md", "")
+
+
+# 21. The data model check was wrong in both directions: an honest bullet list
+# outside the entity section became entities with no source, and an entity name
+# carrying a hyphen or a dot was dropped from the set the PASS line asserted over.
+@case("an-honest-notes-list-is-not-a-set-of-entities", "datamodel", "PASS")
+def e1(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Notes\n- All timestamps are stored in UTC\n- Soft deletes are used everywhere\n"
+          "## Relationships\n- Customer to Order: one-to-many\n")
+
+
+@case("a-hyphenated-entity-with-no-source-is-not-dropped", "datamodel", "FAIL")
+def e2(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Subscriber: system of record: the identity service.\n"
+          "- payment-token: the stored card token. Nobody knows who owns this.\n"
+          "- pii.profile: personal data. Nobody knows who owns this either.\n")
+
+
+# 22. Requiring every diagram node to be an ENTITY failed the diagrams the
+# template asks for at T3, and the published escape was to add services to the
+# conceptual data model, which corrupts the model to satisfy a diagram check.
+@case("a-declared-runtime-component-is-traceable", "diagrams", "PASS")
+def g1(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record: the order service.\n")
+    write(root, "04-technology-map.md",
+          "# Technology map\n| Component | Technology | Owner |\n|---|---|---|\n"
+          "| EventBus | Managed queue | Platform team |\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Order --> EventBus\n```\n")
+
+
+@case("an-invented-node-is-still-an-orphan-with-components-declared", "diagrams", "FAIL")
+def g2(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record: the order service.\n")
+    write(root, "04-technology-map.md",
+          "# Technology map\n| Component | Technology | Owner |\n|---|---|---|\n"
+          "| EventBus | Managed queue | Platform team |\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Order --> LedgerService\n```\n")
+
+
+# 23. Prose is not a diagram. A markdown bullet after a heading read as an
+# erDiagram relationship line and invented a node out of the heading.
+@case("prose-outside-a-fence-is-not-a-diagram-node", "diagrams", "PASS")
+def g3(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record: the order service.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Components\n- OrderQueue: described in prose, not a node\n"
+          "The order flows to the warehouse.\n```mermaid\nflowchart LR\n  Order --> OrderQueue\n```\n")
+
+
+# 24. `### Option A (rejected): ...` counted zero, and the convention appeared
+# only in the template.
+@case("rejected-named-inside-a-heading-counts", "adr", "PASS")
+def r1(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\nlatency\n"
+                             "### Option A (rejected): synchronous call\nTies checkout to the warehouse.\n"
+                             "### Option B (rejected): nightly batch\nFails freshness.\n"
+                             "## Decision\nQueue.\n## Consequences\nOne more part.\n"
+                             "## What would flip this\nSub-second freshness.\n")
+
+
+# 25. An artifact that legitimately CITES the marker FAILed with the false
+# sentence "still the shipped template, unedited".
+@case("an-artifact-citing-the-marker-is-not-unedited", "placeholder", "PASS")
+def r2(root):
+    write(root, "07-verification.md",
+          "# Verification\nOne assertion here is that no dossier file still contains the string "
+          "SBE-TEMPLATE-UNFILLED, which is how we know the template was edited.\n")
+
+
+SCORE_CHECKS = ("ledger-coverage", "schema-2-uniform", "cache-economy", "vault-log-per-active-day",
+                "fence-hygiene", "correction-latency", "budget-vs-tier", "prediction-seals",
+                "felt-outcome-ratings", "review-cadence", "silent-failure-lints")
+
+
+def score_check(name, vault, env=None, args=()):
+    e = dict(os.environ)
+    e.update({"BROTHERSBE_VAULT": vault, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""})
+    e.update(env or {})
+    out = subprocess.run([sys.executable, SCORE] + list(args), capture_output=True, text=True, env=e)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if parts and parts[0] == name:
+            return parts[1]
+    return "no-verdict-line"
+
+
+def _ledger(root, body):
+    write(root, "99-System/telemetry/outcomes.jsonl", body)
+    return root
+
+
+# 26. Three checks read `PASS if not <empty list>`, so a fresh checkout printed
+# "0 pre-schema-2 lines remain PASS" over a corpus with no rows: the project's
+# own law inverted inside the project's own scorer, in its default state.
+@case("empty-ledger-is-not-schema-uniformity", "score", "NO-DATA")
+def sc1(root):
+    return score_check("schema-2-uniform", _ledger(root, ""))
+
+
+@case("zero-active-days-is-not-a-session-log-pass", "score", "NO-DATA")
+def sc2(root):
+    return score_check("vault-log-per-active-day", _ledger(root, ""))
+
+
+@case("zero-corrections-is-not-a-latency-pass", "score", "NO-DATA")
+def sc3(root):
+    return score_check("correction-latency", root)
+
+
+@case("a-malformed-ledger-line-is-a-fail", "score", "FAIL")
+def sc4(root):
+    return score_check("schema-2-uniform", _ledger(root, "{not json\n"))
+
+
+@case("a-ledger-line-of-the-wrong-type-is-a-fail", "score", "FAIL")
+def sc5(root):
+    return score_check("ledger-coverage", _ledger(root, "\"a string\"\n"))
+
+
+@case("a-malformed-ledger-does-not-delete-the-other-checks", "score", "NO-DATA")
+def sc6(root):
+    # The crashing scorer took every check down with it, including ones reading
+    # a different file entirely.
+    return score_check("prediction-seals", _ledger(root, "\"a string\"\n"))
+
+
+# The fence check appended the SKILL'S OWN STATE.md to the registry list on every
+# run, so an operator with no registries configured got a green fence-discipline
+# line sourced from the author's machine. Reproduced hermetically: the tools under
+# test are copied beside a STATE.md carrying a tier-tagged fence line, which is
+# exactly the layout that produced the phantom PASS.
+@case("budget-vs-tier-does-not-score-the-skills-own-registry", "score", "NO-DATA")
+def sc7(root):
+    import shutil
+    shutil.copytree(os.path.dirname(os.path.abspath(SCORE)), os.path.join(root, "tools"))
+    write(root, "STATE.md",
+          "# State\n## Fences\n- agent: builder | tier T2 | objective: ship the thing\n")
+    e = dict(os.environ)
+    e.update({"BROTHERSBE_VAULT": os.path.join(root, "vault"),
+              "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""})
+    out = subprocess.run([sys.executable, os.path.join(root, "tools", "sbe_score.py")],
+                         capture_output=True, text=True, env=e)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if parts and parts[0] == "budget-vs-tier":
+            return parts[1]
+    return "no-verdict-line"
+
+
+@case("an-all-exempted-scan-is-not-clean", "score", "NO-DATA")
+def sc8(root):
+    src = os.path.join(root, "src")
+    write(root, "src/swallowy.py",
+          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent fixture\n")
+    return score_check("silent-failure-lints", root, args=(src,))
+
+
+@case("an-exemption-on-the-pass-line-is-honoured", "score", "PASS")
+def sc9(root):
+    src = os.path.join(root, "src")
+    write(root, "src/swallowy.py",
+          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent fixture\n")
+    write(root, "src/clean.py", "def b():\n    return 1\n")
+    return score_check("silent-failure-lints", root, args=(src,))
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
-                if klass in ("tier", "decide", "sig", "lints"):
+                if klass in ("tier", "decide", "sig", "lints", "score", "designrun",
+                             "evidence", "guard"):
                     verdict = fn(d)
                 else:
                     fn(d)
