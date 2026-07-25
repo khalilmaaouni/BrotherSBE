@@ -13,14 +13,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "..", "tools", "sbe_gate.py")
 
 
+DESIGN_CLASSES = ("artifacts", "adr", "datamodel", "diagrams")
+DESIGN = os.path.join(HERE, "..", "tools", "sbe_design.py")
+
+
 def run_gate(root, klass):
-    out = subprocess.run([sys.executable, GATE, klass, root],
+    script = DESIGN if klass in DESIGN_CLASSES else GATE
+    out = subprocess.run([sys.executable, script, klass, root],
                          capture_output=True, text=True)
-    # parse the class line
     for line in out.stdout.splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[0] == klass:
-            return parts[1]  # verdict
+            return parts[1]
     return "?"
 
 
@@ -185,6 +189,64 @@ def c12(root):
 @case("green-on-red-caught", "ran", "FAIL")
 def c13(root):
     write(root, "ran-receipt.json", {"checks": [{"name": "row_parity", "exit_code": 1, "duration_ms": 400}]})
+
+
+@case("missing-required-artifact-caught", "artifacts", "FAIL")
+def d1(root):
+    write(root, "00-intake.json", {"tier": "T2", "answers": {}, "override": None})
+    write(root, "01-purpose.md", "# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n")
+
+
+@case("complete-t1-dossier-passes", "artifacts", "PASS")
+def d2(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": {}, "override": None})
+    write(root, "01-purpose.md", "# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n")
+
+
+@case("adr-without-rejected-alternatives-caught", "adr", "FAIL")
+def d3(root):
+    write(root, "03-adr.md", "# ADR\n## Decision\nUse a modular monolith.\n## Consequences\nOne deploy.\n")
+
+
+@case("adr-with-alternatives-and-flip-passes", "adr", "PASS")
+def d4(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\nteam size, consistency\n"
+                             "## Options considered\n### Rejected: microservices\nToo much ops load.\n"
+                             "### Rejected: single script\nNo isolation.\n"
+                             "## Decision\nModular monolith.\n## Consequences\nOne deploy.\n"
+                             "## What would flip this\nMore than three deploying teams.\n")
+
+
+@case("unspecified-cardinality-caught", "datamodel", "FAIL")
+def d5(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "## Relationships\n- Customer to Order: ?\n")
+
+
+@case("entity-without-system-of-record-caught", "datamodel", "FAIL")
+def d6(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer\n"
+                                    "## Relationships\n- Customer to Order: one-to-many\n")
+
+
+@case("sound-data-model-passes", "datamodel", "PASS")
+def d7(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "- Order: system of record OMS\n"
+                                    "## Relationships\n- Customer to Order: one-to-many, optional\n")
+
+
+@case("orphan-diagram-node-caught", "diagrams", "FAIL")
+def d8(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Customer --> Invoice\n```\n")
+
+
+@case("consistent-diagram-passes", "diagrams", "PASS")
+def d9(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "- Order: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Customer -->|places| Order\n```\n")
 
 
 def main():
