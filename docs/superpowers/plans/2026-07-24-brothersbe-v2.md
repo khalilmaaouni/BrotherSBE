@@ -940,7 +940,7 @@ Run:
 python3 tools/test_sbe.py && python3 evals/run_evals.py && python3 tools/sbe_score.py "$(pwd)" | grep silent-failure
 python3 -c "
 import re,glob,os
-n=sum(len(re.findall('[–—]',open(f,errors='replace').read())) for f in glob.glob('**/*',recursive=True) if os.path.isfile(f) and not f.startswith('.git') and f.rsplit('.',1)[-1] in ('md','py','sh','yml','json'))
+n=sum(len(re.findall('[\\u2013\\u2014]',open(f,errors='replace').read())) for f in glob.glob('**/*',recursive=True) if os.path.isfile(f) and not f.startswith('.git') and f.rsplit('.',1)[-1] in ('md','py','sh','yml','json'))
 print('dashes:',n)"
 ```
 Expected: `OK`, `29 evals: 29 passed`, `silent-failure-lints PASS clean`, `dashes: 0`

@@ -415,9 +415,13 @@ system, so it points a human at a rehearsal rather than proving one ran.
 
 `python3 tools/sbe_gate.py migration` passes that. It FAILs a reverse that never
 ran against a restore (`untested-reverse-caught`), a reverse with no
-`rehearsal_run_id` (`unresolvable-rehearsal-id-caught`, free text is not a
-receipt), and a lossy reverse where `row_counts.before` and `after_reverse`
-disagree (`lossy-reverse-caught`, 100 became 61). All are in the evals.
+`rehearsal_run_id` (`unresolvable-rehearsal-id-caught`), an id that is not a string
+(`non-string-rehearsal-id-is-caught`, where `true` used to satisfy a bare truthiness
+test), a lossy reverse where `row_counts.before` and `after_reverse` disagree
+(`lossy-reverse-caught`, 100 became 61), and a half-recorded count
+(`half-a-row-count-is-caught`). A receipt with no row counts at all is NO-DATA
+(`migration-with-no-row-counts-is-nodata`), because the gate cannot assert the half
+it never read. All are in the evals.
 
 ---
 

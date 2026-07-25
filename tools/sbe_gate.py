@@ -14,8 +14,13 @@ The classes (ratified 2026-07-24):
             against a PINNED snapshot (live-warehouse drift is expected; the gate
             fails loudly if no snapshot id is recorded, rather than silently).
   migration A forward and a reverse migration, both with a receipt showing they
-            ran against a restored copy, the reverse receipt carrying a resolvable
-            rehearsal run id (not free text), and matching row-count checks.
+            ran against a restored copy, the reverse receipt recording a rehearsal
+            run id AS A STRING, and row counts that were recorded and that match.
+            Two limits, stated because the evidence line used to overstate both:
+            this gate does not resolve the rehearsal id against any job system,
+            and a receipt with no row counts is NO-DATA rather than a pass,
+            because the reverse restoring the rows is the half it cannot assert
+            without them.
   approval  Money or partner-facing change carries a named human approval bound
             to something stronger than a typed name. Two paths, and they are NOT
             equally strong, so this says exactly what each one proves:
@@ -48,7 +53,7 @@ receipt is INTERNALLY CONSISTENT (a run id resolves to a nonzero duration and an
 exit code, a manifest's second query differs textually from the first), because
 the operating record proves pasted receipts get invented.
 """
-import json, os, sys, re, subprocess, hashlib
+import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import Check, run_guarded
