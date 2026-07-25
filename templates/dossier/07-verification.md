@@ -1,5 +1,9 @@
 # 07. Verification plan
 
+<!-- SBE-TEMPLATE-UNFILLED 07-verification: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 | Claim this design makes | The check that proves it | When it runs |
 |---|---|---|
 | The warehouse sees a new order within minutes | Time from order confirmation to warehouse receipt, measured in production | Continuous, alerted on breach |

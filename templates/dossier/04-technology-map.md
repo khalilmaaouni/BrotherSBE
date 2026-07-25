@@ -1,5 +1,9 @@
 # 04. Technology map
 
+<!-- SBE-TEMPLATE-UNFILLED 04-technology-map: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 | Component | Technology | Owner | Failure mode | Recovery path |
 |---|---|---|---|---|
 | Checkout | Checkout service | Checkout team | Cannot reach the order service | Retries, then queues locally |

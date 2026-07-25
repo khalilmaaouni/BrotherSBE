@@ -1,5 +1,9 @@
 # 05. Data model
 
+<!-- SBE-TEMPLATE-UNFILLED 05-data-model: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 ## Conceptual: entities and meanings
 - Customer: the person or account placing an order; system of record: the CRM.
 - Order: a confirmed request to purchase, one per checkout; system of record: the order service.

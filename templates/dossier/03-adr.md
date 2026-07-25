@@ -1,5 +1,9 @@
 # 03. Architecture decision record
 
+<!-- SBE-TEMPLATE-UNFILLED 03-adr: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 ## Context
 What forced this decision, in three sentences or fewer.
 Example: order volume is growing past what one database transaction per

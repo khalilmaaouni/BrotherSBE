@@ -1,5 +1,9 @@
 # 02. Process map
 
+<!-- SBE-TEMPLATE-UNFILLED 02-process: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 ## Actors
 Who and what participates.
 Example: the customer, the checkout service, the order service, and the
