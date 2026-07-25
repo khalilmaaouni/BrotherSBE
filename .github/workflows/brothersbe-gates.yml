@@ -37,3 +37,12 @@ jobs:
         run: python3 tools/sbe_design.py --strict .
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
