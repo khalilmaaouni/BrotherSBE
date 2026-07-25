@@ -794,7 +794,9 @@ def x2(root):
 @case("an-exempt-dossier-does-not-block-an-unrelated-merge", "designrun", "clear")
 def x3(root):
     write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
-    write(root, "design/legacy/.sbe-exempt", "closed two years ago, kept for history\n")
+    write(root, "design/legacy/.sbe-exempt",
+          "checks: artifacts, adr, datamodel, diagrams, placeholder\n"
+          "reason: closed two years ago, kept for history\n")
     return design_run(root)
 
 
@@ -1244,18 +1246,68 @@ def v29(root):
     return design_run(root)
 
 
+EXEMPTION = ("checks: artifacts, adr, datamodel, diagrams, placeholder\n"
+             "reason: closed two years ago, kept for history\n")
+
+
 @case("an-exemption-is-reported-as-a-waiver-not-a-pass", "designrun", "waived")
 def v30(root):
     write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
-    write(root, "design/legacy/.sbe-exempt", "closed two years ago, kept for history\n")
+    write(root, "design/legacy/.sbe-exempt", EXEMPTION)
     e = dict(os.environ)
     e["SBE_DOSSIER_ROOT"] = ""
     out = subprocess.run([sys.executable, DESIGN, root], capture_output=True, text=True, env=e)
     for line in out.stdout.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[0] == "dossier" and parts[1] == "WAIVED":
-            return "waived" if "waives artifacts" in line else "waiver-line-does-not-name-the-checks"
+        if len(parts) >= 3 and parts[1] == "dossier" and parts[2] == "WAIVED":
+            named = all(c in line for c in DESIGN_CLASSES)
+            return "waived" if named else "waiver-line-does-not-name-the-checks"
     return "no-waiver-line"
+
+
+# An exemption that names no checks waives everything by default, which is an off
+# switch rather than an exemption. Measured before this: three words of filler in
+# a free-text file switched off all five design checks for a directory and
+# --strict exited 0 with a T3 dossier missing six of seven artifacts.
+@case("an-exemption-that-names-no-checks-does-not-waive", "designrun", "blocked")
+def v30a(root):
+    write(root, "design/proj/00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/.sbe-exempt",
+          "this dossier was closed two years ago and is kept only for history\n")
+    return design_run(root)
+
+
+# An exemption scoped to one check leaves the other four running, so an author
+# waiving `diagrams` on an archived dossier no longer also waives `artifacts`.
+@case("a-scoped-exemption-waives-only-the-checks-it-names", "designrun", "blocked")
+def v30b(root):
+    write(root, "design/proj/00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/.sbe-exempt",
+          "checks: diagrams\nreason: the diagrams moved to the architecture wiki in 2024\n")
+    return design_run(root)
+
+
+@case("an-exemption-naming-a-check-that-does-not-exist-does-not-waive", "designrun", "blocked")
+def v30c(root):
+    write(root, "design/proj/00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/.sbe-exempt",
+          "checks: everything\nreason: this dossier was archived when the team disbanded\n")
+    return design_run(root)
+
+
+# A waiver is not a pass, and CI must be able to act on it without reading prose.
+@case("a-waiver-blocks-under-strict-waivers", "designrun", "blocked")
+def v30d(root):
+    write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "design/legacy/.sbe-exempt", EXEMPTION)
+    e = dict(os.environ)
+    e["SBE_DOSSIER_ROOT"] = ""
+    out = subprocess.run([sys.executable, DESIGN, "--strict", "--strict-waivers", root],
+                         capture_output=True, text=True, env=e)
+    return "blocked" if out.returncode else "clear"
 
 
 @case("a-blank-session-id-is-a-broken-ledger-row", "score", "FAIL")
@@ -1379,6 +1431,213 @@ def h4(root):
     subprocess.run(["git", "-C", root, "commit", "-qm", "internal refactor"], check=True)
     out = subprocess.run([sys.executable, GATE, "--strict", root], capture_output=True, text=True)
     return "blocked" if out.returncode else "clear"
+
+
+# ---------------------------------------------------------------------------
+# Round four of one defect: the value is PRESENT, NON-EMPTY, and vacuous.
+#
+# Measured against the tree that shipped it: a manifest with snapshot_id "TODO"
+# and rerun.primary = rerun.secondary = "pending" produced "numbers PASS 1
+# figure(s) each with a pinned, independently re-derived, zero-drift check" and
+# --strict exit 0, and the other three hard gates fell to "unknown", "TODO" and
+# "-" in the same run. Every clause of those four evidence lines was false. The
+# fix is one shared predicate (sbe_checks.VACUOUS_VALUES and answered()), and the
+# mechanical closure is the vacuous-token sweep in evals/test_no_data_class.py;
+# these fixtures pin the named cases the review reproduced by hand.
+# ---------------------------------------------------------------------------
+
+@case("a-placeholder-snapshot-id-is-not-a-pinned-read", "numbers", "FAIL")
+def w1(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "Q3 revenue", "snapshot_id": "TODO",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("two-pending-values-are-not-zero-drift", "numbers", "FAIL")
+def w2(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "Q3 revenue", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": "pending", "secondary": "pending"}}]})
+
+
+@case("a-second-derivation-differing-only-in-case-is-not-independent", "numbers", "FAIL")
+def w3(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "select sum(amount) from orders",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-second-derivation-differing-only-in-whitespace-is-not-independent", "numbers", "FAIL")
+def w4(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT  SUM(amount)\n  FROM orders",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("rerun-ran-as-the-string-false-is-not-a-re-run", "numbers", "FAIL")
+def w5(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": "false", "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-figure-value-recorded-as-a-numeric-string-still-passes", "numbers", "PASS")
+def w6(root):
+    # The type check must not reject an honest receipt exported from a
+    # spreadsheet: a count written as "17,570" is a count.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": "17,570", "secondary": "17570"}}]})
+
+
+@case("row-counts-of-unknown-are-not-a-matched-comparison", "migration", "FAIL")
+def w7(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": "unknown", "after_reverse": "unknown"}})
+
+
+@case("a-placeholder-rehearsal-id-is-not-a-rehearsal-id", "migration", "FAIL")
+def w8(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "TODO"},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+
+
+@case("a-placeholder-check-name-does-not-say-what-ran", "ran", "FAIL")
+def w9(root):
+    write(root, "ran-receipt.json", {"checks": [{"name": "TODO", "exit_code": 0,
+                                                 "duration_ms": 1}]})
+
+
+@case("a-hyphen-is-not-a-review-id", "approval", "FAIL")
+def w10(root):
+    write(root, "APPROVAL", "touches the partner payout path\n")
+    git_init(root)
+    open(os.path.join(root, "x"), "w").write("1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "payout batching\n\nReviewed-in: -"],
+                   check=True)
+
+
+# I4, adjudicated: an unverifiable signature already reports NO-DATA on the
+# grounds that this host cannot check it. A Reviewed-in id is in the identical
+# state, so it gets the identical verdict. While it was a PASS, the strongest
+# sentence this gate could print about a money-movement change cost one hyphen.
+@case("an-unresolved-review-id-is-nodata-not-a-pass", "approval", "NO-DATA")
+def w11(root):
+    write(root, "APPROVAL", "touches the partner payout path\n")
+    git_init(root)
+    open(os.path.join(root, "x"), "w").write("1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "payout batching\n\nReviewed-in: PR-482"],
+                   check=True)
+
+
+@case("a-tbd-system-of-record-and-a-todo-snapshot-are-refused-by-one-list", "evidence", "one-list")
+def w12(root):
+    # The structural point, pinned: sbe_design.py refused "todo" as a system of
+    # record while sbe_gate.py accepted "TODO" as a pinned snapshot, because the
+    # list was a private constant in one file that the other never imported.
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    import sbe_checks, sbe_design, sbe_gate
+    shared = sbe_checks.VACUOUS_VALUES
+    for mod in (sbe_design, sbe_gate):
+        if any(isinstance(v, (tuple, list, set, frozenset)) and "todo" in {str(x).lower() for x in v}
+               and v is not shared for k, v in vars(mod).items() if k.isupper()):
+            return "%s carries its own vacuity list" % mod.__name__
+    return "one-list" if sbe_design._stated_value("TODO") == "" and \
+        sbe_checks.answered("TODO") is None else "predicates disagree"
+
+
+# ---------------------------------------------------------------------------
+# Honest work that used to be blocked. A gate that rejects correct work gets
+# switched off by its users, which destroys the system more surely than a hole
+# does, so each of these is a fixture in its own right.
+# ---------------------------------------------------------------------------
+
+@case("a-soft-wrapped-entity-bullet-keeps-its-system-of-record", "datamodel", "PASS")
+def y1(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- RefundEvent: one refund action against an order, as recorded by the\n"
+          "  ledger; system of record: the ledger service.\n"
+          "- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to RefundEvent: one-to-many, optional.\n")
+
+
+@case("a-soft-wrapped-relationship-keeps-its-cardinality", "datamodel", "PASS")
+def y2(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "- Refund: system of record: the ledger service.\n"
+          "## Relationships\n"
+          "- Customer to Refund, where a refund is always raised against an order\n"
+          "  that the customer placed: one-to-many, optional.\n")
+
+
+@case("an-adr-written-in-prose-headings-passes", "adr", "PASS")
+def y3(root):
+    write(root, "03-adr.md",
+          "# How we are settling refunds\n"
+          "## What we weighed\nSettlement latency, operational load, auditability.\n"
+          "## Roads not taken\n"
+          "- A synchronous call to the ledger: ties checkout latency to ledger availability.\n"
+          "- Nightly batch reconciliation: misses the one business day requirement.\n"
+          "## What we are doing\nPublish refund events to a queue and settle asynchronously.\n"
+          "## What this costs us\nOne more moving part to operate, and an ordering guarantee.\n"
+          "## When we would revisit this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("an-entity-lifecycle-state-diagram-with-declared-states-passes", "diagrams", "PASS")
+def y4(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Order: system of record: the OMS.\n"
+          "## Order states\n- Draft\n- Placed\n- Shipped\n"
+          "## Relationships\n- Order to Order: one-to-one, self.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Order lifecycle\n```mermaid\nstateDiagram-v2\n"
+          "  [*] --> Draft\n  Draft --> Placed\n  Placed --> Shipped\n  Shipped --> [*]\n```\n")
+
+
+@case("an-undeclared-lifecycle-state-is-nodata-not-a-false-failure", "diagrams", "NO-DATA")
+def y5(root):
+    # Before: FAIL, "diagram element(s) appear nowhere else in the dossier:
+    # Draft, Placed, Shipped", with no document anywhere telling an author how to
+    # make a state diagram trace. The only way through was to declare the states
+    # as runtime COMPONENTS, which is the model-corrupting pathology L5 removed
+    # for queues, reproduced one diagram type over.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Order: system of record: the OMS.\n"
+          "## Relationships\n- Order to Order: one-to-one, self.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Order lifecycle\n```mermaid\nstateDiagram-v2\n"
+          "  [*] --> Draft\n  Draft --> Placed\n  Placed --> Shipped\n  Shipped --> [*]\n```\n")
+
+
+@case("an-invented-flowchart-node-still-fails-beside-a-state-diagram", "diagrams", "FAIL")
+def y6(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Order: system of record: the OMS.\n"
+          "## Order states\n- Draft\n- Placed\n"
+          "## Relationships\n- Order to Order: one-to-one, self.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nstateDiagram-v2\n  [*] --> Draft\n  Draft --> Placed\n```\n"
+          "## Context\n```mermaid\nflowchart LR\n  X[MysteryBox] --> Y[GhostQueue]\n```\n")
 
 
 # The counts printed in the shipped docs, checked against the suites that print

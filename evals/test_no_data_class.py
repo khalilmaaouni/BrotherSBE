@@ -96,24 +96,63 @@ _telemetry = SourceFileLoader("sbe_telemetry",
 NOT_INVOKED = "so this check opened no file"
 
 EMPTY_VALUES = [("e", "empty-string", ""), ("f", "whitespace", "   "), ("g", "null", None)]
+# Round four of the same defect, as a scenario shape. The value is PRESENT, it is
+# NON-EMPTY, and it records nothing: `snapshot_id: "TODO"` with both rerun values
+# `"pending"` produced "1 figure(s) each with a pinned, independently re-derived,
+# zero-drift check" and `--strict` exit 0. `stated()` is not a test for this and
+# nothing anywhere was asking "is this field an ANSWER".
+#
+# Three tokens, not the whole vacuity list, and each is here for a different
+# reason a substitution can go wrong: TODO is upper case (so a case-sensitive
+# membership test fails this scenario), n/a carries punctuation (so a naive
+# isalnum-style normalisation fails it), and "-" is a single character that a
+# length check would wave through. Every token in sbe_checks.VACUOUS_VALUES is
+# covered by construction, because they all resolve through one predicate; these
+# three prove the predicate is actually being CALLED, which is what a scenario
+# can prove and a list cannot.
+VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")]
 
 
 # ---------------------------------------------------------------------------
 # Registry discovery
 # ---------------------------------------------------------------------------
 
+def tool_sources():
+    """Every Python file in tools/, by name.
+
+    NOT `sbe_*.py`. The prefix filter was a hole and it was proved: a registry
+    shipped as `tools/quality.py` holding a check whose body was
+    `return "PASS", "quality is fine (examined nothing at all)"` was invisible
+    to the registry walk AND to the source lint, and this file printed
+    "20 checks discovered ... 0 failure(s)" over twenty-one checks and exited 0.
+    Discovery must not depend on what somebody named a file.
+    """
+    return [fn for fn in sorted(os.listdir(TOOLS_DIR)) if fn.endswith(".py")]
+
+
 def load_tool_modules():
-    mods = {}
-    for fn in sorted(os.listdir(TOOLS_DIR)):
-        if not fn.startswith("sbe_") or not fn.endswith(".py"):
-            continue
+    """Import every tool module. An import that fails is a FAILURE, not a skip.
+
+    Returns (modules, failures). A module this test cannot import is a module
+    whose registries it cannot walk, which is the same blindness as a registry
+    it cannot invoke, so it is reported by name rather than passed over.
+    """
+    mods, failures = {}, []
+    for fn in tool_sources():
         if fn == "sbe_checks.py":
             # Reloading it would rebind sbe_checks.Check to a second, unequal
             # class, and every isinstance(x, Check) below would then be false
-            # against registries that had already imported the first one.
+            # against registries that had already imported the first one. This is
+            # the ONE exclusion, it is named, and the file holds no registry: the
+            # lint below still reads it, so a check hiding there is still caught.
             continue
-        mods[fn] = SourceFileLoader(fn[:-3], os.path.join(TOOLS_DIR, fn)).load_module()
-    return mods
+        try:
+            mods[fn] = SourceFileLoader(fn[:-3], os.path.join(TOOLS_DIR, fn)).load_module()
+        except Exception as e:
+            failures.append("tools/%s could not be imported (%s: %s), so any registry in it went "
+                            "unwalked. A module this test cannot reach is a failure, never a skip"
+                            % (fn, type(e).__name__, e))
+    return mods, failures
 
 
 def discover_registries(mods):
@@ -139,33 +178,74 @@ def discover_registries(mods):
     return found, defects
 
 
-def pass_returning_functions(mods):
-    """Source-level: every function that can return the literal verdict PASS.
+def _pass_valued_names(tree):
+    """Names bound to the string "PASS" anywhere in a module.
+
+    The lint matched the literal spelling only, so `VERDICT_OK = "PASS"` at
+    module level and `return VERDICT_OK, "shadow gate: examined nothing"` in the
+    body walked straight through it, and the run still printed 0 failures. A
+    verdict is a verdict whatever it was spelled through.
+    """
+    names = set()
+    for node in ast.walk(tree):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not (isinstance(value, ast.Constant) and value.value == "PASS"):
+            continue
+        for t in targets:
+            if isinstance(t, ast.Name):
+                names.add(t.id)
+    return names
+
+
+def _returns_pass(head, pass_names):
+    """True when this expression can be the verdict PASS."""
+    if isinstance(head, ast.Constant) and head.value == "PASS":
+        return True
+    if isinstance(head, ast.Name) and head.id in pass_names:
+        return True
+    if isinstance(head, (ast.IfExp, ast.BoolOp)):
+        for n in ast.walk(head):
+            if isinstance(n, ast.Constant) and n.value == "PASS":
+                return True
+            if isinstance(n, ast.Name) and n.id in pass_names:
+                return True
+    return False
+
+
+def pass_returning_functions(mods=None):
+    """Source-level: every function that can return the verdict PASS.
 
     A registry walk covers what is registered. This covers what EXISTS, so a
     verdict-producing path that was never registered is caught by name rather
-    than by being quietly outside the walk.
+    than by being quietly outside the walk. Over every .py file in tools/, not
+    over `sbe_*.py`: see tool_sources().
     """
     out = []
-    for fn in sorted(os.listdir(TOOLS_DIR)):
-        if not fn.startswith("sbe_") or not fn.endswith(".py"):
-            continue
+    for fn in tool_sources():
         tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
+        pass_names = _pass_valued_names(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for sub in ast.walk(node):
-                if not isinstance(sub, ast.Return) or not isinstance(sub.value, ast.Tuple):
+                if not isinstance(sub, ast.Return):
                     continue
-                head = sub.value.elts[0] if sub.value.elts else None
-                if isinstance(head, ast.Constant) and head.value == "PASS":
+                value = sub.value
+                if isinstance(value, ast.Tuple):
+                    head = value.elts[0] if value.elts else None
+                elif isinstance(value, ast.Name) and value.id in pass_names:
+                    head = value
+                else:
+                    continue
+                if _returns_pass(head, pass_names):
                     out.append((fn, node.name))
                     break
-                if isinstance(head, ast.IfExp):
-                    consts = [n.value for n in ast.walk(head) if isinstance(n, ast.Constant)]
-                    if "PASS" in consts:
-                        out.append((fn, node.name))
-                        break
     return sorted(set(out))
 
 
@@ -435,7 +515,8 @@ def hollow_cases(tool, check):
     if fx is None:
         return []
     files, env = fx["files"], fx.get("env", {})
-    out = [Scenario("full", "full", files, env=env, expect="PASS", forbid_pass=False)]
+    out = [Scenario("full", "full", files, env=env, expect=check.full_expect,
+                    forbid_pass=(check.full_expect != "PASS"))]
 
     def variant(sid, label, rel, content):
         # A hollowing that changed nothing is not a scenario. Emptying a subtree
@@ -450,7 +531,7 @@ def hollow_cases(tool, check):
 
     for rel, content in files.items():
         if isinstance(content, (dict, list)):
-            for tag, vname, value in EMPTY_VALUES:
+            for tag, vname, value in EMPTY_VALUES + VACUOUS_VALUES:
                 variant("%s::*|%s" % (rel, vname), tag, rel,
                         hollowed(content, value, keep_booleans=True))
                 for path in container_paths(content):
@@ -472,6 +553,18 @@ def hollow_cases(tool, check):
                         replace_at(content, path, []))
         else:
             variant("%s::whitespace" % rel, "f", rel, "   \n")
+            for _tag, vname, value in VACUOUS_VALUES:
+                # The text-shaped vacuity: an artifact whose whole body is the
+                # word TODO is present, non-empty, and says nothing.
+                variant("%s::vacuous-%s" % (rel, vname), "v", rel, "%s\n" % value)
+                # And the same one level in: every heading kept, every body
+                # replaced by a placeholder rather than emptied. This is the
+                # markdown shape of "the keys are all there and the values all
+                # say TODO".
+                if heading_sections(content):
+                    filled = "".join("%s\n%s\n" % (l, value) for l in content.splitlines()
+                                     if l.lstrip().startswith("#"))
+                    variant("%s::every-section-%s" % (rel, vname), "v", rel, filled)
             for title, _body in heading_sections(content):
                 variant("%s##%s" % (rel, title), "s", rel, drop_section(content, title))
         variant("%s::zero-bytes" % rel, "i", rel, "")
@@ -495,7 +588,7 @@ def counts():
     produced for a whole wave, which is the same defect as a stale evidence
     string: a number asserted where nothing recomputed it.
     """
-    mods = load_tool_modules()
+    mods, _failed = load_tool_modules()
     registries, _ = discover_registries(mods)
     checks = scenarios = regs = 0
     for fn, attr, reg in registries:
@@ -510,9 +603,9 @@ def counts():
 
 
 def main():
-    mods = load_tool_modules()
+    mods, import_failures = load_tool_modules()
     registries, defects = discover_registries(mods)
-    failures = list(defects)
+    failures = list(import_failures) + list(defects)
     checked = ran = 0
     notapplicable, exemptions, unregistered = [], [], []
 
@@ -551,11 +644,15 @@ def main():
             if check.full_fixture is None:
                 notapplicable.append("%s %s: no positive fixture to hollow, declared reason: %s"
                                      % (fn, name, check.no_full_fixture))
+            if check.full_expect != "PASS":
+                notapplicable.append("%s %s: its worked example asserts %s rather than PASS, "
+                                     "declared reason: %s"
+                                     % (fn, name, check.full_expect, check.full_expect_reason))
             for path, why in sorted(check.optional_leaves.items()):
                 exemptions.append("%s %s [%s]: %s" % (fn, name, path, why))
             scenarios = legacy_cases(tool, check) + hollow_cases(tool, check)
             invoked_count = 0
-            saw_pass = False
+            saw_full = False
             for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
                     for rel, content in subst(sc.files, d).items():
@@ -568,7 +665,7 @@ def main():
                 got, line = verdict_and_evidence(out.stdout, name)
                 invoked = NOT_INVOKED not in line
                 invoked_count += invoked
-                saw_pass = saw_pass or got == "PASS"
+                saw_full = saw_full or (sc.label == "full" and got == check.full_expect)
                 bad = []
                 exempt = check.optional_leaves.get(sc.sid.split("|")[0])
                 if got == "PASS" and sc.forbid_pass and not exempt:
@@ -593,10 +690,10 @@ def main():
                 if not QUIET or bad:
                     print("  %-26s %-3s %-52s %-9s %s"
                           % (name, sc.label, sc.sid[:52], got, mark))
-            if check.full_fixture is not None and not saw_pass:
-                failures.append("%s %s: no scenario produced a PASS, so nothing here proves the "
-                                "check body ran or that its declared full_fixture is a real "
-                                "positive example" % (fn, name))
+            if check.full_fixture is not None and not saw_full:
+                failures.append("%s %s: the declared full_fixture did not produce %s, so nothing "
+                                "here proves the check body ran or that its worked example is a "
+                                "real one" % (fn, name, check.full_expect))
             print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
                                   % (invoked_count, len(scenarios))))
 
