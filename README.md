@@ -41,12 +41,12 @@ A design engagement produces at most seven files in one directory. Templates wit
 **How much of it you write is computed, not chosen.** Five objective questions produce a tier, first match wins: T3 (money, partner data, personal data, production state, or not reversible in an hour) requires all seven; T2 (a contract change, or many consumers) requires six; T1 (one boundary crossed, or some consumers) requires the purpose brief; T0 requires nothing at all. T0 is the common case.
 
 ```bash
-python3 tools/sbe_intake.py            # five questions, writes 00-intake.json
+python3 tools/sbe_intake.py design/my-project   # five questions, writes its 00-intake.json there
 python3 tools/sbe_design.py .          # artifacts, adr, datamodel, diagrams, placeholder
 python3 tools/sbe_decide.py tables/architecture.json shape   # asks for each criterion on stdin
 ```
 
-`sbe_decide.py` reads its criteria interactively, so pipe the answers when you run it from a script, a CI job or an agent, where a prompt nobody answers is a hang: `printf 'many\nstrong\nlow\nlow\n' | python3 tools/sbe_decide.py tables/architecture.json shape`.
+`sbe_decide.py` reads its criteria interactively, so pipe the answers when you run it from a script, a CI job or an agent, where a prompt nobody answers is a hang: `printf '5\neventual\nhigh\nhigh\n' | python3 tools/sbe_decide.py tables/architecture.json shape`.
 
 Architecture shape is scored against named criteria in [`tables/architecture.json`](tables/architecture.json): independently deploying teams, consistency requirement, operational maturity, failure isolation. Every run returns a recommendation, up to two alternatives, the criteria that separated them, and what would flip the decision. A run where no criterion contributed returns NO-DATA with the recommendation suppressed, because a recommendation backed by zero evidence is a guess with a table around it.
 
@@ -87,7 +87,7 @@ Each gate walks the git worktree for a receipt file and checks it is internally 
  "row_counts": {"before": 100, "after_reverse": 100}}
 ```
 
-**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) plus an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer PASSes only when this host verified the commit signature (`git log` `%G?` in `G` or `U`); an unsigned typed name FAILs, and a `Reviewed-in:` id reports NO-DATA because nothing resolves it.
+**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) or an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer PASSes only when this host verified the commit signature (`git log` `%G?` in `G` or `U`); an unsigned typed name FAILs, and a `Reviewed-in:` id reports NO-DATA because nothing resolves it.
 
 **ran** looks for `ran-receipt.json`:
 
@@ -213,7 +213,7 @@ only worth having if it clears, and the last two are the docs checking their own
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-208 evals: 208 passed, 0 regressions.
+265 evals: 265 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -232,7 +232,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-20 checks discovered from 3 registries in 7 module(s), 688 scenarios run, 0 failure(s).
+20 checks discovered from 3 registries in 7 module(s), 920 scenarios run, 0 failure(s).
 ```
 
 To watch one check on a real change:

@@ -17,7 +17,7 @@ BrotherSBE is a standalone skill: clone it, and it works with nothing else insta
 ## Where BrotherSBE deliberately diverges
 
 - Operator register: engineer peer-to-peer, not a non-engineer principal. The sibling's narration law is replaced (SKILL.md, "The spine").
-- Alignment metric: review outcomes and the deploy and incident record, not a felt-outcome rating (RUBRIC.md metric 4). An engineer verifies alignment directly, so an impression-based feed would let charm outrank correctness.
+- Alignment metric: primarily review outcomes and the deploy and incident record, not a felt-outcome rating outranking or substituting for them (RUBRIC.md metric 4). Felt ratings are still collected and scored (`tools/sbe_score.py`'s felt-outcome-ratings check, gathered per `tools/WEEKLY-REVIEW.md`), but an engineer verifies alignment directly, so an impression-based feed is never allowed to let charm outrank correctness.
 - The four hard gates and the eval bed (tools/sbe_gate.py, evals/): BrotherSBE-only. This is the specialization.
 - Team learning through reviewed pull requests into LEARNED.md (SKILL.md, "What is not law"): the sibling assumed a single operator.
 

@@ -59,9 +59,11 @@ Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
    a standalone token. A system of record recorded as TBD or explicitly absent fails
    like one that is missing, and "one-to-many-ish" is not a cardinality. No entities
    at all is a failure, not a pass.
-4. **diagrams.** At least one diagram node exists, and no node names something
-   `05-data-model.md` never defines. A diagram artifact with no diagram in it is a
-   defect, not an absence.
+4. **diagrams.** At least one diagram node exists, and every node traces to an
+   entity in `05-data-model.md`, a declared runtime component, or a declared
+   lifecycle state; a node that traces to none of the three is an orphan and
+   fails by name. A diagram artifact with no diagram in it is a defect, not an
+   absence.
 5. **placeholder.** No artifact is still the shipped template. Each template carries
    an `SBE-TEMPLATE-UNFILLED` marker, and the check fails while any survives, naming
    the artifacts. Without it, the fastest route to a green run was copying seven
