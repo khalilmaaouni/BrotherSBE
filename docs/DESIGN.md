@@ -50,7 +50,7 @@ Two rules sit under everything:
 | Architecture | What shape, decided against what criteria | `03-adr.md`, `04-technology-map.md` | L3, adr check |
 | Data | What exists, how it relates, where it is mastered | `05-data-model.md` | L4, datamodel check |
 | Expression | What the system looks like, in code that diffs | `06-diagrams.md` | L5, diagrams check |
-| Verification | What proves each claim, and when | `07-verification.md` | L7 to L10, the hard gates |
+| Verification | What proves each claim, and when | `07-verification.md` | L7 to L11, the gates CI runs under `--strict` |
 
 **Purpose.** No design starts while the purpose is unstated. The problem without a
 solution inside it, the users and what they do today instead, observable success

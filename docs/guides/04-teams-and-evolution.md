@@ -27,7 +27,7 @@ machine) carries the law and the tools:
 - `SKILL.md`, the outermost law when `/brothersbe` is invoked.
 - `tools/sbe_gate.py`, `tools/sbe_score.py`, `tools/sbe_telemetry.py`, the hooks.
 - `RUBRIC.md`, the metric definitions the weekly review scores against.
-- `memory-template/LEARNED.md`, the team law file (section 4). This is the only
+- `memory-template/LEARNED.md`, the team law file. This is the only
   file in the repo whose content is meant to grow from what the team learns.
 
 **The local vault** (one per machine, default `~/BrotherSBEVault`, relocatable
@@ -42,8 +42,8 @@ with `BROTHERSBE_VAULT`) carries everything private:
   `Sessions/*.md` logs.
 
 The line between them is the security guarantee: **the shared repo is reviewed and
-public to the team; the vault never leaves the machine.** `SKILL.md` section 8
-states it as law ("Local telemetry is gitignored and never leaves the machine"),
+public to the team; the vault never leaves the machine.** `DIGEST.md` states it
+("Local telemetry never leaves the machine"),
 and `SECURITY.md` lets you verify the zero-network claim yourself:
 
 ```bash
@@ -178,7 +178,7 @@ SBE_LINT_ROOT=~/work/your-service python3 ~/.claude/skills/brothersbe/tools/sbe_
 
 ### 2g. The gates are proven, not asserted
 
-`evals/run_evals.py` is 13 cases, each a real failure class as a fixture with a
+`evals/run_evals.py` is one case per real failure class, each a fixture with a
 planted defect and an assertion that the matching gate catches it: the overstated
 five-year total, the non-independent second derivation, the unpinned read, the
 untested reverse, the lossy reverse, the typed-name approval, the green-on-red
@@ -193,7 +193,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  37 evals: 37 passed, 0 regressions.
+  70 evals: 70 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects
@@ -219,7 +219,7 @@ Three properties hold at that boundary, and they are the point of the whole desi
    reviewer judges a distilled rule, never someone's private transcript. The
    `corrections.jsonl` line that started it stays on the origin machine.
 2. **Every install reads `LEARNED.md` on session start.** When `/brothersbe` is
-   invoked, the invocation sequence (`SKILL.md` section 0 step 2, section 11)
+   invoked, the invocation sequence (`SKILL.md`, "Every run, mechanically", step 2)
    reads the project overview, open items, failures index, and the `LEARNED.md`
    team laws before it acts. Merge a rule today and every teammate's next session
    runs under it. (The `SessionStart` shell hook injects the digest and the

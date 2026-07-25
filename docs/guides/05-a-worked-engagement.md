@@ -469,6 +469,7 @@ BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
   datamodel  PASS     5 entities, each with a system of record; every relationship carries cardinality
   diagrams   FAIL     diagram element(s) appear nowhere else in the dossier: IntakeService, WarehouseLoader
+  placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
 ```
 
 That FAIL is the check doing its job with the only vocabulary it has. The
@@ -501,6 +502,7 @@ BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
   datamodel  PASS     7 entities, each with a system of record; every relationship carries cardinality
   diagrams   PASS     7 diagram node(s), all traceable to dossier artifacts
+  placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
 exit: 0
 ```
 
@@ -590,7 +592,7 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
   migration PASS     forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id
   approval  FAIL     approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
-  ran       PASS     every recorded check executed with a zero exit and a nonzero duration
+  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 exit: 1
 ```
@@ -613,11 +615,11 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
   migration PASS     forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id
   approval  PASS     approval bound to platform review PR-482
-  ran       PASS     every recorded check executed with a zero exit and a nonzero duration
+  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 exit: 0
 ```
 
-Eight checks green: four design, four gates. That is the whole engagement.
+Nine checks green: five design, four gates. That is the whole engagement.
 
 ---
 
@@ -643,18 +645,36 @@ for a change with nothing to prove.
 ## What to copy
 
 The seven templates in `templates/dossier/` are the same files with the example
-content swapped out. Copy them into `design/<project>/`, run the intake, and delete
-whatever the tier does not require:
+content swapped out. Copy them into `design/<project>/` and run the intake:
 
 ```bash
 mkdir -p design && cp -r "$SBE/templates/dossier" design/my-project
 cd design/my-project && python3 "$SBE/tools/sbe_intake.py"
 ```
 
-The templates ship passing their own checks, so the baseline is green before you
-write anything and any red you see afterwards is yours: an entity that lost its
-system of record, a relationship with no cardinality, a diagram node nothing
-defines.
+Answered n, n, y, n, none (nothing sensitive, nothing crossing a boundary,
+reversible, no consumers), the intake writes:
+
+```json
+{
+  "answers": {
+    "changes_contract": false,
+    "crosses_boundary": false,
+    "reversible_under_hour": true,
+    "touches_sensitive": false,
+    "consumers": "none"
+  },
+  "tier": "T0",
+  "override": null,
+  "override_reason": null
+}
+```
+
+Now run the design check on the copied dossier:
+
+```bash
+python3 "$SBE/tools/sbe_design.py" .
+```
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
@@ -662,7 +682,20 @@ BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
   datamodel  PASS     3 entities, each with a system of record; every relationship carries cardinality
   diagrams   PASS     3 diagram node(s), all traceable to dossier artifacts
+  placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker, which the template says to delete once the section is your own design
 ```
+
+Four green, one red, and the red is the point. The four structural checks pass
+because the example is a coherent system, which is useful while you work: any red
+you see in them afterwards is yours, an entity that lost its system of record, a
+relationship with no cardinality, a diagram node nothing defines. But four green
+checks on a copied file describing someone else's warehouse is not a design, and
+before the `placeholder` check existed that was the fastest route to a clean
+`--strict` run: copy seven files, change nothing, merge.
+
+Each template carries one `SBE-TEMPLATE-UNFILLED` comment under its title. Delete
+it as you replace the section with your own work. The check clears when the last
+one is gone, and until then it names exactly which artifacts are still boilerplate.
 
 The order matters more than the templates. Purpose before process, process before
 architecture, architecture before data, data before diagrams, and verification

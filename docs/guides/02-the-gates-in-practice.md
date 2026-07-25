@@ -327,7 +327,7 @@ The fields the gate reads per check: `name`, `exit_code`, `duration_ms`.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       PASS     every recorded check executed with a zero exit and a nonzero duration
+  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration
 ```
 
 ### Worked FAIL
@@ -403,10 +403,16 @@ STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 
 ## The silent-failure lints
 
-Alongside the four hard gates, `tools/sbe_score.py` runs a tenth check,
-`silent-failure-lints`, that scans source for the code patterns that hide an error so a
-wrong result looks like a right one. By ratified decision these are gate severity: in
-`--strict` a lint hit exits nonzero, the same as a hard-gate FAIL.
+Alongside the four hard gates, `tools/sbe_score.py` runs `silent-failure-lints`, which
+scans source for the code patterns that hide an error so a wrong result looks like a right
+one. By ratified decision these are gate severity: in `--strict` a lint hit exits nonzero,
+the same as a hard-gate FAIL, which is why L7 to L11 rather than L7 to L10 are the laws a
+session may never waive.
+
+The check is opt-in on a path: it scans the directory you pass, or `SBE_LINT_ROOT`. Pass
+neither and it reports NO-DATA naming why, because a run that opened no file has found
+nothing and cannot be called clean. A positional argument that is not a directory is a
+FAIL, so a mistyped path cannot read as a clean scan.
 
 ### The five patterns
 
@@ -453,8 +459,8 @@ once and forgets. The reason travels with the code.
 The tool holds itself to the rule it enforces. Running the lint over the shipped tools:
 
 ```
-$ python3 tools/sbe_score.py tools/
-silent-failure-lints      PASS     clean
+$ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
+silent-failure-lints      PASS     6 file(s) scanned under tools/, clean
 ```
 
 Two mechanisms make that honest rather than lucky:
@@ -486,8 +492,8 @@ the four gates hold your work to, applied to the gates themselves.
 
 Advisory in a session, `--strict` in CI. NO-DATA is never a pass. Output that has not
 cleared its gate is labeled UNVERIFIED next to the item. The gates are regression-tested:
-`python3 evals/run_evals.py` runs 13 cases, each a real failure class as a fixture, and a
-release is blocked if any of them stops being caught.
+`python3 evals/run_evals.py` runs every case in the suite, each a real failure class as a
+fixture, and a release is blocked if any of them stops being caught.
 
 Maintained by Khalil Maaouni, Founder. BrotherSBE is the specialist sibling of
 BrotherModeUp (github.com/khalilmaaouni/BrotherModeUp).

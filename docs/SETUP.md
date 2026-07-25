@@ -55,7 +55,7 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 python3 evals/run_evals.py
 ```
 
-Thirty-seven lines, each a real failure class caught by the check that owns it, ending "37 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "70 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
@@ -69,10 +69,30 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
 
 ```yaml
 - run: python3 tools/sbe_gate.py --strict .
+- run: python3 tools/sbe_design.py --strict .
 - run: python3 tools/sbe_score.py --strict .
 ```
 
-The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on a silent-failure lint. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
+Three steps, not two. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
+
+Two settings decide whether those steps can see anything.
+
+**`SBE_DOSSIER_ROOT`.** The design step is given the checkout root, and from there it walks for every directory holding a `00-intake.json`, which is what lets it reach a dossier in `design/<project>/`. Left empty, finding none is NO-DATA and the step passes, because a change that needs no dossier should not be blocked for not having one. Set it to where your dossiers live once the repository is supposed to carry one, and a declared root holding none becomes a FAIL:
+
+```yaml
+env:
+  SBE_DOSSIER_ROOT: design
+```
+
+**Signer keys, for the approval gate.** The gate accepts a signed `Approved-by:` trailer only if the host running it actually verified the signature. A stock runner has no public keys imported, so `git` reports that it cannot check the signature, and the gate calls that NO-DATA rather than an approval. That is deliberate: a gate that accepted an unverifiable signature would trust a key nobody on the team recognises while rejecting a known key that had merely expired. Two working configurations:
+
+```yaml
+# either import the approvers' public keys into the job
+- run: gpg --import <<< "${{ secrets.SBE_APPROVER_PUBKEYS }}"
+# or use the keyless path, a Reviewed-in: <review id> trailer on the commit
+```
+
+Doing neither is legal and honest: approvals then report NO-DATA in CI, and the binding is enforced wherever your review platform enforces it.
 
 ## What you get, and what you do not
 

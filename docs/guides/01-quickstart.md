@@ -51,10 +51,10 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-37 evals: 37 passed, 0 regressions.
+70 evals: 70 passed, 0 regressions.
 ```
 
-Thirty-seven cases, each a real failure class as a fixture. When you change a gate,
+Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
 this suite is what tells you a gate stopped catching its defect. Run it before you
 rely on anything else here.
 
@@ -215,7 +215,7 @@ python3 "$SBE/tools/sbe_gate.py" ran ~/sbe-demo
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       PASS     every recorded check executed with a zero exit and a nonzero duration
+  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration
 ```
 
 Now the change is done in the sense the gate means: its check executed and left
@@ -280,6 +280,15 @@ first). The workflow, verbatim:
 # merge is stopped when a hard gate fails. Copy it into the repo you want guarded.
 name: BrotherSBE gates
 on: [pull_request]
+env:
+  # Where your dossiers live. Empty means "search the whole checkout": every
+  # directory holding a 00-intake.json is found and checked. That is what makes
+  # the design checks reach a dossier in design/<project>/ instead of opening
+  # only <root>/00-intake.json and reporting nothing while a full dossier sits
+  # two directories away. Set it (for example to `design`) once this repository
+  # is supposed to carry a dossier: a declared root holding none is then a FAIL,
+  # not an absence.
+  SBE_DOSSIER_ROOT: ''
 jobs:
   gates:
     runs-on: ubuntu-latest
@@ -290,8 +299,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      # The approval gate accepts a signature only if THIS host verified it. A
+      # runner with no public keys imported reports "cannot verify" for every
+      # signed commit, which is NO-DATA and not an approval. To use the signed
+      # trailer path in CI, import the approvers' public keys first:
+      #   - run: gpg --import <<< "${{ secrets.SBE_APPROVER_PUBKEYS }}"
+      # Or standardise on the Reviewed-in: <review id> trailer, which needs no
+      # keyring at all. Doing neither is legal and honest: approvals then report
+      # NO-DATA, instead of a gate that quietly degrades into accepting any
+      # signature blob because it could not check one.
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
+      - name: Design checks (dossier completeness) block on failure
+        run: python3 tools/sbe_design.py --strict .
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
 ```
@@ -317,9 +337,9 @@ until the receipt is there and consistent.
 
 ## Where to go next
 
-- `SKILL.md` section 3 is the law behind the four gates and the override rules
-  (an override is named, logged, and never available on the `--strict` CI path).
-- `evals/run_evals.py` is the proof: thirty-seven planted defects, each caught by its
+- `SKILL.md` L7 to L10 are the four hard gates, L11 the lints CI runs beside them,
+  L15 the override rule and L16 the one that makes `--strict` unavailable to a session.
+- `evals/run_evals.py` is the proof: one planted defect per class, each caught by its
   gate. Read the fixtures to see the exact shape of every receipt.
 - `SECURITY.md` documents the zero-network posture: the tools make no network call,
   write only to the vault you point `BROTHERSBE_VAULT` at (default
