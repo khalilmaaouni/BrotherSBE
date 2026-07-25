@@ -2,43 +2,66 @@
 """The honesty meta-test: no check in this project may report PASS over evidence
 it never examined.
 
-This exists because fixing the instances did not fix the CLASS. Six named cases
-of "a PASS whose evidence asserts something the tool never inspected" were fixed
-by hand, and a re-review found the identical defect alive in four more places
-inside the same two files that wave edited. A seventh hand fix would have been
-the same mistake a seventh time.
+This exists because fixing the instances did not fix the CLASS, twice. Six named
+cases of "a PASS whose evidence asserts something the tool never inspected" were
+fixed by hand; a re-review found the identical defect alive in four more places
+inside the same two files; a third review found it alive in six more. A seventh
+hand fix would have been the same mistake a seventh time.
 
-So this test does not carry a list of checks. It ENUMERATES the registries in
-sbe_gate.py, sbe_design.py and sbe_score.py, and it refuses to run if any entry
-in them is a bare function instead of a Check declaring its evidence. A check
-added next year is covered the moment it is registered, because it cannot be
-registered without saying what it reads and what its empty state is. Adding a
-check that lies is now a two-step act of deliberation rather than an oversight.
+The reason it kept surviving is precise and worth stating, because it is the
+whole design of this file. Every earlier round modelled absent evidence as an
+absent FILE. The surviving holes were absent VALUES. A manifest that exists,
+parses, carries every required key and holds "" in all of them sailed through,
+and the check then printed "zero drift" over two empty strings. So this test does
+not enumerate shapes of missing files. It takes the WORKING example each check
+declares and hollows it out, mechanically, in every way a value can be empty:
 
-Four cases per check, run through the real command line entry points, because a
-verdict that only exists when you call the function directly is not the verdict
-an operator sees:
+  a  a completely empty directory                      -> NO-DATA, never PASS
+  a2 a dossier-shaped directory with a zero-byte anchor, so that a check whose
+     tool has a no-target fallback is genuinely INVOKED at least once
+  b  evidence that exists and declares zero items      -> the declared empty state
+  c  valid JSON of the wrong shape (list, string, ...) -> FAIL, a verdict line is
+                                                          still printed, and no
+                                                          traceback escapes
+  d  malformed JSON                                    -> FAIL
+  full the declared full_fixture                       -> PASS, which is what
+                                                          proves the check ran at
+                                                          all and that the fixture
+                                                          is a real positive
+  e  every value in it replaced by ""                  -> never PASS
+  f  every value replaced by whitespace                -> never PASS
+  g  every value replaced by null                      -> never PASS
+  e/f/g are also applied to every SUBTREE and every single LEAF of the fixture,
+     one at a time. Emptying the whole receipt is the easy case and no shipped
+     defect had that shape: the live ones were a single emptied pair inside an
+     otherwise complete receipt (`rerun.primary` and `rerun.secondary`, or
+     `row_counts.before` and `row_counts.after_reverse`), which is exactly the
+     subtree sweep, and a single whitespace value (`rehearsal_run_id: " "`),
+     which is exactly the leaf sweep.
+  h  every item in a list replaced by an empty object  -> never PASS
+  j  every list emptied                                -> never PASS
+  i  the files exist with the right names and are zero bytes -> never PASS
+  s  for a markdown artifact: every heading kept, the body under one heading
+     dropped, one heading at a time. This is the text-shaped version of "the keys
+     are all there and the values are all empty".
 
-  a  a completely empty directory                     -> NO-DATA, never PASS
-  b  evidence that exists and declares zero items     -> the declared empty state,
-                                                         which may never be PASS
-  c  valid JSON of the wrong shape (list, string,
-     number)                                          -> FAIL, a verdict line is
-                                                         still printed, and no
-                                                         traceback escapes
-  d  malformed JSON                                   -> FAIL
+Booleans are preserved by the whole-fixture and subtree sweeps and emptied only
+by the leaf sweep, on purpose. In a receipt a boolean is the CLAIM ("the reverse
+ran against a restore") and a string or a number is the EVIDENCE for it. Emptying
+the evidence while leaving the claim standing is the precise shape a fabricated
+receipt has, and it is the shape three rounds of review kept finding.
 
-Case c is two assertions, not one. A tool that crashes prints no verdict line
-for the crashing check or for any check after it, and in advisory mode exits 0:
-the gate does not fail, it disappears, which is the defect in its purest form.
-
-Cases c and d apply to checks whose evidence is JSON. A check reading markdown, a
-source tree or a commit trailer says so through its declared kind, and this test
-PRINTS that as a declared not-applicable rather than skipping it quietly, so the
-coverage claim at the bottom is checkable.
+Registries are DISCOVERED, not listed. Every tools/sbe_*.py module is imported
+and every module-level dict of Checks in it is a registry. A registry this test
+does not know how to invoke is a FAILURE, not a skip, so a fourth tool added next
+year cannot be silently uncovered. A source-level lint additionally requires that
+every function anywhere in tools/ that can return the literal verdict "PASS" is
+registered in one of those registries, so a verdict-producing code path cannot
+live outside the walk.
 
 Run: python3 evals/test_no_data_class.py
      python3 evals/test_no_data_class.py --tools <dir>
+     python3 evals/test_no_data_class.py --quiet     (summary and failures only)
 
 The second form runs the SAME scenarios against a different copy of the tools,
 which is how the before-list was measured against the tree that shipped these
@@ -46,29 +69,304 @@ defects: the scenarios and the expected verdicts are data held here, the code
 under test is whatever --tools points at. A test that can only be run against the
 fixed code proves nothing about what it caught.
 """
-import json, os, subprocess, sys, tempfile
+import ast, copy, datetime, json, os, subprocess, sys, tempfile
 from importlib.machinery import SourceFileLoader
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOOLS_DIR = os.path.join(HERE, "..", "tools")
-sys.path.insert(0, os.path.abspath(TOOLS_DIR))
+TOOLS_DIR = os.path.abspath(os.path.join(HERE, "..", "tools"))
+sys.path.insert(0, TOOLS_DIR)
 
 # The registries (the declarations) always come from this working tree. The code
 # actually invoked can be pointed elsewhere, which is how the before-list is
 # measured against the tree that shipped the defects.
-RUN_DIR = os.path.abspath(TOOLS_DIR)
+RUN_DIR = TOOLS_DIR
 if "--tools" in sys.argv:
     RUN_DIR = os.path.abspath(sys.argv[sys.argv.index("--tools") + 1])
+QUIET = "--quiet" in sys.argv
 
 from sbe_checks import Check  # noqa: E402
 
-_gate = SourceFileLoader("sbe_gate", os.path.join(TOOLS_DIR, "sbe_gate.py")).load_module()
-_design = SourceFileLoader("sbe_design", os.path.join(TOOLS_DIR, "sbe_design.py")).load_module()
-_score = SourceFileLoader("sbe_score", os.path.join(TOOLS_DIR, "sbe_score.py")).load_module()
-_telemetry = SourceFileLoader("sbe_telemetry", os.path.join(TOOLS_DIR, "sbe_telemetry.py")).load_module()
+_telemetry = SourceFileLoader("sbe_telemetry",
+                              os.path.join(TOOLS_DIR, "sbe_telemetry.py")).load_module()
 
-# Valid JSON that is not a receipt. Each of these used to reach a .get() call and
-# raise, taking the rest of the run down with it.
+# The evidence sentence sbe_design.py prints for a check it did NOT open a file
+# for, because no dossier was found. It is matched here so a scenario cannot be
+# counted as covering a check that never ran. The phrase is load-bearing: see the
+# comment beside it in tools/sbe_design.py.
+NOT_INVOKED = "so this check opened no file"
+
+EMPTY_VALUES = [("e", "empty-string", ""), ("f", "whitespace", "   "), ("g", "null", None)]
+
+
+# ---------------------------------------------------------------------------
+# Registry discovery
+# ---------------------------------------------------------------------------
+
+def load_tool_modules():
+    mods = {}
+    for fn in sorted(os.listdir(TOOLS_DIR)):
+        if not fn.startswith("sbe_") or not fn.endswith(".py"):
+            continue
+        if fn == "sbe_checks.py":
+            # Reloading it would rebind sbe_checks.Check to a second, unequal
+            # class, and every isinstance(x, Check) below would then be false
+            # against registries that had already imported the first one.
+            continue
+        mods[fn] = SourceFileLoader(fn[:-3], os.path.join(TOOLS_DIR, fn)).load_module()
+    return mods
+
+
+def discover_registries(mods):
+    """Every module-level dict holding Checks, plus the ones that hold something else.
+
+    A dict with any Check in it is a registry; a registry with a bare function in
+    it is a defect, because this test cannot cover what does not declare its
+    evidence. Nothing here is written down by hand.
+    """
+    found, defects = [], []
+    for fn, mod in mods.items():
+        for attr, val in sorted(vars(mod).items()):
+            if attr.startswith("_") or not isinstance(val, dict) or not val:
+                continue
+            if not any(isinstance(v, Check) for v in val.values()):
+                continue
+            bad = sorted(k for k, v in val.items() if not isinstance(v, Check))
+            if bad:
+                defects.append("%s: %s.%s holds %s registered as bare values, not Checks "
+                               "declaring their evidence, so this test cannot cover them"
+                               % (fn, fn[:-3], attr, ", ".join(bad)))
+            found.append((fn, attr, val))
+    return found, defects
+
+
+def pass_returning_functions(mods):
+    """Source-level: every function that can return the literal verdict PASS.
+
+    A registry walk covers what is registered. This covers what EXISTS, so a
+    verdict-producing path that was never registered is caught by name rather
+    than by being quietly outside the walk.
+    """
+    out = []
+    for fn in sorted(os.listdir(TOOLS_DIR)):
+        if not fn.startswith("sbe_") or not fn.endswith(".py"):
+            continue
+        tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for sub in ast.walk(node):
+                if not isinstance(sub, ast.Return) or not isinstance(sub.value, ast.Tuple):
+                    continue
+                head = sub.value.elts[0] if sub.value.elts else None
+                if isinstance(head, ast.Constant) and head.value == "PASS":
+                    out.append((fn, node.name))
+                    break
+                if isinstance(head, ast.IfExp):
+                    consts = [n.value for n in ast.walk(head) if isinstance(n, ast.Constant)]
+                    if "PASS" in consts:
+                        out.append((fn, node.name))
+                        break
+    return sorted(set(out))
+
+
+# ---------------------------------------------------------------------------
+# Fixture substitution and hollowing
+# ---------------------------------------------------------------------------
+
+def subst(value, d):
+    # One clock. %(today)s is the UTC date so that it agrees with the UTC
+    # timestamp in %(now)s: deriving them from different clocks made a fixture
+    # fail for nine hours a day in one timezone and pass in another.
+    utc = datetime.datetime.now(datetime.timezone.utc)
+    table = {"dir": d, "now": utc.isoformat().replace("+00:00", "Z"),
+             "today": utc.date().isoformat()}
+    if isinstance(value, str):
+        for k, v in table.items():
+            value = value.replace("%(" + k + ")s", v)
+        return value
+    if isinstance(value, dict):
+        return {subst(k, d): subst(v, d) for k, v in value.items()}
+    if isinstance(value, list):
+        return [subst(v, d) for v in value]
+    return value
+
+
+def leaf_paths(obj, prefix=()):
+    """Every path to a scalar inside the fixture."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            for p in leaf_paths(v, prefix + (k,)):
+                yield p
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            for p in leaf_paths(v, prefix + (i,)):
+                yield p
+    else:
+        yield prefix
+
+
+def container_paths(obj, prefix=()):
+    """Every path to a dict or list inside the fixture, root last."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            for p in container_paths(v, prefix + (k,)):
+                yield p
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            for p in container_paths(v, prefix + (i,)):
+                yield p
+    if isinstance(obj, (dict, list)):
+        yield prefix
+
+
+def render(path):
+    out = ""
+    for part in path:
+        out += ("[%d]" % part) if isinstance(part, int) else (("." if out else "") + str(part))
+    return out or "<root>"
+
+
+def at(obj, path):
+    for part in path:
+        obj = obj[part]
+    return obj
+
+
+def replace_at(obj, path, new):
+    if not path:
+        return new
+    out = copy.deepcopy(obj)
+    node = out
+    for part in path[:-1]:
+        node = node[part]
+    node[path[-1]] = new
+    return out
+
+
+def hollowed(node, value, keep_booleans):
+    if isinstance(node, dict):
+        return {k: hollowed(v, value, keep_booleans) for k, v in node.items()}
+    if isinstance(node, list):
+        return [hollowed(v, value, keep_booleans) for v in node]
+    if keep_booleans and isinstance(node, bool):
+        return node
+    return value
+
+
+def heading_sections(text):
+    """(heading title, line indices of its body) for a markdown document."""
+    out, current = [], None
+    for i, line in enumerate(text.splitlines()):
+        if line.lstrip().startswith("#"):
+            current = (line.strip("# ").strip(), [])
+            out.append(current)
+        elif current is not None:
+            current[1].append(i)
+    return [(title, body) for title, body in out if body]
+
+
+def drop_section(text, title):
+    lines = text.splitlines()
+    keep, current = [], None
+    for line in lines:
+        if line.lstrip().startswith("#"):
+            current = line.strip("# ").strip()
+            keep.append(line)
+            continue
+        if current == title:
+            continue
+        keep.append(line)
+    return "\n".join(keep) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Tool adapters: how a registry is invoked from the command line
+# ---------------------------------------------------------------------------
+
+def run(script, args, env_extra):
+    env = dict(os.environ)
+    env.update(env_extra)
+    return subprocess.run([sys.executable, os.path.join(RUN_DIR, script)] + args,
+                          capture_output=True, text=True, env=env)
+
+
+def verdict_and_evidence(stdout, name):
+    for line in stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == name:
+            return parts[1], line
+    return "NO-VERDICT-LINE", ""
+
+
+class DirTool:
+    """sbe_gate.py and sbe_design.py: evidence is a file in the target directory."""
+
+    def __init__(self, script, env=None):
+        self.script = script
+        self.env = env or {}
+
+    def root(self, d):
+        return d
+
+    def place(self, d, relpath, content):
+        write_file(os.path.join(d, relpath), content)
+
+    def invoke(self, d, name, extra_env):
+        env = dict(self.env)
+        env.update(extra_env)
+        return run(self.script, [name, d], env)
+
+    def relpath(self, p):
+        return p
+
+
+class ScoreTool:
+    """sbe_score.py: evidence lives under the vault, or behind an env var."""
+
+    def __init__(self, script):
+        self.script = script
+        self.env = {}
+
+    def root(self, d):
+        return d
+
+    def place(self, d, relpath, content):
+        write_file(os.path.join(d, relpath), content)
+
+    def invoke(self, d, name, extra_env):
+        env = {"BROTHERSBE_VAULT": d, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""}
+        env.update(extra_env)
+        return run(self.script, [], env)
+
+    def relpath(self, p):
+        # The registry stores absolute paths resolved against the default vault;
+        # the test re-roots them into a throwaway one.
+        return os.path.relpath(p, _telemetry.VAULT) if os.path.isabs(p) else p
+
+
+ADAPTERS = {
+    ("sbe_gate.py", "GATES"): DirTool("sbe_gate.py"),
+    ("sbe_design.py", "CHECKS"): DirTool("sbe_design.py", env={"SBE_DOSSIER_ROOT": ""}),
+    ("sbe_score.py", "CHECKS"): ScoreTool("sbe_score.py"),
+}
+
+
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    if isinstance(content, dict):
+        body = json.dumps(content)
+    elif isinstance(content, list):
+        body = "".join(json.dumps(row) + "\n" for row in content)
+    else:
+        body = content
+    with open(path, "w") as f:
+        f.write(body)
+
+
+# ---------------------------------------------------------------------------
+# Scenario generation
+# ---------------------------------------------------------------------------
+
 WRONG_SHAPES = [
     ("c-json-is-a-list", "[{\"figures\": []}]"),
     ("c-json-is-a-string", "\"a string\""),
@@ -81,154 +379,245 @@ WRONG_SHAPE_LINES = [
 ]
 
 
-def write(path, content):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write(content)
+class Scenario:
+    """One run: files to write, env to set, the verdict that would be a defect."""
 
-
-def run(script, args, env_extra):
-    env = dict(os.environ)
-    env.update(env_extra)
-    return subprocess.run([sys.executable, os.path.join(RUN_DIR, script)] + args,
-                          capture_output=True, text=True, env=env)
-
-
-def verdict_of(stdout, name):
-    for line in stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[0] == name:
-            return parts[1]
-    return "NO-VERDICT-LINE"
-
-
-class DirTool:
-    """sbe_gate.py and sbe_design.py: evidence is a file in the target directory."""
-
-    def __init__(self, script, registry, env=None):
-        self.script = script
-        self.registry = registry
+    def __init__(self, sid, label, files, env=None, expect=None, forbid_pass=True,
+                 expect_invoked=True):
+        self.sid = sid
+        self.label = label
+        self.files = files
         self.env = env or {}
-
-    def place(self, d, check, relpath, content):
-        write(os.path.join(d, relpath), content)
-
-    def invoke(self, d, name, extra_env):
-        env = dict(self.env)
-        env.update(extra_env)
-        return run(self.script, [name, d], env)
-
-    def evidence_path(self, check):
-        return check.reads[0]
+        self.expect = expect          # an exact verdict, or None for "anything but PASS"
+        self.forbid_pass = forbid_pass
+        self.expect_invoked = expect_invoked
 
 
-class ScoreTool:
-    """sbe_score.py: evidence lives under the vault, or behind an env var."""
-
-    def __init__(self, script, registry):
-        self.script = script
-        self.registry = registry
-        self.env = {}
-
-    def place(self, d, check, relpath, content):
-        write(os.path.join(d, relpath), content)
-
-    def invoke(self, d, name, extra_env):
-        env = {"BROTHERSBE_VAULT": d, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""}
-        env.update(extra_env)
-        return run(self.script, [], env)
-
-    def evidence_path(self, check):
-        # The registry stores absolute paths resolved against the default vault;
-        # the test re-roots them into a throwaway one.
-        return os.path.relpath(check.reads[0], _telemetry.VAULT)
-
-
-TOOLS = [
-    DirTool("sbe_gate.py", _gate.GATES),
-    DirTool("sbe_design.py", _design.CHECKS, env={"SBE_DOSSIER_ROOT": ""}),
-    ScoreTool("sbe_score.py", _score.CHECKS),
-]
-
-
-def cases_for(tool, check):
-    """(case id, expected verdict, files to write, extra env) per check."""
-    out = [("a-empty-directory", "NO-DATA", {}, {})]
+def legacy_cases(tool, check):
+    """The four original shapes: absent file, declared-empty, wrong type, malformed."""
+    out = [Scenario("a-empty-directory", "a", {}, expect="NO-DATA",
+                    expect_invoked=(tool.script != "sbe_design.py"))]
+    if tool.script == "sbe_design.py":
+        # A directory that IS a dossier, so the tool cannot answer from its
+        # no-target fallback and the check itself has to produce the verdict.
+        out.append(Scenario("a2-dossier-with-a-zero-byte-intake", "a2",
+                            {"00-intake.json": ""}))
     if check.kind == "tree":
         fx = check.empty_fixture or {}
-        files = fx.get("files", {})
-        out.append(("b-declares-nothing", check.empty_expect, files,
-                    {check.reads[0]: fx.get("value", "%(dir)s")}))
+        out.append(Scenario("b-declares-nothing", "b", fx.get("files", {}),
+                            env={check.reads[0]: fx.get("value", "%(dir)s")},
+                            expect=check.empty_expect))
         return out
-    path = tool.evidence_path(check)
+    path = tool.relpath(check.reads[0])
     if check.kind == "json":
         body = json.dumps({check.item_key: []}) if check.item_key else "{}"
     elif check.kind == "jsonl":
         body = ""
     elif check.kind == "git":
         body = check.empty_fixture or ""
-    else:                       # text
+    else:
         body = ""
-    out.append(("b-declares-nothing", check.empty_expect, {path: body}, {}))
+    out.append(Scenario("b-declares-nothing", "b", {path: body}, expect=check.empty_expect))
     if check.kind == "json":
         for cid, content in WRONG_SHAPES:
-            out.append((cid, "FAIL", {path: content}, {}))
-        out.append((MALFORMED[0], "FAIL", {path: MALFORMED[1]}, {}))
+            out.append(Scenario(cid, "c", {path: content}, expect="FAIL"))
+        out.append(Scenario(MALFORMED[0], "d", {path: MALFORMED[1]}, expect="FAIL"))
     elif check.kind == "jsonl":
         for cid, content in WRONG_SHAPE_LINES:
-            out.append((cid, "FAIL", {path: content}, {}))
-        out.append((MALFORMED[0], "FAIL", {path: MALFORMED[1] + "\n"}, {}))
+            out.append(Scenario(cid, "c", {path: content}, expect="FAIL"))
+        out.append(Scenario(MALFORMED[0], "d", {path: MALFORMED[1] + "\n"}, expect="FAIL"))
     return out
 
 
+def hollow_cases(tool, check):
+    """The empty-VALUE sweep, derived from the check's own worked example."""
+    fx = check.full_fixture
+    if fx is None:
+        return []
+    files, env = fx["files"], fx.get("env", {})
+    out = [Scenario("full", "full", files, env=env, expect="PASS", forbid_pass=False)]
+
+    def variant(sid, label, rel, content):
+        # A hollowing that changed nothing is not a scenario. Emptying a subtree
+        # whose only leaf is a preserved boolean reproduces the fixture exactly,
+        # and asserting "this must not PASS" about the untouched positive example
+        # would be asserting the opposite of the sanity case two lines above.
+        if content == files[rel]:
+            return
+        merged = dict(files)
+        merged[rel] = content
+        out.append(Scenario(sid, label, merged, env=env))
+
+    for rel, content in files.items():
+        if isinstance(content, (dict, list)):
+            for tag, vname, value in EMPTY_VALUES:
+                variant("%s::*|%s" % (rel, vname), tag, rel,
+                        hollowed(content, value, keep_booleans=True))
+                for path in container_paths(content):
+                    if not path:
+                        continue
+                    variant("%s::%s/*|%s" % (rel, render(path), vname), tag, rel,
+                            replace_at(content, path,
+                                       hollowed(at(content, path), value, keep_booleans=True)))
+                for path in leaf_paths(content):
+                    variant("%s::%s|%s" % (rel, render(path), vname), tag, rel,
+                            replace_at(content, path, value))
+            for path in container_paths(content):
+                if not isinstance(at(content, path), list):
+                    continue
+                items = at(content, path)
+                variant("%s::%s=[{}]" % (rel, render(path)), "h", rel,
+                        replace_at(content, path, [{} for _ in items]))
+                variant("%s::%s=[]" % (rel, render(path)), "j", rel,
+                        replace_at(content, path, []))
+        else:
+            variant("%s::whitespace" % rel, "f", rel, "   \n")
+            for title, _body in heading_sections(content):
+                variant("%s##%s" % (rel, title), "s", rel, drop_section(content, title))
+        variant("%s::zero-bytes" % rel, "i", rel, "")
+
+    # (i) in its purest form: every file the check DECLARES it reads exists with
+    # the right name and holds nothing at all.
+    named = {tool.relpath(p): "" for p in check.reads if os.sep in p or p.endswith(
+        (".json", ".jsonl", ".md", ".txt")) or p == "APPROVAL"}
+    if named:
+        out.append(Scenario("declared-reads::zero-bytes", "i", named, env=env))
+    return out
+
+
+# ---------------------------------------------------------------------------
+
+def counts():
+    """(checks, registries, scenarios) without running anything.
+
+    Exists so a doc that prints this test's summary line can be checked against
+    it mechanically. Three shipped docs printed an eval count the suite had not
+    produced for a whole wave, which is the same defect as a stale evidence
+    string: a number asserted where nothing recomputed it.
+    """
+    mods = load_tool_modules()
+    registries, _ = discover_registries(mods)
+    checks = scenarios = regs = 0
+    for fn, attr, reg in registries:
+        tool = ADAPTERS.get((fn, attr))
+        if tool is None:
+            continue
+        regs += 1
+        for _name, check in reg.items():
+            checks += 1
+            scenarios += len(legacy_cases(tool, check)) + len(hollow_cases(tool, check))
+    return checks, regs, scenarios
+
+
 def main():
-    failures, checked, ran = [], 0, 0
-    notapplicable = []
+    mods = load_tool_modules()
+    registries, defects = discover_registries(mods)
+    failures = list(defects)
+    checked = ran = 0
+    notapplicable, exemptions, unregistered = [], [], []
+
     print("BROTHERSBE HONESTY META-TEST: no check may report PASS over evidence it never examined")
-    for tool in TOOLS:
-        print("\n%s  (%d checks in its registry)" % (tool.script, len(tool.registry)))
-        for name, check in tool.registry.items():
-            if not isinstance(check, Check):
-                failures.append("%s: %s is registered as a bare %s, not a Check declaring its "
-                                "evidence, so this test cannot cover it"
-                                % (tool.script, name, type(check).__name__))
-                print("  %-26s REGISTRY DEFECT: not a Check" % name)
-                continue
+    print("tools under test: %s" % RUN_DIR)
+
+    # Registries are discovered. One this test cannot invoke is a failure, never a skip.
+    known = {}
+    for fn, attr, reg in registries:
+        adapter = ADAPTERS.get((fn, attr))
+        if adapter is None:
+            failures.append("%s.%s is a registry of %d Check(s) that this test does not know how "
+                            "to invoke. Add an adapter in ADAPTERS; a registry nobody walks is a "
+                            "check nobody covers" % (fn, attr, len(reg)))
+            continue
+        known[(fn, attr)] = (adapter, reg)
+
+    # Every function anywhere in tools/ that can return PASS must be registered.
+    registered_fns = {c.fn for _, _, reg in registries for c in reg.values()
+                      if isinstance(c, Check)}
+    registered_pairs = {(getattr(f, "__module__", "") + ".py", f.__name__) for f in registered_fns}
+    for fn, name in pass_returning_functions(mods):
+        if (fn, name) not in registered_pairs:
+            unregistered.append("%s:%s" % (fn, name))
+    if unregistered:
+        failures.append("function(s) that can return the verdict PASS but sit in no registry, so "
+                        "no scenario in this file reaches them: %s" % ", ".join(unregistered))
+
+    for (fn, attr), (tool, reg) in sorted(known.items()):
+        print("\n%s.%s  (%d checks discovered)" % (fn, attr, len(reg)))
+        for name, check in reg.items():
             checked += 1
             if check.kind not in ("json", "jsonl"):
                 notapplicable.append("%s %s: evidence is %s, so the wrong-shape and malformed-JSON "
-                                     "cases do not apply" % (tool.script, name, check.kind))
-            for cid, expect, files, env in cases_for(tool, check):
+                                     "cases do not apply" % (fn, name, check.kind))
+            if check.full_fixture is None:
+                notapplicable.append("%s %s: no positive fixture to hollow, declared reason: %s"
+                                     % (fn, name, check.no_full_fixture))
+            for path, why in sorted(check.optional_leaves.items()):
+                exemptions.append("%s %s [%s]: %s" % (fn, name, path, why))
+            scenarios = legacy_cases(tool, check) + hollow_cases(tool, check)
+            invoked_count = 0
+            saw_pass = False
+            for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
-                    for rel, content in files.items():
-                        tool.place(d, check, rel, content)
-                    env = {k: (v % {"dir": d} if "%(dir)s" in v else v) for k, v in env.items()}
-                    out = tool.invoke(d, name, env)
+                    for rel, content in subst(sc.files, d).items():
+                        tool.place(d, rel, content)
+                    git = (check.full_fixture or {}).get("git") if sc.label == "full" else None
+                    if git:
+                        git_commit(d, git["message"])
+                    out = tool.invoke(d, name, subst(sc.env, d))
                     ran += 1
-                got = verdict_of(out.stdout, name)
+                got, line = verdict_and_evidence(out.stdout, name)
+                invoked = NOT_INVOKED not in line
+                invoked_count += invoked
+                saw_pass = saw_pass or got == "PASS"
                 bad = []
-                if got != expect:
-                    bad.append("want %s got %s" % (expect, got))
-                if got == "PASS":
+                exempt = check.optional_leaves.get(sc.sid.split("|")[0])
+                if got == "PASS" and sc.forbid_pass and not exempt:
                     bad.append("a PASS over evidence that declares nothing is the defect this "
                                "whole project exists to prevent")
+                elif sc.expect and got != sc.expect and not (exempt and got == "PASS"):
+                    bad.append("want %s got %s" % (sc.expect, got))
+                elif got not in ("PASS", "FAIL", "NO-DATA"):
+                    bad.append("no verdict line for this check at all (%s)" % got)
                 if "Traceback" in out.stderr:
                     bad.append("a traceback escaped to stderr")
                 if out.returncode != 0:
                     bad.append("advisory mode exited %d" % out.returncode)
-                mark = "ok"
+                if sc.expect_invoked and not invoked:
+                    bad.append("the scenario never reached the check: the tool answered from its "
+                               "no-target fallback")
+                mark = "ok" if not bad else ("FAILED: " + "; ".join(bad))
+                if exempt and got == "PASS":
+                    mark = "ok (declared exemption)"
                 if bad:
-                    mark = "FAILED: " + "; ".join(bad)
-                    failures.append("%s %s [%s] %s" % (tool.script, name, cid, "; ".join(bad)))
-                print("  %-26s %-26s %-9s %s" % (name, cid, got, mark))
+                    failures.append("%s %s [%s] %s" % (fn, name, sc.sid, "; ".join(bad)))
+                if not QUIET or bad:
+                    print("  %-26s %-3s %-52s %-9s %s"
+                          % (name, sc.label, sc.sid[:52], got, mark))
+            if check.full_fixture is not None and not saw_pass:
+                failures.append("%s %s: no scenario produced a PASS, so nothing here proves the "
+                                "check body ran or that its declared full_fixture is a real "
+                                "positive example" % (fn, name))
+            print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
+                                  % (invoked_count, len(scenarios))))
+
     print("\ndeclared not-applicable (printed, never skipped silently):")
     for n in notapplicable:
         print("  %s" % n)
-    print("\n%d checks enumerated from %d registries, %d scenarios run, %d failure(s)."
-          % (checked, len(TOOLS), ran, len(failures)))
+    print("\ndeclared exemptions from the empty-value sweep (each states its reason):")
+    for e in exemptions or ["none"]:
+        print("  %s" % e)
+    print("\n%d checks discovered from %d registries in %d module(s), %d scenarios run, %d failure(s)."
+          % (checked, len(known), len(mods), ran, len(failures)))
     for f in failures:
         print("  FAIL %s" % f)
     sys.exit(1 if failures else 0)
+
+
+def git_commit(d, message):
+    for cmd in (["init", "-q"], ["config", "user.email", "e@e"], ["config", "user.name", "T"]):
+        subprocess.run(["git", "-C", d] + cmd, check=True, capture_output=True)
+    subprocess.run(["git", "-C", d, "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", d, "commit", "-qm", message], check=True, capture_output=True)
 
 
 if __name__ == "__main__":
