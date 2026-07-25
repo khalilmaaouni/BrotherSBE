@@ -206,14 +206,21 @@ restore row count: before=204118 after=61" when `before` and `after_reverse` dif
 
 ### What makes the receipt hard to fake
 
-- **Resolvable rehearsal id.** `reverse.rehearsal_run_id` must be present. The word
-  resolvable is load-bearing: the id is meant to point at a rehearsal run someone can
-  look up (a CI job number, a pipeline run id), not a sentence a model typed. The gate
-  enforces presence; the review enforces that it resolves.
+- **A rehearsal id, recorded as a string.** `reverse.rehearsal_run_id` must be present
+  and must be a string, so `true` FAILs. The id is meant to point at a rehearsal run
+  someone can look up (a CI job number, a pipeline run id). The gate enforces presence
+  and type and NOTHING MORE: it does not query your orchestrator, so free text in the
+  right shape satisfies it. A human follows the pointer, or you add a CI step that
+  resolves the id and fails when it does not exist.
 - **Ran against a restore.** Both legs must set `ran_against_restore: true`. A
   migration tested against an empty scratch schema proves nothing about production; the
   flag records that the rehearsal happened against a restored copy of real data.
-- **Row-count identity.** `before` must equal `after_reverse`. A reverse that leaves
+- **Row-count identity, and the absence of it.** `before` must equal `after_reverse`,
+  and both must be recorded. A receipt with no `row_counts` at all is NO-DATA, not a
+  pass: the evidence line used to say "with matching row counts" over a receipt that
+  recorded none, which is a sentence about work nothing did. A `row_counts` block
+  carrying one side and not the other is a FAIL, because it claims a comparison and
+  does not produce it. A reverse that leaves
   the table with fewer rows than it started with is a lossy reverse, and the gate
   catches it by arithmetic, not by trust.
 
