@@ -65,12 +65,36 @@ def recommend(table, context):
             "flip_condition": table["flip"], "scores": tally}
 
 
+def load_table(path, key):
+    """Return (table, error). Every boundary here has a named failure path: a
+    missing file, a malformed file, and a table key that does not exist each
+    produce a sentence naming what is available, not a raw traceback. One table
+    ships (the architecture shape table); asking for a family that has no table
+    yet must say so, because a traceback reads as a broken tool rather than as
+    "this decision is human review until its table ships"."""
+    try:
+        with open(path) as f:
+            tables = json.load(f)
+    except OSError as e:
+        return None, "cannot read table file %s: %s" % (path, e)
+    except ValueError as e:
+        return None, "table file %s is not valid JSON: %s" % (path, e)
+    if not isinstance(tables, dict):
+        return None, "table file %s does not hold a mapping of table name to table" % path
+    if key not in tables:
+        return None, ("no table named %r in %s. Tables that ship: %s. Decision families with no table yet "
+                      "are human review, not a tool failure." % (key, path, ", ".join(sorted(tables)) or "none"))
+    return tables[key], ""
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "tables", "architecture.json")
-    tables = json.load(open(path))
     key = sys.argv[2] if len(sys.argv) > 2 else "shape"
-    table = tables[key]
+    table, err = load_table(path, key)
+    if err:
+        print("sbe_decide: %s" % err)
+        sys.exit(1)
     context = {}
     for crit in table["criteria"]:
         raw = input("%s (%s): " % (crit["name"], crit["note"])).strip()
@@ -95,4 +119,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Same wrapper as the other tools: a crash names itself and exits nonzero
+        # rather than printing a traceback that reads as an unusable tool.
+        print("sbe_decide: error %r" % (e,))
+        sys.exit(1)
