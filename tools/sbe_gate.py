@@ -15,7 +15,10 @@ The classes (ratified 2026-07-24):
             fails loudly if no snapshot id is recorded, rather than silently).
   migration A forward and a reverse migration, both with a receipt showing they
             ran against a restored copy, the reverse receipt recording a rehearsal
-            run id AS A STRING, and row counts that were recorded and that match.
+            run id AS A NON-BLANK STRING, and row counts that were RECORDED and
+            that match. Recorded, not merely keyed: two empty strings compare
+            equal, so a gate whose only emptiness test was `is None` reported
+            "1 row-count comparison(s) matched" about a pair of blanks.
             Two limits, stated because the evidence line used to overstate both:
             this gate does not resolve the rehearsal id against any job system,
             and a receipt with no row counts is NO-DATA rather than a pass,
@@ -56,7 +59,7 @@ the operating record proves pasted receipts get invented.
 import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import Check, run_guarded
+from sbe_checks import Check, run_guarded, stated
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -172,22 +175,39 @@ def gate_numbers(root):
                 problems.append("entry %d in %s is %s, not a figure object"
                                 % (checked, os.path.relpath(m, root), type(fig).__name__))
                 continue
-            label = fig.get("label", "?")
-            if not fig.get("snapshot_id"):
+            # Every field below goes through stated(), not through truthiness and
+            # not through `is None`. A manifest carrying "" or " " in every field
+            # parsed, held every required key, and cleared this gate, and the
+            # evidence line then reported a re-derivation that compared two empty
+            # strings. An empty value is an absent value.
+            label = stated(fig.get("label")) or "figure %d" % checked
+            if stated(fig.get("label")) is None:
+                problems.append("%s in %s records no label, so nothing in the report can say which "
+                                "figure was checked" % (label, os.path.relpath(m, root)))
+            if stated(fig.get("snapshot_id")) is None:
                 problems.append("%s: no snapshot_id (a live warehouse drifts; pin the read)" % label)
-            q1, q2 = fig.get("query", ""), fig.get("second_derivation", "")
-            if not q1.strip():
+            q1, q2 = stated(fig.get("query")), stated(fig.get("second_derivation"))
+            if q1 is None:
                 problems.append("%s: no query recorded, so there is nothing for the second derivation to be independent of" % label)
-            if not q2:
+            if q2 is None:
                 problems.append("%s: no independent second derivation" % label)
-            elif q1.strip() == q2.strip():
+            elif q1 is not None and str(q1).strip() == str(q2).strip():
                 problems.append("%s: second derivation is textually identical to the first (not independent)" % label)
-            r = fig.get("rerun", {})
-            if not r.get("ran"):
+            r = fig.get("rerun")
+            if not isinstance(r, dict):
+                problems.append("%s: rerun is %s, not an object recording the re-derivation"
+                                % (label, type(r).__name__))
+                continue
+            primary, secondary = stated(r.get("primary")), stated(r.get("secondary"))
+            if not stated(r.get("ran")):
                 problems.append("%s: second derivation not marked as re-run" % label)
-            elif r.get("primary") is None or r.get("secondary") is None:
-                problems.append("%s: rerun marked ran but the primary or secondary value needed to prove zero drift was not recorded" % label)
-            elif r["primary"] != r["secondary"]:
+            elif primary is None or secondary is None:
+                have = ", ".join(k for k in ("primary", "secondary") if stated(r.get(k)) is not None)
+                problems.append("%s: rerun marked ran but the value(s) needed to prove zero drift "
+                                "were not recorded (recorded: %s). Two empty values compare equal "
+                                "and prove nothing, so this is a failure and not a zero-drift pass"
+                                % (label, have or "neither"))
+            elif primary != secondary:
                 problems.append("%s: DRIFT primary=%s secondary=%s (zero drift required)" % (label, r["primary"], r["secondary"]))
     if unreadable:
         return "FAIL", ("manifest present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
@@ -228,14 +248,23 @@ def gate_migration(root):
             if not isinstance(leg, dict):
                 problems.append("%s: %s leg is %s, not an object" % (rel, direction, type(leg).__name__))
                 continue
-            if not leg.get("ran_against_restore"):
-                problems.append("%s: not run against a restored copy" % direction)
-            if direction == "reverse" and not leg.get("rehearsal_run_id"):
+            # The boolean IS the claim, so it has to be the boolean. A whitespace
+            # string is truthy, and " " satisfied this test while asserting
+            # nothing at all about a restored copy.
+            if leg.get("ran_against_restore") is not True:
+                problems.append("%s: %s is not marked as run against a restored copy (recorded %r, "
+                                "and only the value true is that claim)"
+                                % (direction, direction, leg.get("ran_against_restore")))
+            if direction != "reverse":
+                continue
+            rid = leg.get("rehearsal_run_id")
+            if stated(rid) is None:
                 problems.append("reverse: no rehearsal_run_id recorded (this gate checks the id is "
-                                "present and is a string, and cannot resolve it against a job system)")
-            elif direction == "reverse" and not isinstance(leg.get("rehearsal_run_id"), str):
+                                "present, is a string and is not blank, and cannot resolve it "
+                                "against a job system)")
+            elif not isinstance(rid, str):
                 problems.append("reverse: rehearsal_run_id is %s, not a run id string"
-                                % type(leg.get("rehearsal_run_id")).__name__)
+                                % type(rid).__name__)
         checked += 1
         # The row counts are the half that used to be asserted without being read.
         # A receipt with no row_counts had the comparison skipped and the PASS
@@ -249,10 +278,15 @@ def gate_migration(root):
                            "the reverse was supposed to restore" % rel)
         elif not isinstance(rc, dict):
             problems.append("%s: row_counts is %s, not an object" % (rel, type(rc).__name__))
-        elif rc.get("before") is None or rc.get("after_reverse") is None:
-            have = ", ".join(sorted(k for k in rc if rc.get(k) is not None)) or "neither"
-            problems.append("%s: row_counts records %s; a half-recorded count proves nothing, "
-                            "both before and after_reverse are required" % (rel, have))
+        elif stated(rc.get("before")) is None or stated(rc.get("after_reverse")) is None:
+            # `is None` was the whole emptiness test here, so a row_counts block
+            # holding "" in both fields compared equal, incremented the counter,
+            # and produced "1 row-count comparison(s) matched" about two empty
+            # strings. A count that was not recorded is not a count that matched.
+            have = ", ".join(sorted(k for k in rc if stated(rc.get(k)) is not None)) or "neither"
+            problems.append("%s: row_counts records %s; a blank or half-recorded count proves "
+                            "nothing, and both before and after_reverse are required as recorded "
+                            "values" % (rel, have))
         else:
             compared += 1
             if rc["before"] != rc["after_reverse"]:
@@ -332,13 +366,28 @@ def gate_ran(root):
                 problems.append("entry %d in %s is %s, not a check object"
                                 % (checked, os.path.relpath(m, root), type(chk).__name__))
                 continue
-            name = chk.get("name", "?")
-            if chk.get("exit_code") is None:
+            name = stated(chk.get("name")) or "check %d" % checked
+            if stated(chk.get("name")) is None:
+                problems.append("%s in %s records no name, so nothing in the report can say what "
+                                "ran" % (name, os.path.relpath(m, root)))
+            # An exit code is an integer and a duration is a number. `False`
+            # satisfied `!= 0` and `True` satisfied a truthiness test, so
+            # {"exit_code": false, "duration_ms": true} passed as "a zero exit and
+            # a nonzero duration". Booleans are neither.
+            code = chk.get("exit_code")
+            if code is None:
                 problems.append("%s: no exit code recorded (was it actually run?)" % name)
-            elif chk.get("exit_code") != 0:
-                problems.append("%s: check exited nonzero (%s)" % (name, chk["exit_code"]))
-            if not chk.get("duration_ms"):
-                problems.append("%s: zero or missing duration (a check that took no time did not run)" % name)
+            elif isinstance(code, bool) or not isinstance(code, int):
+                problems.append("%s: exit_code is %r, which is not an exit status integer"
+                                % (name, code))
+            elif code != 0:
+                problems.append("%s: check exited nonzero (%s)" % (name, code))
+            ms = chk.get("duration_ms")
+            if isinstance(ms, bool) or not isinstance(ms, (int, float)):
+                problems.append("%s: duration_ms is %r, which is not a measured duration in "
+                                "milliseconds" % (name, ms))
+            elif ms <= 0:
+                problems.append("%s: zero or negative duration (a check that took no time did not run)" % name)
     if unreadable:
         return "FAIL", ("ran-receipt present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
                         % ", ".join(unreadable))
@@ -352,21 +401,40 @@ def gate_ran(root):
     return "PASS", "%d recorded check(s), each with a zero exit and a nonzero duration" % checked
 
 
-# The registry is the contract. Each gate declares the evidence it opens and what
-# its empty state is, and evals/test_no_data_class.py enumerates exactly this dict:
-# a gate added later is covered by the meta-test the moment it is registered,
-# because it cannot be registered without the declaration.
+# The registry is the contract. Each gate declares the evidence it opens, what its
+# empty state is, and a worked receipt that SHOULD pass, and
+# evals/test_no_data_class.py discovers exactly this dict: a gate added later is
+# covered by the meta-test the moment it is registered, because it cannot be
+# registered without the declaration. The full_fixture receipts below are minimal
+# on purpose: every field in them is a field the PASS sentence asserts over, so
+# the honesty test can empty any one of them and demand the PASS goes away.
 GATES = {
-    "numbers": Check(gate_numbers, reads=(MANIFEST,), kind="json", item_key="figures"),
-    "migration": Check(gate_migration, reads=(MIGRATION_RECEIPT,), kind="json"),
+    "numbers": Check(
+        gate_numbers, reads=(MANIFEST,), kind="json", item_key="figures",
+        full_fixture={"files": {MANIFEST: {"figures": [{
+            "label": "gmv", "snapshot_id": "snap-2026-07",
+            "query": "SELECT SUM(amount) FROM orders",
+            "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+            "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]}}}),
+    "migration": Check(
+        gate_migration, reads=(MIGRATION_RECEIPT,), kind="json",
+        full_fixture={"files": {MIGRATION_RECEIPT: {
+            "forward": {"ran_against_restore": True},
+            "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+            "row_counts": {"before": 100, "after_reverse": 100}}}}),
     "approval": Check(
         gate_approval, reads=(APPROVAL_FILE,), kind="git", empty_expect="FAIL",
         empty_fixture="",
         empty_note="the presence of an APPROVAL file IS the claim that this change touches a "
                    "money or partner path. An empty one is that claim with no identity behind "
                    "it, which is a broken claim and not an absence, so it FAILs rather than "
-                   "reporting NO-DATA"),
-    "ran": Check(gate_ran, reads=(RAN_RECEIPT,), kind="json", item_key="checks"),
+                   "reporting NO-DATA",
+        full_fixture={"files": {APPROVAL_FILE: "touches the partner payout path\n"},
+                      "git": {"message": "payout batching\n\nReviewed-in: PR-99999"}}),
+    "ran": Check(
+        gate_ran, reads=(RAN_RECEIPT,), kind="json", item_key="checks",
+        full_fixture={"files": {RAN_RECEIPT: {"checks": [
+            {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]}}}),
 }
 
 
