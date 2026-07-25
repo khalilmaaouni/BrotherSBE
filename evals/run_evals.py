@@ -249,6 +249,29 @@ def d9(root):
     write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  Customer -->|places| Order\n```\n")
 
 
+# 10. A node written with bracket shape syntax that appears nowhere else in the
+# dossier must still be caught as an orphan (regex must capture bracket nodes).
+@case("orphan-node-in-bracket-syntax-caught", "diagrams", "FAIL")
+def d10(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  FakeVendor[Not A Real Entity] --> Order\n```\n")
+
+
+# 11. A legitimate erDiagram (entity-relationship syntax) whose entities all
+# appear in the data model must pass, not hard-fail with "no diagram nodes found".
+@case("er-diagram-nodes-recognized-passes", "diagrams", "PASS")
+def d11(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- CUSTOMER: system of record CRM\n"
+                                    "- ORDER: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nerDiagram\n  CUSTOMER ||--o{ ORDER : places\n```\n")
+
+
+# 12. An intake file with no tier key must be NO-DATA, never a silent PASS.
+@case("missing-tier-is-nodata", "artifacts", "NO-DATA")
+def d12(root):
+    write(root, "00-intake.json", {"answers": {}, "override": None})
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
