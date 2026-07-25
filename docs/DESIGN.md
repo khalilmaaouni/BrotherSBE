@@ -169,10 +169,12 @@ score is evidence about your warehouse.
 
 ## 6. Diagram discipline
 
-Diagrams are Mermaid, committed with the design, diffed in review. The required set
-follows the tier: T1 one context diagram; T2 adds a workflow or sequence diagram
-and an entity relationship diagram for the data delta; T3 adds system context and
-container views, the technology map, and the failover topology.
+Diagrams are Mermaid, committed with the design, diffed in review. A set worth
+writing, and human guidance rather than a gate, because nothing counts diagram
+TYPES: at T2 and above a reviewer should expect a context view, a workflow or
+sequence view, and the data delta, and should say so in review. This paragraph
+used to state that set as a per-tier requirement, which SKILL.md withdrew as a
+law claiming an enforcement nothing had.
 
 Three rules, one of them mechanical. Every node is named. Every edge says what
 flows and by what trigger or protocol. And every element that appears in a diagram

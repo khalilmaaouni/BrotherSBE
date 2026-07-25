@@ -470,7 +470,7 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md
-  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
@@ -507,7 +507,7 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  PASS     tier T3: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names
-  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
@@ -747,7 +747,7 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for
-  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality
   diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction)
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design

@@ -50,8 +50,11 @@ Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
 1. **artifacts.** Every file the tier requires exists, and the tier itself is
    re-derived from the answers stored beside it rather than believed as written. A
    tier that disagrees with its own answers and carries no override reason fails,
-   naming both values. A missing tier, no answers, or no intake file at all, is
-   NO-DATA rather than a pass.
+   naming both values. A missing tier or no answers is NO-DATA rather than a
+   pass. No intake file at all, in a directory carrying dossier artifacts, FAILS
+   and names the missing file: without a tier nothing can say which artifacts are
+   owed, and reporting an absence there made deleting one file the cheapest way
+   through the gate.
 2. **adr.** At least two rejected alternatives, plus Criteria, Decision,
    Consequences, and a "What would flip this" section. All five, or it fails.
 3. **datamodel.** Every entity names a system of record with a value; every
@@ -99,9 +102,14 @@ def compute_tier(a):
 05 06 07`, T3 all seven. `sbe_design.py` imports both functions rather than
 duplicating the rule, so the tier logic exists once.
 
-The written file carries `override` and `override_reason` fields. Both are set
-together or the design check fails the mismatch, naming the written tier and the
-computed one, which is what makes L15 a rule rather than a wish.
+The written file carries `override` and `override_reason` fields, both null,
+because the tier it writes is the tier its own answers compute and no tier was
+moved. Moving one is an edit to that file, and it sets BOTH fields: a stored tier
+that differs from the computed one with `override` still null, or with no
+reviewable reason, FAILS, and the failure names both fields, the written tier and
+the computed one. That is what makes L15 a rule rather than a wish. Only the
+reason used to be enforced, so the half-declared override was the state every
+file the tool writes starts in.
 
 ## 3. `tools/sbe_design.py`: the completeness checks
 
@@ -355,7 +363,10 @@ share. A fence closes only with an inline evidence block: the command and its la
 lines. Two parts of this are checked by `sbe_score.py` over the registries named in
 `BROTHERSBE_REGISTRIES`: `fence-hygiene` flags a live fence line in a registry
 untouched for more than two days, and `budget-vs-tier` flags a live fence line with
-no tier tag. Unset registries report NO-DATA rather than guessing. The rest of the
+no tier tag. Both see only a line containing the word "agent": a fence naming its
+writer some other way ("writer W1 on src/foo.py") is invisible to both and is
+neither passed nor failed, it is simply not seen. Unset registries report NO-DATA
+rather than guessing. The rest of the
 fence discipline is human review, and SKILL.md law L13 says so in its own text.
 
 **State on disk.** Event-time logging rather than batch-end logging; write-ahead
