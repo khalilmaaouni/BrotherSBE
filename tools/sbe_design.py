@@ -282,19 +282,41 @@ _HEADING = re.compile(r"^(#+)\s*(.*)$")
 # heading, listed here and in SKILL.md L3 so the set is reviewable and
 # extensible rather than folklore.
 _SECTION_WORDS = {
-    "Criteria": (r"criteri(?:a|on)|what (?:we|i) weighed|how (?:we|i) (?:chose|decided)|"
-                 r"what mattered|decision drivers|forces"),
-    "Decision": (r"decision|what (?:we|i) (?:are doing|chose|decided|will do)|"
-                 r"chosen (?:option|approach)|our choice|the call"),
-    "Consequences": (r"consequences|what this costs|costs?(?: and benefits)?|implications|"
-                     r"what (?:we|i) give up|impact|so what"),
-    "What would flip this": (r"what would flip|what would change (?:our|my|this) mind|"
-                             r"when (?:we|i) would revisit|revisit|reconsider|reversal|"
-                             r"what would reverse"),
+    "Criteria": ("Criteria", "Criterion", "What we weighed", "How we chose",
+                 "How we decided", "What mattered", "Decision drivers", "Forces"),
+    "Decision": ("Decision", "What we are doing", "What we chose", "What we decided",
+                 "What we will do", "Chosen option", "Chosen approach", "Our choice",
+                 "The call"),
+    "Consequences": ("Consequences", "What this costs", "Costs", "Costs and benefits",
+                     "Implications", "What we give up", "Impact", "So what"),
+    "What would flip this": ("What would flip this", "What would change our mind",
+                             "What would reverse this", "When we would revisit this",
+                             "Revisit", "Reconsider", "Reversal"),
 }
+
+
+def _heading_alternatives(spellings):
+    """One regex per section, built from the spellings a reader is shown.
+
+    Built rather than written twice, because the FAIL message names the accepted
+    set and a set that drifts from the pattern it describes is a doc claim
+    nothing recomputes. First person singular is accepted alongside the plural,
+    and a trailing "this" or "it" is optional, so "What we weighed" and "What I
+    weighed" and "When we would revisit" all land.
+    """
+    out = []
+    for s in spellings:
+        pat = re.escape(s.lower()).replace(r"\ ", r"\s+")
+        pat = pat.replace(r"we\s+", r"(?:we|i)\s+")
+        pat = re.sub(r"\\?\s*this$", r"(?:\\s+this)?", pat)
+        out.append(pat)
+    return "|".join(out)
 # Matched anywhere in the heading line, not anchored to its first word: an author
 # writes `## When would we revisit this?` as often as `## Revisit`.
-_SECTION_PATTERNS = {label: r"^#+[^\n]*\b(?:%s)" % words for label, words in _SECTION_WORDS.items()}
+_SECTION_ANCHORED = {label: r"^#+\s*(?:%s)" % _heading_alternatives(words)
+                     for label, words in _SECTION_WORDS.items()}
+_SECTION_PATTERNS = {label: r"^#+[^\n]*\b(?:%s)" % _heading_alternatives(words)
+                     for label, words in _SECTION_WORDS.items()}
 # The flip condition may also be a stated line with no heading of its own, and
 # that fallback stays narrow on purpose: a heading is a declaration, a sentence
 # in the middle of a paragraph is not, so only the explicit phrasings count.
@@ -352,36 +374,55 @@ def _rejected_alternatives(t):
     return found
 
 
+def _sections(t):
+    """(heading text, body lines) for every heading in a document, in order."""
+    out = []
+    current = None
+    for line in t.splitlines():
+        h = _HEADING.match(line)
+        if h:
+            current = (h.group(2).strip(), [])
+            out.append(current)
+        elif current is not None:
+            current[1].append(line)
+    return out
+
+
 def _section_body(t, heading_pattern):
-    """The lines under the first heading matching a pattern, or None if absent.
+    """The lines under the heading matching a pattern, or None if there is none.
 
     A heading is not a section. `^#+\\s*criteria` matched `## Criteria` with
     nothing whatsoever under it, and the ADR check then reported "criteria,
     decision, consequences and flip condition present" over four empty headings.
     That is the empty-values defect in markdown: every key present, every value
     blank.
+
+    Where more than one heading matches, the one with content wins. Matching the
+    first one made the DOCUMENT TITLE `# 03. Architecture decision record` the
+    Decision section, whose body is the blank line before `## Context`, and the
+    check then FAILed a correct ADR with "the Decision heading is present with
+    nothing under it". A section that exists lower down is the section.
     """
-    lines = t.splitlines()
-    body, capturing = [], False
-    for line in lines:
-        h = _HEADING.match(line)
-        if h:
-            if capturing:
-                break
-            capturing = bool(re.search(heading_pattern, line, re.I))
-            continue
-        if capturing:
-            body.append(line)
-    if not capturing and not body:
+    matches = [(title, body) for title, body in _sections(t)
+               if re.search(heading_pattern, "#" + title, re.I)]
+    if not matches:
         return None
-    return body
+    for _title, body in matches:
+        if [l for l in body if l.strip()]:
+            return body
+    return matches[0][1]
 
 
 def _required_section(t, label, problems):
-    body = _section_body(t, _SECTION_PATTERNS[label])
+    # Anchored first, so a heading that merely mentions the word (a title, a
+    # cross-reference) never shadows the real section; the looser match is the
+    # fallback that lets an author write "When would we revisit this?".
+    body = _section_body(t, _SECTION_ANCHORED[label])
+    if body is None:
+        body = _section_body(t, _SECTION_PATTERNS[label])
     if body is None:
         problems.append("no %s section (this heading is accepted as any of: %s)"
-                        % (label, _SECTION_WORDS[label].replace("|", ", ")))
+                        % (label, ", ".join(_SECTION_WORDS[label])))
     elif not [l for l in body if l.strip()]:
         problems.append("the %s heading is present with nothing under it, so it names nothing; a "
                         "heading is a promise of content, not content" % label)
@@ -413,13 +454,14 @@ def check_adr(root):
     # The flip condition is accepted as a heading with content or, as before this
     # change, as a stated line anywhere in the document. Only the empty-heading
     # form is new, and only that form is rejected.
-    flip_words = _SECTION_WORDS["What would flip this"]
-    flip = _section_body(t, _SECTION_PATTERNS["What would flip this"])
+    flip = _section_body(t, _SECTION_ANCHORED["What would flip this"])
+    if flip is None:
+        flip = _section_body(t, _SECTION_PATTERNS["What would flip this"])
     if flip is None:
         if not [l for l in t.splitlines() if re.search(_FLIP_IN_PROSE, l, re.I) and l.strip()]:
             problems.append("no 'What would flip this' section; an ADR without it is a tombstone "
                             "(this heading is accepted as any of: %s)"
-                            % flip_words.replace("|", ", "))
+                            % ", ".join(_SECTION_WORDS["What would flip this"]))
     elif not [l for l in flip if l.strip()]:
         problems.append("the 'What would flip this' heading is present with nothing under it, so "
                         "the ADR names no condition that would reverse the decision")

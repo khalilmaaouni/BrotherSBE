@@ -247,7 +247,10 @@ def numeric(value):
         return value
     if not isinstance(value, str):
         return None
-    text = value.strip().replace(",", "").replace("_", "").lstrip("$£€").rstrip("%")
+    # A leading currency symbol and thousands separators are formatting, not
+    # meaning. Only the ASCII "$" is stripped: this repository is ASCII by rule,
+    # and a receipt written in another currency records the number either way.
+    text = value.strip().replace(",", "").replace("_", "").lstrip("$").rstrip("%")
     try:
         return float(text)
     except ValueError:
