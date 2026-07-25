@@ -536,7 +536,7 @@ def s3(root):
 
 @case("lints-catch-a-swallowed-error", "lints", "FAIL")
 def s4(root):
-    write(root, "bad.py", "try:\n    f()\nexcept:\n    pass\n")
+    write(root, "bad.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
     return run_score_lints([root])
 
 
