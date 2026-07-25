@@ -51,7 +51,7 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
-import os, re
+import json, math, os, re
 
 KINDS = ("json", "jsonl", "text", "tree", "git")
 
@@ -65,37 +65,108 @@ KINDS = ("json", "jsonl", "text", "tree", "git")
 # team that cannot fix the code the gate fails on and cannot waive it switches the
 # gate off, which costs more than any hole this project has closed.
 #
-# Names, plus the two structural tells below, because a virtualenv is whatever
-# somebody named it.
-SKIP_DIRS = frozenset((
-    ".git", ".hg", ".svn",
-    "node_modules", "bower_components", "vendor", "vendored", "third_party", "thirdparty",
-    "__pycache__", ".venv", "venv", ".virtualenv", "virtualenv", ".tox", ".nox", ".direnv",
-    "site-packages", "dist-packages", ".eggs",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".pyre", ".ipynb_checkpoints",
-))
+# And then the cure had the disease. The list was a list of NAMES, so `mv plain
+# vendor` turned two FAILs into two NO-DATAs at exit 0, and the evidence line
+# said "no directory contains 00-intake.json" about a tree that held one.
+# Discovery that depends on what somebody named a directory is the defect this
+# file's own docstrings say discovery must not have.
+#
+# So: a directory is pruned when something INSIDE it identifies it as somebody
+# else's code or a generated cache. A name may corroborate a marker. A name may
+# never prune on its own. The consequence is stated rather than hidden: a hand
+# vendored tree carrying no marker IS walked, and the lint reads it.
+SKIP_MARKERS = ("pyvenv.cfg", "CACHEDIR.TAG")
+NODE_MARKERS = (".package-lock.json", ".yarn-integrity", ".modules.yaml", ".bin")
 
 
-def is_skipped_dir(parent, name):
-    """True when this directory holds somebody else's code rather than this repo's.
+def skip_reason(parent, name):
+    """Why this directory holds somebody else's code, or None when it is ours.
 
-    By detection as well as by name: a directory carrying `pyvenv.cfg` IS a
-    virtualenv whatever it is called, and any path component `site-packages` or
-    `dist-packages` is installed third-party code. Matching on the exact names
-    `.venv` and `venv` was the whole defence, and renaming the environment
-    defeated it.
+    Every branch reads the directory's CONTENTS. `node_modules` is the one place
+    a name appears at all, and it appears next to a marker, never instead of one.
     """
-    if name in SKIP_DIRS:
-        return True
     path = os.path.join(parent, name)
-    if os.path.isfile(os.path.join(path, "pyvenv.cfg")):
-        return True
-    return False
+    try:
+        entries = set(os.listdir(path))
+    except OSError:
+        # Not readable is not the same as not ours. Left in the walk, where the
+        # caller's own error handling reports it.
+        return None
+    if "pyvenv.cfg" in entries:
+        return "a virtualenv (it carries pyvenv.cfg)"
+    if any(e.endswith((".dist-info", ".egg-info", ".egg-link")) for e in entries):
+        return "installed third-party packages (it carries .dist-info or .egg-info entries)"
+    if name in ("site-packages", "dist-packages") and entries:
+        # Structural, not nominal: an installed-packages directory sits under a
+        # `lib/pythonX.Y/` path, which is a shape a repository does not have by
+        # accident. A directory called site-packages anywhere else is walked.
+        parts = os.path.normpath(parent).split(os.sep)[-3:]
+        if any(p in ("lib", "lib64") or p.startswith("python") for p in parts):
+            return "installed third-party packages (a %s directory under a lib/pythonX.Y path)" % name
+    if "CACHEDIR.TAG" in entries:
+        return "a tool cache (it carries CACHEDIR.TAG)"
+    if {"HEAD", "objects", "refs"} <= entries:
+        return "a version-control object store (it carries HEAD, objects and refs)"
+    if entries and all(e.endswith((".pyc", ".pyo")) for e in entries):
+        return "compiled bytecode only (every entry is a .pyc or .pyo)"
+    if name == "node_modules" and entries:
+        if entries & set(NODE_MARKERS):
+            return "installed node packages (a node_modules tree carrying package metadata)"
+        for e in sorted(entries)[:20]:
+            if os.path.isfile(os.path.join(path, e, "package.json")):
+                return "installed node packages (its entries carry their own package.json)"
+    return None
 
 
-def prune_dirs(parent, dirnames):
-    """The subdirectories of `parent` worth walking, sorted, for os.walk's dns[:]."""
-    return sorted(d for d in dirnames if not is_skipped_dir(parent, d))
+class Pruner:
+    """os.walk pruning that keeps a record of what it removed, and why.
+
+    The second half of the fix, and the half that matters more. Pruning is how a
+    FAIL becomes a NO-DATA in silence: the check opens nothing, reports an
+    absence, and the sentence it prints is false about the tree. Every walker in
+    this project now prunes through one of these and prints `note()` on its
+    verdict, so a directory that was not examined is a directory a reader is
+    told about.
+    """
+
+    LIMIT = 4000        # directories inspected while looking for hidden evidence
+
+    def __init__(self):
+        self.pruned = []            # (path, reason)
+
+    def __call__(self, parent, dirnames):
+        """For os.walk's `dns[:] = pruner(dp, dns)`."""
+        keep = []
+        for d in sorted(dirnames):
+            why = skip_reason(parent, d)
+            if why is None:
+                keep.append(d)
+            else:
+                self.pruned.append((os.path.join(parent, d), why))
+        return keep
+
+    def hidden(self, wanted):
+        """Pruned trees that hold a file this walk was looking for, `wanted(name)`."""
+        out, budget = [], self.LIMIT
+        for path, why in self.pruned:
+            for _dp, _dns, fns in os.walk(path):
+                budget -= 1
+                if budget <= 0:
+                    break
+                if any(wanted(f) for f in fns):
+                    out.append("%s (%s)" % (path, why))
+                    break
+        return sorted(set(out))
+
+    def note(self, wanted):
+        """The sentence a verdict carries when pruning removed candidate evidence."""
+        h = self.hidden(wanted)
+        if not h:
+            return ""
+        return ("; %d pruned director(y/ies) hold file(s) this check reads and were NOT examined, "
+                "so this verdict does not cover them: %s" % (len(h), "; ".join(h[:4])))
+
+
 VERDICTS = ("PASS", "FAIL", "NO-DATA")
 
 
@@ -207,6 +278,33 @@ VACUOUS_VALUES = frozenset((
     "not decided", "undecided", "not known", "unclear",
     "to be decided", "to be determined",
 ))
+
+# The scoping decision, in one place, because the list above was being applied to
+# things that are not evidence fields at all.
+#
+# `pending` is a vacuous answer in a receipt and the standard first state of every
+# payment, order, job and queue in existence. A reviewer modelled a payment, named
+# its first state `pending`, and the diagram check told them the state "appears
+# nowhere else in the dossier" while it sat declared four lines above under a
+# heading called Lifecycle. The implied fix was to rename a domain concept to
+# satisfy a linter, and SKILL.md L5 already carries the sentence that condemns
+# that: a check that makes the honest artifact fail is a check that teaches people
+# to corrupt it.
+#
+# So there are two populations and they get two tests:
+#
+#   EVIDENCE FIELDS   things a person fills in to prove work happened: a
+#                     snapshot id, a rehearsal run id, an override reason, a
+#                     system of record, an intake answer. `answered()` and
+#                     `vacuous()` apply the whole list to these.
+#   DOMAIN CONTENT    things the engineer authored as the subject matter: entity
+#                     names, state names, diagram node labels, component names.
+#                     `domain_vacuous()` applies the list MINUS the words below.
+#
+# A word belongs here when an engineer can honestly mean it as a name in a model.
+# `todo`, `tbd`, `xxx`, `foo` and the punctuation tokens are notes to the author
+# in any context, so they stay refused everywhere.
+DOMAIN_WORDS = frozenset(("none", "pending", "unknown", "unclear", "undecided", "null", "nil"))
 _LEADING_COPULA = re.compile(r"^(?:it\s+is|is|was|are)\s+", re.I)
 
 # The yes/no vocabulary, in one place, for the same reason VACUOUS_VALUES is in
@@ -305,7 +403,25 @@ def vacuous(value, allow=()):
     v = _LEADING_COPULA.sub("", v).strip().casefold()
     if v in {a.casefold() for a in allow}:
         return False
-    return v in VACUOUS_VALUES or not v
+    if not v:
+        return True
+    # A value with no letter and no digit anywhere in it records nothing, whatever
+    # the punctuation spells. The list carried "-", "--", "?" and "???" one at a
+    # time and a lone "#" walked past all four of them, which is the list-of-
+    # instances failure this project keeps finding one level in. This is the rule
+    # those four entries were reaching for, and it holds for the ones nobody typed.
+    if not any(ch.isalnum() for ch in v):
+        return True
+    return v in VACUOUS_VALUES
+
+
+def domain_vacuous(value):
+    """True when this DOMAIN NAME is a placeholder rather than a thing.
+
+    The scoped test: see DOMAIN_WORDS above. An entity called TBD is a note to the
+    author; a state called `pending` is a payment lifecycle.
+    """
+    return vacuous(value, allow=DOMAIN_WORDS)
 
 
 def answered(value, allow=()):
@@ -319,6 +435,63 @@ def answered(value, allow=()):
     if isinstance(v, str) and vacuous(v, allow):
         return None
     return v
+
+
+def answered_as(value, reduce, allow=()):
+    """The answer this field records once it is reduced to what it actually says.
+
+    ORDER, and the order was wrong everywhere. The vacuity test ran on the RAW
+    value and the reduction ran after it, so every reduction this project performs
+    could manufacture a fresh non-answer that nothing rechecked. The shipped case:
+    `second_derivation: "#"` is not blank, is not in VACUOUS_VALUES and survives
+    `answered()`; `derivation_fold` then turns it into the empty string; the gate
+    compared "" against a real query, found them different, and printed the
+    strongest sentence this project owns over a derivation that computes nothing.
+    The same hole exists for every reduction: strip comments, strip a currency
+    symbol, split a table cell, fold a wrapped line.
+
+    Reduce first. Test second. This is the one function that does it in that
+    order, and the call sites that reduce anything go through it.
+    """
+    v = stated(value)
+    if v is None:
+        return None
+    reduced = reduce(v) if isinstance(v, str) else v
+    if stated(reduced) is None:
+        return None
+    if isinstance(reduced, str) and vacuous(reduced, allow):
+        return None
+    return reduced
+
+
+def distinct(items):
+    """(the items that are actually different, how many duplicates were folded).
+
+    ONE rule for every threshold in this project, here, because `gate_numbers`
+    learned it and its three siblings did not: five identical rows are one row
+    written five times, and a count printed in an evidence line is what a reader
+    takes as the amount of work that was checked. Two rejected alternatives that
+    are the same sentence twice are one alternative; five sealed predictions that
+    are the same prediction are one prediction.
+
+    Strings are compared folded (case and whitespace), because that is what makes
+    two spellings of one sentence one sentence. Everything else is compared by its
+    JSON, and by repr when it has none.
+    """
+    seen, keys = [], set()
+    for it in items:
+        if isinstance(it, str):
+            key = fold(it)
+        else:
+            try:
+                key = json.dumps(it, sort_keys=True)
+            except (TypeError, ValueError):
+                key = repr(it)
+        if key in keys:
+            continue
+        keys.add(key)
+        seen.append(it)
+    return seen, len(items) - len(seen)
 
 
 def all_vacuous(text):
@@ -349,7 +522,7 @@ def numeric(value):
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return value
+        return None if _not_a_measurement(value) else value
     if not isinstance(value, str):
         return None
     # A leading currency symbol and thousands separators are formatting, not
@@ -357,11 +530,37 @@ def numeric(value):
     # and a receipt written in another currency records the number either way.
     text = value.strip().replace(",", "").replace("_", "").lstrip("$").rstrip("%")
     try:
-        return float(text)
+        n = float(text)
     except ValueError:
         # Not swallowed: None is the answer, and every caller turns it into a
         # named FAIL that quotes the value it could not read as a number.
         return None
+    # Tested AFTER the parse, which is the order this file gets wrong everywhere
+    # it is not looked at: `float()` accepts "inf", "Infinity", "1e400" and "nan"
+    # and json.loads accepts bare Infinity and NaN, so `{"primary": "inf",
+    # "secondary": "inf"}` compared equal and bought "re-run to zero drift", and
+    # `inf`/`inf` row counts bought "1 row-count comparison(s) matched". An
+    # infinity is not a measurement and neither is a not-a-number.
+    return None if _not_a_measurement(n) else n
+
+
+def _not_a_measurement(n):
+    return isinstance(n, float) and (math.isinf(n) or math.isnan(n))
+
+
+def count(value):
+    """The count this field records, or None if it does not record one.
+
+    A count is a whole number of things. `numeric()` is the right test for a
+    figure, which may be a rate, a ratio or a negative delta, and the wrong test
+    for a row count: `-1`/`-1` compared equal and produced "1 row-count
+    comparison(s) matched", and minus one rows is not a count any table has ever
+    had. Neither is two and a half rows.
+    """
+    n = numeric(value)
+    if n is None or n < 0 or n != int(n):
+        return None
+    return int(n)
 
 
 def run_guarded(name, check, *args):
