@@ -5,8 +5,27 @@ The tier decides how much dossier a task gets, which is the mechanism behind
 "brief always": a one line fix produces nothing, a new system produces the full
 set. The rule is a decision table, not a judgment, so two engineers classifying
 the same task land on the same tier.
+
+Every answer is read for MEANING, never for truthiness. This function used to
+test `a.get("touches_sensitive")` directly, and the tool's own prompts teach the
+answers "y" and "n", so an intake written in the vocabulary this file asks for
+computed the wrong tier in both directions at once: five answers of "n" computed
+T3, because the string "n" is truthy, and `consumers: "several"` computed T0,
+because it matched neither "some" nor "many" and fell through to the lowest tier.
+The first blocks honest work at maximum ceremony, which is how a gate gets
+switched off; the second silently decides that a change owes no evidence at all,
+and the re-derivation in sbe_design.py then agrees with it, because it recomputes
+the same wrong answer from the same unread strings.
+
+So the vocabulary is explicit, it is shared (sbe_checks.boolean_answer, beside
+VACUOUS_VALUES, imported by everything), and a value outside it is REFUSED by
+name rather than guessed at, exactly as sbe_decide.py reports an unrecognized
+criterion value instead of ignoring it.
 """
 import json, os, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sbe_checks import boolean_answer, BOOLEAN_VOCABULARY
 
 QUESTIONS = [
     ("changes_contract", "Does this change a data model, an API contract, or a file interface others depend on? (y/n) "),
@@ -17,15 +36,69 @@ QUESTIONS = [
 ]
 
 TIERS = ("T0", "T1", "T2", "T3")
+# The one question that is not a yes/no. Its vocabulary is named here so the
+# prompt, the refusal message and the rule all read from the same tuple.
+CONSUMERS = "consumers"
+CONSUMER_VALUES = ("none", "some", "many")
+
+
+class UnreadableIntake(ValueError):
+    """One or more answers the tier rule could not interpret, named one per line.
+
+    Raised rather than defaulted. A tier is the size of the evidence a change
+    owes, so guessing at an answer nobody can read is guessing at how much of
+    this project's machinery applies, and the two guesses available (treat it as
+    a yes, treat it as a no) are the two failures this class exists to prevent.
+    """
+
+    def __init__(self, problems):
+        self.problems = list(problems)
+        ValueError.__init__(self, "; ".join(self.problems))
+
+
+def read_answers(a):
+    """(values, problems): every answer as the meaning it records, or named as unreadable.
+
+    `values` holds only the answers that were read. `problems` holds one sentence
+    per answer that was not, naming the field, quoting the value received, and
+    listing the vocabulary that would have been accepted, so a typo is
+    distinguishable from an omission and from a lie.
+    """
+    values, problems = {}, []
+    for key, _prompt in QUESTIONS:
+        raw = (a or {}).get(key)
+        if key == CONSUMERS:
+            v = " ".join(str(raw).split()).casefold() if isinstance(raw, str) else raw
+            if v in CONSUMER_VALUES:
+                values[key] = v
+            else:
+                problems.append("%s=%r is not a recognized value (accepted: %s)"
+                                % (key, raw, ", ".join(CONSUMER_VALUES)))
+            continue
+        b = boolean_answer(raw)
+        if b is None:
+            problems.append("%s=%r is not a recognized value (accepted: %s, or a JSON boolean)"
+                            % (key, raw, ", ".join(BOOLEAN_VOCABULARY)))
+        else:
+            values[key] = b
+    return values, problems
 
 
 def compute_tier(a):
-    """Named inputs, one output. Highest matching rule wins."""
-    if a.get("touches_sensitive") or not a.get("reversible_under_hour"):
+    """Named inputs, one output. Highest matching rule wins.
+
+    Raises UnreadableIntake if any of the five answers is not in the accepted
+    vocabulary. There is no lenient mode: the caller that wants to report the
+    problem rather than raise calls read_answers() and prints the sentences.
+    """
+    v, problems = read_answers(a)
+    if problems:
+        raise UnreadableIntake(problems)
+    if v["touches_sensitive"] or not v["reversible_under_hour"]:
         return "T3"
-    if a.get("changes_contract") or a.get("consumers") == "many":
+    if v["changes_contract"] or v[CONSUMERS] == "many":
         return "T2"
-    if a.get("crosses_boundary") or a.get("consumers") == "some":
+    if v["crosses_boundary"] or v[CONSUMERS] == "some":
         return "T1"
     return "T0"
 
@@ -35,14 +108,40 @@ REQUIRED = {"T0": [], "T1": ["01"], "T2": ["01", "02", "03", "05", "06", "07"],
 
 
 def required_artifacts(tier):
-    return REQUIRED.get(tier, [])
+    """The artifact numbers this tier owes. An unknown tier is refused, not zero.
+
+    Returning [] for a tier outside TIERS made "this tier requires nothing" the
+    default answer for a typo, and the one caller that stands between this
+    function and a silent no-requirement is a single `if` in another file.
+    """
+    if tier not in REQUIRED:
+        raise ValueError("unknown tier %r (expected one of %s); a tier nothing recognizes "
+                         "requires nothing, which is the wrong default for a rule that "
+                         "decides how much evidence a change owes" % (tier, ", ".join(TIERS)))
+    return REQUIRED[tier]
+
+
+def ask(key, prompt):
+    """One question, re-asked until the answer is in the accepted vocabulary.
+
+    The prompt teaches y/n and the file used to accept anything, reading only
+    whether the reply began with the letter y: "nope" was a no and so was
+    "yes, but only in staging". A reply this tool cannot read is refused here,
+    where the person who typed it is still sitting there, rather than written to
+    00-intake.json for a gate to misread three commits later.
+    """
+    while True:
+        raw = input(prompt)
+        values, problems = read_answers({key: raw})
+        if key in values:
+            return values[key]
+        print("  %s" % next(p for p in problems if p.startswith(key + "=")))
 
 
 def main():
     answers = {}
     for key, prompt in QUESTIONS:
-        raw = input(prompt).strip().lower()
-        answers[key] = raw if key == "consumers" else raw.startswith("y")
+        answers[key] = ask(key, prompt)
     tier = compute_tier(answers)
     out = {"answers": answers, "tier": tier, "override": None, "override_reason": None}
     path = os.path.join(".", "00-intake.json")

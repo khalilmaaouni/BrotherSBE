@@ -7,7 +7,7 @@ tested against the exact defects the operating record produced.
 
 Every fixture is generalized: no client, employer, or private project appears.
 """
-import json, os, sys, tempfile, subprocess
+import fnmatch, json, os, sys, tempfile, subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "..", "tools", "sbe_gate.py")
@@ -83,6 +83,75 @@ def t4(root):
     return _intake.compute_tier({"changes_contract": False, "crosses_boundary": True,
                                  "reversible_under_hour": True, "touches_sensitive": False,
                                  "consumers": "none"})
+
+
+def _tier_or_refusal(answers):
+    """The tier, or the sentence naming the answer the rule refused to interpret."""
+    try:
+        return _intake.compute_tier(answers)
+    except _intake.UnreadableIntake as e:
+        return "REFUSED: %s" % e
+
+
+@case("tier-reads-the-y-n-vocabulary-its-own-prompt-teaches", "tier", "T0")
+def t5(root):
+    # Every answer honest, every answer written the way the tool asks for it. This
+    # computed T3 (the maximum) because the string "n" is truthy, so an engineer
+    # answering no to all five questions was handed seven artifacts of ceremony,
+    # and a gate that blocks honest work is a gate that gets switched off.
+    return _tier_or_refusal({"changes_contract": "n", "crosses_boundary": "n",
+                             "reversible_under_hour": "y", "touches_sensitive": "n",
+                             "consumers": "none"})
+
+
+@case("tier-no-to-reversible-is-a-no-not-a-yes", "tier", "T3")
+def t6(root):
+    # The reproduction from the review, in the direction that hides work rather
+    # than inflating it: "no, this is not reversible in under an hour" is the T3
+    # rule's own trigger, and the string "no" being truthy computed T0, which
+    # requires no artifact at all and makes every design check report NO-DATA at
+    # exit 0.
+    return _tier_or_refusal({"changes_contract": False, "crosses_boundary": False,
+                             "reversible_under_hour": "no", "touches_sensitive": False,
+                             "consumers": "none"})
+
+
+@case("tier-refuses-a-consumers-value-it-does-not-know", "tier",
+      "REFUSED: consumers='several' is not a recognized value (accepted: none, some, many)")
+def t7(root):
+    # "several" matched neither "some" nor "many" and fell through to the lowest
+    # tier. An unrecognized value must never quietly mean no risk; it is reported
+    # as unrecognized, exactly as sbe_decide.py reports one.
+    return _tier_or_refusal({"changes_contract": False, "crosses_boundary": False,
+                             "reversible_under_hour": True, "touches_sensitive": False,
+                             "consumers": "several"})
+
+
+@case("tier-refuses-an-answer-outside-the-yes-no-vocabulary", "tier",
+      "REFUSED: touches_sensitive='maybe' is not a recognized value "
+      "(accepted: false, n, no, true, y, yes, or a JSON boolean)")
+def t8(root):
+    return _tier_or_refusal({"changes_contract": False, "crosses_boundary": False,
+                             "reversible_under_hour": True, "touches_sensitive": "maybe",
+                             "consumers": "none"})
+
+
+@case("tier-refuses-a-blank-answer-rather-than-reading-it-as-a-no", "tier",
+      "REFUSED: crosses_boundary='' is not a recognized value "
+      "(accepted: false, n, no, true, y, yes, or a JSON boolean)")
+def t9(root):
+    return _tier_or_refusal({"changes_contract": False, "crosses_boundary": "",
+                             "reversible_under_hour": True, "touches_sensitive": False,
+                             "consumers": "none"})
+
+
+@case("an-unknown-tier-is-refused-rather-than-owing-no-artifact", "tier",
+      "REFUSED: unknown tier 'T9'")
+def t10(root):
+    try:
+        return _intake.required_artifacts("T9")
+    except ValueError as e:
+        return "REFUSED: %s" % str(e).split(" (expected")[0]
 
 
 # 1. The filed model that overstated a five year total against its own components.
@@ -1119,6 +1188,39 @@ def v13(root):
         "touches_sensitive": False, "consumers": "none"}, "override": None})
 
 
+@case("an-intake-answering-no-in-words-does-not-collapse-a-t3-to-a-t0", "artifacts", "FAIL")
+def v13b(root):
+    # The whole of C1 in one file. Four honest booleans, one honest answer written
+    # as the word the prompt asks for, and the tier field agreeing with what the
+    # truthiness rule computed from it: tier T0, no artifact owed, every design
+    # check NO-DATA, --strict --strict-waivers exit 0. The re-derivation whose job
+    # is to catch a hand-edited tier agreed, because it made the same mistake.
+    write(root, "00-intake.json", {"tier": "T0", "answers": {
+        "changes_contract": False, "crosses_boundary": False,
+        "reversible_under_hour": "no", "touches_sensitive": False,
+        "consumers": "none"}, "override": None, "override_reason": None})
+
+
+@case("an-intake-whose-consumers-value-nothing-recognizes-fails", "artifacts", "FAIL")
+def v13c(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": {
+        "changes_contract": False, "crosses_boundary": False,
+        "reversible_under_hour": True, "touches_sensitive": False,
+        "consumers": "several"}, "override": None, "override_reason": None})
+
+
+@case("an-honest-intake-written-entirely-in-y-n-still-passes", "artifacts", "PASS")
+def v13d(root):
+    # The other half of the same fix, and the half that decides whether the gate
+    # survives contact with a team: an intake in the vocabulary the tool's own
+    # prompt teaches, honest in every answer, must pass rather than be argued with.
+    write(root, "00-intake.json", {"tier": "T1", "answers": {
+        "changes_contract": "n", "crosses_boundary": "Y",
+        "reversible_under_hour": "yes", "touches_sensitive": "no",
+        "consumers": "None"}, "override": None, "override_reason": None})
+    write(root, "01-purpose.md", PURPOSE)
+
+
 @case("an-artifact-of-headings-only-does-not-clear-a-tier", "artifacts", "FAIL")
 def v14(root):
     write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
@@ -1654,7 +1756,12 @@ SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-C
                 # opens nothing is the absent-file defect in a tuple.
                 "docs/guides/03-work-doctrines.md", "docs/guides/04-teams-and-evolution.md",
                 "docs/guides/05-a-worked-engagement.md", "evals/README.md", "DIGEST.md",
-                "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.md")
+                # STATE.md was named here and is excluded by .gitignore, so it is in
+                # nobody's clone. The guard below caught it as an absent file, and
+                # only in a fresh clone: on the author's machine the untracked file
+                # was present, the suite was green, and CI was red on arrival. The
+                # shippable artifact is the template, so the template is what ships.
+                "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.template.md")
 _REPO = os.path.abspath(os.path.join(HERE, ".."))
 
 
@@ -1700,6 +1807,53 @@ def dc2(root):
 def dc0(root):
     missing = [rel for rel in SHIPPED_DOCS if not os.path.isfile(os.path.join(_REPO, rel))]
     return "consistent" if not missing else "SHIPPED_DOCS names %s, which opens nothing" % missing
+
+
+@case("every-shipped-doc-path-in-this-suite-is-actually-shipped", "docs", "consistent")
+def dc6(root):
+    """A path this suite depends on has to exist in the reader's copy, not only here.
+
+    `STATE.md` was in SHIPPED_DOCS and in `.gitignore` at the same time. It is
+    therefore in no clone of this repository, so the guard above FAILed for every
+    reader and passed for the one machine that happened to hold the untracked
+    file: the shipped CI was red on its first pull request, on a step unrelated to
+    the change, with an error naming a file the reader cannot find. Opening a file
+    is not evidence that the file ships. This asks the two questions that are, and
+    a path that answers neither is named here rather than discovered by a stranger.
+    """
+    problems = []
+    tracked = None
+    try:
+        out = subprocess.run(["git", "-C", _REPO, "ls-files", "-z", "--"] + list(SHIPPED_DOCS),
+                             capture_output=True, text=True)
+        if out.returncode == 0:
+            tracked = set(p for p in out.stdout.split("\0") if p)
+    except OSError:
+        # Not swallowed: `tracked` stays None and the .gitignore reading below is
+        # what runs, and the absence of git is reported in the evidence.
+        tracked = None
+    if tracked is not None:
+        problems += ["%s is not tracked by git, so it is in nobody's clone" % rel
+                     for rel in SHIPPED_DOCS if rel not in tracked]
+    # The .gitignore reading runs either way, because a source tarball has no git
+    # and a guard that can only run in a working repository is the same blindness
+    # one layer out. Plain patterns only: a name, or a name anchored to the root.
+    ignore = os.path.join(_REPO, ".gitignore")
+    patterns = []
+    if os.path.isfile(ignore):
+        for line in open(ignore, errors="replace").read().splitlines():
+            s = line.strip()
+            if s and not s.startswith(("#", "!")):
+                patterns.append(s.strip("/"))
+    elif tracked is None:
+        return ("neither git nor a .gitignore is readable here, so whether these paths ship "
+                "could not be checked at all; this is reported rather than passed over")
+    for rel in SHIPPED_DOCS:
+        for pat in patterns:
+            if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(os.path.basename(rel), pat):
+                problems.append("%s is excluded by .gitignore rule %r, so it is in nobody's clone"
+                                % (rel, pat))
+    return "consistent" if not problems else "; ".join(sorted(set(problems))[:4])
 
 
 @case("no-copy-ready-ci-block-shows-fewer-steps-than-the-shipped-workflow", "docs", "consistent")

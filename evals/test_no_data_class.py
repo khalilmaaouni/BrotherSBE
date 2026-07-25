@@ -112,6 +112,26 @@ EMPTY_VALUES = [("e", "empty-string", ""), ("f", "whitespace", "   "), ("g", "nu
 # can prove and a list cannot.
 VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")]
 
+# Round five, and the first one that is not about emptiness at all. Every sweep
+# above replaces a value with a value that says NOTHING. This one replaces a
+# boolean with a well-formed word that says the OPPOSITE, which is the shape the
+# whole sweep was blind to: the intake asks its questions as "(y/n)", read the
+# answers for Python truthiness, and so an answer of "no" to "is this reversible
+# in under an hour" computed the LOWEST tier, T0 required no artifact, every
+# design check reported NO-DATA, and the re-derivation that exists to catch a
+# hand-edited tier recomputed the same wrong tier from the same unread string and
+# agreed with the file. Nothing in this test could have caught that, because
+# every scenario it generated was a form of blank.
+#
+# The rule: a boolean in a worked positive example is a CLAIM. Replacing it with
+# a word meaning the opposite of that claim must not leave the verdict at PASS.
+# The same-meaning direction is deliberately NOT swept here: the gates hold that
+# only the JSON boolean true is the claim (SKILL.md L14), so "yes" correctly
+# fails there while it correctly reads as a yes in the intake, and one sweep
+# cannot assert both. That direction is covered by named cases in
+# evals/run_evals.py instead.
+OPPOSITE_WORDS = {True: ("no", "false"), False: ("yes", "true")}
+
 
 # ---------------------------------------------------------------------------
 # Registry discovery
@@ -543,6 +563,13 @@ def hollow_cases(tool, check):
                 for path in leaf_paths(content):
                     variant("%s::%s|%s" % (rel, render(path), vname), tag, rel,
                             replace_at(content, path, value))
+            for path in leaf_paths(content):
+                leaf = at(content, path)
+                if not isinstance(leaf, bool):
+                    continue
+                for word in OPPOSITE_WORDS[leaf]:
+                    variant("%s::%s|says-%s" % (rel, render(path), word), "t", rel,
+                            replace_at(content, path, word))
             for path in container_paths(content):
                 if not isinstance(at(content, path), list):
                     continue
