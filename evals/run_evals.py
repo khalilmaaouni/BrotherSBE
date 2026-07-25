@@ -317,6 +317,14 @@ def a5(root):
     return r["verdict"]
 
 
+# A non-numeric value for a number criterion must not crash; it must land in
+# unrecognized, just like an unrecognized choice value.
+@case("non-numeric-number-criterion-is-unrecognized", "decide", "unrecognized")
+def a6(root):
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": "notanumber"})
+    return "unrecognized" if r["unrecognized"] and not r["deciding_criteria"] else "fail"
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
