@@ -30,14 +30,26 @@ import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
-from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous, prune_dirs
+from sbe_checks import (Check, run_guarded, answered, vacuous, domain_vacuous, all_vacuous,
+                        distinct, Pruner)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
     "04": "04-technology-map.md", "05": "05-data-model.md",
     "06": "06-diagrams.md", "07": "07-verification.md",
 }
-CARDINALITIES = ("one-to-one", "one-to-many", "many-to-one", "many-to-many")
+# How a data model is allowed to write a cardinality. Four spellings shipped, and
+# `1:N`, `N:1` and `1..*` were reported as "has no cardinality" about lines that
+# carry one, with no accepted set named anywhere in the message. Crow's-foot
+# shorthand and UML multiplicity are how data models are actually annotated, and a
+# gate that rejects the two most common notations in the discipline is a gate that
+# gets switched off. Named here, printed in the FAIL text, compiled below.
+CARDINALITY_FORMS = (
+    "one-to-one, one-to-many, many-to-one, many-to-many (hyphens or spaces)",
+    "1:1, 1:N, N:1, N:M, 1:many (crow's foot shorthand)",
+    "1..1, 0..1, 1..*, 0..* (UML multiplicity)",
+    "1-to-many, N to 1 and the other mixed spellings of the same two ends",
+)
 INTAKE = "00-intake.json"
 # Every shipped template carries this marker. Deleting it is part of filling the
 # section in, so a dossier copied wholesale and never edited fails with the
@@ -117,6 +129,115 @@ def present(root, name):
     # on purpose: rejecting "Fails freshness." would be rejecting honest work.
     body = " ".join(l.strip() for l in _substantive_lines(t))
     return len(body) >= ARTIFACT_MIN_CHARS and len(body.split()) >= ARTIFACT_MIN_WORDS
+
+
+# Words that carry no subject matter. A coherence test built on shared words has
+# to know which words are shared by every document in the world, or "the system
+# changes the data" would tie a banana to a tractor.
+_COMMON_WORDS = frozenset("""
+about above after again against all also and any are because been before being
+below between both but can cannot could did does doing done down during each
+either else etc even every few for from further had has have having here how
+however into its itself just less like made make many may might more most must
+need needs neither never new not now off once only onto other others ought our
+ours out over own per rather same shall should since some such than that the
+their theirs them then there these they this those through thus too under until
+upon use used uses using very was way well were what when where whether which
+while who whom whose why will with within without would you your yours
+change changes changed data date day days design detail details document
+documents each end ends example examples file files first form forms general
+goal goals group groups hour hours idea ideas info information item items
+level levels line lines list lists main model models name named names next
+note notes number numbers order orders page pages part parts people phase
+phases place places plan plans point points process processes product products
+project projects purpose reason reasons record records result results rule
+rules run runs same section sections service services set sets side sign
+simple site sites size sizes state states step steps stop system systems
+table tables task tasks team teams test tests thing things time times tool
+tools type types unit units update updates user users value values version
+versions view views week weeks work works year years
+""".split())
+_TERM = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
+
+
+def _subject_terms(text):
+    """The words in this artifact that carry its subject matter.
+
+    Case-folded, four characters or more, minus the words every document shares.
+    Crude on purpose: the question this answers is not "what is this about" but
+    "is this about anything the rest of the dossier is about", and for that a
+    word list is enough and a cleverer method would be a claim nobody can check.
+    """
+    # Fenced code is NOT stripped. A diagram artifact's subject matter lives
+    # inside its ```mermaid fence and nowhere else, and stripping it made an
+    # honest 06-diagrams.md read as an artifact about the words "Context" and
+    # "Sequence".
+    body = re.sub(r"(?s)<!--.*?-->", " ", text or "")
+    out = set()
+    for w in _TERM.findall(body):
+        lw = w.lower()
+        if len(lw) >= 4 and lw not in _COMMON_WORDS:
+            out.add(lw)
+    return out
+
+
+def _coherence_problem(root, name, others):
+    """Why this artifact belongs to a different dossier, or "" if it belongs to this one.
+
+    The rule four of the seven required artifacts had no rule at all. `present()`
+    was the entire content test for 01-purpose, 02-process, 04-technology-map and
+    07-verification: two words and eight characters each. So a T3 dossier, the
+    maximum-ceremony tier, whose purpose was about bananas, whose process was
+    about lawnmowers, whose technology map was a tractor fleet and whose
+    verification plan verified Mars, cleared five of five design checks. Every
+    sentence the report printed was narrowly true and the dossier proved nothing.
+
+    Coherence is the point. An artifact that never mentions anything named
+    anywhere else in its own dossier is not an artifact, it is filler. Two ways
+    to satisfy it, because one rule alone would reject honest work: name
+    something the dossier DECLARES (an entity, a runtime component, a lifecycle
+    state), or share any subject word with another artifact in the same dossier.
+    A dossier with nothing else to compare against is not measured, and the
+    verdict says so rather than passing quietly.
+    """
+    text = read(root, name)
+    if text is None:
+        return ""
+    mine = _subject_terms(text)
+    declared = set()
+    for label in _declared_names(root, exclude=name):
+        declared |= {w.lower() for w in _TERM.findall(label) if len(w) >= 3}
+    if mine & declared:
+        return ""
+    theirs = set()
+    for other in others:
+        if other == name:
+            continue
+        theirs |= _subject_terms(read(root, other) or "")
+    if not theirs and not declared:
+        return None          # nothing to be coherent with; not measurable
+    if mine & theirs:
+        return ""
+    return ("%s shares no named subject with any other artifact in this dossier (nothing it "
+            "mentions is an entity, a runtime component or a lifecycle state declared here, and "
+            "no substantive word in it appears in any sibling artifact); an artifact about a "
+            "different system than the one this dossier designs is filler, not an artifact"
+            % name)
+
+
+def _declared_names(root, exclude=""):
+    """Every name this dossier declares: entities, runtime components, lifecycle states."""
+    out = []
+    model = read(root, ARTIFACT_FILES["05"])
+    if model is not None and ARTIFACT_FILES["05"] != exclude:
+        out.extend(_entities(model))
+    for norm, where in _declared_components(root).items():
+        if not where.startswith(exclude or "\0"):
+            out.append(where.split(": ", 1)[-1])
+    for norm, where in _declared_states(root).items():
+        if not where.startswith(exclude or "\0"):
+            out.append(where.split(": ", 1)[-1])
+    return out
 
 
 def _override_problem(reason):
@@ -241,10 +362,23 @@ def check_artifacts(root):
         # still nothing, so it says so instead.
         return "NO-DATA", ("tier %s requires no artifact, so this check opened none and there is "
                            "nothing here it can vouch for%s" % (tier, label))
-    missing = [ARTIFACT_FILES[n] for n in need if read(root, ARTIFACT_FILES[n]) is None]
-    empty = [ARTIFACT_FILES[n] for n in need
-             if ARTIFACT_FILES[n] not in missing and not present(root, ARTIFACT_FILES[n])]
-    if missing or empty:
+    wanted = [ARTIFACT_FILES[n] for n in need]
+    missing = [n for n in wanted if read(root, n) is None]
+    empty = [n for n in wanted if n not in missing and not present(root, n)]
+    # The content rule four of the seven artifacts never had: see
+    # _coherence_problem. Only artifacts that are present and non-empty are asked,
+    # because "this file is empty" and "this file is about something else" are two
+    # different sentences and the first one is already printed above.
+    unrelated, unmeasured = [], []
+    for n in wanted:
+        if n in missing or n in empty:
+            continue
+        problem = _coherence_problem(root, n, wanted)
+        if problem is None:
+            unmeasured.append(n)
+        elif problem:
+            unrelated.append(problem)
+    if missing or empty or unrelated:
         parts = []
         if missing:
             parts.append("missing: %s" % ", ".join(missing))
@@ -254,9 +388,15 @@ def check_artifacts(root):
                          "or one whose whole body is under %d words and %d characters, is the absence "
                          "of an artifact)"
                          % (", ".join(empty), ARTIFACT_MIN_WORDS, ARTIFACT_MIN_CHARS))
+        parts.extend(unrelated)
         return "FAIL", "tier %s requires %s; %s" % (tier, ", ".join(need), "; ".join(parts))
-    return "PASS", ("tier %s: every required artifact present and carrying content%s"
-                    % (tier, label))
+    return "PASS", ("tier %s: every required artifact present, carrying content, and naming subject "
+                    "matter the rest of this dossier also names%s%s"
+                    % (tier,
+                       "" if not unmeasured else
+                       "; except %s, which this dossier has nothing else to be coherent with, so "
+                       "that was not checked" % ", ".join(unmeasured),
+                       label))
 
 
 # The marker as the templates actually ship it: inside an HTML comment. Matching
@@ -310,7 +450,8 @@ _HEADING = re.compile(r"^(#+)\s*(.*)$")
 # extensible rather than folklore.
 _SECTION_WORDS = {
     "Criteria": ("Criteria", "Criterion", "What we weighed", "How we chose",
-                 "How we decided", "What mattered", "Decision drivers", "Forces"),
+                 "How we decided", "What mattered", "Decision drivers",
+                 "Deciding factors", "Forces"),
     "Decision": ("Decision", "What we are doing", "What we chose", "What we decided",
                  "What we will do", "Chosen option", "Chosen approach", "Our choice",
                  "The call"),
@@ -352,10 +493,27 @@ _FLIP_IN_PROSE = r"what would flip|what would change (?:our|my|this) mind|what w
 # saying it. Requiring the heading to BEGIN with the word meant
 # `### Option A (rejected): synchronous call` counted zero, and the convention
 # was written down nowhere outside the template.
+#
+# And then the list was still an allow-list of the phrasings somebody had already
+# tried. `## Alternatives considered` passed and `## Options considered` failed:
+# synonyms, opposite verdicts. `## Considered options`, which is the heading the
+# MADR template ships and therefore the single most common ADR heading in
+# existence, failed outright, and the FAIL text listed the accepted FORMS and
+# never the accepted WORDS, so the one thing the author needed was the one thing
+# withheld. A gate nobody can predict is a gate people route around.
+#
+# Now: the head noun is enough. "Alternatives", "options" and "rejected" carry the
+# meaning; whatever an author puts around them is theirs. The set is named here,
+# is printed in full in the FAIL text, and is what the pattern is built from, so
+# the message and the rule cannot drift apart.
+REJECTED_HEADING_WORDS = (
+    "rejected", "alternatives", "alternative", "options", "roads not taken",
+    "not taken", "not chosen", "ruled out", "discarded", "dropped", "declined",
+    "did not pick", "did not choose", "didn't pick", "didn't choose", "why not",
+)
 _REJECTED_HEADING = re.compile(
-    r"(?i)\brejected\b|\broads not taken\b|\bnot taken\b|\bruled out\b|\bdiscarded\b|"
-    r"\balternatives (?:considered|weighed)\b|\boptions (?:rejected|declined|dropped)\b|"
-    r"\bwhy not\b")
+    r"(?i)(?:%s)" % "|".join(r"\b%s\b" % w.replace(" ", r"\s+").replace("'", "'?")
+                             for w in REJECTED_HEADING_WORDS))
 _BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 # A numbered list is a list. `1.` and `2)` were not read as alternatives at all,
 # while forty lines away the same file already accepts `^\d+[.)]\s+` as a
@@ -501,13 +659,20 @@ def check_adr(root):
     if t is None:
         return "NO-DATA", "no 03-adr.md in this dossier"
     problems = []
-    alternatives = _rejected_alternatives(t)
+    # Deduplicated by the shared rule, because `gate_numbers` learned that a
+    # figure listed twice is one figure and this threshold did not: the same
+    # rejected alternative pasted twice cleared "an ADR needs at least 2".
+    alternatives, dupes = distinct(_rejected_alternatives(t))
     rejected = len(alternatives)
     if rejected < 2:
-        problems.append("only %d rejected alternative(s) found under a rejected-alternatives heading; "
-                        "an ADR needs at least 2, each with at least one line saying why it lost (an "
-                        "empty heading is not an alternative). Accepted forms: %s"
-                        % (rejected, "; ".join(ALTERNATIVE_FORMS)))
+        problems.append("only %d distinct rejected alternative(s) found under a "
+                        "rejected-alternatives heading%s; an ADR needs at least 2, each with at "
+                        "least one line saying why it lost (an empty heading is not an "
+                        "alternative). The heading is accepted as anything containing any of: %s. "
+                        "Accepted forms under it: %s"
+                        % (rejected,
+                           "" if not dupes else " (%d duplicate line(s) counted once)" % dupes,
+                           ", ".join(REJECTED_HEADING_WORDS), "; ".join(ALTERNATIVE_FORMS)))
     # The FAIL text above promises "at least one line saying why it lost", and
     # `- a` satisfied it. An override reason carries a reviewability threshold;
     # so does this, and it is the same threshold.
@@ -537,8 +702,11 @@ def check_adr(root):
                         "the ADR names no condition that would reverse the decision")
     if problems:
         return "FAIL", "; ".join(problems)
-    return ("PASS", "%d alternatives rejected with a stated reason, and criteria, decision, "
-                    "consequences and flip condition each carry content" % rejected)
+    return ("PASS", "%d distinct alternatives rejected with a stated reason%s, and criteria, "
+                    "decision, consequences and flip condition each carry content"
+                    % (rejected,
+                       "" if not dupes else
+                       " (%d duplicate line(s) counted once)" % dupes))
 
 
 # An entity name may carry a hyphen or a dot. `[A-Za-z_][\w ]*?` could match
@@ -590,20 +758,44 @@ def _table_entities(lines):
 
     The header row and its `---` separator are skipped, exactly as they are for
     relationships, and a row whose first cell is empty is not an entity.
+
+    A COLUMN HEADED `System of record` applies to its column. Without that, the
+    phrase had to be repeated inside every cell, so a five-entity table produced
+    five identical FAILs and the eval certifying "or as table rows" was written
+    as `| Customer | system of record: the CRM |`, a cell restating its own
+    column header, which is a fixture shaped to the parser rather than to an
+    author. The header is read, and a cell under a system-of-record column is
+    read as the answer to that column.
     """
-    out, row = {}, 0
+    out, row, header = {}, 0, []
     for line in lines:
         s = line.strip()
         if not s.startswith("|"):
             continue
         row += 1
         cells = [c.strip() for c in s.strip("|").split("|")]
-        if row <= 2 or not set(s) - set("|-: "):
-            continue        # header, separator, or a row with nothing in it
+        if row == 1:
+            header = cells
+            continue
+        if row == 2 or not set(s) - set("|-: "):
+            continue        # separator, or a row with nothing in it
         name = cells[0]
         if not name or not re.match(r"^[A-Za-z_][\w .\-]*$", name):
             continue
-        out[name] = " ".join(c for c in cells[1:] if c)
+        # Joined with the cell separator, so a value cannot run into the next
+        # column: see the note beside _SOR.
+        meta = []
+        for i, c in enumerate(cells[1:], start=1):
+            if not c:
+                continue
+            head = header[i] if i < len(header) else ""
+            if head and _SOR_HEADER.match(head) and not _SOR.search(c):
+                # The column says what this cell is. Restated in the phrase the
+                # value test reads, so one rule reads both authoring forms.
+                meta.append("system of record: %s" % c)
+            else:
+                meta.append(c)
+        out[name] = " | ".join(meta)
     return out
 
 
@@ -647,12 +839,29 @@ def _entities(t):
     return out
 
 
-# "system of record" followed by a value, with the separator optional so both
-# "system of record: the CRM" and "system of record the CRM" are read. Substring
-# matching alone let "no system of record known yet" through, because the phrase
-# was present; the value is what the rule is actually about.
-_SOR = re.compile(r"(?i)system of record\s*[:=]?\s*(.+)")
-_NO_SOR = re.compile(r"(?i)\bno\s+system\s+of\s+record\b")
+# How an entity is allowed to name the system that owns it. The rule is that the
+# owning system is NAMED; the phrase used to name it was a hidden allow-list of
+# one. "source of truth" is the most common synonym in the discipline and it
+# FAILed with the sentence "entity 'Order' has no system of record" about a line
+# that names one in plain sight, and the message never said what phrase it wanted.
+# Named here, printed in the FAIL text, compiled below, longest phrase first so
+# "owned by" wins over "owner".
+SOR_PHRASES = ("system of record", "system of truth", "source of truth", "book of record",
+               "authoritative source", "mastered by", "owned by", "owner", "sor")
+_SOR_ALT = "|".join(re.escape(p).replace(r"\ ", r"\s+")
+                    for p in sorted(SOR_PHRASES, key=len, reverse=True))
+# The separator is optional so both "system of record: the CRM" and "system of
+# record the CRM" are read. Substring matching alone let "no system of record
+# known yet" through, because the phrase was present; the value is what the rule
+# is actually about.
+# The value stops at a cell boundary. Capturing `(.+)` ran a table row's
+# system-of-record cell straight into its Notes cell, so `| Customer | TBD |
+# core |` read as the value "TBD core", which is not a placeholder, and a
+# nameless owner passed on the strength of an unrelated column.
+_SOR = re.compile(r"(?i)(?<![\w-])(?:%s)(?![\w-])\s*[:=]?\s*([^|]+)" % _SOR_ALT)
+# A table COLUMN whose heading is one of the phrases and nothing else.
+_SOR_HEADER = re.compile(r"(?i)^\s*(?:%s)\s*$" % _SOR_ALT)
+_NO_SOR = re.compile(r"(?i)\bno\s+(?:%s)(?![\w-])" % _SOR_ALT)
 # The list of values that name the absence of an answer used to live HERE, as a
 # private constant, and that is precisely how the fourth round of this defect
 # happened: this file refused the token "todo" as a system of record while
@@ -661,8 +870,15 @@ _NO_SOR = re.compile(r"(?i)\bno\s+system\s+of\s+record\b")
 # by every tool, extended in one place. See the comment beside it there.
 # A cardinality must stand as its own token. Without the guards, "one-to-many-ish"
 # satisfied a substring test, so a sentence explicitly saying the cardinality was
-# undecided cleared the gate that exists to decide it.
-_CARDINALITY = re.compile(r"(?i)(?<![\w-])(%s)(?![\w-])" % "|".join(CARDINALITIES))
+# undecided cleared the gate that exists to decide it. The accepted notations are
+# CARDINALITY_FORMS at the top of this file; this is what they compile to.
+_CARD_END = r"(?:one|many|1|n|m|\*)"
+_CARDINALITY = re.compile(
+    r"(?ix)(?<![\w.*-])(?:"
+    r"   %s \s*[-\s]?\s* to \s*[-\s]?\s* %s"      # one-to-many, 1-to-many, N to 1
+    r" | %s \s*:\s* %s"                            # 1:N, N:1, 1:1, many:1
+    r" | [0-9*]+ \s*\.\.\s* [0-9*]+"               # 1..*, 0..1 (UML multiplicity)
+    r")(?![\w-])" % (_CARD_END, _CARD_END, _CARD_END, _CARD_END))
 
 
 def _stated_value(v):
@@ -685,15 +901,20 @@ def check_data_model(root):
                         "table whose first column is the entity name, under a heading that names "
                         "entities, above the Relationships heading")
     for name, meta in ents.items():
-        if vacuous(name):
+        if domain_vacuous(name):
             # An entity called TBD is a note to the author. The PASS sentence
-            # counts entities, so a placeholder counted as one.
+            # counts entities, so a placeholder counted as one. Scoped: an entity
+            # name is DOMAIN CONTENT, so the words an engineer can honestly mean
+            # (none, pending, unknown) are not placeholders here. See
+            # sbe_checks.DOMAIN_WORDS.
             problems.append("entity %r names no entity; a placeholder in the entity list is counted "
                             "by the sentence 'N entities, each with a system of record'" % name)
             continue
         m = _SOR.search(meta)
         if not m or _NO_SOR.search(meta):
-            problems.append("entity '%s' has no system of record" % name)
+            problems.append("entity '%s' does not name the system that owns it (accepted as any of: "
+                            "%s, as `<phrase>: the OMS` on the bullet, or as a table column headed "
+                            "with one of them)" % (name, ", ".join(SOR_PHRASES)))
         elif not _stated_value(m.group(1)):
             problems.append("entity '%s' names a system of record with no value (%r); an undecided source is not a source"
                             % (name, m.group(1).strip()[:24]))
@@ -719,7 +940,8 @@ def check_data_model(root):
                 rels.append(s)
     for line in rels:
         if not _CARDINALITY.search(line):
-            problems.append("relationship '%s' has no cardinality" % line[:48])
+            problems.append("relationship '%s' names no cardinality this tool can read (accepted: "
+                            "%s)" % (line[:48], "; ".join(CARDINALITY_FORMS)))
     if problems:
         return "FAIL", "; ".join(problems[:6])
     if not rels:
@@ -744,11 +966,36 @@ def check_data_model(root):
 DIAGRAM_TYPES = {
     "flowchart": "nodes", "graph": "nodes", "sequenceDiagram": "sequence",
     "erDiagram": "er", "classDiagram": "class", "stateDiagram": "state",
-    "stateDiagram-v2": "state", "C4Context": "nodes", "mindmap": "nodes",
+    "stateDiagram-v2": "state", "mindmap": "nodes",
+    # C4 has its own statement grammar, `Person(alias, "Label")`, and reading it
+    # as a flowchart made the Mermaid KEYWORDS `Person` and `System` into orphan
+    # node names, so the canonical Mermaid dialect for the system-context diagram
+    # that SKILL.md Phase 5 asks a T2 or T3 author to draw FAILed, inventing the
+    # orphans it then reported. It gets a parser instead.
+    "C4Context": "c4", "C4Container": "c4", "C4Component": "c4",
+    "C4Dynamic": "c4", "C4Deployment": "c4",
+    # block-beta names its blocks as bare identifiers on a line, which the
+    # flowchart parser reads only when they carry a shape or an edge, so a real
+    # diagram produced no nodes and was reported as "a diagram artifact with no
+    # diagram in it".
+    "block-beta": "block",
     "journey": "none", "gantt": "none", "pie": "none", "timeline": "none",
     "gitGraph": "none", "quadrantChart": "none", "requirementDiagram": "none",
-    "sankey-beta": "none", "block-beta": "nodes", "xychart-beta": "none",
+    "sankey-beta": "none", "xychart-beta": "none",
 }
+# C4 statement keywords, by what each one contributes.
+_C4_ELEMENT = {"Person", "Person_Ext", "System", "System_Ext", "SystemDb", "SystemDb_Ext",
+               "SystemQueue", "SystemQueue_Ext", "Container", "Container_Ext", "ContainerDb",
+               "ContainerDb_Ext", "ContainerQueue", "Component", "Component_Ext", "ComponentDb",
+               "ComponentQueue", "Node", "Node_L", "Node_R", "Deployment_Node"}
+_C4_REL = {"Rel", "BiRel", "Rel_U", "Rel_D", "Rel_L", "Rel_R", "Rel_Up", "Rel_Down",
+           "Rel_Left", "Rel_Right", "Rel_Back", "RelIndex"}
+_C4_GROUPING = {"Boundary", "Enterprise_Boundary", "System_Boundary", "Container_Boundary",
+                "Node_Boundary", "Deployment_Node"}
+_C4_CALL = re.compile(r"^\s*([A-Za-z_]\w*)\s*\(\s*([A-Za-z_][\w.-]*)\s*(?:,\s*\"([^\"]*)\")?")
+_BLOCK_STATEMENTS = {"columns", "space", "block", "end", "style", "classDef", "class",
+                     "click", "direction", "down", "up", "%%"}
+_BLOCK_TOKEN = re.compile(r"(?<![\w.\-\[\"])([A-Za-z_][\w.-]*)(?::\d+)?(?![\w.\-\[\"(])")
 DIRECTIONS = {"LR", "RL", "TB", "TD", "BT"}
 # Statement keywords that begin a line without naming a node. A token skipped for
 # being one of these is REPORTED, never dropped: a diagram whose four nodes were
@@ -827,9 +1074,15 @@ def _diagram_nodes(t):
         first = head.split()[0]
         kind = DIAGRAM_TYPES.get(first)
         if kind is None:
+            # Read as a flowchart, an unrecognised dialect turned its own
+            # statement keywords into orphan node names and FAILed a correct
+            # diagram. SKILL.md L5's own rule is that a type this tool cannot
+            # trace is NO-DATA and not a failure, so it is not read, it is
+            # reported, and check_diagrams turns it into NO-DATA.
             kinds.append("unrecognised:%s" % first)
-            kind = "nodes"          # read it as a flowchart rather than ignore it
-            body = lines
+            skipped.append("%s (a diagram type this tool has no parser for, so nothing in this "
+                           "block was read as a node)" % first)
+            continue
         else:
             kinds.append(first)
             body = lines[1:]
@@ -883,6 +1136,42 @@ def _diagram_nodes(t):
                         if g != "[*]":
                             add(g)
                             states.add(g)
+                continue
+            if kind == "c4":
+                m = _C4_CALL.match(s)
+                if not m:
+                    if word and any(ch.isalnum() for ch in word):
+                        skipped.append("%s (a %s statement, not an element)" % (word, first))
+                    continue
+                keyword, alias, label = m.group(1), m.group(2), (m.group(3) or "").strip()
+                if keyword in _C4_GROUPING:
+                    # A boundary groups elements, exactly as `subgraph` does in a
+                    # flowchart, and a flowchart's subgraph is skipped and named.
+                    skipped.append("%s(%s) (a %s boundary, which groups elements rather than "
+                                   "being one)" % (keyword, alias, first))
+                    continue
+                if keyword in _C4_ELEMENT:
+                    add(alias, label)
+                    continue
+                if keyword in _C4_REL:
+                    args = [a.strip().strip("\"") for a in s[s.find("(") + 1:].split(",")]
+                    for a in args[:2]:
+                        if re.match(r"^[A-Za-z_][\w.-]*$", a):
+                            add(a)
+                    continue
+                skipped.append("%s (a %s statement, not an element)" % (keyword, first))
+                continue
+            if kind == "block":
+                if word.split(":")[0] in _BLOCK_STATEMENTS or s.startswith("%%"):
+                    skipped.append("%s (a %s statement, not a block)" % (word, first))
+                    continue
+                s = _INLINE_EDGE_LABEL.sub(lambda m: " %s " % m.group(1), s)
+                for m in _NODE_LABELLED.finditer(s):
+                    add(m.group(1), _label_text(m.group(2)))
+                bare = _NODE_LABELLED.sub(" ", s)
+                for m in _BLOCK_TOKEN.finditer(bare):
+                    if m.group(1) not in _BLOCK_STATEMENTS:
+                        add(m.group(1))
                 continue
             if kind == "none":
                 continue
@@ -987,7 +1276,7 @@ def _declared_states(root):
             if m:
                 for token in re.split(r"[,|/]| or | then |->|-->", m.group(1)):
                     name = token.strip().strip(".;`").strip()
-                    if name and not vacuous(name):
+                    if name and not domain_vacuous(name):
                         out.setdefault(_norm(name), "%s: %s" % (artifact, name))
                 continue
             if not in_states:
@@ -995,7 +1284,7 @@ def _declared_states(root):
             b = _BULLET.match(line)
             if b:
                 name = b.group(1).split(":")[0].strip()
-                if name and not vacuous(name):
+                if name and not domain_vacuous(name):
                     out.setdefault(_norm(name), "%s: %s" % (artifact, name))
     return out
 
@@ -1014,15 +1303,18 @@ def check_diagrams(root):
                         "in it is a defect. Diagrams are code: put the Mermaid source in a "
                         "```mermaid fence so it diffs in review")
     if not nodes:
-        bare = [k for k in kinds if DIAGRAM_TYPES.get(k) == "none"]
+        # A gantt or a pie chart is a real diagram that names no element this
+        # check can trace, and a dialect this tool has no parser for is a diagram
+        # it did not read. Failing either as "a diagram artifact with no diagram
+        # in it" is rejecting correct work, which gets the gate switched off, and
+        # a gate that is off catches less than a gate that is honest.
+        bare = [k for k in kinds
+                if DIAGRAM_TYPES.get(k) == "none" or k.startswith("unrecognised:")]
         if bare and len(bare) == len(kinds):
-            # A gantt or a pie chart is a real diagram that names no element this
-            # check can trace. Failing it as "a diagram artifact with no diagram
-            # in it" would be rejecting correct work, which gets the gate switched
-            # off, and a gate that is off catches less than a gate that is honest.
-            return "NO-DATA", ("%s diagram(s) present, and this diagram type declares no nodes that "
-                               "can be traced to entities or components, so nothing here was checked "
-                               "for traceability%s" % (", ".join(sorted(set(bare))), note))
+            return "NO-DATA", ("%s diagram(s) present, and nothing in them could be read as a node "
+                               "this check can trace (the type declares none, or this tool has no "
+                               "parser for it), so nothing here was checked for traceability%s"
+                               % (", ".join(sorted(set(bare))), note))
         return "FAIL", ("fenced %s block(s) found but no diagram node could be read out of them; a "
                         "diagram artifact with no diagram in it is a defect%s"
                         % (", ".join(sorted(set(kinds))), note))
@@ -1060,13 +1352,18 @@ def check_diagrams(root):
     untraced_states = sorted(n for n in orphans if n in states) if not declared_states else []
     orphans = [n for n in orphans if n not in untraced_states]
     if orphans:
-        return "FAIL", ("diagram element(s) appear nowhere else in the dossier: %s. Every node must be an "
+        placeholders = [n for n in orphans if domain_vacuous(n)]
+        placeholder_note = ("" if not placeholders else
+                            " Of these, %s name(s) nothing: a node called TBD or XXX is a note to "
+                            "the author, and declaring it as a state or a component would not make "
+                            "it one." % ", ".join(placeholders[:4]))
+        return "FAIL", ("diagram element(s) appear nowhere else in the dossier: %s.%s Every node must be an "
                         "entity in %s or a declared component (a row in %s, or a bullet under a Components "
                         "heading in %s), matched on the node id or on its label. A state diagram's states "
                         "trace to states declared as bullets under a States, Status or Lifecycle heading, "
                         "or to a `status: draft | placed | shipped` line in %s%s"
-                        % (", ".join(orphans[:6]), ARTIFACT_FILES["05"], ARTIFACT_FILES["04"],
-                           ARTIFACT_FILES["06"], ARTIFACT_FILES["05"], note))
+                        % (", ".join(orphans[:6]), placeholder_note, ARTIFACT_FILES["05"],
+                           ARTIFACT_FILES["04"], ARTIFACT_FILES["06"], ARTIFACT_FILES["05"], note))
     if untraced_states:
         return "NO-DATA", ("%d diagram node(s) in %s, of which %d are lifecycle state(s) this dossier "
                            "declares nowhere (%s), so their traceability was not checked and this "
@@ -1218,15 +1515,6 @@ def parse_exemption(text):
     return checks, reason, ""
 
 
-def is_dossier(d):
-    """A directory holding an intake file or any dossier artifact."""
-    try:
-        fns = set(os.listdir(d))
-    except OSError:
-        return False
-    return INTAKE in fns or bool(fns & set(ARTIFACT_FILES.values()))
-
-
 def find_dossiers(root):
     """Walk for directories carrying ANY numbered dossier artifact.
 
@@ -1237,8 +1525,9 @@ def find_dossiers(root):
     intake, because the tier cannot be established without it.
     """
     hits, exempt, refused = [], [], []
+    pruner = Pruner()
     for dp, dns, fns in os.walk(root):
-        dns[:] = prune_dirs(dp, dns)
+        dns[:] = pruner(dp, dns)
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
         if EXEMPT in fns:
@@ -1263,7 +1552,8 @@ def find_dossiers(root):
                 hits.append(dp)
             continue
         hits.append(dp)
-    return hits, exempt, refused
+    return hits, exempt, refused, pruner.note(
+        lambda f: f == INTAKE or f in set(ARTIFACT_FILES.values()))
 
 
 def main():
@@ -1296,11 +1586,18 @@ def main():
     strict_waivers = "--strict-waivers" in sys.argv
     print("BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; "
           "WAIVED is not a pass either)")
-    exempt, refused = [], []
-    if os.path.isdir(root) and is_dossier(root):
-        targets = [root]
-    elif os.path.isdir(root):
-        targets, exempt, refused = find_dossiers(root)
+    exempt, refused, pruned = [], [], ""
+    if os.path.isdir(root):
+        # ALWAYS walk. This used to be `if is_dossier(root): targets = [root]`,
+        # so a root that was itself a dossier skipped the walk that finds every
+        # other one, and a stray `00-intake.json` in a repository root made every
+        # dossier below it invisible: `--strict` printed five NO-DATA lines and
+        # exited 0 over a tree holding seven unedited templates. `sbe_intake.py`
+        # writes exactly that file to the directory it is run from, and the README
+        # tells the reader to run it, so the off switch installed itself.
+        # A root that is itself a dossier is one more dossier, not a reason to
+        # stop, and find_dossiers reports it as one because os.walk starts there.
+        targets, exempt, refused, pruned = find_dossiers(root)
     else:
         targets = []
     waived_by = {os.path.abspath(d): set(w) for d, w, _ in exempt}
@@ -1340,12 +1637,12 @@ def main():
             print("  %-10s %-8s %s" % ("dossier", "FAIL",
                   "SBE_DOSSIER_ROOT=%s holds no dossier (no directory under it contains %s or any of "
                   "01 through 07); this repository declares that it keeps dossiers, so an empty dossier "
-                  "root is a broken configuration, not an absence" % (root, INTAKE)))
+                  "root is a broken configuration, not an absence%s" % (root, INTAKE, pruned)))
         else:
             print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
                   "no dossier found under %s: no directory contains %s or any of 01 through 07. If this "
                   "repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and "
-                  "this becomes a FAIL instead of a report" % (root, INTAKE)))
+                  "this becomes a FAIL instead of a report%s" % (root, INTAKE, pruned)))
         # Every requested check still accounts for itself. A check that prints no
         # line is indistinguishable from a check that was removed, and "the gate
         # said nothing" must never be readable as "the gate was satisfied".
@@ -1355,7 +1652,11 @@ def main():
         # covering a check it never reached. Change it in both places or not at all.
         for name in which:
             print("  %-10s %-8s %s" % (name, "NO-DATA",
-                  "no dossier under %s, so this check opened no file" % root))
+                  "no dossier under %s, so this check opened no file%s" % (root, pruned)))
+    if targets and pruned:
+        # A dossier the walk refused to enter is a dossier no verdict below covers.
+        print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
+              "%d dossier(s) checked under %s%s" % (len(targets), root, pruned)))
     for target in targets:
         if len(targets) > 1 or os.path.abspath(target) != os.path.abspath(root):
             print("  dossier: %s" % os.path.relpath(target, root))
