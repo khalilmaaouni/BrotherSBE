@@ -131,20 +131,56 @@ def ask(key, prompt):
     00-intake.json for a gate to misread three commits later.
     """
     while True:
-        raw = input(prompt)
+        try:
+            raw = input(prompt)
+        except EOFError:
+            # Not swallowed: this is the named failure path for a closed stdin,
+            # which used to end in an unhandled traceback that read as a broken
+            # tool rather than as "nobody answered".
+            print("\nsbe_intake: stdin closed before %s was answered; nothing was written." % key)
+            sys.exit(1)
         values, problems = read_answers({key: raw})
         if key in values:
             return values[key]
         print("  %s" % next(p for p in problems if p.startswith(key + "=")))
 
 
+USAGE = """usage: sbe_intake.py [DIRECTORY]
+
+Asks the five intake questions and writes 00-intake.json into DIRECTORY
+(default: the current directory).
+
+Give it the dossier directory. This tool used to take no argument at all: it
+accepted one, ignored it, and wrote to wherever it was run from, and the README
+shows it being run from a repository root. A stray 00-intake.json in a root is
+its own dossier, and design/ below it is another, so the file lands where it
+does not belong and the reader is told it worked."""
+
+
 def main():
+    argv = sys.argv[1:]
+    if any(a in ("-h", "--help") for a in argv):
+        print(USAGE)
+        sys.exit(0)
+    flags = [a for a in argv if a.startswith("-")]
+    if flags:
+        print("sbe_intake: %s is not an option.\n\n%s" % (", ".join(flags), USAGE))
+        sys.exit(1)
+    if len(argv) > 1:
+        print("sbe_intake: one directory at a time, got %d (%s).\n\n%s"
+              % (len(argv), ", ".join(argv), USAGE))
+        sys.exit(1)
+    where = argv[0] if argv else "."
+    if not os.path.isdir(where):
+        print("sbe_intake: %r is not a directory, so nothing was written. Create the dossier "
+              "directory first, then run this in it.\n\n%s" % (where, USAGE))
+        sys.exit(1)
     answers = {}
     for key, prompt in QUESTIONS:
         answers[key] = ask(key, prompt)
     tier = compute_tier(answers)
     out = {"answers": answers, "tier": tier, "override": None, "override_reason": None}
-    path = os.path.join(".", "00-intake.json")
+    path = os.path.join(where, "00-intake.json")
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
     print("tier %s (artifacts required: %s) written to %s"
