@@ -165,23 +165,30 @@ Run the eval bed. Each case is a real failure class turned into a fixture with a
 python3 evals/run_evals.py
 ```
 
-The last eight lines of the run, verbatim:
+The last ten lines of the run, verbatim. The last four are the honest path, which a gate is
+only worth having if it clears, and the last two are the docs checking their own numbers:
 
 ```
-  zero-corrections-is-not-a-latency-pass want=NO-DATA  got=NO-DATA  ok
-  a-malformed-ledger-line-is-a-fail      want=FAIL     got=FAIL     ok
-  a-ledger-line-of-the-wrong-type-is-a-fail want=FAIL     got=FAIL     ok
-  a-malformed-ledger-does-not-delete-the-other-checks want=NO-DATA  got=NO-DATA  ok
-  budget-vs-tier-does-not-score-the-skills-own-registry want=NO-DATA  got=NO-DATA  ok
-  an-all-exempted-scan-is-not-clean      want=NO-DATA  got=NO-DATA  ok
-  an-exemption-on-the-pass-line-is-honoured want=PASS     got=PASS     ok
+  cache-counters-that-are-not-counts-are-caught want=FAIL     got=FAIL     ok
+  a-complete-t0-dossier-blocks-nothing   want=clear    got=clear    ok
+  a-complete-t1-dossier-blocks-nothing   want=clear    got=clear    ok
+  a-complete-t2-dossier-blocks-nothing   want=clear    got=clear    ok
+  a-complete-t3-dossier-blocks-nothing   want=clear    got=clear    ok
+  a-change-with-no-numbers-and-no-migration-blocks-nothing want=clear    got=clear    ok
+  no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
+  no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-110 evals: 110 passed, 0 regressions.
+154 evals: 154 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
 
-Then run the honesty meta-test, which is the one that keeps the rest honest. It does not carry a list of checks: it enumerates the check registries in the three tools and runs the same four scenarios against every entry, so a check added later is covered without anyone remembering.
+Then run the honesty meta-test, which is the one that keeps the rest honest. It carries no list of
+checks and no list of registries: it DISCOVERS every registry of checks in `tools/`, and refuses to
+run if it finds one it was not taught to invoke. For each check it takes the worked example that
+check declares and hollows it out, one leaf, one subtree and one whole receipt at a time, in empty
+strings, whitespace and nulls, and requires that none of it produces a PASS. A check added later is
+covered without anyone remembering, and so is a field added to an existing one.
 
 ```bash
 python3 evals/test_no_data_class.py
@@ -190,7 +197,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-20 checks enumerated from 3 registries, 77 scenarios run, 0 failure(s).
+20 checks discovered from 3 registries in 6 module(s), 398 scenarios run, 0 failure(s).
 ```
 
 To watch one check on a real change:

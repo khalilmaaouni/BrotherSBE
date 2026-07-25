@@ -40,14 +40,18 @@ Into `~/.claude/settings.json`, or a project `.claude/settings.json`. The harnes
         "command": "python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py outcomes-append"}]}
     ],
     "PreCompact": [
-      {"hooks": [{"type": "command",
-        "command": "sh ~/.claude/skills/brothersbe/tools/sbe_autosave.sh precompact"}]}
+      {"hooks": [
+        {"type": "command",
+         "command": "sh ~/.claude/skills/brothersbe/tools/sbe_autosave.sh precompact"},
+        {"type": "command",
+         "command": "python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py precompact-brief"}
+      ]}
     ]
   }
 }
 ```
 
-What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). PreCompact snapshots the whole worktree to a private git ref so a token-death is recoverable. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
+What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). PreCompact does two things: it snapshots the whole worktree to a private git ref so a token-death is recoverable, and it writes the brief that survives the compaction. Both commands are in the block above; a setup carrying only the first loses the brief. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
 
 ## 4. Prove it works, in 60 seconds
 
@@ -55,7 +59,7 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "70 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "154 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory

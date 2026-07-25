@@ -196,7 +196,7 @@ Here the reverse claims it ran against a restore but records no run id.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration FAIL     reverse: no rehearsal_run_id recorded (this gate checks the id is present and is a string, and cannot resolve it against a job system)
+  migration FAIL     reverse: no rehearsal_run_id recorded (this gate checks the id is present, is a string and is not blank, and cannot resolve it against a job system)
 ```
 
 Two other FAIL paths exist and are worth knowing: a leg with

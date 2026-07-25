@@ -114,8 +114,11 @@ FAILs, naming it, because without a tier nothing can say which artifacts are owe
 Set `SBE_DOSSIER_ROOT` when a repository is supposed to carry a dossier: a declared
 root holding none is then a FAIL rather than a report. A directory that holds
 dossier-shaped files without being live design work carries a `.sbe-exempt` file
-whose contents say why, and that reason is printed on every run, so an exemption
-nobody can see is not possible.
+whose contents say why, and that reason is printed on every run as a WAIVER naming
+the directory and every check it covers, so an exemption nobody can see is not
+possible. The reason meets the same reviewability threshold as a tier override: an
+empty `.sbe-exempt` waives nothing, the dossier is checked anyway, and the broken
+exemption is itself a FAIL.
 
 On this repository, which carries the shipped templates and no real dossier, the run
 looks like this, and the exit code is 0. Every check prints a line even with nothing
@@ -124,8 +127,8 @@ deleted.
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
-  dossier    NO-DATA  templates/dossier is exempt (.sbe-exempt names why: These are the shipped dossier TEMPLATES, not a dossier. They carry the), so no check opened a file there
-  dossier    NO-DATA  no dossier found under .: no directory contains 00-intake.json or any of 01 through 07. If this repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and this becomes a FAIL instead of a report
+  dossier    WAIVED   templates/dossier: .sbe-exempt waives artifacts, adr, datamodel, diagrams, placeholder here, stated reason: These are the shipped dossier TEMPLATES, not a dossier. They carry the SBE-TEMPLATE-UNFILLED marker on purpose and have no 00-intake.json, because nobody filled them in for a real change. Copy them in. Nothing below opened a file in that directory, so this is a waiver and not a verdict about the work
+  dossier    NO-DATA  every dossier found under . (1) is waived by a .sbe-exempt, so no check opened a file. The waiver line(s) above name each one and the reason given
   artifacts  NO-DATA  no dossier under ., so this check opened no file
   adr        NO-DATA  no dossier under ., so this check opened no file
   datamodel  NO-DATA  no dossier under ., so this check opened no file
