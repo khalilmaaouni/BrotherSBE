@@ -1,0 +1,19 @@
+# BrotherSBE enforcement: this is what turns the gates from advisory into blocking.
+# Cloning the skill gives you the tools; this file wires them into your CI so a
+# merge is stopped when a hard gate fails. Copy it into the repo you want guarded.
+name: BrotherSBE gates
+on: [pull_request]
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the approval gate reads commit trailers and signatures
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Hard gates (numbers, migration, approval, ran) block on failure
+        run: python3 tools/sbe_gate.py --strict .
+      - name: Silent-failure lints and code-graded checks block on failure
+        run: python3 tools/sbe_score.py --strict .

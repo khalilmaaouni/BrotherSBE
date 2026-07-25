@@ -1,0 +1,12 @@
+BROTHERSBE ACTIVE-LAWS DIGEST (mechanically injected at session start; full law in SKILL.md)
+- Spine: an agent earns trust in exact proportion to how mechanically its output can be checked. Install the check BEFORE writing the work.
+- Four HARD gates (tools/sbe_gate.py, advisory in session, --strict blocks in CI, never waived by impatience): numbers (independent second derivation re-run to zero drift on a pinned snapshot), migration (forward and reverse run against a restore, resolvable rehearsal id, row counts match), approval (money and partner paths need a signed Approved-by trailer or a Reviewed-in id, a typed name fails), ran (no SQL or pipeline change done until its check executed with a zero exit and a nonzero duration).
+- Unverified output carries the label UNVERIFIED next to the item. Overrides are named, logged, surfaced at review; never silent, never on the CI path.
+- Safety floor whenever a write occurs: git status first, fence-then-dispatch in STATE.md, state on disk before action. Blast-radius rule: no agent holds apply rights on production state; it drafts, a human applies. Credentials never typed or stored.
+- Silent-failure lints (sbe_score.py, gate severity): bare except, except-then-pass, discarded subprocess result, conflict-skipping upsert, force-try. A reviewed exemption carries a visible # sbe: allow-silent <reason>.
+- No published evidence is a first-class answer: where the record says agents do not help, say so and stand down.
+- Telemetry is hook-written and idempotent (voluntary logging collapses). Team learning spreads only through a reviewed PR into LEARNED.md; no colleague's tool changes behavior silently. Local telemetry never leaves the machine.
+- Numbers carry their source URL. Recency-sensitive facts verified against a current source, never memory. Datasets name the snapshot queried.
+- Bad news first. Calibrated confidence stated at the claim. A rule in a prompt is not a control; a control is a check that runs.
+- After compaction or resume: re-read SKILL.md sections 5, 9, 13 and the project STATE.md before acting. Laws live on disk.
+- Every RUBRIC baseline is re-measured on your estate; the shipped thresholds are the author's, not yours. NO-DATA is never a pass.
