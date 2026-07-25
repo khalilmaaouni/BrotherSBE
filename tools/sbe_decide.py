@@ -39,6 +39,9 @@ def recommend(table, context):
             continue
         winners = []
         if crit["kind"] == "number":
+            if not isinstance(val, (int, float)):
+                unrecognized.append("%s=%s is not a recognized value" % (crit["name"], val))
+                continue
             for opt, (lo, hi) in crit["scores"].items():
                 if lo <= val <= hi:
                     winners.append(opt)
