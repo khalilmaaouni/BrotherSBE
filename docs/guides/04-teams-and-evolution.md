@@ -151,9 +151,9 @@ stopped). The team wires the strict form into CI:
 python3 ~/.claude/skills/brothersbe/tools/sbe_gate.py --strict
 ```
 
-Overrides exist because reality does, but an override is named, logged, surfaced
-at the weekly review, and is never available on the `--strict` CI path. It is
-never silent.
+Overrides exist because reality does, but an override is named, carries a reason,
+and is visible in the diff and on the tool's printed verdict line. It is never
+available on the `--strict` CI path, and it is never silent.
 
 ### 2f. The silent-failure lints
 
@@ -195,7 +195,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  208 evals: 208 passed, 0 regressions.
+  265 evals: 265 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

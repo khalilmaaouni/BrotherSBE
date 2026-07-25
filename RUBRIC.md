@@ -21,13 +21,16 @@ Floor gates (pass/fail, NEVER tradeable for scores; a fail voids the week's scor
 3. SPEED (baseline 6): fleet wall-clock per landed loop down 30 percent vs your
    first measured baseline (ledger duration_h per shipped surface), zero
    infra-death retries per commit train. Evidence: ledger + train logs.
-4. OPERATOR ALIGNMENT (baseline 5): measured on outcomes an engineer can verify,
-   not on how the output felt. Signals: review outcome on assisted PRs (approved
-   versus changes-requested trend), the deploy and incident record on assisted
-   changes (change-failure rate not worse than baseline), zero repeat-class
-   corrections for 2 consecutive weeks. Felt impressions are inadmissible here by
-   design: charm must not outrank correctness. Evidence: PR review states,
-   change-failure telemetry, correction-log delta.
+4. OPERATOR ALIGNMENT (baseline 5): measured primarily on outcomes an engineer
+   can verify, not on how the output felt. Signals: review outcome on assisted
+   PRs (approved versus changes-requested trend), the deploy and incident record
+   on assisted changes (change-failure rate not worse than baseline), zero
+   repeat-class corrections for 2 consecutive weeks. Felt ratings are still
+   collected and scored (the felt-outcome-ratings check in `tools/sbe_score.py`,
+   gathered per the weekly-review felt-outcome batch): what is inadmissible is a
+   felt impression outranking or substituting for the mechanical verdict, by
+   design, so charm must not outrank correctness. Evidence: PR review states,
+   change-failure telemetry, correction-log delta, ratings.jsonl.
 5. MEMORY WRITE-BACK (baseline 6): one canonical machine ledger, zero stale fence
    lines at weekly registry-check, session log every work session, vault hygiene
    pass monthly. Evidence: registry-check output, Sessions folder.

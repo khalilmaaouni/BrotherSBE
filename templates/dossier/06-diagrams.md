@@ -8,11 +8,15 @@ Diagrams are code so they diff in review and cannot drift silently. Every diagra
 lives inside a fenced code block: source outside a fence is prose, and the check
 does not read it.
 
-Required by tier: T2 is the first tier that requires this file at all, and it wants
-a context diagram plus a workflow or sequence diagram and an entity relationship
-diagram; T3 adds system context, container view, technology map, and failover
-topology. T1 requires only 01-purpose.md, so a sketch there is welcome and is not
-a gate.
+No check enforces a required diagram set per tier. What is checked: at least one
+diagram exists in a fenced mermaid block, and every node traces to something
+declared elsewhere in the dossier (an entity in `05-data-model.md`, a declared
+runtime component, or a declared lifecycle state). Beyond that, the set below is
+guidance an author is free to follow, not a gate: at T2 and above, a reviewer
+should expect a context diagram plus a workflow or sequence diagram and an entity
+relationship diagram; at T3, system context, container view, technology map, and
+failover topology. T1 requires only 01-purpose.md, so a sketch here is welcome
+and is not a gate.
 
 ## Context
 

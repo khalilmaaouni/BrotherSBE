@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-208 evals: 208 passed, 0 regressions.
+265 evals: 265 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -377,9 +377,10 @@ Why the two settings matter:
   neither blocks nor passes, so it does not impede a team that has chosen it. A
   bare typed name fails by design: a name in a text field is not a control.
 - The second step runs `sbe_gate.py`'s companion, `sbe_score.py --strict`, which
-  blocks on the silent-failure lints and the code-graded checks. It is optional;
-  keep it if you want the swallow patterns to fail a merge too. Both tools take the
-  root as a trailing `.` argument and resolve it to the git worktree top.
+  blocks on the silent-failure lints and the code-graded checks. This is not
+  optional: the silent-failure lints are the fifth non-waivable gate on the merge
+  path, refused rather than waived, same as the four in `sbe_gate.py`. Both tools
+  take the root as a trailing `.` argument and resolve it to the git worktree top.
 
 Turn on branch protection for the `gates` job and the four failure classes stop
 being things a reviewer has to remember. They become a merge that does not happen

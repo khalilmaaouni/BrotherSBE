@@ -192,11 +192,14 @@ Decided by:
   - consistency=strong favours monolith, modular monolith
   - ops_maturity=low favours monolith, modular monolith
   - failure_isolation=low favours monolith, modular monolith
-What would flip this: Cross four independently deploying teams, or need one component to fail without the others, and revisit this decision.
+What would flip this: Cross four independently deploying teams, or need one module to fail without the others while ops maturity is high, and revisit this decision.
 ```
 
 Four things come back every time: the recommendation, up to two alternatives, the
-criteria that separated them, and what would flip it. Answer nothing and the
+criteria that separated them, and what would flip it. The flip condition belongs to the
+RECOMMENDATION, not to the table: one string for the whole table meant a run that
+recommended `services` off nine teams and high failure isolation was handed a flip
+condition naming two conditions that were already true, which can never fire. Answer nothing and the
 verdict is NO-DATA with the recommendation suppressed, because a recommendation
 backed by zero evidence is a guess with a table around it.
 
@@ -214,7 +217,7 @@ Decided by:
   - deploying_teams=2 favours modular monolith, monolith
   - ops_maturity=low favours monolith, modular monolith
   - failure_isolation=low favours monolith, modular monolith
-What would flip this: Cross four independently deploying teams, or need one component to fail without the others, and revisit this decision.
+What would flip this: Cross four independently deploying teams, or need one module to fail without the others while ops maturity is high, and revisit this decision.
 Unrecognized values (check for typos):
   - consistency=strongly is not a recognized value
 ```
@@ -251,7 +254,7 @@ Decided by:
   - consistency=strong favours monolith, modular monolith
   - ops_maturity=low favours monolith, modular monolith
   - failure_isolation=low favours monolith, modular monolith
-What would flip this: Cross four independently deploying teams, or need one component to fail without the others, and revisit this decision.
+What would flip this: Cross four independently deploying teams, or need one module to fail without the others while ops maturity is high, and revisit this decision.
 ```
 
 ## Options considered
@@ -418,12 +421,12 @@ history as rows.
 
 ## Phase 5: expression, where a diagram gets caught drifting
 
-`06-diagrams.md`, first attempt. T3 wants the system context, the container view,
-the entity relationship view, and the failover topology. This system is one
-deployable with two modules, so the container view collapses into the system
-context: `IntakeService` and `WarehouseLoader` are the two containers, and the
-technology map in `04` carries their technology and owner rather than repeating
-them in a box.
+`06-diagrams.md`, first attempt. T3 guidance (not a check-enforced requirement)
+suggests the system context, the container view, the entity relationship view,
+and the failover topology. This system is one deployable with two modules, so the
+container view collapses into the system context: `IntakeService` and
+`WarehouseLoader` are the two containers, and the technology map in `04` carries
+their technology and owner rather than repeating them in a box.
 
 ````markdown
 ## System context
@@ -467,7 +470,7 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md
-  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
@@ -503,8 +506,8 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  artifacts  PASS     tier T3: every required artifact present and carrying content
-  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  artifacts  PASS     tier T3: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names
+  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction)
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
@@ -709,9 +712,13 @@ The seven templates in `templates/dossier/` are the same files with the example
 content swapped out. Copy them into `design/<project>/` and run the intake:
 
 ```bash
-mkdir -p design && cp -r "$SBE/templates/dossier" design/my-project
-cd design/my-project && python3 "$SBE/tools/sbe_intake.py"
+mkdir -p design/my-project && cp "$SBE/templates/dossier"/*.md design/my-project/
+python3 "$SBE/tools/sbe_intake.py" design/my-project
 ```
+
+Copy only the `*.md` files: the templates directory also carries a `.sbe-exempt`
+that waives the design checks for the templates themselves, and it must not
+travel with a real dossier, where those checks are supposed to run.
 
 Answered n, n, y, n, none (nothing sensitive, nothing crossing a boundary,
 reversible, no consumers), the intake writes:
@@ -740,7 +747,7 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for
-  adr        PASS     2 alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
+  adr        PASS     2 distinct alternatives rejected with a stated reason, and criteria, decision, consequences and flip condition each carry content
   datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality
   diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction)
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design

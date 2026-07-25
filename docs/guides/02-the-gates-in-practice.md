@@ -266,8 +266,9 @@ file and the HEAD commit trailers.
   (no signature), and similar.
 
 The binding rule: an `Approved-by:` trailer counts only when the signature state is
-`G`, `U`, or `E` (a signature exists and was attached to the commit). A `Reviewed-in:`
-trailer counts as a platform review id on its own.
+`G` or `U` (this host verified the signature). `E` means this host could not check
+the signature, which is NO-DATA and never an approval. A `Reviewed-in:` trailer
+counts as a platform review id on its own.
 
 ### Worked FAIL
 
@@ -410,8 +411,12 @@ runner removes the opportunity.
 Reality produces exceptions, so overrides exist. They are constrained so an override can
 never quietly become the norm:
 
-- **Named and logged.** An override is named (who, why) and written to the overrides
-  ledger, then surfaced at the weekly review. It is never silent.
+- **Named and reasoned, in the record `sbe_design.py` reads.** An override sets both
+  `override` and `override_reason` in `00-intake.json`. `sbe_design.py` re-derives the
+  tier from the intake answers and prints the declared override, its direction (raised
+  or lowered), and its reason on the verdict line, on every run. A reason under three
+  words or twelve characters is refused: it is not reviewable, so the override fails.
+  It is never silent.
 - **Never on the `--strict` CI path.** Impatience cannot override a strict gate. The
   only way a `--strict` gate stops failing is a human editing the gate config in a
   reviewed change. This is deliberate: the session can note an exception, but the merge
@@ -421,9 +426,9 @@ never quietly become the norm:
   rule stated in a prompt is not a control; a control is a check that runs.
 
 Concretely, an advisory FAIL in a session is a signal you can act on with an override
-noted in the ledger. A `--strict` FAIL in CI is a wall: you fix the receipt, or a human
-changes the gate in a PR someone reviews. `--strict` on a FAIL exits nonzero and prints
-the block reason:
+recorded in `00-intake.json` and printed on the next verdict line. A `--strict` FAIL in
+CI is a wall: you fix the receipt, or a human changes the gate in a PR someone reviews.
+`--strict` on a FAIL exits nonzero and prints the block reason:
 
 ```
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
@@ -495,7 +500,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:524, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:631, sbe_telemetry.py:286, sbe_telemetry.py:734, sbe_telemetry.py:787, sbe_telemetry.py:932); this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over

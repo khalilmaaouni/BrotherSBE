@@ -178,8 +178,9 @@ plus a named human approval the agent cannot forge: a signed commit trailer
 `Approved-by:` on a signed commit. A `Reviewed-in:` platform review id is the
 keyless alternative and reports NO-DATA, because nothing resolves it. A typed
 name with no signature FAILs the `approval` gate. That override, if you ever take
-one, is never silent: it is named, logged, and surfaced at the weekly review, and
-it is never available on the `--strict` CI path.
+one, is never silent: it is named, carries a reason, and is visible in the diff
+and on the tool's printed verdict line, and it is never available on the
+`--strict` CI path.
 
 ## Starter files (paste these, or just copy the folder)
 
