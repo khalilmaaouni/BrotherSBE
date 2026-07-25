@@ -207,6 +207,7 @@ printf '2\nstrongly\nlow\nlow\n' | python3 "$SBE/tools/sbe_decide.py" "$SBE/tabl
 ```
 
 ```
+deploying_teams (Independently deploying teams. Services below four teams usually cost more than they return.): consistency (Strong consistency across a service boundary is expensive and often accidental.): ops_maturity (On-call, tracing, and CI maturity. Without them a distributed estate is undebuggable.): failure_isolation (Does one component failing have to leave the others running?): 
 Recommendation: modular monolith
 Alternatives: monolith, services
 Decided by:
@@ -468,29 +469,30 @@ BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
   datamodel  PASS     5 entities, each with a system of record; every relationship carries cardinality
-  diagrams   FAIL     diagram element(s) appear nowhere else in the dossier: IntakeService, WarehouseLoader
+  diagrams   PASS     7 diagram node(s), all traceable: 5 to entities in 05-data-model.md, 2 to declared components
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker
 ```
 
-That FAIL is the check doing its job with the only vocabulary it has. The
-traceability check reads the bullet list in `05-data-model.md` and treats it as the
-set of names a diagram may use. `IntakeService` and `WarehouseLoader` are real
-parts of this system, but the dossier had not defined them anywhere the check can
-read, and an undefined box on an architecture diagram is exactly how a picture
-starts describing a system that does not exist.
+Read the diagrams line, because it is doing something worth understanding. Five of
+those seven nodes are entities in `05-data-model.md`. The other two, `IntakeService`
+and `WarehouseLoader`, are not entities and never should be: they are running
+software, and a conceptual data model that lists a nightly job alongside OrderLine is
+a worse data model. They trace because `04-technology-map.md` already declares them
+in its component table, as "Intake service" and "Warehouse loader".
 
-Two honest fixes: redraw the diagram using only names the dossier defines, or
-define the components. Here they are components worth naming, so they get declared
-in `05-data-model.md`, in their own section, above the relationships:
+That is the point. A diagram node is traceable if it is an entity in the data model
+OR a declared runtime component: a row in `04-technology-map.md`, or a bullet under a
+Components heading in `06-diagrams.md` itself. An earlier version of this check
+required every node to be an ENTITY, which produced a FAIL here and an obvious way
+out: add IntakeService and WarehouseLoader to `05-data-model.md` as entities with a
+system of record. The gate went green and the data model got worse. A check that
+makes the honest artifact fail is a check that teaches people to corrupt it, so the
+check changed rather than the model.
 
-```markdown
-## Components named in diagrams
-- IntakeService: the deployable that claims a file, validates it, and writes the order store; system of record: this repository.
-- WarehouseLoader: the nightly job that replaces one OrderFact partition; system of record: this repository.
-```
-
-They follow the same rule as an entity: each names where it lives, or the data
-model check rejects it. Write `07-verification.md` (next section) and run again:
+The rule that stayed is the one that matters: an undefined box on an architecture
+diagram is exactly how a picture starts describing a system that does not exist. Draw
+a node this dossier defines nowhere and it still FAILs by name. Write
+`07-verification.md` (next section) and run again:
 
 ```bash
 python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
@@ -500,15 +502,16 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   artifacts  PASS     tier T3: every required artifact present
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
-  datamodel  PASS     7 entities, each with a system of record; every relationship carries cardinality
-  diagrams   PASS     7 diagram node(s), all traceable to dossier artifacts
+  datamodel  PASS     5 entities, each with a system of record; every relationship carries cardinality
+  diagrams   PASS     7 diagram node(s), all traceable: 5 to entities in 05-data-model.md, 2 to declared components
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker
 exit: 0
 ```
 
-Seven, not five, because the two components are now part of the dossier's
-vocabulary. The rule the check enforces is one sentence: if it is in a diagram, it
-is defined somewhere a reader can find it.
+Five entities and seven traceable nodes, and the evidence says which is which. The
+rule the check enforces is one sentence: if it is in a diagram, it is defined
+somewhere a reader can find it. What it no longer does is decide for you which
+artifact that has to be.
 
 ---
 
@@ -590,16 +593,26 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
-  migration PASS     forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
   approval  FAIL     approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 exit: 1
 ```
 
-The `APPROVAL` file declares the path; it is not the approval. The approval has to
-be bound to something the agent cannot forge, which means a signed commit carrying
-`Approved-by:` or a recorded platform review id. Commit with the trailer:
+The `APPROVAL` file declares the path; it is not the approval. The approval has to be
+bound to more than a name in a text field: a signed commit carrying `Approved-by:`,
+or a recorded platform review id.
+
+Be clear-eyed about which of the two you are using, because they are not equally
+strong. A signature this host verified cannot be produced by an agent that does not
+hold the private key. A `Reviewed-in:` id is a regex match against a commit message
+the agent writes, and nothing resolves it against a review platform, so an agent can
+type one. The gate says exactly that in its own evidence, below. It is used here
+because it is the path that works on a runner with no keyring, and it is a pointer
+for a human to follow rather than proof a review happened. If you need it to be a
+control, add a CI step that queries your review platform for the id and fails when it
+does not exist. Commit with the trailer:
 
 ```bash
 git add -A
@@ -613,8 +626,8 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
-  migration PASS     forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id
-  approval  PASS     approval bound to platform review PR-482
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
+  approval  PASS     commit records Reviewed-in: PR-482. This gate checked the trailer is present and does not resolve the id against a review platform, so it points a human at a review rather than proving one happened
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 exit: 0
 ```
@@ -681,8 +694,8 @@ BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
   artifacts  PASS     tier T0: every required artifact present
   adr        PASS     2 alternatives rejected, criteria, decision, consequences, and flip condition present
   datamodel  PASS     3 entities, each with a system of record; every relationship carries cardinality
-  diagrams   PASS     3 diagram node(s), all traceable to dossier artifacts
-  placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker, which the template says to delete once the section is your own design
+  diagrams   PASS     5 diagram node(s), all traceable: 3 to entities in 05-data-model.md, 2 to declared components
+  placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design
 ```
 
 Four green, one red, and the red is the point. The four structural checks pass
