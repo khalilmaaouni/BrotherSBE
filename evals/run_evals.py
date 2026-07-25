@@ -272,12 +272,37 @@ def d12(root):
     write(root, "00-intake.json", {"answers": {}, "override": None})
 
 
+_decide = SourceFileLoader("sbe_decide", os.path.join(HERE, "..", "tools", "sbe_decide.py")).load_module()
+_TABLES = json.load(open(os.path.join(HERE, "..", "tables", "architecture.json")))
+
+
+@case("small-team-strong-consistency-is-not-microservices", "decide", "modular monolith")
+def a1(root):
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": 1, "consistency": "strong",
+                                             "ops_maturity": "low", "failure_isolation": "low"})
+    return r["recommendation"]
+
+
+@case("many-teams-high-isolation-is-services", "decide", "services")
+def a2(root):
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": 6, "consistency": "eventual",
+                                             "ops_maturity": "high", "failure_isolation": "high"})
+    return r["recommendation"]
+
+
+@case("recommendation-always-names-a-flip-condition", "decide", "yes")
+def a3(root):
+    r = _decide.recommend(_TABLES["shape"], {"deploying_teams": 1, "consistency": "strong",
+                                             "ops_maturity": "low", "failure_isolation": "low"})
+    return "yes" if r["flip_condition"] and len(r["alternatives"]) == 2 else "no"
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
-                if klass == "tier":
+                if klass in ("tier", "decide"):
                     verdict = fn(d)
                 else:
                     fn(d)
