@@ -13,6 +13,11 @@ The classes (ratified 2026-07-24):
             whose second, independently-scripted derivation RE-RAN to zero drift
             against a PINNED snapshot (live-warehouse drift is expected; the gate
             fails loudly if no snapshot id is recorded, rather than silently).
+            Pinned means a snapshot id that is an answer, independent means the
+            second query differs by more than case and whitespace, and zero drift
+            is a comparison of two NUMBERS. `snapshot_id: "TODO"` with both rerun
+            values `"pending"` once produced "1 figure(s) each with a pinned,
+            independently re-derived, zero-drift check" at exit 0.
   migration A forward and a reverse migration, both with a receipt showing they
             ran against a restored copy, the reverse receipt recording a rehearsal
             run id AS A NON-BLANK STRING, and row counts that were RECORDED and
@@ -30,12 +35,17 @@ The classes (ratified 2026-07-24):
               Approved-by: with a signature THIS HOST verified (git %G? = G or U)
                 proves a key holder signed the commit. The agent cannot produce
                 this without the private key.
-              Reviewed-in: <review id> proves only that an id in the right shape
-                was written into the commit message. This gate does not resolve
-                it against any platform, so an agent can type one. It is a
-                pointer for a human to follow, not a forgery-resistant control.
-                Resolve it in CI (a job that queries your review platform for
-                that id) if you need it to be one.
+              Reviewed-in: <review id> proves only that a non-vacuous id was
+                written into the commit message. This gate does not resolve it
+                against any platform, so an agent can type one. It is a pointer
+                for a human to follow, not a forgery-resistant control, and its
+                verdict is NO-DATA for exactly the reason an unverifiable
+                signature's is: the host cannot check either one, and two
+                identical epistemic states get one verdict. Resolve it in CI (a
+                job that queries your review platform for that id) if you need
+                it to be a control. There is NO shape check on the id beyond
+                refusing the vacuity tokens; "an id in the right shape" was a
+                claim the regex \S+ never made.
             A bare typed name FAILS. A signature the host cannot check (git
             %G? = E, the normal result on a runner with no imported keys) is
             NO-DATA, never an approval: CI must import the signer's public keys,
@@ -59,7 +69,7 @@ the operating record proves pasted receipts get invented.
 import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import Check, run_guarded, stated
+from sbe_checks import Check, run_guarded, answered, numeric, fold
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -175,38 +185,54 @@ def gate_numbers(root):
                 problems.append("entry %d in %s is %s, not a figure object"
                                 % (checked, os.path.relpath(m, root), type(fig).__name__))
                 continue
-            # Every field below goes through stated(), not through truthiness and
-            # not through `is None`. A manifest carrying "" or " " in every field
-            # parsed, held every required key, and cleared this gate, and the
-            # evidence line then reported a re-derivation that compared two empty
-            # strings. An empty value is an absent value.
-            label = stated(fig.get("label")) or "figure %d" % checked
-            if stated(fig.get("label")) is None:
-                problems.append("%s in %s records no label, so nothing in the report can say which "
-                                "figure was checked" % (label, os.path.relpath(m, root)))
-            if stated(fig.get("snapshot_id")) is None:
-                problems.append("%s: no snapshot_id (a live warehouse drifts; pin the read)" % label)
-            q1, q2 = stated(fig.get("query")), stated(fig.get("second_derivation"))
+            # Every field below goes through answered(), not through truthiness,
+            # not through `is None`, and no longer through stated() either. A
+            # manifest carrying "" in every field cleared this gate once and the
+            # evidence line reported zero drift over two empty strings; the round
+            # after that, a manifest carrying "TODO" and "pending" did the same
+            # thing, because a placeholder is not blank. An empty value is an
+            # absent value, and so is a value that names the absence of one.
+            label = answered(fig.get("label")) or "figure %d" % checked
+            if answered(fig.get("label")) is None:
+                problems.append("%s in %s records no label (%r), so nothing in the report can say "
+                                "which figure was checked"
+                                % (label, os.path.relpath(m, root), fig.get("label")))
+            if answered(fig.get("snapshot_id")) is None:
+                problems.append("%s: no snapshot_id recorded (%r); a live warehouse drifts, so pin "
+                                "the read. A placeholder is not a pin"
+                                % (label, fig.get("snapshot_id")))
+            q1, q2 = answered(fig.get("query")), answered(fig.get("second_derivation"))
             if q1 is None:
                 problems.append("%s: no query recorded, so there is nothing for the second derivation to be independent of" % label)
             if q2 is None:
                 problems.append("%s: no independent second derivation" % label)
-            elif q1 is not None and str(q1).strip() == str(q2).strip():
-                problems.append("%s: second derivation is textually identical to the first (not independent)" % label)
+            elif q1 is not None and fold(q1) == fold(q2):
+                # Compared on `.strip()`ed text, so a second derivation that was
+                # the first one lowercased, or reindented, was accepted as an
+                # independent re-derivation. Two texts that differ only in case
+                # or in whitespace are one text.
+                problems.append("%s: the second derivation is the first one again (it differs only "
+                                "in case or whitespace, if at all), so nothing independent re-derived "
+                                "this figure" % label)
             r = fig.get("rerun")
             if not isinstance(r, dict):
                 problems.append("%s: rerun is %s, not an object recording the re-derivation"
                                 % (label, type(r).__name__))
                 continue
-            primary, secondary = stated(r.get("primary")), stated(r.get("secondary"))
-            if not stated(r.get("ran")):
-                problems.append("%s: second derivation not marked as re-run" % label)
+            primary, secondary = numeric(r.get("primary")), numeric(r.get("secondary"))
+            if r.get("ran") is not True:
+                # The boolean IS the claim, exactly as in gate_migration below.
+                # The string "false" is truthy, and it satisfied this test while
+                # asserting the opposite of what it says.
+                problems.append("%s: second derivation not marked as re-run (recorded %r, and only "
+                                "the value true is that claim)" % (label, r.get("ran")))
             elif primary is None or secondary is None:
-                have = ", ".join(k for k in ("primary", "secondary") if stated(r.get(k)) is not None)
+                unread = ", ".join("%s=%r" % (k, r.get(k)) for k in ("primary", "secondary")
+                                   if numeric(r.get(k)) is None)
                 problems.append("%s: rerun marked ran but the value(s) needed to prove zero drift "
-                                "were not recorded (recorded: %s). Two empty values compare equal "
-                                "and prove nothing, so this is a failure and not a zero-drift pass"
-                                % (label, have or "neither"))
+                                "were not recorded as numbers (%s). A figure is a number; two "
+                                "placeholders compare equal and prove nothing, so this is a failure "
+                                "and not a zero-drift pass" % (label, unread))
             elif primary != secondary:
                 problems.append("%s: DRIFT primary=%s secondary=%s (zero drift required)" % (label, r["primary"], r["secondary"]))
     if unreadable:
@@ -258,10 +284,11 @@ def gate_migration(root):
             if direction != "reverse":
                 continue
             rid = leg.get("rehearsal_run_id")
-            if stated(rid) is None:
-                problems.append("reverse: no rehearsal_run_id recorded (this gate checks the id is "
-                                "present, is a string and is not blank, and cannot resolve it "
-                                "against a job system)")
+            if answered(rid) is None:
+                problems.append("reverse: no rehearsal_run_id recorded (%r). This gate checks the id "
+                                "is present, is a string, is not blank and is not one of the tokens "
+                                "this project refuses as a stated value; it cannot resolve it against "
+                                "a job system" % (rid,))
             elif not isinstance(rid, str):
                 problems.append("reverse: rehearsal_run_id is %s, not a run id string"
                                 % type(rid).__name__)
@@ -278,18 +305,23 @@ def gate_migration(root):
                            "the reverse was supposed to restore" % rel)
         elif not isinstance(rc, dict):
             problems.append("%s: row_counts is %s, not an object" % (rel, type(rc).__name__))
-        elif stated(rc.get("before")) is None or stated(rc.get("after_reverse")) is None:
+        elif numeric(rc.get("before")) is None or numeric(rc.get("after_reverse")) is None:
             # `is None` was the whole emptiness test here, so a row_counts block
             # holding "" in both fields compared equal, incremented the counter,
             # and produced "1 row-count comparison(s) matched" about two empty
-            # strings. A count that was not recorded is not a count that matched.
-            have = ", ".join(sorted(k for k in rc if stated(rc.get(k)) is not None)) or "neither"
-            problems.append("%s: row_counts records %s; a blank or half-recorded count proves "
-                            "nothing, and both before and after_reverse are required as recorded "
-                            "values" % (rel, have))
+            # strings. Then a block holding "unknown" in both did the same thing,
+            # because "unknown" is not blank. A row count is a NUMBER: that is
+            # the test, it rejects every placeholder at once, and it cannot
+            # reject an honest receipt, because a count nobody counted is not a
+            # count that matched.
+            unread = ", ".join("%s=%r" % (k, rc.get(k)) for k in ("before", "after_reverse")
+                               if numeric(rc.get(k)) is None)
+            problems.append("%s: row_counts does not record a number for %s; a blank, a placeholder "
+                            "or a half-recorded count proves nothing, and both before and "
+                            "after_reverse are required as counted numbers" % (rel, unread))
         else:
             compared += 1
-            if rc["before"] != rc["after_reverse"]:
+            if numeric(rc["before"]) != numeric(rc["after_reverse"]):
                 problems.append("reverse did not restore row count: before=%s after=%s"
                                 % (rc["before"], rc["after_reverse"]))
     if unreadable:
@@ -327,15 +359,25 @@ def gate_approval(root):
     # rejecting a known key that had merely expired, so E is NO-DATA, not an approval.
     if trailer and sig in ("G", "U"):
         return "PASS", "signed commit carries Approved-by: %s" % trailer.group(1).strip()
+    if review_id and answered(review_id.group(1)) is not None:
+        # NO-DATA, not PASS, and the argument is internal consistency rather than
+        # taste. Four lines below, a signature THIS HOST COULD NOT VERIFY returns
+        # NO-DATA, with the reasoning "an unverifiable signature is not an
+        # approval". A Reviewed-in id is in the identical epistemic state: this
+        # gate cannot resolve it either, and the agent writes the commit message.
+        # Two identical states must not get two different verdicts, and while
+        # this one returned PASS the strongest sentence this gate could print
+        # about a money-movement change was purchasable with a single hyphen.
+        # NO-DATA neither blocks nor passes, so no honest team is impeded.
+        return "NO-DATA", ("commit records Reviewed-in: %s. This gate read a trailer out of a commit "
+                           "message and does not resolve the id against any review platform, so it "
+                           "points a human at a review rather than proving one happened. That is a "
+                           "pointer, not a control: resolve the id in CI (a job that queries your "
+                           "review platform) or sign the commit, and this becomes a verdict"
+                           % review_id.group(1))
     if review_id:
-        # Say what this proves, in the evidence line, every time. The id is not
-        # resolved against any platform: this gate reads the commit message the
-        # agent wrote. Claiming more than that in the evidence string is the same
-        # defect as claiming a row count nothing compared.
-        return "PASS", ("commit records Reviewed-in: %s. This gate checked the trailer is present "
-                        "and does not resolve the id against a review platform, so it points a "
-                        "human at a review rather than proving one happened"
-                        % review_id.group(1))
+        return "FAIL", ("the Reviewed-in trailer records %r, which names no review; an id nobody can "
+                        "follow is not a pointer at anything" % review_id.group(1))
     if trailer and sig == "E":
         return "NO-DATA", ("signature present but this host could not verify it (git %G? = E): import the signer's public key "
                            "into the verifying keyring, or use a Reviewed-in: review id, which needs no keyring. "
@@ -366,10 +408,10 @@ def gate_ran(root):
                 problems.append("entry %d in %s is %s, not a check object"
                                 % (checked, os.path.relpath(m, root), type(chk).__name__))
                 continue
-            name = stated(chk.get("name")) or "check %d" % checked
-            if stated(chk.get("name")) is None:
-                problems.append("%s in %s records no name, so nothing in the report can say what "
-                                "ran" % (name, os.path.relpath(m, root)))
+            name = answered(chk.get("name")) or "check %d" % checked
+            if answered(chk.get("name")) is None:
+                problems.append("%s in %s records no name (%r), so nothing in the report can say "
+                                "what ran" % (name, os.path.relpath(m, root), chk.get("name")))
             # An exit code is an integer and a duration is a number. `False`
             # satisfied `!= 0` and `True` satisfied a truthiness test, so
             # {"exit_code": false, "duration_ms": true} passed as "a zero exit and
@@ -430,7 +472,14 @@ GATES = {
                    "it, which is a broken claim and not an absence, so it FAILs rather than "
                    "reporting NO-DATA",
         full_fixture={"files": {APPROVAL_FILE: "touches the partner payout path\n"},
-                      "git": {"message": "payout batching\n\nReviewed-in: PR-99999"}}),
+                      "git": {"message": "payout batching\n\nReviewed-in: PR-99999"}},
+        full_expect="NO-DATA",
+        full_expect_reason=(
+            "this gate reaches PASS only on a commit whose signature THIS HOST verified, and no "
+            "fixture can produce one: the honesty test has no private key and importing one would "
+            "make the test prove something about the test's keyring rather than about the gate. The "
+            "strongest evidence a fixture can carry is the keyless Reviewed-in trailer, whose "
+            "honest verdict is NO-DATA, so that is what the worked example asserts")),
     "ran": Check(
         gate_ran, reads=(RAN_RECEIPT,), kind="json", item_key="checks",
         full_fixture={"files": {RAN_RECEIPT: {"checks": [

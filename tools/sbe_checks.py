@@ -17,6 +17,9 @@ example of its evidence:
   empty_expect   the verdict when the evidence exists and declares nothing
   full_fixture   evidence that SHOULD pass, from which the honesty test derives
                  the empty-value shapes mechanically
+  full_expect    the verdict full_fixture produces, PASS unless the check cannot
+                 reach PASS on any evidence this host can build, in which case
+                 full_expect_reason says why and is printed on every run
   optional_leaves fields in full_fixture the PASS sentence does not assert over,
                  each with a stated reason, printed on every run
 
@@ -27,6 +30,14 @@ think of that shape again. The honesty test hollows the declared fixture leaf by
 leaf, subtree by subtree, and whole, in empty strings, whitespace and nulls, and
 requires that none of it produces a PASS. A field nobody empties is a field
 nobody tested.
+
+A fourth round found the same defect one level deeper again: the value was
+present, non-empty, and vacuous. `snapshot_id: "TODO"` with `primary` and
+`secondary` both `"pending"` produced "1 figure(s) each with a pinned,
+independently re-derived, zero-drift check" and exit 0. The defence already
+existed in this repository, as a private constant in one tool that no gate
+imported, which is why VACUOUS_VALUES and `answered()` live in THIS file: one
+definition, imported everywhere, extended in one place.
 
 empty_expect can never be PASS. The constructor refuses it.
 
@@ -40,13 +51,17 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
+import re
+
 KINDS = ("json", "jsonl", "text", "tree", "git")
+VERDICTS = ("PASS", "FAIL", "NO-DATA")
 
 
 class Check:
     def __init__(self, fn, reads, kind, item_key=None,
                  empty_expect="NO-DATA", empty_note="", empty_fixture=None,
-                 full_fixture=None, no_full_fixture="", optional_leaves=None):
+                 full_fixture=None, no_full_fixture="", optional_leaves=None,
+                 full_expect="PASS", full_expect_reason=""):
         if kind not in KINDS:
             raise ValueError("unknown evidence kind %r (expected one of %s)"
                              % (kind, ", ".join(KINDS)))
@@ -71,6 +86,13 @@ class Check:
                     "full_fixture must be a dict carrying a non-empty 'files' mapping of "
                     "relative path to content (a dict or list is written as JSON, a string "
                     "verbatim), optionally with 'env' and 'git' keys")
+        if full_expect not in VERDICTS:
+            raise ValueError("full_expect must be one of %s, got %r" % (", ".join(VERDICTS), full_expect))
+        if full_expect != "PASS" and not full_expect_reason:
+            raise ValueError(
+                "a check whose worked positive example does not reach PASS must say why "
+                "(full_expect_reason). The honesty test asserts the fixture produces exactly this "
+                "verdict, so an unstated ceiling would let a check quietly stop being able to pass")
         for path, why in (optional_leaves or {}).items():
             if not why:
                 raise ValueError(
@@ -90,6 +112,8 @@ class Check:
         self.full_fixture = full_fixture
         self.no_full_fixture = no_full_fixture
         self.optional_leaves = dict(optional_leaves or {})
+        self.full_expect = full_expect
+        self.full_expect_reason = full_expect_reason
 
     def __call__(self, *a, **kw):
         return self.fn(*a, **kw)
@@ -108,6 +132,10 @@ def stated(value):
     all record nothing. False and 0 record something: a zero row count and a
     zero exit code are answers, and a check that treated them as absent would
     reject honest work.
+
+    This is emptiness only. "TODO" is not empty and records nothing either;
+    that is `answered()` below, and a field whose content the verdict sentence
+    describes goes through THAT one.
     """
     if value is None:
         return None
@@ -116,6 +144,116 @@ def stated(value):
     if isinstance(value, (list, dict, tuple, set)) and not value:
         return None
     return value
+
+
+# Tokens that are present, non-empty, and still name no answer. ONE list, here,
+# because the fourth round of this defect was caused by there being two: this
+# module owned `stated()` and sbe_design.py privately owned an equivalent list,
+# so the project refused the token "todo" as a system of record and accepted it
+# as a pinned warehouse snapshot in the same run. Every tool imports this.
+#
+# Add to it freely. A token belongs here when a reader seeing it in a receipt
+# would learn nothing about the work: it is a note to the author, not a value.
+# It does NOT belong here if an engineer could honestly mean it (which is why
+# "0", "false" and short real identifiers are absent: a zero row count and a
+# zero exit code are answers).
+VACUOUS_VALUES = frozenset((
+    "todo", "to do", "tbd", "tba", "tbc", "fixme", "xxx",
+    "placeholder", "n/a", "na", "none", "null", "nil", "unknown",
+    "pending", "-", "--", "---", "?", "??", "???",
+    "foo", "bar", "baz", "same", "as above", "see above", "ditto",
+    "not decided", "undecided", "not known", "unclear",
+    "to be decided", "to be determined",
+))
+_LEADING_COPULA = re.compile(r"^(?:it\s+is|is|was|are)\s+", re.I)
+
+
+def fold(text):
+    """A text reduced to what it actually says: no case, no stray whitespace.
+
+    Two derivations that differ only in case or in internal whitespace are one
+    derivation. `str.strip()` was the whole comparison, so `SELECT SUM(amount)
+    FROM orders` and `select  sum(amount)  from orders` were reported as an
+    independent second check of each other.
+    """
+    return " ".join(str(text).split()).casefold()
+
+
+def vacuous(value, allow=()):
+    """True when this value is present and non-empty and still records no answer.
+
+    Round four of one defect. `stated()` answers "is this field blank", every
+    gate asked it correctly, and nothing anywhere asked "is this field an
+    ANSWER". A placeholder is not blank, so `snapshot_id: "TODO"` cleared a gate
+    whose evidence line then asserted a pinned read, and two `"pending"` values
+    compared equal and were reported as zero drift.
+
+    `allow` names tokens that ARE answers in one field's domain: the intake asks
+    how many downstream consumers break and "none" is the honest answer to that
+    question, while "none" as a system of record is the absence of one. A field
+    that carves a token out says so at the call site, in one place a reader can
+    find, rather than the shared list being quietly weakened for everyone.
+    """
+    if not isinstance(value, str):
+        return False
+    v = " ".join(value.split()).strip(" \t.;,:!\"'`")
+    v = _LEADING_COPULA.sub("", v).strip().casefold()
+    if v in {a.casefold() for a in allow}:
+        return False
+    return v in VACUOUS_VALUES or not v
+
+
+def answered(value, allow=()):
+    """The answer recorded here, or None if this field records none.
+
+    `stated()` plus the vacuity list: the test every field goes through when the
+    verdict sentence is going to assert something ABOUT its content. Use
+    `stated()` only where any non-blank value is genuinely acceptable.
+    """
+    v = stated(value)
+    if isinstance(v, str) and vacuous(v, allow):
+        return None
+    return v
+
+
+def all_vacuous(text):
+    """True when a body of text is present and every substantive line of it is a placeholder.
+
+    The text-shaped vacuity. A zero-byte artifact was already the absence of an
+    artifact; a file holding only headings was too; and then a file whose every
+    line under those headings said TODO cleared the same checks, because a
+    placeholder is not blank. Headings and comment lines are scaffolding and are
+    not counted either way: this asks whether anything was WRITTEN.
+    """
+    body = re.sub(r"(?s)<!--.*?-->", "", text or "")
+    lines = [l.strip() for l in body.splitlines()
+             if l.strip() and not l.lstrip().startswith("#")]
+    return bool(lines) and all(vacuous(l) for l in lines)
+
+
+def numeric(value):
+    """The number this field records, or None if it does not record one.
+
+    A figure's value and a row count are numbers. `"pending"` and `"unknown"`
+    are not, and neither is `True`: a boolean satisfied both `!= 0` and a
+    truthiness test, and the receipt then read as a measurement. A number
+    written as a string is still a number, so "17,570" and "17570" both count;
+    an engineer exporting a receipt from a spreadsheet writes the first one and
+    rejecting it would be rejecting honest work.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return None
+    text = value.strip().replace(",", "").replace("_", "").lstrip("$£€").rstrip("%")
+    try:
+        return float(text)
+    except ValueError:
+        # Not swallowed: None is the answer, and every caller turns it into a
+        # named FAIL that quotes the value it could not read as a number.
+        return None
 
 
 def run_guarded(name, check, *args):
