@@ -1,5 +1,9 @@
 # 06. Diagrams
 
+<!-- SBE-TEMPLATE-UNFILLED 06-diagrams: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 Diagrams are code so they diff in review and cannot drift silently.
 Required by tier: T1 one context diagram; T2 adds workflow and entity-relationship;
 T3 adds system context, container view, technology map, and failover topology.

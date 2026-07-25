@@ -1,5 +1,9 @@
 # 01. Purpose brief
 
+<!-- SBE-TEMPLATE-UNFILLED 01-purpose: this section is still the shipped example.
+     Replace it with your own design, then delete this comment. While it is
+     here, `sbe_design.py placeholder` FAILs and names this file. -->
+
 ## Problem
 What is broken or missing, stated without a solution in it.
 Example: order confirmations reach the warehouse up to a day late, so
