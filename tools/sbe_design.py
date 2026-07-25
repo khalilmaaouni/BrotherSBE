@@ -30,7 +30,7 @@ import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
-from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous
+from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous, prune_dirs
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -43,7 +43,6 @@ INTAKE = "00-intake.json"
 # section in, so a dossier copied wholesale and never edited fails with the
 # artifact named, rather than clearing the design gate on someone else's example.
 UNFILLED_MARKER = "SBE-TEMPLATE-UNFILLED"
-SKIP_DIRS = (".git", "node_modules", "__pycache__", ".venv", "venv", "vendor")
 # One visible exemption, with its reason inside the file and printed on every run.
 # A directory can hold dossier-shaped files without being live design work: the
 # shipped templates in templates/dossier/ are the obvious case, and a finished
@@ -1151,7 +1150,7 @@ def find_dossiers(root):
     """
     hits, exempt, refused = [], [], []
     for dp, dns, fns in os.walk(root):
-        dns[:] = sorted(d for d in dns if d not in SKIP_DIRS)
+        dns[:] = prune_dirs(dp, dns)
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
         if EXEMPT in fns:

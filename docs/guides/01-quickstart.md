@@ -68,9 +68,12 @@ The four gates and the exact receipt each one reads:
 | `ran` | `ran-receipt.json` | a SQL or pipeline check actually executed (nonzero duration, zero exit) |
 
 The gate resolves its root to your git worktree top and walks the tree for these
-filenames, skipping `.git`, `node_modules`, `__pycache__`, `.venv`, `venv` and
-`vendor` by directory name (matching `.git` as a substring of the path had also
-hidden `.github/` from all four gates). Put a receipt at the repo root, or beside the model or
+filenames, skipping version-control, dependency and virtualenv directories by
+directory name (matching `.git` as a substring of the path had also hidden
+`.github/` from all four gates). The skip list is one shared set,
+`sbe_checks.SKIP_DIRS`, plus two structural tells: a directory carrying a
+`pyvenv.cfg` is a virtualenv whatever it was named, and `site-packages` is
+installed code. Put a receipt at the repo root, or beside the model or
 migration it belongs to; both are found.
 
 ---
@@ -327,18 +330,26 @@ jobs:
         run: |
           set -o pipefail
           python3 tools/sbe_design.py --strict . | tee design-checks.out
+      # The pattern is `^  >> `, the prefix sbe_design.py puts on a waived line, and
+      # not the word WAIVED. The banner the tool prints on every run ends "WAIVED
+      # is not a pass either", so `grep -q 'WAIVED'` was unconditionally true: every
+      # clean run told the reviewer that a .sbe-exempt had waived one or more design
+      # checks and that nothing opened a file for them, over a run in which every
+      # check opened its files. An assurance signal that always fires carries no
+      # information, and this one asserted something false, which trains a reviewer
+      # to ignore the single control that makes WAIVED visible in CI at all.
       - name: Surface design waivers (a waiver is not a pass)
         if: always()
         run: |
-          if grep -q 'WAIVED' design-checks.out; then
-            grep 'WAIVED' design-checks.out | while read -r line; do
+          if grep -qE '^  >> ' design-checks.out; then
+            grep -E '^  >> ' design-checks.out | while read -r line; do
               echo "::warning title=BrotherSBE design waiver::$line"
             done
             {
               echo '### BrotherSBE design waivers'
               echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
               echo '```'
-              grep 'WAIVED' design-checks.out
+              grep -E '^  >> |^WAIVERS: ' design-checks.out
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi

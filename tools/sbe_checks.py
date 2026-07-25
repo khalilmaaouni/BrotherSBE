@@ -51,9 +51,51 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
-import re
+import os, re
 
 KINDS = ("json", "jsonl", "text", "tree", "git")
+
+# Directories no check walks into, in one place because the three tools that walk
+# a repository each carried their own list and the shortest of them was on the one
+# gate that cannot be waived. `tools/sbe_score.py` skipped exactly `.venv` and
+# `venv`, so a virtualenv called `.venv-whisper` put third-party code through the
+# silent-failure lint: 1127 hits in 8109 files against a real repository on the
+# author's machine, every one of them inside a vendored site-packages, with no
+# `.sbe-exempt` path out because that file is read only by the design checks. A
+# team that cannot fix the code the gate fails on and cannot waive it switches the
+# gate off, which costs more than any hole this project has closed.
+#
+# Names, plus the two structural tells below, because a virtualenv is whatever
+# somebody named it.
+SKIP_DIRS = frozenset((
+    ".git", ".hg", ".svn",
+    "node_modules", "bower_components", "vendor", "vendored", "third_party", "thirdparty",
+    "__pycache__", ".venv", "venv", ".virtualenv", "virtualenv", ".tox", ".nox", ".direnv",
+    "site-packages", "dist-packages", ".eggs",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".pyre", ".ipynb_checkpoints",
+))
+
+
+def is_skipped_dir(parent, name):
+    """True when this directory holds somebody else's code rather than this repo's.
+
+    By detection as well as by name: a directory carrying `pyvenv.cfg` IS a
+    virtualenv whatever it is called, and any path component `site-packages` or
+    `dist-packages` is installed third-party code. Matching on the exact names
+    `.venv` and `venv` was the whole defence, and renaming the environment
+    defeated it.
+    """
+    if name in SKIP_DIRS:
+        return True
+    path = os.path.join(parent, name)
+    if os.path.isfile(os.path.join(path, "pyvenv.cfg")):
+        return True
+    return False
+
+
+def prune_dirs(parent, dirnames):
+    """The subdirectories of `parent` worth walking, sorted, for os.walk's dns[:]."""
+    return sorted(d for d in dirnames if not is_skipped_dir(parent, d))
 VERDICTS = ("PASS", "FAIL", "NO-DATA")
 
 

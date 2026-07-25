@@ -150,18 +150,26 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
         run: |
           set -o pipefail
           python3 tools/sbe_design.py --strict . | tee design-checks.out
+      # The pattern is `^  >> `, the prefix sbe_design.py puts on a waived line, and
+      # not the word WAIVED. The banner the tool prints on every run ends "WAIVED
+      # is not a pass either", so `grep -q 'WAIVED'` was unconditionally true: every
+      # clean run told the reviewer that a .sbe-exempt had waived one or more design
+      # checks and that nothing opened a file for them, over a run in which every
+      # check opened its files. An assurance signal that always fires carries no
+      # information, and this one asserted something false, which trains a reviewer
+      # to ignore the single control that makes WAIVED visible in CI at all.
       - name: Surface design waivers (a waiver is not a pass)
         if: always()
         run: |
-          if grep -q 'WAIVED' design-checks.out; then
-            grep 'WAIVED' design-checks.out | while read -r line; do
+          if grep -qE '^  >> ' design-checks.out; then
+            grep -E '^  >> ' design-checks.out | while read -r line; do
               echo "::warning title=BrotherSBE design waiver::$line"
             done
             {
               echo '### BrotherSBE design waivers'
               echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
               echo '```'
-              grep 'WAIVED' design-checks.out
+              grep -E '^  >> |^WAIVERS: ' design-checks.out
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi

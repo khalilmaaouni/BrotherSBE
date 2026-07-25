@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous
+from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous, prune_dirs
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -435,7 +435,10 @@ def silent_failure_lints(ctx=None):
     hits, exempt = [], []
     scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
     for dp, dns, fns in os.walk(root):
-        dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__", ".venv", "venv")]
+        # Shared with the other two walkers, and by detection as well as by name:
+        # a virtualenv named .venv-whisper put third-party code through THIS gate,
+        # which is the one gate a .sbe-exempt cannot waive.
+        dns[:] = prune_dirs(dp, dns)
         for fn in sorted(fns):
             if fn == os.path.basename(__file__):
                 continue  # the linter declares the patterns as strings; do not self-match

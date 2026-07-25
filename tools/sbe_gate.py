@@ -69,13 +69,12 @@ the operating record proves pasted receipts get invented.
 import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import Check, run_guarded, answered, numeric, fold
+from sbe_checks import Check, run_guarded, answered, numeric, fold, prune_dirs
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
 APPROVAL_FILE = "APPROVAL"
 RAN_RECEIPT = "ran-receipt.json"
-SKIP_DIRS = (".git", "node_modules", "__pycache__", ".venv", "venv", "vendor")
 
 
 def load_receipt(path):
@@ -129,7 +128,7 @@ def find(root, name):
         # Match directory NAMES, not a substring of the path: `.git` as a
         # substring test also hid `.github/`, so the workflow that wires these
         # gates into CI was invisible to every one of them.
-        dns[:] = sorted(d for d in dns if d not in SKIP_DIRS)
+        dns[:] = prune_dirs(dp, dns)
         if name in fns:
             hits.append(os.path.join(dp, name))
     return hits

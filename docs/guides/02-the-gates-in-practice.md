@@ -460,8 +460,13 @@ From `LINT_PATTERNS` in `sbe_score.py`:
 
 The lint is opt-in and scoped: it scans a directory you pass as an argument or set via
 `SBE_LINT_ROOT`, and never an unrelated tree. It walks source files (`.py`, `.sql`,
-`.swift`, `.rb`, `.js`, `.ts`, `.go`), skipping `.git`, `node_modules`, `__pycache__`,
-`.venv`, and `venv`. Each hit names its file and line.
+`.swift`, `.rb`, `.js`, `.ts`, `.go`), skipping the shared vendor and virtualenv
+set `sbe_checks.SKIP_DIRS` (version control, `node_modules`, `vendor`,
+`third_party`, `__pycache__`, `.venv`, `venv`, `.tox`, `.nox`, `.direnv`,
+`site-packages`, `dist-packages` and the usual caches), plus any directory
+carrying a `pyvenv.cfg`. This list used to be `.venv` and `venv` alone, and a
+virtualenv named `.venv-whisper` therefore put vendored third-party code through
+the one gate a `.sbe-exempt` cannot waive. Each hit names its file and line.
 
 ### The visible allow-marker
 
@@ -485,7 +490,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:503, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:502, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over

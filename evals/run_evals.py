@@ -617,6 +617,31 @@ def s4(root):
     return run_score_lints([root])
 
 
+@case("lints-do-not-fail-a-repo-over-a-virtualenv-with-an-unusual-name", "lints", "PASS")
+def s5(root):
+    # The one gate a .sbe-exempt cannot waive, failing a team over code it did not
+    # write and cannot fix. `.venv` and `venv` were the entire skip list here, so
+    # `.venv-whisper` (or `.tox`, or `env39`) put every vendored file through it:
+    # 1127 hits in 8109 files against a real repository. Vendored code is now
+    # skipped by detection, not by exact name.
+    write(root, "src/app.py", "def f():\n    return 1\n")
+    write(root, ".venv-whisper/lib/python3.9/site-packages/thirdparty.py",
+          "try:\n    f()\nexcept Exception:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    return run_score_lints([root])
+
+
+@case("lints-still-read-the-repos-own-source-beside-a-virtualenv", "lints", "FAIL")
+def s6(root):
+    # The control for the case above: skipping vendored trees must not become a
+    # way to hide the repository's own swallowed error one directory over.
+    write(root, ".venv-whisper/pyvenv.cfg", "home = /usr/bin\n")
+    write(root, ".venv-whisper/lib/thirdparty.py",
+          "try:\n    f()\nexcept Exception:\n    pass\n")  # sbe: allow-silent lint FIXTURE, see above
+    write(root, "src/app.py",
+          "try:\n    f()\nexcept Exception:\n    pass\n")  # sbe: allow-silent lint FIXTURE, see above
+    return run_score_lints([root])
+
+
 _decide = SourceFileLoader("sbe_decide", os.path.join(HERE, "..", "tools", "sbe_decide.py")).load_module()
 _TABLES = json.load(open(os.path.join(HERE, "..", "tables", "architecture.json")))
 
@@ -1410,6 +1435,100 @@ def v30d(root):
     out = subprocess.run([sys.executable, DESIGN, "--strict", "--strict-waivers", root],
                          capture_output=True, text=True, env=e)
     return "blocked" if out.returncode else "clear"
+
+
+@case("the-meta-test-lint-sees-a-verdict-in-a-subpackage-and-in-a-lookup-table", "guard", "caught")
+def v30f(root):
+    """The honesty meta-test's own discovery, probed rather than read.
+
+    Three holes, all proved by building the shadow check the file exists to
+    forbid. Its walk was `os.listdir`, one level deep, so a registry in
+    `tools/quality/extra.py` was invisible to the registry walk AND to the source
+    lint while the summary line printed "20 checks discovered ... 0 failure(s)"
+    over twenty-one. And the lint resolved a constant and a name but not a `BinOp`
+    or a `Subscript`, so `"PA" + "SS"` and a `{"ok": "PASS"}` lookup returned the
+    verdict from a function it never saw. A coverage count that reads complete is
+    what makes each of those silent.
+    """
+    meta = SourceFileLoader("meta_probe", os.path.join(HERE, "test_no_data_class.py")).load_module()
+    tools = os.path.join(root, "tools")
+    os.makedirs(os.path.join(tools, "quality"))
+    write(tools, "quality/extra.py",
+          "def gate_shadow(root):\n"
+          "    return \"PASS\", \"quality is fine (examined nothing at all)\"\n\n"
+          "def gate_shadow_concat(root):\n"
+          "    return \"PA\" + \"SS\", \"examined nothing\"\n\n"
+          "_V = {\"ok\": \"PASS\"}\n\n"
+          "def gate_shadow_dict(root):\n"
+          "    return _V[\"ok\"], \"examined nothing\"\n")
+    original = meta.TOOLS_DIR
+    try:
+        meta.TOOLS_DIR = tools
+        found = {name for _fn, name in meta.pass_returning_functions()}
+        walked = set(meta.tool_sources())
+    finally:
+        meta.TOOLS_DIR = original
+    want = {"gate_shadow", "gate_shadow_concat", "gate_shadow_dict"}
+    if os.path.join("quality", "extra.py") not in walked:
+        return "the walk never reached a module one directory down: %s" % sorted(walked)
+    missing = sorted(want - found)
+    return "caught" if not missing else "the lint did not see %s" % ", ".join(missing)
+
+
+def _waiver_grep_pattern():
+    """The pattern the shipped CI actually uses to decide a waiver happened.
+
+    Read out of the workflow rather than restated here, so this eval is a check on
+    the file that ships and not on a copy of it that agrees with itself.
+    """
+    import re as _re
+    wf = open(os.path.join(_REPO, ".github/workflows/brothersbe-gates.yml"), errors="replace").read()
+    m = _re.search(r"if grep -q(\w*) '([^']+)' design-checks\.out", wf)
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def _design_output(root, args=()):
+    e = dict(os.environ)
+    e["SBE_DOSSIER_ROOT"] = ""
+    return subprocess.run([sys.executable, DESIGN] + list(args) + [root],
+                          capture_output=True, text=True, env=e).stdout
+
+
+@case("the-ci-waiver-annotation-does-not-fire-on-a-run-with-no-waiver", "guard", "differs")
+def v30e(root):
+    """The CI step must behave differently on a waived run and a clean one.
+
+    It did not. `grep -q 'WAIVED'` matched the banner sbe_design.py prints on every
+    single run ("WAIVED is not a pass either"), so every clean run annotated the
+    job summary with "a .sbe-exempt waived one or more design checks. Nothing
+    opened a file for them" over a run in which every check opened its files. An
+    always-on assurance signal carries no information; this one asserted something
+    false, and it is the only control that makes WAIVED visible in CI at all,
+    since the exit code deliberately cannot.
+
+    The pattern under test is read out of the shipped workflow, and the two
+    outputs are produced by running the real tool, so this cannot pass by
+    agreeing with itself.
+    """
+    import re as _re
+    flags, pattern = _waiver_grep_pattern()
+    if pattern is None:
+        return "the workflow no longer greps design-checks.out for a waiver at all"
+    rx = _re.compile(pattern, 0 if "E" in (flags or "") else 0)
+    clean_dir = os.path.join(root, "clean")
+    waived_dir = os.path.join(root, "waived")
+    for d, exempt in ((clean_dir, None), (waived_dir, EXEMPTION)):
+        write(d, "design/proj/00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+        write(d, "design/proj/01-purpose.md", PURPOSE)
+        if exempt:
+            write(d, "design/proj/.sbe-exempt", exempt)
+    clean_hits = [l for l in _design_output(clean_dir).splitlines() if rx.search(l)]
+    waived_hits = [l for l in _design_output(waived_dir).splitlines() if rx.search(l)]
+    if clean_hits:
+        return "the CI pattern %r fires on a run with no waiver: %r" % (pattern, clean_hits[0][:80])
+    if not waived_hits:
+        return "the CI pattern %r does not fire on a run that waived five checks" % pattern
+    return "differs"
 
 
 @case("a-blank-session-id-is-a-broken-ledger-row", "score", "FAIL")
