@@ -167,6 +167,43 @@ VACUOUS_VALUES = frozenset((
 ))
 _LEADING_COPULA = re.compile(r"^(?:it\s+is|is|was|are)\s+", re.I)
 
+# The yes/no vocabulary, in one place, for the same reason VACUOUS_VALUES is in
+# one place. A fifth round of one defect: the intake asks its five questions as
+# "(y/n)" and then read the answers for Python truthiness, so an intake answering
+# "n" to every question computed the HIGHEST tier (the string "n" is truthy) and
+# an intake answering "no" to "is this reversible" computed the LOWEST one. The
+# rule that decides how much evidence a change owes was the one rule reading its
+# inputs by truth-of-the-object rather than by meaning, in a file the tools that
+# already fixed this shape never imported.
+#
+# Extended here, once, and every caller that asks "is this answer a yes" gets the
+# extension. A token belongs here only if it is unambiguous written down alone: a
+# blank, a "maybe" and a "1" are not answers to a yes/no question and are refused
+# by name rather than guessed at.
+AFFIRMATIVE = frozenset(("true", "yes", "y"))
+NEGATIVE = frozenset(("false", "no", "n"))
+BOOLEAN_VOCABULARY = tuple(sorted(AFFIRMATIVE | NEGATIVE))
+
+
+def boolean_answer(value):
+    """The yes/no this field records, or None if it records neither.
+
+    A JSON boolean, or one of the words the prompts teach, trimmed and in any
+    case. Anything else is None, which every caller turns into a named refusal
+    that quotes the value it could not read: "the string false is truthy" is the
+    project's own stated law (SKILL.md L14) and this is the function that keeps
+    it true wherever a claim is written as a word instead of a boolean.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = " ".join(value.split()).strip(" \t.;,:!\"'`").casefold()
+        if v in AFFIRMATIVE:
+            return True
+        if v in NEGATIVE:
+            return False
+    return None
+
 
 def fold(text):
     """A text reduced to what it actually says: no case, no stray whitespace.

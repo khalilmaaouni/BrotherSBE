@@ -29,7 +29,7 @@ does not exempt, and a broken one is its own FAIL rather than a quiet gate.
 import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_intake import required_artifacts, compute_tier, TIERS, QUESTIONS
+from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import Check, run_guarded, answered, vacuous, all_vacuous
 
 ARTIFACT_FILES = {
@@ -187,6 +187,20 @@ def check_artifacts(root):
                            "cannot be re-derived from a complete intake. A blank answer is not a "
                            "no, and neither is the word TBD; rerun sbe_intake.py"
                            % (tier, ", ".join(unanswered)))
+    # Answered is not the same as readable. Every answer is now converted to the
+    # meaning it records before any rule reads it, and an answer outside the
+    # accepted vocabulary is a broken claim rather than an absence: the intake
+    # says something, and nothing here can tell which thing. Reading these five
+    # for truthiness meant "n" to every question computed the highest tier and
+    # `consumers: "several"` computed the lowest, and this re-derivation, whose
+    # entire job is to catch a hand-edited tier, recomputed the same wrong answer
+    # and agreed with the file.
+    _values, unreadable = read_answers(answers)
+    if unreadable:
+        return "FAIL", ("00-intake.json records tier %s but %s, so the tier cannot be re-derived "
+                        "from answers this tool can read. An answer written in a vocabulary "
+                        "nothing recognizes is a broken claim, not an absence; rerun sbe_intake.py"
+                        % (tier, "; ".join(unreadable)))
     computed = compute_tier(answers)
     label = ""
     declared = data.get("override")
