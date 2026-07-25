@@ -258,6 +258,32 @@ def fold(text):
     return " ".join(str(text).split()).casefold()
 
 
+_BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
+_LINE_COMMENT = re.compile(r"(?:--|#)[^\n]*")
+
+
+def derivation_fold(text):
+    """A derivation reduced to the work it actually does.
+
+    `fold()` collapsed case and whitespace, and that left a cosmetic edit buying
+    the strongest sentence this project prints: appending `;` to a copied query,
+    or pasting it back with `-- rerun 2026-07-25` on the end, was accepted as an
+    independent second derivation of the figure. Neither is fabrication; both are
+    the lazy thing rather than the dishonest thing, and answering them with "1
+    figure independently re-derived" is the gate asserting more than it examined.
+
+    Comments, trailing punctuation, case and whitespace are removed. What this
+    still cannot do is stated rather than implied: renaming an alias is a textual
+    difference and this will accept it, and no test here proves the two
+    derivations read different tables or different columns. Text difference is
+    the floor, not proof of independence, and the PASS sentence and SKILL.md L14
+    say exactly that and no more.
+    """
+    t = _BLOCK_COMMENT.sub(" ", str(text))
+    t = _LINE_COMMENT.sub(" ", t)
+    return fold(t).strip(" \t;.,")
+
+
 def vacuous(value, allow=()):
     """True when this value is present and non-empty and still records no answer.
 

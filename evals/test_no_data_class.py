@@ -56,9 +56,9 @@ receipt has, and it is the shape three rounds of review kept finding.
 
 Registries are DISCOVERED, not listed. Every Python module anywhere under
 tools/ is imported, at any depth, and every module-level dict of Checks in it is
-a registry. A registry this test
-does not know how to invoke is a FAILURE, not a skip, so a fourth tool added next
-year cannot be silently uncovered. A source-level lint additionally requires that
+a registry. A registry this test does not know how to invoke is a FAILURE, not a
+skip, so a fourth tool added next year, or a package added under an existing one,
+cannot be silently uncovered. A source-level lint additionally requires that
 every function anywhere in tools/ that can return the literal verdict "PASS" is
 registered in one of those registries, so a verdict-producing code path cannot
 live outside the walk.

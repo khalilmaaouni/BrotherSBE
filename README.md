@@ -54,7 +54,7 @@ Architecture shape is scored against named criteria in [`tables/architecture.jso
 
 Verification comes last, and only four failure classes get structural gates. Each fails silently: a wrong result looks exactly like a right one, and detection latency runs from minutes to never.
 
-- **numbers**: every figure that could reach a decision ships with an independently scripted second derivation, re-run to zero drift against a pinned snapshot.
+- **numbers**: every figure that could reach a decision ships with a second derivation whose text differs from the first by more than case, whitespace and comments, re-run to zero drift against a pinned snapshot. Text difference is the floor the tool can check, not proof that the two derivations are independent: renaming an alias passes, and nothing reads which tables they touch.
 - **migration**: forward and reverse both ran against a restored copy, the reverse records a rehearsal run id as a string, and row counts before and after match. A receipt with no row counts is NO-DATA, not a pass: the gate says what it compared instead of asserting a comparison it never made. Stated plainly, because the difference matters: nothing resolves the rehearsal id against a job system, so it is a pointer for a human to follow.
 - **approval**: a declared approval must be bound to more than a name typed into a text field. Two paths, and they are not equally strong. A signed `Approved-by:` commit trailer THIS HOST VERIFIED proves a key holder signed it, and an agent without the private key cannot produce it. A recorded `Reviewed-in:` review id proves only that a non-vacuous id sits in the commit message: nothing resolves it, there is no shape check on it, the agent writes commit messages, so an agent can write one. Its verdict is therefore NO-DATA, the same verdict a signature this host could not verify gets and for the same reason, and the evidence line says so on every run. If you need that path to be a control, add a CI step that resolves the id against your review platform. A typed name fails, a `Reviewed-in:` id that is a hyphen fails, and CI needs the signers' public keys for the one path that PASSes. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
 - **ran**: no SQL or pipeline change is done until its reconciliation query or test executed and left a receipt with a zero exit code and a nonzero duration. A check that took no time did not run.
@@ -213,7 +213,7 @@ only worth having if it clears, and the last two are the docs checking their own
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-190 evals: 190 passed, 0 regressions.
+199 evals: 199 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

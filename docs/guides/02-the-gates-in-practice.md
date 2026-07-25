@@ -50,8 +50,13 @@ itself, not in a footnote.
 
 Every figure that could reach a decision ships with a `numbers-manifest.json`. The
 gate reads `sbe_gate.py numbers` and checks each figure for four things: a pinned
-snapshot id, an independently scripted second derivation, that the second derivation
-actually re-ran, and zero drift between the two derivations.
+snapshot id, a second derivation whose text differs from the first by more than case,
+whitespace and comments, that the second derivation actually re-ran, and zero drift
+between the two derivations. A trailing semicolon or a trailing `-- rerun` comment
+used to buy that third one, which is a cosmetic edit answered with the strongest
+sentence the tool prints. What is still NOT checked, and what the PASS line
+therefore does not claim: that the two derivations are genuinely independent.
+Renaming an alias is a textual difference and passes, and no SQL here is parsed.
 
 ### The receipt shape (from `gate_numbers`)
 
@@ -82,7 +87,7 @@ number.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each with a pinned, independently re-derived, zero-drift check
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
 ```
 
 ### Worked FAIL
@@ -196,7 +201,7 @@ Here the reverse claims it ran against a restore but records no run id.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration FAIL     reverse: no rehearsal_run_id recorded (this gate checks the id is present, is a string and is not blank, and cannot resolve it against a job system)
+  migration FAIL     reverse: no rehearsal_run_id recorded (None). This gate checks the id is present, is a string, is not blank and is not one of the tokens this project refuses as a stated value; it cannot resolve it against a job system
 ```
 
 Two other FAIL paths exist and are worth knowing: a leg with
@@ -490,7 +495,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:502, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:512, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over

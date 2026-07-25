@@ -69,7 +69,7 @@ the operating record proves pasted receipts get invented.
 import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import Check, run_guarded, answered, numeric, fold, prune_dirs
+from sbe_checks import Check, run_guarded, answered, numeric, derivation_fold, prune_dirs
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -205,14 +205,17 @@ def gate_numbers(root):
                 problems.append("%s: no query recorded, so there is nothing for the second derivation to be independent of" % label)
             if q2 is None:
                 problems.append("%s: no independent second derivation" % label)
-            elif q1 is not None and fold(q1) == fold(q2):
+            elif q1 is not None and derivation_fold(q1) == derivation_fold(q2):
                 # Compared on `.strip()`ed text, so a second derivation that was
                 # the first one lowercased, or reindented, was accepted as an
                 # independent re-derivation. Two texts that differ only in case
-                # or in whitespace are one text.
+                # or in whitespace are one text. And then two texts differing by
+                # a trailing semicolon, or by `-- rerun 2026-07-25` on the end,
+                # were also one text, and bought the strongest sentence this file
+                # prints: a cosmetic edit is not a second derivation.
                 problems.append("%s: the second derivation is the first one again (it differs only "
-                                "in case or whitespace, if at all), so nothing independent re-derived "
-                                "this figure" % label)
+                                "in case, whitespace, comments or trailing punctuation, if at all), "
+                                "so nothing independent re-derived this figure" % label)
             r = fig.get("rerun")
             if not isinstance(r, dict):
                 problems.append("%s: rerun is %s, not an object recording the re-derivation"
@@ -244,7 +247,14 @@ def gate_numbers(root):
                            % "; ".join(nothing))
     if nothing:
         return _partial(nothing, checked, "manifest", "figure(s)")
-    return "PASS", "%d figure(s) each with a pinned, independently re-derived, zero-drift check" % checked
+    # The sentence says what the four tests prove and stops there. "Independently
+    # re-derived" read as a claim about the METHOD, and the only thing examined is
+    # that the two texts differ by more than formatting: an alias rename is a
+    # textual difference and passes, and nothing here reads which tables the two
+    # queries touch. Overclaiming in the PASS line is this project's own defect
+    # class pointed at itself.
+    return "PASS", ("%d figure(s) each pinned to a snapshot, with a second derivation whose text "
+                    "differs beyond case, whitespace and comments, re-run to zero drift" % checked)
 
 
 def gate_migration(root):
