@@ -16,10 +16,10 @@ compliance, so those checks now say NO-DATA and name the file they found nothing
 import json, os, sys, glob, datetime, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_telemetry import (LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
+from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import Check, run_guarded
+from sbe_checks import Check, run_guarded, stated
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -69,6 +69,22 @@ class Ledger:
                 self.errors.append("%s:%d is a JSON %s, not an object"
                                    % (os.path.basename(path), i, type(obj).__name__))
                 continue
+            # A session_id is the key every session-shaped row is deduplicated
+            # by. A row whose session_id is an object or a list is unhashable and
+            # raised inside the shared context, outside the per-check guard, which
+            # collapsed all eleven checks into one error line at exit 0. A row
+            # whose session_id is "" or " " is worse than that: it is hashable, so
+            # it silently merged with every other blank-id row and the coverage
+            # check counted them as one session. Both are broken records, and this
+            # is where a broken record is named.
+            if "session_id" in obj and stated(obj.get("session_id")) is None:
+                self.errors.append("%s:%d records session_id %r, which is not a session identifier"
+                                   % (os.path.basename(path), i, obj.get("session_id")))
+                continue
+            if "session_id" in obj and not isinstance(obj["session_id"], str):
+                self.errors.append("%s:%d records session_id of type %s, not a string"
+                                   % (os.path.basename(path), i, type(obj["session_id"]).__name__))
+                continue
             self.rows.append(obj)
 
     def problem(self, what):
@@ -86,22 +102,65 @@ class Ledger:
 
 
 class Ctx:
-    """Everything the checks read, resolved once, so a check takes an argument
+    """Everything the checks read, resolved LAZILY, so a check takes an argument
     instead of reaching for a module global. The meta-test builds one of these
-    against a throwaway vault."""
+    against a throwaway vault.
+
+    Lazy on purpose, and this is the whole point of the class. Reading every
+    evidence file in __init__ put the read outside the per-check guard: one
+    malformed ledger line raised while the context was being built, so eleven
+    verdict lines became a single error line and advisory mode exited 0. That is
+    the absent-check defect in its purest form, in the file whose docstring says
+    it was closed. Now each field is opened on first use, inside the guard of the
+    check that asked for it, so a broken ledger FAILs the four checks that read
+    the ledger and the other seven still run and still print.
+    """
 
     def __init__(self):
-        self.ledger = Ledger(LEDGER)
-        self.ratings = Ledger(RATINGS)
-        self.reviews = Ledger(REVIEWS)
-        self.corrections = Ledger(CORRECTIONS)
-        self.registries = REGISTRIES
-        rows = real_sessions(self.ledger.rows)
-        self.recent = [r for r in rows if (age_days(r.get("ts", "")) or 99) <= 7]
-        self.sessions = rows
-        self.days = {}
-        for r in self.recent:
-            self.days[r.get("ts", "")[:10]] = self.days.get(r.get("ts", "")[:10], 0) + 1
+        self._cache = {}
+
+    def _once(self, key, build):
+        if key not in self._cache:
+            self._cache[key] = build()
+        return self._cache[key]
+
+    @property
+    def ledger(self):
+        return self._once("ledger", lambda: Ledger(LEDGER))
+
+    @property
+    def ratings(self):
+        return self._once("ratings", lambda: Ledger(RATINGS))
+
+    @property
+    def reviews(self):
+        return self._once("reviews", lambda: Ledger(REVIEWS))
+
+    @property
+    def corrections(self):
+        return self._once("corrections", lambda: Ledger(CORRECTIONS))
+
+    @property
+    def registries(self):
+        return REGISTRIES
+
+    @property
+    def sessions(self):
+        return self._once("sessions", lambda: real_sessions(self.ledger.rows))
+
+    @property
+    def recent(self):
+        return self._once("recent", lambda: [
+            r for r in self.sessions if (age_days(r.get("ts", "")) or 99) <= 7])
+
+    @property
+    def days(self):
+        def build():
+            out = {}
+            for r in self.recent:
+                out[r.get("ts", "")[:10]] = out.get(r.get("ts", "")[:10], 0) + 1
+            return out
+        return self._once("days", build)
 
 
 # --------------------------------------------------------------------------
@@ -132,14 +191,24 @@ def check_cache_economy(ctx):
     bad = ctx.ledger.problem("cache economy")
     if bad:
         return bad
-    flagged, measured = [], 0
+    flagged, measured, unusable = [], 0, []
     for r in ctx.recent:
         cr, cw = r.get("cache_read", 0), r.get("cache_write", 0)
+        # A cache counter is a number. Left unchecked, "" and None reached the
+        # arithmetic and the check died inside the guard, which is honest but
+        # unreadable; a value that is not a count is a broken field and says so.
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (cr, cw)):
+            unusable.append("%s (%r/%r)" % (r.get("session_id", "?")[:8], cr, cw))
+            continue
         if cr + cw > 0:
             measured += 1
             ratio = 100.0 * cr / (cr + cw)
             if ratio < CACHE_RATIO_FLOOR:
                 flagged.append("%s %.0f%%" % (r.get("session_id", "?")[:8], ratio))
+    if unusable:
+        return "FAIL", ("%d session(s) record cache fields that are not counts (%s), so the warm-read "
+                        "ratio could not be computed over them"
+                        % (len(unusable), ", ".join(unusable[:4])))
     if not measured:
         return "NO-DATA", "no sessions with cache fields last 7d"
     return ("PASS" if not flagged else "FAIL",
@@ -155,8 +224,21 @@ def check_vault_log_per_active_day(ctx):
         return "NO-DATA", ("no active days in the last 7d, so no day was checked for a session log; "
                            "'no missing logs' over zero days is not compliance")
     # filename date OR mtime date counts, so a dated backfill note clears an old miss
-    log_days = set()
+    log_days, blank = set(), []
     for f in glob.glob(SESSIONS_GLOB):
+        try:
+            # A zero-byte file, and a file holding only its own headings, is not a
+            # session log. Counting either as one let `touch` satisfy the day and
+            # the check then reported "0 days without any log" over a file with
+            # nothing written in it.
+            body = open(f, errors="replace").read()
+            if not [l for l in body.splitlines()
+                    if l.strip() and not l.lstrip().startswith("#")]:
+                blank.append(os.path.basename(f))
+                continue
+        except OSError:
+            blank.append(os.path.basename(f))
+            continue
         m = re.match(r"^(\d{4}-\d{2}-\d{2})", os.path.basename(f))
         if m:
             log_days.add(m.group(1))
@@ -165,9 +247,11 @@ def check_vault_log_per_active_day(ctx):
         except OSError:
             continue
     missing = sorted(d for d in ctx.days if d not in log_days)
+    note = ("; %d file(s) in the session folders hold nothing and were not counted as logs (%s)"
+            % (len(blank), ", ".join(sorted(blank)[:4]))) if blank else ""
     return ("PASS" if not missing else "FAIL",
-            "%d active day(s) checked against %d dated session log(s); days without any log: %s"
-            % (len(ctx.days), len(log_days), missing or "none"))
+            "%d active day(s) checked against %d dated session log(s) with content; days without "
+            "any log: %s%s" % (len(ctx.days), len(log_days), missing or "none", note))
 
 
 def _registry_lines(ctx, max_age_days=None):
@@ -218,7 +302,17 @@ def check_correction_latency(ctx):
     bad = ctx.corrections.problem("correction latency")
     if bad:
         return bad
-    old = [c for c in ctx.corrections.rows if (age_days(c.get("ts", "")) or 0) > 7]
+    # `age_days(...) or 0` read an unreadable timestamp as an age of zero, so a
+    # correction with "" or no ts at all counted as fresh and the check reported
+    # "0 older than 7d" over rows whose age nothing had measured. An age that
+    # could not be computed is not an age of zero.
+    undated = [c for c in ctx.corrections.rows if age_days(c.get("ts") or "") is None]
+    if undated:
+        return "FAIL", ("%d of %d correction candidate(s) carry no readable timestamp (%s), so their "
+                        "latency was never measured and this check cannot report on it"
+                        % (len(undated), len(ctx.corrections.rows),
+                           ", ".join(repr(c.get("ts")) for c in undated[:4])))
+    old = [c for c in ctx.corrections.rows if age_days(c.get("ts", "")) > 7]
     return ("PASS" if not old else "FAIL",
             "%d candidate(s) total, %d older than 7d unprocessed"
             % (len(ctx.corrections.rows), len(old)))
@@ -336,7 +430,7 @@ def silent_failure_lints(ctx=None):
     if not os.path.isdir(root):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
     hits, exempt = [], []
-    scanned, with_matches, all_exempt = 0, 0, 0
+    scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
     for dp, dns, fns in os.walk(root):
         dns[:] = [d for d in dns if d not in (".git", "node_modules", "__pycache__", ".venv", "venv")]
         for fn in sorted(fns):
@@ -351,6 +445,8 @@ def silent_failure_lints(ctx=None):
                 continue
             scanned += 1
             src = "\n".join(lines)
+            if not src.strip():
+                empty_files += 1
             file_hits, file_exempt = 0, 0
             for pat, desc in LINT_PATTERNS:
                 for m in pat.finditer(src):
@@ -374,6 +470,13 @@ def silent_failure_lints(ctx=None):
     if not scanned:
         return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened"
                            % (root, " ".join(SCANNABLE)))
+    if empty_files == scanned:
+        # Files with the right extensions and nothing in them were opened and
+        # reported "clean", which is the same sentence as a PASS over an empty
+        # manifest. A scan of empty files examined no source.
+        return "NO-DATA", ("%d file(s) scanned under %s and every one of them is empty, so no line of "
+                           "source was examined and there is nothing to call clean"
+                           % (scanned, root))
     if hits:
         return "FAIL", "%d hit(s) in %d file(s) scanned: %s" % (len(hits), scanned, "; ".join(hits[:5]))
     if exempt and all_exempt == scanned:
@@ -388,28 +491,81 @@ def silent_failure_lints(ctx=None):
     return "PASS", "%d file(s) scanned under %s, clean" % (scanned, root)
 
 
+def _rel(p):
+    """A registry path as the honesty test can rebuild it under a throwaway vault."""
+    return os.path.relpath(p, VAULT)
+
+
+# One minimal worked fixture per check, holding only the fields that check's PASS
+# sentence asserts over. Minimal is the point: every leaf here is a leaf the
+# honesty test may empty, and a PASS that survives an emptied leaf is a sentence
+# claiming something nothing read. %(now)s, %(today)s and %(dir)s are substituted
+# by the test when it writes the fixture into its throwaway vault.
+_FENCE_REGISTRY = {"files": {"STATE.md": "# State\n## Fences\n"
+                                         "- agent: builder | tier T2 | objective: ship the refund gate\n"},
+                   "env": {"BROTHERSBE_REGISTRIES": "%(dir)s/*.md"}}
+_PREDICTIONS = ("# Operator model\n## Prediction ledger\n"
+                "date | prediction | seal | scored on | hit\n"
+                + "".join("2026-07-0%d | the queue depth stays under 1k | seal-%d | review | yes\n"
+                          % (i, i) for i in range(1, 6)))
+
 CHECKS = {
-    "ledger-coverage": Check(check_ledger_coverage, reads=(LEDGER,), kind="jsonl"),
-    "schema-2-uniform": Check(check_schema_uniform, reads=(LEDGER,), kind="jsonl"),
-    "cache-economy": Check(check_cache_economy, reads=(LEDGER,), kind="jsonl"),
-    "vault-log-per-active-day": Check(check_vault_log_per_active_day, reads=(LEDGER,), kind="jsonl"),
+    "ledger-coverage": Check(
+        check_ledger_coverage, reads=(LEDGER,), kind="jsonl",
+        full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s"}]}}),
+    "schema-2-uniform": Check(
+        check_schema_uniform, reads=(LEDGER,), kind="jsonl",
+        full_fixture={"files": {_rel(LEDGER): [{"schema": 2, "session_id": "sess-0001"}]}}),
+    "cache-economy": Check(
+        check_cache_economy, reads=(LEDGER,), kind="jsonl",
+        full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s",
+                                                "cache_read": 95, "cache_write": 5}]}}),
+    "vault-log-per-active-day": Check(
+        check_vault_log_per_active_day, reads=(LEDGER,), kind="jsonl",
+        full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s"}],
+                                "10-Projects/demo/Sessions/%(today)s-session.md":
+                                    "# Session log\nWhat happened today.\n"}}),
     "fence-hygiene": Check(check_fence_hygiene, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
-                           empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"}),
-    "correction-latency": Check(check_correction_latency, reads=(CORRECTIONS,), kind="jsonl"),
+                           empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"},
+                           full_fixture=_FENCE_REGISTRY),
+    "correction-latency": Check(
+        check_correction_latency, reads=(CORRECTIONS,), kind="jsonl",
+        full_fixture={"files": {_rel(CORRECTIONS): [{"ts": "%(now)s"}]}}),
     "budget-vs-tier": Check(check_budget_vs_tier, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
-                            empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"}),
-    "prediction-seals": Check(check_prediction_seals, reads=(OPERATOR_MODEL,), kind="text"),
-    "felt-outcome-ratings": Check(check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl"),
-    "review-cadence": Check(check_review_cadence, reads=(REVIEWS,), kind="jsonl"),
+                            empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"},
+                            full_fixture=_FENCE_REGISTRY),
+    "prediction-seals": Check(check_prediction_seals, reads=(OPERATOR_MODEL,), kind="text",
+                              full_fixture={"files": {_rel(OPERATOR_MODEL): _PREDICTIONS}}),
+    "felt-outcome-ratings": Check(
+        check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl",
+        full_fixture={"files": {_rel(RATINGS): [{"score": 5} for _ in range(6)]}}),
+    "review-cadence": Check(
+        check_review_cadence, reads=(REVIEWS,), kind="jsonl",
+        full_fixture={"files": {_rel(REVIEWS): [{"ts": "%(now)s"}]}}),
     "silent-failure-lints": Check(silent_failure_lints, reads=("SBE_LINT_ROOT",), kind="tree",
                                   empty_fixture={"files": {"notes.txt": "no scannable source here\n"},
-                                                 "value": "%(dir)s"}),
+                                                 "value": "%(dir)s"},
+                                  full_fixture={"files": {"src/ok.py": "def f():\n    return 1\n"},
+                                                "env": {"SBE_LINT_ROOT": "%(dir)s/src"}}),
 }
 
 
 def main():
-    ctx = Ctx()
-    results = [(name, ) + run_guarded(name, CHECKS[name], ctx) for name in CHECKS]
+    # Building the context is itself guarded. It used to sit outside run_guarded,
+    # so a context that could not be built took every check with it. A check whose
+    # context cannot be built is a FAILED check, one line each, and the checks that
+    # do not need the broken part still run.
+    try:
+        ctx = Ctx()
+        ctx_error = ""
+    except Exception as e:  # sbe: allow-silent the exception becomes the FAIL evidence on every check below, and is not swallowed
+        ctx, ctx_error = None, ("the evidence context could not be built: %s: %s. A check whose "
+                                "context could not be built examined nothing, and is reported here "
+                                "as a failure rather than disappearing"
+                                % (type(e).__name__, e))
+    results = [(name,) + (("FAIL", ctx_error) if ctx is None
+                          else run_guarded(name, CHECKS[name], ctx))
+               for name in CHECKS]
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
     for n, v, e in results:
