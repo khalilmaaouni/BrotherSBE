@@ -17,7 +17,7 @@ Two rules sit under every doctrine below, so they are stated once here:
   never. Those four classes (numbers, migrations, money and partner paths,
   unexecuted checks) each have a mechanical gate in `tools/sbe_gate.py`. Ungated
   output ships labeled UNVERIFIED. A HARD gate is never waived by a session
-  instruction (SKILL section 3).
+  instruction (SKILL.md L16).
 
 Every gate command in this doc is real. `tools/sbe_gate.py` inspects the current
 git worktree (or a directory you pass) for the receipt that proves a check RAN,
@@ -33,7 +33,7 @@ python3 tools/sbe_gate.py numbers --strict  # CI: nonzero exit on FAIL
 
 The four gates are regression-tested against the exact defects the operating
 record produced: `evals/run_evals.py` plants each failure as a fixture and
-asserts the gate catches it (13 cases, release blocked on any regression). The
+asserts the gate catches it (every case in `evals/run_evals.py`, release blocked on any regression). The
 worked examples below reuse those fixture shapes, so what you copy is what the
 evals prove.
 
@@ -506,7 +506,7 @@ names each hit by file and line.
 
 Where the record shows agents do not help, or shows nothing at all, BrotherSBE says
 "no published evidence" and stands down rather than reaching for a weaker source
-(SKILL section 4). The standing list, as of v1:
+(DIGEST.md, the evidence line). The standing list, as of v1:
 
 - **Autonomous FinOps action.** BrotherSBE explains cost and drafts the arithmetic;
   it does not act on spend autonomously.

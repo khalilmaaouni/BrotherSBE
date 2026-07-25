@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """BrotherSBE regression tests. Standard library only (no pip install), matching
-the zero-dependency ethos of the tools. Run: python3 tools/test_bm.py
+the zero-dependency ethos of the tools. Run: python3 tools/test_sbe.py
 
 These exist because an external review found a real secret-leak in the resume
 brief that a test would have caught. Each test here guards a claim the project

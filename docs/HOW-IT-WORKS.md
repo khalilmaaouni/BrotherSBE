@@ -43,19 +43,29 @@ A design engagement produces at most seven files in one directory, usually
 `templates/dossier/` holds all seven with worked example content. Copy the folder,
 run the intake, delete what the tier does not require.
 
-Four completeness rules are mechanical. They are the ones stated as laws L2 to L5
-in [SKILL.md](../SKILL.md), and they are exactly what `tools/sbe_design.py` checks:
+Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
+[SKILL.md](../SKILL.md) and the fifth backs L2, and they are exactly what
+`tools/sbe_design.py` checks:
 
-1. **artifacts.** Every file the tier requires exists. A missing tier, or no intake
-   file, is NO-DATA rather than a pass.
+1. **artifacts.** Every file the tier requires exists, and the tier itself is
+   re-derived from the answers stored beside it rather than believed as written. A
+   tier that disagrees with its own answers and carries no override reason fails,
+   naming both values. A missing tier, no answers, or no intake file at all, is
+   NO-DATA rather than a pass.
 2. **adr.** At least two rejected alternatives, plus Criteria, Decision,
    Consequences, and a "What would flip this" section. All five, or it fails.
-3. **datamodel.** Every entity names a system of record; every relationship carries
-   one of one-to-one, one-to-many, many-to-one, many-to-many. No entities at all is
-   a failure, not a pass.
-4. **diagrams.** At least one diagram node exists, and no node names something the
-   rest of the dossier never defines. A diagram artifact with no diagram in it is a
+3. **datamodel.** Every entity names a system of record with a value; every
+   relationship carries one of one-to-one, one-to-many, many-to-one, many-to-many as
+   a standalone token. A system of record recorded as TBD or explicitly absent fails
+   like one that is missing, and "one-to-many-ish" is not a cardinality. No entities
+   at all is a failure, not a pass.
+4. **diagrams.** At least one diagram node exists, and no node names something
+   `05-data-model.md` never defines. A diagram artifact with no diagram in it is a
    defect, not an absence.
+5. **placeholder.** No artifact is still the shipped template. Each template carries
+   an `SBE-TEMPLATE-UNFILLED` marker, and the check fails while any survives, naming
+   the artifacts. Without it, the fastest route to a green run was copying seven
+   files describing someone else's system and changing nothing.
 
 ## 2. `tools/sbe_intake.py`: five questions, one tier
 
@@ -78,29 +88,34 @@ def compute_tier(a):
 duplicating the rule, so the tier logic exists once.
 
 The written file carries `override` and `override_reason` fields. Both are set
-together or the tier stands as computed.
+together or the design check fails the mismatch, naming the written tier and the
+computed one, which is what makes L15 a rule rather than a wish.
 
 ## 3. `tools/sbe_design.py`: the completeness checks
 
 One function per check, each returning a verdict and its evidence, collected in a
-`CHECKS` dict: `artifacts`, `adr`, `datamodel`, `diagrams`. Same contract as the
-gates: advisory by default, `--strict` exits nonzero so CI can block.
+`CHECKS` dict: `artifacts`, `adr`, `datamodel`, `diagrams`, `placeholder`. Same
+contract as the gates: advisory by default, `--strict` exits nonzero so CI can block.
 
 ```bash
-python3 tools/sbe_design.py .              # all four, advisory
+python3 tools/sbe_design.py .              # all five, advisory
 python3 tools/sbe_design.py datamodel .    # one check
 python3 tools/sbe_design.py --strict .     # enforcing
 ```
 
-On this repository, which is not itself a dossier, every check reports NO-DATA and
-the exit code is 0:
+Where it looks matters as much as what it checks. A directory holding a dossier is
+checked directly. Anything else is a search root, walked for directories containing
+`00-intake.json`, because the documented layout puts dossiers in `design/<project>/`
+while CI runs from the repository root. Set `SBE_DOSSIER_ROOT` when a repository is
+supposed to carry a dossier: a declared root holding none is then a FAIL rather than
+a report.
+
+On this repository, which carries no dossier at all, the search finds nothing and
+says so, and the exit code is 0:
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
-  artifacts  NO-DATA  no 00-intake.json; run sbe_intake.py to compute the tier
-  adr        NO-DATA  no 03-adr.md in this dossier
-  datamodel  NO-DATA  no 05-data-model.md in this dossier
-  diagrams   NO-DATA  no 06-diagrams.md in this dossier
+  dossier    NO-DATA  no dossier found under .: no directory contains 00-intake.json. If this repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and this becomes a FAIL instead of a report
 ```
 
 Two implementation details are worth knowing before you write a dossier, because
@@ -115,8 +130,11 @@ right shape for everything after that point.
 
 **The diagram check traces against that same entity list.** A node in
 `06-diagrams.md` that is not in the list is an orphan and fails by name. If a
-diagram legitimately names a runtime component, declare that component in the
-dossier so the check can see it. And when `05-data-model.md` has no entities at
+diagram legitimately names a runtime component, declare it in `05-data-model.md`
+with a system of record, under its own heading, exactly as
+[guide 05](guides/05-a-worked-engagement.md) does. Declaring it anywhere else does
+not work: the datamodel check then fails the component for having no system of
+record. And when `05-data-model.md` has no entities at
 all, the diagram check returns NO-DATA rather than PASS, because an empty known set
 would make every invented node look traceable, which is the exact defect the check
 exists to catch.
@@ -172,11 +190,15 @@ python3 tools/sbe_gate.py numbers .     # one class
 python3 tools/sbe_gate.py --strict .    # enforcing
 ```
 
-Three properties are deliberate. A missing receipt is NO-DATA, so a change with
-nothing to prove is not taxed. A receipt that exists and is inconsistent FAILs with
-the reason named, because the operating record says pasted receipts get invented. A
-crash under `--strict` exits nonzero: a broken gate blocks rather than waves work
-through.
+Four properties are deliberate. A missing receipt is NO-DATA, so a change with
+nothing to prove is not taxed. A receipt that exists and records zero items is also
+NO-DATA and says which file and why, because an empty manifest is exactly what a run
+that never happened produces, and reporting PASS over zero items would print evidence
+asserting work nobody did. A receipt that exists and is either unparseable or
+internally inconsistent FAILs with the reason named, because the operating record
+says pasted receipts get invented and a file that cannot be read is a broken claim,
+not an absent one. A crash under `--strict` exits nonzero: a broken gate blocks
+rather than waves work through.
 
 ## 6. `tools/sbe_score.py`: the code-graded checks
 
@@ -187,9 +209,12 @@ NO-DATA with its evidence inline, so the model judges only the residue:
 `felt-outcome-ratings`, `review-cadence`, and `silent-failure-lints`.
 
 The last one is the linter for the patterns that swallow an error so a wrong result
-passes for a right one: bare `except`, except-then-`pass`, a discarded subprocess
-result without `check=True`, a conflict-skipping upsert with no logged skip count,
-and force-try. It scans tracked `.py .sql .swift .rb .js .ts .go` files under
+passes for a right one. The patterns are bare `except`, except-then-`pass`, a
+discarded subprocess result without `check=True`, a conflict-skipping upsert with no
+logged skip count, and force-try. It is opt-in on a path, and a run that opened no
+file reports NO-DATA naming why rather than the word "clean", which would assert the
+opposite of what happened; a positional argument that is not a directory is a FAIL,
+so a mistyped path cannot read as a clean scan. It scans tracked `.py .sql .swift .rb .js .ts .go` files under
 `SBE_LINT_ROOT` or a directory argument. A reviewed exemption carries a visible
 `# sbe: allow-silent <reason>` marker on the line, so the swallow is auditable in
 the diff.

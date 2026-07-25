@@ -38,11 +38,11 @@ A design engagement produces at most seven files in one directory. Templates wit
 | `06-diagrams.md` | Mermaid views, every node traceable to the dossier | diagrams |
 | `07-verification.md` | every claim, the check that proves it, when it runs | artifacts |
 
-**How much of it you write is computed, not chosen.** Five objective questions produce a tier, first match wins: T3 (money, partner data, personal data, production state, or not reversible in an hour) requires all seven; T2 (a contract change, or many consumers) requires six; T1 (one boundary crossed) requires the purpose brief; T0 requires nothing at all. T0 is the common case.
+**How much of it you write is computed, not chosen.** Five objective questions produce a tier, first match wins: T3 (money, partner data, personal data, production state, or not reversible in an hour) requires all seven; T2 (a contract change, or many consumers) requires six; T1 (one boundary crossed, or some consumers) requires the purpose brief; T0 requires nothing at all. T0 is the common case.
 
 ```bash
 python3 tools/sbe_intake.py            # five questions, writes 00-intake.json
-python3 tools/sbe_design.py .          # artifacts, adr, datamodel, diagrams
+python3 tools/sbe_design.py .          # artifacts, adr, datamodel, diagrams, placeholder
 python3 tools/sbe_decide.py tables/architecture.json shape
 ```
 
@@ -54,10 +54,10 @@ Verification comes last, and only four failure classes get structural gates. Eac
 
 - **numbers**: every figure that could reach a decision ships with an independently scripted second derivation, re-run to zero drift against a pinned snapshot.
 - **migration**: forward and reverse both ran against a restored copy, the reverse carries a resolvable rehearsal run id, and row counts before and after match.
-- **approval**: money and partner paths need a named human approval bound to an identity the agent cannot forge (a signed `Approved-by:` commit trailer or a recorded `Reviewed-in:` review id). A typed name fails.
+- **approval**: a declared approval must be bound to an identity the agent cannot forge (a signed `Approved-by:` commit trailer this host verified, or a recorded `Reviewed-in:` review id). A typed name fails, and a signature the host cannot verify is NO-DATA rather than an approval, so CI needs the signers' public keys or the keyless `Reviewed-in:` path. The gate checks the binding of an approval that was declared; nothing detects that a change needed one, so the declaration itself is human review.
 - **ran**: no SQL or pipeline change is done until its reconciliation query or test executed and left a receipt with a zero exit code and a nonzero duration. A check that took no time did not run.
 
-The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed.
+The gates live in [`tools/sbe_gate.py`](tools/sbe_gate.py). They run advisory in a session (print the verdict, exit 0) and enforcing in CI (`--strict`, exit nonzero, stop the merge). Output that has not cleared its gate carries the label UNVERIFIED next to the item. Absent evidence is NO-DATA, never PASS, so a change with nothing to prove is not taxed. A receipt that exists and records nothing is also NO-DATA and says so; a receipt that exists and cannot be parsed is a FAIL, because a broken claim is not an absent one.
 
 A companion linter in [`tools/sbe_score.py`](tools/sbe_score.py) catches the code patterns that swallow an error so a wrong result passes for a right one (bare except, except-then-pass, discarded subprocess result, conflict-skipping upsert, force-try). A reviewed exemption carries a visible `# sbe: allow-silent <reason>` marker, so the swallow is auditable in the diff.
 
@@ -167,13 +167,13 @@ Expected tail:
   empty-context-is-no-data               want=NO-DATA  got=NO-DATA  ok
   non-numeric-number-criterion-is-unrecognized want=unrecognized got=unrecognized ok
 
-37 evals: 37 passed, 0 regressions.
+70 evals: 70 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself. To watch one check on a real change:
 
 ```bash
-python3 tools/sbe_design.py .           # the four design checks, advisory
+python3 tools/sbe_design.py .           # the five design checks, advisory
 python3 tools/sbe_gate.py numbers .     # one hard gate
 python3 tools/sbe_gate.py --strict .    # enforcing: exits nonzero on any FAIL
 ```
