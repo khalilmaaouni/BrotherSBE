@@ -1012,13 +1012,433 @@ def sc9(root):
     return score_check("silent-failure-lints", root, args=(src,))
 
 
+# ---------------------------------------------------------------------------
+# Third wave. One defect, one more shape of it. The first two waves modelled
+# absent evidence as an absent FILE; every fixture below is a receipt that
+# EXISTS, parses, carries every required key, and holds nothing in one of them.
+# The rest are the mirror image: correct work that the gates were rejecting,
+# because a gate that rejects correct work gets switched off, and a gate that is
+# off catches less than a gate that is merely incomplete.
+# ---------------------------------------------------------------------------
+
+@case("blank-rerun-values-are-not-a-zero-drift-check", "numbers", "FAIL")
+def v1(root):
+    # `is None` was the only emptiness test, so two empty strings compared equal
+    # and the evidence reported a re-derivation that compared nothing.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "revenue", "snapshot_id": "snap-1", "query": "select 1",
+        "second_derivation": "select 2", "rerun": {"ran": True, "primary": "", "secondary": ""}}]})
+
+
+@case("whitespace-rerun-values-are-not-a-zero-drift-check", "numbers", "FAIL")
+def v2(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "revenue", "snapshot_id": "snap-1", "query": "select 1",
+        "second_derivation": "select 2", "rerun": {"ran": True, "primary": " ", "secondary": " "}}]})
+
+
+@case("a-whitespace-snapshot-id-is-not-a-pinned-read", "numbers", "FAIL")
+def v3(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "revenue", "snapshot_id": "  ", "query": "select 1",
+        "second_derivation": "select 2", "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
+
+
+@case("a-figure-with-no-label-is-caught", "numbers", "FAIL")
+def v4(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "", "snapshot_id": "snap-1", "query": "select 1",
+        "second_derivation": "select 2", "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
+
+
+@case("a-whitespace-rerun-flag-is-not-a-rerun", "numbers", "FAIL")
+def v5(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "revenue", "snapshot_id": "snap-1", "query": "select 1",
+        "second_derivation": "select 2", "rerun": {"ran": " ", "primary": 5, "secondary": 5}}]})
+
+
+@case("a-whitespace-second-derivation-is-not-independent", "numbers", "FAIL")
+def v6(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "revenue", "snapshot_id": "snap-1", "query": "select 1",
+        "second_derivation": "   ", "rerun": {"ran": True, "primary": 5, "secondary": 5}}]})
+
+
+@case("blank-row-counts-are-not-a-matched-comparison", "migration", "FAIL")
+def v7(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-1"},
+        "row_counts": {"before": "", "after_reverse": ""}})
+
+
+@case("a-whitespace-rehearsal-id-is-not-a-run-id", "migration", "FAIL")
+def v8(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": " "},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+
+
+@case("a-whitespace-restore-claim-is-not-a-restore", "migration", "FAIL")
+def v9(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": " "},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-1"},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+
+
+@case("a-recorded-check-with-no-name-is-caught", "ran", "FAIL")
+def v10(root):
+    write(root, "ran-receipt.json", {"checks": [{"name": " ", "exit_code": 0, "duration_ms": 812}]})
+
+
+@case("booleans-are-not-an-exit-code-and-a-duration", "ran", "FAIL")
+def v11(root):
+    # {"exit_code": false} satisfied `!= 0` and {"duration_ms": true} satisfied a
+    # truthiness test, so this passed as "a zero exit and a nonzero duration".
+    write(root, "ran-receipt.json", {"checks": [
+        {"name": "recon", "exit_code": False, "duration_ms": True}]})
+
+
+@case("an-intake-with-blank-answers-is-nodata", "artifacts", "NO-DATA")
+def v12(root):
+    write(root, "00-intake.json", {"tier": "T0", "answers": {k: "" for k, _ in _intake.QUESTIONS},
+                                   "override": None})
+
+
+@case("a-tier-that-requires-nothing-reports-nothing", "artifacts", "NO-DATA")
+def v13(root):
+    # "tier T0: every required artifact present" read exactly like a verified T3
+    # line while nothing had been opened at all.
+    write(root, "00-intake.json", {"tier": "T0", "answers": {
+        "changes_contract": False, "crosses_boundary": False, "reversible_under_hour": True,
+        "touches_sensitive": False, "consumers": "none"}, "override": None})
+
+
+@case("an-artifact-of-headings-only-does-not-clear-a-tier", "artifacts", "FAIL")
+def v14(root):
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "01-purpose.md", "# Purpose\n\n## Problem\n\n## Users\n")
+
+
+@case("an-empty-criteria-heading-is-not-criteria", "adr", "FAIL")
+def v15(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\n## Rejected alternatives\n"
+                             "- Synchronous call: ties checkout to the ledger.\n"
+                             "- Nightly batch: misses the freshness requirement.\n"
+                             "## Decision\nQueue.\n## Consequences\nOne more part.\n"
+                             "## What would flip this\nSub-second freshness.\n")
+
+
+@case("a-one-letter-rejection-reason-is-not-a-reason", "adr", "FAIL")
+def v16(root):
+    write(root, "03-adr.md", "# ADR\n## Criteria\nlatency\n## Rejected alternatives\n- a\n- b\n"
+                             "## Decision\nQueue.\n## Consequences\nOne more part.\n"
+                             "## What would flip this\nSub-second freshness.\n")
+
+
+@case("no-relationships-under-the-heading-is-nodata", "datamodel", "NO-DATA")
+def v17(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "## Relationships\n")
+
+
+@case("a-relationship-table-with-no-cardinality-is-caught", "datamodel", "FAIL")
+def v18(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record CRM\n- Order: system of record OMS\n"
+          "## Relationships\n| From | To | Cardinality |\n|---|---|---|\n| Customer | Order | not decided |\n")
+
+
+@case("a-relationship-table-with-cardinality-passes", "datamodel", "PASS")
+def v19(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record CRM\n- Order: system of record OMS\n"
+          "## Relationships\n| From | To | Cardinality |\n|---|---|---|\n| Customer | Order | one-to-many |\n")
+
+
+@case("labelled-mermaid-nodes-are-traced-by-their-label", "diagrams", "PASS")
+def v20(root):
+    # A[Customer] --> B[Order] is the single most common Mermaid idiom there is,
+    # and it FAILed as two orphans named A and B.
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "- Order: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  A[Customer] --> B[Order]\n```\n")
+
+
+@case("a-labelled-node-naming-nothing-is-still-an-orphan", "diagrams", "FAIL")
+def v21(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  A[Customer] --> B[Invoice]\n```\n")
+
+
+@case("a-sequence-diagram-is-a-diagram", "diagrams", "PASS")
+def v22(root):
+    # The shipped template tells a T2 author that this file wants a sequence
+    # diagram, and the shipped check called one "a diagram artifact with no
+    # diagram in it".
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "- Order: system of record OMS\n")
+    write(root, "06-diagrams.md",
+          "```mermaid\nsequenceDiagram\n  participant Customer\n  participant Order\n"
+          "  Customer->>Order: places\n  Order->>Customer: confirms\n```\n")
+
+
+@case("a-sequence-diagram-participant-can-still-be-an-orphan", "diagrams", "FAIL")
+def v23(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n")
+    write(root, "06-diagrams.md",
+          "```mermaid\nsequenceDiagram\n  participant Customer\n  participant Warehouse\n"
+          "  Customer->>Warehouse: places\n```\n")
+
+
+@case("a-node-named-after-a-direction-keyword-is-not-dropped", "diagrams", "FAIL")
+def v24(root):
+    # Five nodes went in, one came out, and the verdict said "all traceable".
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record OMS\n")
+    write(root, "06-diagrams.md",
+          "```mermaid\nflowchart LR\n  Order --> TD\n  TD --> LR\n  LR --> BT\n  BT --> graph\n```\n")
+
+
+@case("the-diagram-evidence-names-what-it-skipped", "evidence", "named")
+def v25(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record CRM\n"
+                                    "- Order: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nflowchart LR\n  A[Customer] --> B[Order]\n```\n")
+    line = gate_line(root, "diagrams")
+    return "named" if ("flowchart LR" in line and "tokens read as diagram syntax" in line
+                       and line.split()[1] == "PASS") else line
+
+
+@case("a-gantt-chart-is-not-a-missing-diagram", "diagrams", "NO-DATA")
+def v26(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Order: system of record OMS\n")
+    write(root, "06-diagrams.md",
+          "```mermaid\ngantt\n  title Rollout\n  section Phase 1\n  Migrate :a1, 2026-07-01, 30d\n```\n")
+
+
+@case("an-er-diagram-still-passes", "diagrams", "PASS")
+def v27(root):
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- CUSTOMER: system of record CRM\n"
+                                    "- ORDER: system of record OMS\n")
+    write(root, "06-diagrams.md", "```mermaid\nerDiagram\n  CUSTOMER ||--o{ ORDER : places\n```\n")
+
+
+@case("a-zero-byte-exemption-does-not-waive-a-failing-dossier", "designrun", "blocked")
+def v28(root):
+    # `: > .sbe-exempt` turned two failing checks into exit 0, and the report
+    # said ".sbe-exempt names why: no reason recorded".
+    write(root, "design/proj/00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/.sbe-exempt", "")
+    return design_run(root)
+
+
+@case("a-thin-exemption-reason-does-not-waive-a-dossier", "designrun", "blocked")
+def v29(root):
+    write(root, "design/proj/00-intake.json", {"tier": "T3", "answers": T3_ANSWERS, "override": None})
+    write(root, "design/proj/01-purpose.md", PURPOSE)
+    write(root, "design/proj/.sbe-exempt", "tbd\n")
+    return design_run(root)
+
+
+@case("an-exemption-is-reported-as-a-waiver-not-a-pass", "designrun", "waived")
+def v30(root):
+    write(root, "design/legacy/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "design/legacy/.sbe-exempt", "closed two years ago, kept for history\n")
+    e = dict(os.environ)
+    e["SBE_DOSSIER_ROOT"] = ""
+    out = subprocess.run([sys.executable, DESIGN, root], capture_output=True, text=True, env=e)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "dossier" and parts[1] == "WAIVED":
+            return "waived" if "waives artifacts" in line else "waiver-line-does-not-name-the-checks"
+    return "no-waiver-line"
+
+
+@case("a-blank-session-id-is-a-broken-ledger-row", "score", "FAIL")
+def v31(root):
+    return score_check("schema-2-uniform", _ledger(root, json.dumps({"schema": 2, "session_id": " "}) + "\n"))
+
+
+@case("an-unreadable-ledger-row-does-not-delete-the-other-checks", "score", "NO-DATA")
+def v32(root):
+    # One well-formed JSON line whose session_id is an object raised inside the
+    # shared context, OUTSIDE the per-check guard: eleven verdict lines became
+    # one error line and advisory mode exited 0.
+    body = json.dumps({"schema": 2, "session_id": {"a": 1}, "ts": "2026-07-25T10:00:00Z"}) + "\n"
+    return score_check("prediction-seals", _ledger(root, body))
+
+
+@case("an-unreadable-ledger-row-fails-the-checks-that-read-it", "score", "FAIL")
+def v33(root):
+    body = json.dumps({"schema": 2, "session_id": {"a": 1}, "ts": "2026-07-25T10:00:00Z"}) + "\n"
+    return score_check("ledger-coverage", _ledger(root, body))
+
+
+@case("an-undated-correction-is-not-a-fresh-one", "score", "FAIL")
+def v34(root):
+    write(root, "99-System/telemetry/corrections.jsonl", json.dumps({"text": "x"}) + "\n")
+    return score_check("correction-latency", root)
+
+
+@case("a-zero-byte-session-log-is-not-a-session-log", "score", "FAIL")
+def v35(root):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc)
+    _ledger(root, json.dumps({"session_id": "s1", "ts": now.isoformat().replace("+00:00", "Z")}) + "\n")
+    write(root, "10-Projects/demo/Sessions/%s-session.md" % now.date().isoformat(), "")
+    return score_check("vault-log-per-active-day", root)
+
+
+@case("a-scan-of-empty-source-files-is-not-clean", "score", "NO-DATA")
+def v36(root):
+    src = os.path.join(root, "src")
+    write(root, "src/empty.py", "")
+    return score_check("silent-failure-lints", root, args=(src,))
+
+
+@case("cache-counters-that-are-not-counts-are-caught", "score", "FAIL")
+def v37(root):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    return score_check("cache-economy", _ledger(root, json.dumps(
+        {"session_id": "s1", "ts": now, "cache_read": "", "cache_write": ""}) + "\n"))
+
+
+# The honest path, at every tier. A gate is only worth having if correct work
+# clears it, so a complete dossier is a fixture too, and it uses the ordinary
+# authoring idioms rather than the ones that happen to suit the parser.
+DOSSIER = {
+    "01-purpose.md": PURPOSE,
+    "02-process.md": "# Process\nThe refund is requested, approved, and settled.\n"
+                     "Each step names its owner and its failure path.\n",
+    "03-adr.md": "# ADR\n## Criteria\nsettlement latency, operational load\n"
+                 "## Rejected alternatives\n"
+                 "- Synchronous call to the ledger: ties checkout to ledger availability.\n"
+                 "- Nightly batch: misses the one business day requirement.\n"
+                 "## Decision\nPublish refund events to a queue.\n"
+                 "## Consequences\nOne more moving part to operate.\n"
+                 "## What would flip this\nSub-second settlement becoming a requirement.\n",
+    "04-technology-map.md": "# Technology map\n| Component | Technology | Owner |\n|---|---|---|\n"
+                            "| RefundQueue | Managed queue | Platform team |\n",
+    "05-data-model.md": "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+                        "- Refund: system of record: the ledger service.\n"
+                        "## Relationships\n- Customer to Refund: one-to-many, optional.\n",
+    "06-diagrams.md": "# Diagrams\n## Context\n```mermaid\nflowchart LR\n"
+                      "  C[Customer] --> R[Refund]\n```\n"
+                      "## Sequence\n```mermaid\nsequenceDiagram\n  participant Customer\n"
+                      "  participant Refund\n  Customer->>Refund: requests\n```\n",
+    "07-verification.md": "# Verification\nA reconciliation query compares refunds settled against\n"
+                          "refunds requested, and it runs in CI.\n",
+}
+TIER_ANSWERS = {"T0": {"changes_contract": False, "crosses_boundary": False,
+                       "reversible_under_hour": True, "touches_sensitive": False,
+                       "consumers": "none"},
+                "T1": T1_ANSWERS, "T2": T2_ANSWERS, "T3": T3_ANSWERS}
+
+
+def _complete_dossier(root, tier):
+    write(root, "design/refunds/00-intake.json",
+          {"tier": tier, "answers": TIER_ANSWERS[tier], "override": None})
+    for n in _intake.required_artifacts(tier):
+        name = {"01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
+                "04": "04-technology-map.md", "05": "05-data-model.md",
+                "06": "06-diagrams.md", "07": "07-verification.md"}[n]
+        write(root, "design/refunds/" + name, DOSSIER[name])
+    return design_run(root)
+
+
+@case("a-complete-t0-dossier-blocks-nothing", "designrun", "clear")
+def h0(root):
+    return _complete_dossier(root, "T0")
+
+
+@case("a-complete-t1-dossier-blocks-nothing", "designrun", "clear")
+def h1(root):
+    return _complete_dossier(root, "T1")
+
+
+@case("a-complete-t2-dossier-blocks-nothing", "designrun", "clear")
+def h2(root):
+    return _complete_dossier(root, "T2")
+
+
+@case("a-complete-t3-dossier-blocks-nothing", "designrun", "clear")
+def h3(root):
+    return _complete_dossier(root, "T3")
+
+
+@case("a-change-with-no-numbers-and-no-migration-blocks-nothing", "gaterun", "clear")
+def h4(root):
+    git_init(root)
+    open(os.path.join(root, "x"), "w").write("1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "internal refactor"], check=True)
+    out = subprocess.run([sys.executable, GATE, "--strict", root], capture_output=True, text=True)
+    return "blocked" if out.returncode else "clear"
+
+
+# The counts printed in the shipped docs, checked against the suites that print
+# them. Three docs carried "70 evals: 70 passed" through a wave that took the
+# real number to 110, and the doc whose whole job is "prove it works in 60
+# seconds" was one of them. A number in a doc that nothing recomputes is a stale
+# evidence string with a longer half-life.
+SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-CHECKLIST.md",
+                "docs/guides/01-quickstart.md", "docs/guides/02-the-gates-in-practice.md",
+                "docs/guides/03-the-dossier.md", "docs/guides/04-teams-and-evolution.md",
+                "docs/guides/05-a-worked-engagement.md", "evals/README.md", "DIGEST.md",
+                "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.md")
+_REPO = os.path.abspath(os.path.join(HERE, ".."))
+
+
+@case("no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce", "docs", "consistent")
+def dc1(root):
+    import re as _re
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        body = open(p, errors="replace").read()
+        for m in _re.finditer(r"(\d+) evals: (\d+) passed, (\d+) regressions", body):
+            if (int(m.group(1)), int(m.group(2)), int(m.group(3))) != (len(CASES), len(CASES), 0):
+                wrong.append("%s: %r but the suite has %d cases" % (rel, m.group(0), len(CASES)))
+        for m in _re.finditer(r'ending "(\d+) passed, (\d+) regressions', body):
+            if (int(m.group(1)), int(m.group(2))) != (len(CASES), 0):
+                wrong.append("%s: %r but the suite has %d cases" % (rel, m.group(0), len(CASES)))
+    return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
+@case("no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce", "docs", "consistent")
+def dc2(root):
+    import re as _re
+    meta = SourceFileLoader("test_no_data_class",
+                            os.path.join(HERE, "test_no_data_class.py")).load_module()
+    checks, regs, scen = meta.counts()
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        for m in _re.finditer(r"(\d+) checks discovered from (\d+) registries in (\d+) module\(s\), "
+                              r"(\d+) scenarios run", open(p, errors="replace").read()):
+            got = (int(m.group(1)), int(m.group(2)), int(m.group(4)))
+            if got != (checks, regs, scen):
+                wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d scenarios"
+                             % (rel, m.group(0), checks, regs, scen))
+    return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
                 if klass in ("tier", "decide", "sig", "lints", "score", "designrun",
-                             "evidence", "guard"):
+                             "gaterun", "evidence", "guard", "docs"):
                     verdict = fn(d)
                 else:
                     fn(d)
