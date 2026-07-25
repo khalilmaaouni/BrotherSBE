@@ -1,0 +1,21 @@
+{
+  "shape": {
+    "question": "What architecture shape fits this system?",
+    "options": ["modular monolith", "services", "event-driven", "monolith"],
+    "criteria": [
+      {"name": "deploying_teams", "kind": "number",
+       "scores": {"modular monolith": [1, 3], "services": [4, 999], "event-driven": [3, 999], "monolith": [1, 2]},
+       "note": "Independently deploying teams. Services below four teams usually cost more than they return."},
+      {"name": "consistency", "kind": "choice",
+       "scores": {"strong": ["monolith", "modular monolith"], "eventual": ["services", "event-driven"]},
+       "note": "Strong consistency across a service boundary is expensive and often accidental."},
+      {"name": "ops_maturity", "kind": "choice",
+       "scores": {"low": ["monolith", "modular monolith"], "medium": ["modular monolith", "services"], "high": ["services", "event-driven"]},
+       "note": "On-call, tracing, and CI maturity. Without them a distributed estate is undebuggable."},
+      {"name": "failure_isolation", "kind": "choice",
+       "scores": {"low": ["monolith", "modular monolith"], "high": ["services", "event-driven"]},
+       "note": "Does one component failing have to leave the others running?"}
+    ],
+    "flip": "Cross four independently deploying teams, or need one component to fail without the others, and revisit this decision."
+  }
+}
