@@ -8,7 +8,7 @@ fails its rule is not approved, and the failure names the missing field.
 import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_intake import required_artifacts
+from sbe_intake import required_artifacts, TIERS
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -34,6 +34,8 @@ def check_artifacts(root):
         tier = json.loads(intake).get("tier")
     except ValueError:
         return "FAIL", "00-intake.json is not valid JSON"
+    if tier not in TIERS:
+        return "NO-DATA", "00-intake.json has no valid tier (got %r); expected one of %s" % (tier, ", ".join(TIERS))
     need = required_artifacts(tier)
     missing = [ARTIFACT_FILES[n] for n in need if read(root, ARTIFACT_FILES[n]) is None]
     if missing:
@@ -93,18 +95,40 @@ def check_data_model(root):
     return "PASS", "%d entities, each with a system of record; every relationship carries cardinality" % len(ents)
 
 
+DIAGRAM_KEYWORDS = {"flowchart", "graph", "sequenceDiagram", "erDiagram", "LR", "TD", "RL", "BT"}
+
+# A node name followed by a shape wrapper (square, round, curly, or the double-round
+# "circle" form) or by a bare "--"/"-->" edge. Order matters: the double-paren
+# alternative must come before the single-paren one or it never gets a chance to match.
+_SHAPE_OR_EDGE = r"\[[^\]\n]*\]|\(\([^)\n]*\)\)|\([^)\n]*\)|\{[^}\n]*\}|--"
+_NODE_SOURCE = re.compile(r"([A-Za-z_]\w*)\s*(?:%s)" % _SHAPE_OR_EDGE)
+_NODE_DEST = re.compile(r"-->\s*(?:\|[^|]*\|\s*)?([A-Za-z_]\w*)")
+# erDiagram relationship line: ENTITY <cardinality> ENTITY : label
+# Cardinality tokens (||--o{, }o--||, ||--||, }|..|{, ...) are built only from
+# the characters | o { } . and dash, so a run of those between two identifiers,
+# ending in a colon, is an entity-relationship line, not a flowchart arrow.
+_ER_LINE = re.compile(r"([A-Za-z_]\w*)\s+[|o{}.\-]+\s+([A-Za-z_]\w*)\s*:")
+
+
+def _diagram_nodes(t):
+    nodes = set()
+    for m in _NODE_SOURCE.finditer(t):
+        nodes.add(m.group(1))
+    for m in _NODE_DEST.finditer(t):
+        nodes.add(m.group(1))
+    for m in _ER_LINE.finditer(t):
+        nodes.add(m.group(1))
+        nodes.add(m.group(2))
+    return nodes - DIAGRAM_KEYWORDS
+
+
 def check_diagrams(root):
     t = read(root, ARTIFACT_FILES["06"])
     if t is None:
         return "NO-DATA", "no 06-diagrams.md in this dossier"
     model = read(root, ARTIFACT_FILES["05"]) or ""
     known = set(_entities(model))
-    nodes = set()
-    for m in re.finditer(r"([A-Za-z_]\w*)\s*--", t):
-        nodes.add(m.group(1))
-    for m in re.finditer(r"-->\s*(?:\|[^|]*\|\s*)?([A-Za-z_]\w*)", t):
-        nodes.add(m.group(1))
-    nodes -= {"flowchart", "graph", "sequenceDiagram", "erDiagram", "LR", "TD", "RL", "BT"}
+    nodes = _diagram_nodes(t)
     if not nodes:
         return "FAIL", "no diagram nodes found; a diagram artifact with no diagram is a defect"
     orphans = sorted(n for n in nodes if known and n not in known)
