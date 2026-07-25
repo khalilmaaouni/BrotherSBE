@@ -449,7 +449,14 @@ def gate_approval(root):
     approvals, pruned = find(root, APPROVAL_FILE)
     body, sig, authors = git_trailers(root)
     trailer = re.search(r"^Approved-by:\s*(.+)$", body, re.M)
-    review_id = re.search(r"^Reviewed-in:\s*(\S+)$", body, re.M)
+    # The id is whatever the team writes, not one whitespace-free token. `(\S+)$`
+    # was a shape rule nothing declared: `Reviewed-in: PR 99999 on the payments
+    # board` matched nothing, fell past this branch, and got FAIL with the
+    # sentence "approval is a typed name with no signature or review id" printed
+    # over a commit that records one. The law says there is no shape check on the
+    # id beyond refusing the tokens that name the absence of one, so this reads
+    # the line and lets `answered()` be the only test.
+    review_id = re.search(r"^Reviewed-in:\s*(.+)$", body, re.M)
     # The APPROVAL file declares this change touches money/partner paths.
     if not approvals and not trailer:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
