@@ -59,7 +59,7 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "154 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "180 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
@@ -72,12 +72,46 @@ python3 tools/sbe_gate.py --strict .   # enforcing: exits nonzero on any FAIL
 Cloning the skill gives you the tools. It does not stop a bad merge until you wire `--strict` into the CI of the repository you want guarded. A ready workflow ships at `.github/workflows/brothersbe-gates.yml`; copy it into the guarded repo (and make `tools/` reachable there, by vendoring it or adding a clone step). It runs on every pull request:
 
 ```yaml
-- run: python3 tools/sbe_gate.py --strict .
-- run: python3 tools/sbe_design.py --strict .
-- run: python3 tools/sbe_score.py --strict .
+      - name: Hard gates (numbers, migration, approval, ran) block on failure
+        run: python3 tools/sbe_gate.py --strict .
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
+      - name: Design checks (dossier completeness) block on failure
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -q 'WAIVED' design-checks.out; then
+            grep 'WAIVED' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep 'WAIVED' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Silent-failure lints and code-graded checks block on failure
+        run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
 ```
 
-Three steps, not two. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
+Seven steps, not three. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The last one surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
 
 Two settings decide whether those steps can see anything.
 

@@ -126,7 +126,7 @@ to open: a check that prints nothing is indistinguishable from a check that was
 deleted.
 
 ```
-BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass)
+BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   dossier    WAIVED   templates/dossier: .sbe-exempt waives artifacts, adr, datamodel, diagrams, placeholder here, stated reason: These are the shipped dossier TEMPLATES, not a dossier. They carry the SBE-TEMPLATE-UNFILLED marker on purpose and have no 00-intake.json, because nobody filled them in for a real change. Copy them in. Nothing below opened a file in that directory, so this is a waiver and not a verdict about the work
   dossier    NO-DATA  every dossier found under . (1) is waived by a .sbe-exempt, so no check opened a file. The waiver line(s) above name each one and the reason given
   artifacts  NO-DATA  no dossier under ., so this check opened no file
@@ -192,8 +192,12 @@ options per key. Editing a threshold is editing this file, in a reviewed pull
 request; the tool holds no numbers of its own.
 
 ```bash
-python3 tools/sbe_decide.py tables/architecture.json shape
+python3 tools/sbe_decide.py tables/architecture.json shape   # asks for each criterion on stdin
 ```
+
+It prompts for one value per criterion, so a non-interactive caller pipes them in
+(`printf 'many\nstrong\nlow\nlow\n' | python3 tools/sbe_decide.py ...`); left to
+read an empty stdin in CI it prints nothing and waits.
 
 ## 5. `tools/sbe_gate.py`: the four hard gates
 
@@ -205,7 +209,7 @@ present.
 |---|---|---|
 | `numbers` | `numbers-manifest.json` | each figure has a `snapshot_id`, a `second_derivation` textually different from `query`, `rerun.ran` true, and `primary` equal to `secondary` |
 | `migration` | `migration-receipt.json` | both legs have `ran_against_restore`, the reverse has a `rehearsal_run_id`, and `row_counts.before` equals `row_counts.after_reverse` |
-| `approval` | `APPROVAL` file plus a HEAD trailer | a signed commit carries `Approved-by:` (git `%G?` in `G`, `U`, `E`) or the commit carries `Reviewed-in: <id>`. A typed name with neither fails |
+| `approval` | `APPROVAL` file plus a HEAD trailer | a signed commit carries `Approved-by:` and this host verified the signature (git `%G?` in `G` or `U`). An unverifiable signature and a `Reviewed-in: <id>` both report NO-DATA, because this host can check neither. A typed name with neither fails |
 | `ran` | `ran-receipt.json` | every check has `exit_code` 0 and a nonzero `duration_ms` |
 
 ```bash
@@ -250,20 +254,59 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
 
 ## 7. CI: where advisory becomes blocking
 
-`.github/workflows/brothersbe-gates.yml` runs three steps on every pull request:
+`.github/workflows/brothersbe-gates.yml` runs seven steps on every pull request:
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
       - name: Design checks (dossier completeness) block on failure
-        run: python3 tools/sbe_design.py --strict .
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -q 'WAIVED' design-checks.out; then
+            grep 'WAIVED' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep 'WAIVED' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: python3 evals/test_no_data_class.py
+      - name: Tool tests (redaction, permissions, identity, autosave)
+        run: python3 tools/test_sbe.py
 ```
 
 The checkout step needs `fetch-depth: 0` because the approval gate reads commit
 trailers and signatures. All three tools are standard-library Python with no
-dependencies and no network calls.
+dependencies and no network calls, and so are the three suites under them.
+
+The last three steps are not decoration. The gates are worth exactly what their
+tests are worth, and those suites ran on nobody's merge path for a while, which
+made them documentation rather than a gate: a fixture no merge runs cannot stop
+anything. Copy all seven, or copy the first three knowing you have kept the gates and
+dropped the thing that proves they still work. The seventh surfaces any design
+waiver as an annotation, because a waiver is not a pass and the exit code cannot
+tell you one was used.
 
 `--strict` is not overridable by a session instruction. It changes by a human
 editing this file in a reviewed change, which is the entire mechanism behind "a

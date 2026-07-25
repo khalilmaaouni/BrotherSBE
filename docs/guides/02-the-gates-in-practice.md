@@ -284,15 +284,16 @@ Reviewed-in: gh_pr_1421
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  approval  PASS     commit records Reviewed-in: gh_pr_1421. This gate checked the trailer is present and does not resolve the id against a review platform, so it points a human at a review rather than proving one happened
+  approval  NO-DATA  commit records Reviewed-in: gh_pr_1421. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict
 ```
 
-A signed commit with `Approved-by:` passes and prints "signed commit carries
-Approved-by: <name>". The two are not the same strength, and the evidence line is
-where that is stated: the signature path cannot be produced without the private
-key, and the review id is matched by a regex against a commit message the agent
-writes. Add a CI step that resolves the id against your platform if you need the
-second path to be a control.
+A signed commit with `Approved-by:` that this host verified passes and prints
+"signed commit carries Approved-by: <name>". The two are not the same strength,
+and the verdicts now say so rather than only the evidence line: the signature path
+cannot be produced without the private key and PASSes, while the review id is a
+regex match against a commit message the agent writes and reports NO-DATA. Add a
+CI step that resolves the id against your platform if you need the second path to
+be a control.
 
 ### Worked NO-DATA
 
@@ -309,8 +310,9 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
 The point of this gate is to raise the cost of minting an approval, and to be honest
 about how far it gets. A typed name is exactly what an agent can produce, so a typed
 name alone FAILs. A `Reviewed-in:` id is also something an agent can produce, which is
-why the evidence line discloses that the id is never resolved. Only the verified
-signature path is beyond an agent that does not hold the key. What clears the gate
+why its verdict is NO-DATA and the evidence line discloses that the id is never
+resolved. Only the verified signature path is beyond an agent that does not hold
+the key. What clears the gate
 is a binding to an identity the agent does not hold: a cryptographic commit signature
 (the private key is the human's), or a platform review id that points at a review that
 happened in a system the agent cannot post to on the human's behalf. This is the blast
@@ -483,7 +485,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:381, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:503, sbe_telemetry.py:283, sbe_telemetry.py:719, sbe_telemetry.py:772, sbe_telemetry.py:917)
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over
@@ -498,10 +500,15 @@ Two mechanisms make that honest rather than lucky:
   literals, so a naive scan would match itself. It excludes `os.path.basename(__file__)`
   for exactly that reason, and the exclusion is documented in the function.
 - **Every genuine swallow carries a marker.** The boundary handlers that must not crash a
-  session are exempted in the open. `sbe_gate.py:170` marks the receipt-read handler; five
-  handlers in `sbe_telemetry.py` (lines 283, 719, 772, 917, 945) mark the non-blocking hook
-  boundaries, each with a reason ending in the same guarantee: the miss surfaces as absent
-  data, never as a false pass. The test harness (`test_sbe.py`) marks its two fire-and-forget
+  session are exempted in the open. In `sbe_gate.py` the marker sits on the git-worktree
+  fallback, where a directory that is not a git worktree leaves the root as given and every
+  gate below still runs and still prints; in `sbe_checks.py` it sits on the per-check guard,
+  where the exception becomes the FAIL evidence rather than vanishing; five handlers in
+  `sbe_telemetry.py` mark the non-blocking hook boundaries, each with a reason ending in the
+  same guarantee: the miss surfaces as absent data, never as a false pass. No line numbers
+  are quoted here on purpose, because a line number in prose is a claim nothing recomputes
+  and this paragraph carried two wrong ones; `grep -n "sbe: allow-silent" tools/*.py` is the
+  current list. The test harness (`test_sbe.py`) marks its two fire-and-forget
   hook invocations, noting the snapshot ref it creates is asserted immediately below.
 
 Nothing is hidden by turning off the check. The lint runs against the tool's own source,
@@ -516,7 +523,7 @@ the four gates hold your work to, applied to the gates themselves.
 | --- | --- | --- | --- |
 | numbers | `numbers-manifest.json` | `snapshot_id`, `query` vs `second_derivation`, `rerun.ran`, `rerun.primary`/`secondary` | a total that disagrees with its own components |
 | migration | `migration-receipt.json` | `forward`/`reverse.ran_against_restore`, `reverse.rehearsal_run_id`, `row_counts.before`/`after_reverse` | a reverse nobody rehearsed against a restore |
-| approval | `APPROVAL` + commit trailers | `Approved-by:` with a signature (`%G?` in G/U/E), or `Reviewed-in:` | a typed name standing in for a control |
+| approval | `APPROVAL` + commit trailers | `Approved-by:` with a signature this host verified (`%G?` in G or U). A `Reviewed-in:` id is NO-DATA, an unverifiable signature is NO-DATA | a typed name standing in for a control |
 | ran | `ran-receipt.json` | `checks[].exit_code`, `checks[].duration_ms` | a green the agent reported but did not run |
 
 Advisory in a session, `--strict` in CI. NO-DATA is never a pass. Output that has not

@@ -11,7 +11,7 @@ details and ask for a private channel first.
 BrotherSBE makes no network calls. It has no analytics, no account, and no
 server. Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
-yourself; the tools are about 834 lines of standard-library Python and shell:
+yourself; the tools are about 4,300 lines of standard-library Python and shell:
 
 ```bash
 grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/

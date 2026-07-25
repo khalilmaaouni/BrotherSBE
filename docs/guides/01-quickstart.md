@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-154 evals: 154 passed, 0 regressions.
+180 evals: 180 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -318,8 +318,30 @@ jobs:
       # signature blob because it could not check one.
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
       - name: Design checks (dossier completeness) block on failure
-        run: python3 tools/sbe_design.py --strict .
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -q 'WAIVED' design-checks.out; then
+            grep 'WAIVED' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep 'WAIVED' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict .
       # The gates above are only worth what their tests are worth. These two ran
@@ -337,10 +359,12 @@ Why the two settings matter:
 
 - `fetch-depth: 0` gives the approval gate the commit it needs. `gate_approval`
   reads the `Approved-by:` trailer on HEAD and its signature status. Note that
-  signature verification (`G`/`U`/`E`) is awkward to reproduce in CI, so the
-  CI-friendly path to an approval PASS is a `Reviewed-in: <platform-review-id>`
-  trailer, which binds the approval to a recorded platform review instead of a
-  key. A bare typed name fails by design: a name in a text field is not a control.
+  signature verification is awkward to reproduce in CI, so the keyless path is a
+  `Reviewed-in: <platform-review-id>` trailer, which points at a recorded platform
+  review instead of binding a key. That path reports NO-DATA rather than PASS,
+  because nothing resolves the id and the agent writes the commit message; NO-DATA
+  neither blocks nor passes, so it does not impede a team that has chosen it. A
+  bare typed name fails by design: a name in a text field is not a control.
 - The second step runs `sbe_gate.py`'s companion, `sbe_score.py --strict`, which
   blocks on the silent-failure lints and the code-graded checks. It is optional;
   keep it if you want the swallow patterns to fail a merge too. Both tools take the

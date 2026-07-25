@@ -175,7 +175,8 @@ A migration or a money path would add its own gate and column. A migration ships
 
 A money or partner change ships an `APPROVAL` file declaring it touches that path,
 plus a named human approval the agent cannot forge: a signed commit trailer
-`Approved-by:` on a signed commit, or a `Reviewed-in:` platform review id. A typed
+`Approved-by:` on a signed commit. A `Reviewed-in:` platform review id is the
+keyless alternative and reports NO-DATA, because nothing resolves it. A typed
 name with no signature FAILs the `approval` gate. That override, if you ever take
 one, is never silent: it is named, logged, and surfaced at the weekly review, and
 it is never available on the `--strict` CI path.

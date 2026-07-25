@@ -372,8 +372,9 @@ separately, so the control survives a bad prompt.
   ```
 
   `python3 tools/sbe_gate.py approval` reads HEAD. It PASSes an `Approved-by:`
-  trailer only when git reports the commit signature as G, U, or E (a real
-  signature); it PASSes a `Reviewed-in:` id on its own. It FAILs an `Approved-by:`
+  trailer only when git reports the commit signature as G or U (a signature this
+  host verified); a signature it could not check is NO-DATA, and so is a
+  `Reviewed-in:` id, which nothing resolves. It FAILs an `Approved-by:`
   name on an unsigned commit, because a name in a text field is not a control
   (`typed-name-approval-caught` in the evals). An `APPROVAL` file in the worktree
   declares that the change touches a money or partner path; with no APPROVAL file

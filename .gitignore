@@ -5,3 +5,6 @@ STATE.md
 
 # Word owner-lock artifacts (embed the editor username)
 ~$*
+
+# Internal review and planning notes, never shipped
+.superpowers/
