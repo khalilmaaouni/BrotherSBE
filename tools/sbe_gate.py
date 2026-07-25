@@ -51,6 +51,12 @@ The classes (ratified 2026-07-24):
             NO-DATA, never an approval: CI must import the signer's public keys,
             or the team standardises on the weaker keyless Reviewed-in: path
             knowing what it does and does not prove.
+            SELF-APPROVAL FAILS. The Approved-by identity is compared against
+            the commit's own author and committer (%an, %ae, %cn, %ce), because
+            one person with one key authored, signed and approved a payout
+            change and this gate printed its strongest sentence over it. A
+            signature proves a key holder signed and cannot prove a second party
+            looked, and a second party is the whole content of the word approval.
   ran       No SQL or pipeline change is done until its reconciliation query or
             test executed: a receipt with a nonzero-duration run and an exit code.
 
@@ -69,7 +75,8 @@ the operating record proves pasted receipts get invented.
 import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import Check, run_guarded, answered, numeric, derivation_fold, prune_dirs
+from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
+                        derivation_fold, distinct, fold, Pruner)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -123,15 +130,24 @@ def _items(d, key):
 
 
 def find(root, name):
+    """(receipt paths, a sentence naming any pruned tree that also holds one).
+
+    The note is the second return value and every caller prints it, because a
+    directory this walk refused to enter is a directory the verdict does not
+    cover, and "no numbers-manifest found" over a tree that holds one is this
+    project's headline defect class wearing the walker's clothes.
+    """
     hits = []
+    pruner = Pruner()
     for dp, dns, fns in os.walk(root):
         # Match directory NAMES, not a substring of the path: `.git` as a
         # substring test also hid `.github/`, so the workflow that wires these
-        # gates into CI was invisible to every one of them.
-        dns[:] = prune_dirs(dp, dns)
+        # gates into CI was invisible to every one of them. And then not by name
+        # at all: see sbe_checks.skip_reason.
+        dns[:] = pruner(dp, dns)
         if name in fns:
             hits.append(os.path.join(dp, name))
-    return hits
+    return hits, pruner.note(lambda f: f == name)
 
 
 def _partial(nothing, checked, kind, unit):
@@ -151,25 +167,64 @@ def _partial(nothing, checked, kind, unit):
 
 
 def git_trailers(root):
-    """Named-approval source of truth #1: signed commit trailers on HEAD."""
+    """(commit body, signature state, the identities that WROTE the commit).
+
+    The identities are the addition, and they are the whole of the self-approval
+    fix. The gate read the trailer and the signature state and never asked who
+    authored the commit, so one person with one key produced a commit they
+    authored, signed and approved, and the gate printed the strongest sentence it
+    owns over it. `%an %ae` is the author and `%cn %ce` the committer, which are
+    the two identities git can prove wrote this commit on this host.
+    """
     try:
-        out = subprocess.run(["git", "-C", root, "log", "-1", "--format=%B%n---%n%G?"],
+        out = subprocess.run(["git", "-C", root, "log", "-1",
+                              "--format=%B%n---%n%G?%n%an%n%ae%n%cn%n%ce"],
                              capture_output=True, text=True, timeout=10)
-        body, _, sig = out.stdout.rpartition("\n---\n")
-        return body, sig.strip()
+        body, _, tail = out.stdout.rpartition("\n---\n")
+        parts = (tail.split("\n") + [""] * 5)[:5]
+        sig = parts[0].strip()
+        who, seen = [], set()
+        for p in parts[1:]:
+            p = p.strip()
+            if p and p not in seen:
+                seen.add(p)
+                who.append(p)
+        return body, sig, who
     except Exception:
-        return "", "N"
+        return "", "N", []
+
+
+def _identity_tokens(text):
+    """The comparable identities inside a name-and-email string.
+
+    `Dana Author <dana@example.com>` is compared as two tokens, so a trailer that
+    carries only the name still matches an author git records with both, and a
+    trailer that carries only the address matches too. Case and whitespace are
+    folded, because `DANA@example.com` is Dana.
+    """
+    out = set()
+    for m in re.finditer(r"<([^>]+)>", text or ""):
+        out.add(fold(m.group(1)))
+    stripped = re.sub(r"<[^>]*>", " ", text or "")
+    name = fold(stripped.strip(" \t,;"))
+    if name:
+        out.add(name)
+    for m in re.finditer(r"[^\s<>,;]+@[^\s<>,;]+", text or ""):
+        out.add(fold(m.group(0)))
+    return {t for t in out if t}
 
 
 def gate_numbers(root):
-    manifests = find(root, MANIFEST)
+    manifests, pruned = find(root, MANIFEST)
     if not manifests:
-        return "NO-DATA", "no numbers-manifest found; if this change presents no decision figure that is correct, else add one"
+        return "NO-DATA", ("no numbers-manifest found; if this change presents no decision figure "
+                           "that is correct, else add one%s" % pruned)
     problems = []
     unreadable = []
     nothing = []
     checked = 0
-    distinct = set()
+    seen_figures = []
+    snapshots = []
     for m in manifests:
         d, err = load_receipt(m)
         if d is None:
@@ -183,11 +238,10 @@ def gate_numbers(root):
             checked += 1
             # A figure listed twice was counted twice, so a manifest holding one
             # object duplicated reported "2 figure(s)". The count in the evidence
-            # line is what a reader takes as the amount of work checked.
-            try:
-                distinct.add(json.dumps(fig, sort_keys=True))
-            except (TypeError, ValueError):
-                distinct.add(repr(fig))
+            # line is what a reader takes as the amount of work checked. The rule
+            # is sbe_checks.distinct(), shared with the three sibling thresholds
+            # that did not have it.
+            seen_figures.append(fig)
             if not isinstance(fig, dict):
                 problems.append("entry %d in %s is %s, not a figure object"
                                 % (checked, os.path.relpath(m, root), type(fig).__name__))
@@ -208,12 +262,29 @@ def gate_numbers(root):
                 problems.append("%s: no snapshot_id recorded (%r); a live warehouse drifts, so pin "
                                 "the read. A placeholder is not a pin"
                                 % (label, fig.get("snapshot_id")))
-            q1, q2 = answered(fig.get("query")), answered(fig.get("second_derivation"))
+            else:
+                snapshots.append(answered(fig.get("snapshot_id")))
+            # REDUCED FIRST, then tested, and this order is the whole fix. The
+            # previous order asked `answered()` about the raw text and folded it
+            # afterwards, so a `second_derivation` of `"#"`, or of `"-- rerun on
+            # 2026-07-26 by hand, same query"`, was an answer to `answered()`,
+            # folded to the empty string, differed from every real query, and
+            # bought "a second derivation whose text differs beyond case,
+            # whitespace and comments". A derivation that computes nothing is not
+            # a derivation, whichever side of the pair it sits on.
+            q1 = answered_as(fig.get("query"), derivation_fold)
+            q2 = answered_as(fig.get("second_derivation"), derivation_fold)
             if q1 is None:
-                problems.append("%s: no query recorded, so there is nothing for the second derivation to be independent of" % label)
+                problems.append("%s: no query recorded that computes anything (%r); with comments, "
+                                "case, whitespace and trailing punctuation removed there is nothing "
+                                "left, so there is nothing for the second derivation to be "
+                                "independent of" % (label, fig.get("query")))
             if q2 is None:
-                problems.append("%s: no independent second derivation" % label)
-            elif q1 is not None and derivation_fold(q1) == derivation_fold(q2):
+                problems.append("%s: no independent second derivation that computes anything (%r); "
+                                "with comments, case, whitespace and trailing punctuation removed "
+                                "there is nothing left, and a comment is not a derivation"
+                                % (label, fig.get("second_derivation")))
+            elif q1 is not None and q1 == q2:
                 # Compared on `.strip()`ed text, so a second derivation that was
                 # the first one lowercased, or reindented, was accepted as an
                 # independent re-derivation. Two texts that differ only in case
@@ -261,18 +332,28 @@ def gate_numbers(root):
     # textual difference and passes, and nothing here reads which tables the two
     # queries touch. Overclaiming in the PASS line is this project's own defect
     # class pointed at itself.
-    dupes = checked - len(distinct)
+    unique, dupes = distinct(seen_figures)
+    # One snapshot id reused across every figure is a true sentence that proves
+    # nothing about several different reads, so the reuse is stated rather than
+    # left for a reader to notice. It is disclosure, not a failure: reading five
+    # figures out of one pinned snapshot is the ordinary honest thing.
+    reused = len(snapshots) - len(set(snapshots))
     return "PASS", ("%d figure(s) each pinned to a snapshot, with a second derivation whose text "
-                    "differs beyond case, whitespace and comments, re-run to zero drift%s"
-                    % (len(distinct),
+                    "differs beyond case, whitespace and comments, re-run to zero drift%s%s%s"
+                    % (len(unique),
                        "" if not dupes else
-                       "; %d duplicate manifest entry/entries were counted once" % dupes))
+                       "; %d duplicate manifest entry/entries were counted once" % dupes,
+                       "" if not reused else
+                       "; %d figure(s) share a snapshot id already used by another figure (%d "
+                       "distinct snapshot(s) in all), which pins them to one read rather than to "
+                       "several" % (reused, len(set(snapshots))),
+                       pruned))
 
 
 def gate_migration(root):
-    receipts = find(root, MIGRATION_RECEIPT)
+    receipts, pruned = find(root, MIGRATION_RECEIPT)
     if not receipts:
-        return "NO-DATA", "no migration in this change, or no migration-receipt.json"
+        return "NO-DATA", ("no migration in this change, or no migration-receipt.json%s" % pruned)
     problems = []
     unreadable = []
     nothing = []
@@ -326,7 +407,7 @@ def gate_migration(root):
                            "the reverse was supposed to restore" % rel)
         elif not isinstance(rc, dict):
             problems.append("%s: row_counts is %s, not an object" % (rel, type(rc).__name__))
-        elif numeric(rc.get("before")) is None or numeric(rc.get("after_reverse")) is None:
+        elif count(rc.get("before")) is None or count(rc.get("after_reverse")) is None:
             # `is None` was the whole emptiness test here, so a row_counts block
             # holding "" in both fields compared equal, incremented the counter,
             # and produced "1 row-count comparison(s) matched" about two empty
@@ -336,13 +417,14 @@ def gate_migration(root):
             # reject an honest receipt, because a count nobody counted is not a
             # count that matched.
             unread = ", ".join("%s=%r" % (k, rc.get(k)) for k in ("before", "after_reverse")
-                               if numeric(rc.get(k)) is None)
-            problems.append("%s: row_counts does not record a number for %s; a blank, a placeholder "
-                            "or a half-recorded count proves nothing, and both before and "
-                            "after_reverse are required as counted numbers" % (rel, unread))
+                               if count(rc.get(k)) is None)
+            problems.append("%s: row_counts does not record a count for %s; a blank, a placeholder, "
+                            "a half-recorded pair, an infinity, a fraction and a negative are none "
+                            "of them counts, and both before and after_reverse are required as "
+                            "whole non-negative numbers of rows" % (rel, unread))
         else:
             compared += 1
-            if numeric(rc["before"]) != numeric(rc["after_reverse"]):
+            if count(rc["before"]) != count(rc["after_reverse"]):
                 problems.append("reverse did not restore row count: before=%s after=%s"
                                 % (rc["before"], rc["after_reverse"]))
     if unreadable:
@@ -359,18 +441,39 @@ def gate_migration(root):
                            "assert, so it does not"
                            % (checked, len(nothing), "; ".join(nothing[:4])))
     return "PASS", ("%d receipt(s): forward and reverse both ran against a restore, %d row-count "
-                    "comparison(s) matched, and a rehearsal id string is recorded"
-                    % (checked, compared))
+                    "comparison(s) matched, and a rehearsal id string is recorded%s"
+                    % (checked, compared, pruned))
 
 
 def gate_approval(root):
-    approvals = find(root, APPROVAL_FILE)
-    body, sig = git_trailers(root)
+    approvals, pruned = find(root, APPROVAL_FILE)
+    body, sig, authors = git_trailers(root)
     trailer = re.search(r"^Approved-by:\s*(.+)$", body, re.M)
     review_id = re.search(r"^Reviewed-in:\s*(\S+)$", body, re.M)
     # The APPROVAL file declares this change touches money/partner paths.
     if not approvals and not trailer:
-        return "NO-DATA", "no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct"
+        return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
+                           "money or partner path that is correct%s" % pruned)
+    # Self-approval is not approval, and the gate did not look. One person, one
+    # key: they authored the commit, signed the commit and wrote their own name
+    # into the Approved-by trailer, and this gate printed "signed commit carries
+    # Approved-by: Dana Author" over it while the line above the verdict showed
+    # the same identity three times. A signature proves a key holder signed. It
+    # cannot prove a SECOND party looked, and a second party is the entire content
+    # of the word approval.
+    if trailer:
+        approver = _identity_tokens(trailer.group(1))
+        wrote = set()
+        for who in authors:
+            wrote |= _identity_tokens(who)
+        overlap = sorted(approver & wrote)
+        if overlap:
+            return "FAIL", ("the Approved-by identity is the identity that wrote the commit (%s); "
+                            "author and committer are %s. Self-approval is not approval: a "
+                            "signature proves a key holder signed, and it cannot prove a second "
+                            "party reviewed. Have the approver sign, or record a Reviewed-in id "
+                            "pointing at a review somebody else performed"
+                            % (", ".join(overlap), ", ".join(authors) or "unrecorded"))
     # An approval was claimed: now it must be bound to a forgeable-resistant identity.
     # Only a signature that VERIFIED counts. git's %G? returns G (good) and U (good,
     # untrusted-but-valid) for a signature this host actually checked. E means the
@@ -379,7 +482,9 @@ def gate_approval(root):
     # nobody on the team recognises. Accepting E would trust the unknown while
     # rejecting a known key that had merely expired, so E is NO-DATA, not an approval.
     if trailer and sig in ("G", "U"):
-        return "PASS", "signed commit carries Approved-by: %s" % trailer.group(1).strip()
+        return "PASS", ("signed commit carries Approved-by: %s, and that identity is not the "
+                        "commit's author or committer (%s)%s"
+                        % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded", pruned))
     if review_id and answered(review_id.group(1)) is not None:
         # NO-DATA, not PASS, and the argument is internal consistency rather than
         # taste. Four lines below, a signature THIS HOST COULD NOT VERIFY returns
@@ -407,9 +512,10 @@ def gate_approval(root):
 
 
 def gate_ran(root):
-    receipts = find(root, RAN_RECEIPT)
+    receipts, pruned = find(root, RAN_RECEIPT)
     if not receipts:
-        return "NO-DATA", "no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt"
+        return "NO-DATA", ("no ran-receipt.json; a SQL or pipeline change is not done until its "
+                           "check executed and left a receipt%s" % pruned)
     problems = []
     unreadable = []
     nothing = []
@@ -461,7 +567,8 @@ def gate_ran(root):
                            % "; ".join(nothing))
     if nothing:
         return _partial(nothing, checked, "ran-receipt", "check(s)")
-    return "PASS", "%d recorded check(s), each with a zero exit and a nonzero duration" % checked
+    return "PASS", ("%d recorded check(s), each with a zero exit and a nonzero duration%s"
+                    % (checked, pruned))
 
 
 # The registry is the contract. Each gate declares the evidence it opens, what its
