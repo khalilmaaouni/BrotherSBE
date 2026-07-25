@@ -2763,21 +2763,21 @@ def r6as(root):
     # a warehouse file.
     write(root, "load.sql",
           "INSERT INTO orders (id, amount)\nSELECT id, amount FROM staging\n"
-          "ON CONFLICT (id) DO NOTHING;\n")
+          "ON CONFLICT (id) DO NOTHING;\n")  # sbe: allow-silent this is the lint FIXTURE: the skipping upsert is the defect under test, written into a temp file and never executed here
     return run_score_lints([root])
 
 
 @case("a-conflict-skipping-upsert-split-over-lines-is-caught", "lints", "FAIL")
 def r6at(root):
     write(root, "load.sql",
-          "INSERT INTO orders (id) SELECT id FROM staging\nON CONFLICT (id)\n  DO NOTHING;\n")
+          "INSERT INTO orders (id) SELECT id FROM staging\nON CONFLICT (id)\n  DO NOTHING;\n")  # sbe: allow-silent lint FIXTURE, see the case above
     return run_score_lints([root])
 
 
 @case("a-conflict-skipping-upsert-in-a-python-variable-is-caught", "lints", "FAIL")
 def r6au(root):
     write(root, "load.py",
-          "SQL = \"INSERT INTO orders (id) VALUES (1) ON CONFLICT (id) DO NOTHING\"\n"
+          "SQL = \"INSERT INTO orders (id) VALUES (1) ON CONFLICT (id) DO NOTHING\"\n"  # sbe: allow-silent lint FIXTURE, see the case above
           "def load(conn):\n    conn.execute(SQL)\n")
     return run_score_lints([root])
 
