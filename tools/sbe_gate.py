@@ -17,12 +17,22 @@ The classes (ratified 2026-07-24):
             ran against a restored copy, the reverse receipt carrying a resolvable
             rehearsal run id (not free text), and matching row-count checks.
   approval  Money or partner-facing change carries a named human approval bound to
-            an identity the agent cannot forge: a signed commit trailer or a
-            recorded platform review id. A bare typed name FAILS.
+            an identity the agent cannot forge: a signed commit trailer whose
+            signature this host actually VERIFIED, or a recorded platform review
+            id. A bare typed name FAILS. A signature the host cannot check (git
+            %G? = E, the normal result on a runner with no imported keys) is
+            NO-DATA, never an approval: CI must import the signer's public keys,
+            or the team standardises on the keyless Reviewed-in: path.
   ran       No SQL or pipeline change is done until its reconciliation query or
             test executed: a receipt with a nonzero-duration run and an exit code.
 
 Honesty law inherited from the chassis: absent evidence is NO-DATA, never PASS.
+Three states, not two, and the difference is load-bearing: a missing receipt is
+NO-DATA (nothing was claimed), a receipt that exists but records zero items is
+NO-DATA naming that fact (a claim of nothing is still nothing), and a receipt
+that exists and cannot be parsed is a FAIL (a broken claim, not an absent one).
+A gate that reported PASS over zero items would print evidence asserting work
+that was never inspected, which is worse than having no gate at all.
 Fabricated-receipt defense: presence is necessary but the gate also checks the
 receipt is INTERNALLY CONSISTENT (a run id resolves to a nonzero duration and an
 exit code, a manifest's second query differs textually from the first), because
@@ -37,11 +47,36 @@ RAN_RECEIPT = "ran-receipt.json"
 
 
 def load_json(path):
+    """Parse a receipt. None means the file exists but could not be read or parsed.
+
+    The caller must not coerce that None into an empty dict. A receipt that
+    cannot be read is a broken claim, not an absent one: it FAILS. Absence of
+    the file is NO-DATA, and the two are decided in different places on purpose.
+    """
     try:
         with open(path) as f:
             return json.load(f)
     except Exception:
         return None
+
+
+def _items(d, key):
+    """Return (items, note) for a receipt's item list.
+
+    items is [] when the key is missing, is not a list, or is an empty list.
+    note names the reason so the NO-DATA evidence can distinguish a genuinely
+    empty receipt from a misspelled key, which otherwise look identical.
+    """
+    v = d.get(key)
+    if isinstance(v, list) and v:
+        return v, ""
+    if v is None:
+        other = ", ".join(sorted(k for k in d if k != key))
+        return [], ("no '%s' list; top-level keys present: %s" % (key, other)
+                    if other else "no '%s' key and nothing else in the file" % key)
+    if not isinstance(v, list):
+        return [], "'%s' is %s, not a list" % (key, type(v).__name__)
+    return [], "'%s' is an empty list" % key
 
 
 def find(root, name):
@@ -70,15 +105,26 @@ def gate_numbers(root):
     if not manifests:
         return "NO-DATA", "no numbers-manifest found; if this change presents no decision figure that is correct, else add one"
     problems = []
+    unreadable = []
+    nothing = []
     checked = 0
     for m in manifests:
-        d = load_json(m) or {}
-        for fig in d.get("figures", []):
+        d = load_json(m)
+        if d is None:
+            unreadable.append(os.path.relpath(m, root))
+            continue
+        figs, note = _items(d, "figures")
+        if not figs:
+            nothing.append("%s: %s" % (os.path.relpath(m, root), note))
+            continue
+        for fig in figs:
             checked += 1
             label = fig.get("label", "?")
             if not fig.get("snapshot_id"):
                 problems.append("%s: no snapshot_id (a live warehouse drifts; pin the read)" % label)
             q1, q2 = fig.get("query", ""), fig.get("second_derivation", "")
+            if not q1.strip():
+                problems.append("%s: no query recorded, so there is nothing for the second derivation to be independent of" % label)
             if not q2:
                 problems.append("%s: no independent second derivation" % label)
             elif q1.strip() == q2.strip():
@@ -90,8 +136,14 @@ def gate_numbers(root):
                 problems.append("%s: rerun marked ran but the primary or secondary value needed to prove zero drift was not recorded" % label)
             elif r["primary"] != r["secondary"]:
                 problems.append("%s: DRIFT primary=%s secondary=%s (zero drift required)" % (label, r["primary"], r["secondary"]))
+    if unreadable:
+        return "FAIL", ("manifest present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
+                        % ", ".join(unreadable))
     if problems:
         return "FAIL", "; ".join(problems[:6])
+    if not checked:
+        return "NO-DATA", ("manifest present but records no figures (%s); an empty manifest proves nothing, so it is NO-DATA, never a pass"
+                           % "; ".join(nothing))
     return "PASS", "%d figure(s) each with a pinned, independently re-derived, zero-drift check" % checked
 
 
@@ -100,8 +152,12 @@ def gate_migration(root):
     if not receipts:
         return "NO-DATA", "no migration in this change, or no migration-receipt.json"
     problems = []
+    unreadable = []
     for m in receipts:
-        d = load_json(m) or {}
+        d = load_json(m)
+        if d is None:
+            unreadable.append(os.path.relpath(m, root))
+            continue
         for direction in ("forward", "reverse"):
             leg = d.get(direction, {})
             if not leg.get("ran_against_restore"):
@@ -111,6 +167,9 @@ def gate_migration(root):
         rc = d.get("row_counts", {})
         if rc.get("before") is not None and rc.get("after_reverse") is not None and rc["before"] != rc["after_reverse"]:
             problems.append("reverse did not restore row count: before=%s after=%s" % (rc["before"], rc["after_reverse"]))
+    if unreadable:
+        return "FAIL", ("migration receipt present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
+                        % ", ".join(unreadable))
     if problems:
         return "FAIL", "; ".join(problems[:6])
     return "PASS", "forward and reverse both ran against a restore with matching row counts and a resolvable rehearsal id"
@@ -125,10 +184,20 @@ def gate_approval(root):
     if not approvals and not trailer:
         return "NO-DATA", "no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct"
     # An approval was claimed: now it must be bound to a forgeable-resistant identity.
-    if trailer and sig in ("G", "U", "E"):
+    # Only a signature that VERIFIED counts. git's %G? returns G (good) and U (good,
+    # untrusted-but-valid) for a signature this host actually checked. E means the
+    # signature could not be checked at all, which on a runner with no imported keys
+    # is the expected result for every signed commit, including one signed by a key
+    # nobody on the team recognises. Accepting E would trust the unknown while
+    # rejecting a known key that had merely expired, so E is NO-DATA, not an approval.
+    if trailer and sig in ("G", "U"):
         return "PASS", "signed commit carries Approved-by: %s" % trailer.group(1).strip()
     if review_id:
         return "PASS", "approval bound to platform review %s" % review_id.group(1)
+    if trailer and sig == "E":
+        return "NO-DATA", ("signature present but this host could not verify it (git %G? = E): import the signer's public key "
+                           "into the verifying keyring, or use a Reviewed-in: review id, which needs no keyring. "
+                           "An unverifiable signature is not an approval")
     return "FAIL", "approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)"
 
 
@@ -137,9 +206,20 @@ def gate_ran(root):
     if not receipts:
         return "NO-DATA", "no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt"
     problems = []
+    unreadable = []
+    nothing = []
+    checked = 0
     for m in receipts:
-        d = load_json(m) or {}
-        for chk in d.get("checks", []):
+        d = load_json(m)
+        if d is None:
+            unreadable.append(os.path.relpath(m, root))
+            continue
+        chks, note = _items(d, "checks")
+        if not chks:
+            nothing.append("%s: %s" % (os.path.relpath(m, root), note))
+            continue
+        for chk in chks:
+            checked += 1
             name = chk.get("name", "?")
             if chk.get("exit_code") is None:
                 problems.append("%s: no exit code recorded (was it actually run?)" % name)
@@ -147,9 +227,15 @@ def gate_ran(root):
                 problems.append("%s: check exited nonzero (%s)" % (name, chk["exit_code"]))
             if not chk.get("duration_ms"):
                 problems.append("%s: zero or missing duration (a check that took no time did not run)" % name)
+    if unreadable:
+        return "FAIL", ("ran-receipt present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
+                        % ", ".join(unreadable))
     if problems:
         return "FAIL", "; ".join(problems[:6])
-    return "PASS", "every recorded check executed with a zero exit and a nonzero duration"
+    if not checked:
+        return "NO-DATA", ("ran-receipt present but records no checks (%s); a receipt with nothing in it is exactly what a run that never happened produces, so it is NO-DATA, never a pass"
+                           % "; ".join(nothing))
+    return "PASS", "%d recorded check(s), each with a zero exit and a nonzero duration" % checked
 
 
 GATES = {"numbers": gate_numbers, "migration": gate_migration,
