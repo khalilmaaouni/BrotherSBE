@@ -160,7 +160,18 @@ done < "$WORKDIR/installed_raw"
 # executable source is a failure in its own right, because machine state is
 # what the exclusions are for and code is not machine state. .git/ itself is
 # not enumerated (it is git's own object store, holding thousands of objects).
-find "$TARGET" -type f \
+# EVERY directory entry, whatever its type, exactly as the first walk does.
+# The rule "enumerate regardless of type" was applied to the extra-file walk
+# and NOT to this one, so the defect it closed was alive one find-invocation
+# later, in the walk whose whole reason for existing is that code inside an
+# excluded path is not machine state: a SYMLINK to code planted at
+# tools/__pycache__/planted.py was skipped by `-type f` here and excluded by
+# path up there, so it was reported as nothing at all and the qualifier
+# sentence actively vouched for it ("0 file(s), 0 of them source code",
+# PASSED). A non-regular entry inside an excluded path is its own named
+# failure: the manifest cannot hash what it points at AND it is not
+# enumerable as machine state, which is precisely the shape of a plant.
+find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -path "$TARGET/.git/*" \
     \( -path '*/__pycache__/*' \
        -o -path "$TARGET/.superpowers/*" \
@@ -174,10 +185,16 @@ find "$TARGET" -type f \
 
 EXCLUDED=0
 EXCLUDED_SOURCE=0
+EXCLUDED_NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
     rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
     EXCLUDED=$((EXCLUDED + 1))
+    if [ ! -f "$full" ] || [ -L "$full" ]; then
+        echo "EXCLUDED-NON-REGULAR: $rel (a symlink, pipe, or other non-regular entry inside an excluded path; the manifest cannot hash what it resolves to, the exclusions are for machine state and this is not machine state, and something on this host may execute what it points at)"
+        EXCLUDED_NONREGULAR=$((EXCLUDED_NONREGULAR + 1))
+        continue
+    fi
     case "$rel" in
         *.py|*.sh|*.js|*.rb|*.pl|*.php)
             echo "EXCLUDED-SOURCE: $rel (source code inside an excluded path; the manifest cannot vouch for it and something on this host may execute it)"
@@ -189,9 +206,9 @@ done < "$WORKDIR/excluded_files"
 echo ""
 echo "verify-install: checked against $MANIFEST"
 echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest), $NONREGULAR non-regular (a symlink or pipe the manifest cannot hash)"
-echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED file(s), $EXCLUDED_SOURCE of them source code."
+echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
 
-if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$NONREGULAR" -gt 0 ]; then
+if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$EXCLUDED_NONREGULAR" -gt 0 ] || [ "$NONREGULAR" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \
          "understand why the files above differ from the published manifest." >&2
     if [ "$EXTRA" -gt 0 ]; then
@@ -211,6 +228,13 @@ if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$
              "level deeper: source code sitting in a path this check does not" \
              "hash, where an earlier version of this script would have said" \
              "PASSED over it without qualification." >&2
+    fi
+    if [ "$EXCLUDED_NONREGULAR" -gt 0 ]; then
+        echo "verify-install: an EXCLUDED-NON-REGULAR entry is the deepest" \
+             "shape of the same plant: a symlink inside an excluded path," \
+             "invisible to the extra-file walk (excluded by path) and to a" \
+             "\`find -type f\` (skipped by type), so both counts read zero" \
+             "while the code it resolves to runs like everything else here." >&2
     fi
     exit 1
 fi
