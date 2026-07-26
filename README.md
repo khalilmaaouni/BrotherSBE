@@ -193,6 +193,31 @@ The approval gate reads commit trailers and signatures, so the checkout step nee
 
 Invoke the skill with `/brothersbe` at the start of any backend, infrastructure, or data engineering task.
 
+## Status: read this before trusting anything above
+
+The same disclosure the checks demand of evidence, applied to the project itself.
+
+- **Measured:** the eval counts, the meta-test scenario count, the lint numbers and the defect-reinjection record ([INVARIANTS.md](INVARIANTS.md)) are recomputed by the suites that print them; a doc quoting a stale one fails an eval.
+- **Run on one estate only:** every threshold in `tables/`, every baseline in [RUBRIC.md](RUBRIC.md), and the hooks in daily use. They are defaults where you are, not measurements of your estate.
+- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. Windows is untested, and the shipped CI covers Linux and macOS only. The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have never been executed.
+
+The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md).
+
+## Requirements
+
+- Python 3, standard library only. There is no `pip install`, no lockfile, and no dependency to audit beyond the tree itself.
+- git (the autosave, the approval gate, and the manifest all read it).
+- Claude Code with hooks, for the session wiring above. The checkers run fine without it: every tool is a plain script you can run by hand.
+- A POSIX shell for the two `sh` tools. Linux and macOS are what CI runs; Windows is untested.
+
+## Uninstall
+
+Removal is three deletions, and this section names what each leaves behind so nothing lingers silently:
+
+1. Remove the hook entries from `~/.claude/settings.json` (and any project `.claude/settings.json` you added them to).
+2. Delete the clone: `rm -rf ~/.claude/skills/brothersbe`.
+3. Decide about your data, which uninstalling does NOT delete: the vault at `$BROTHERSBE_VAULT` (your session logs and telemetry, yours to keep or delete), the `export BROTHERSBE_VAULT` line in your shell profile, and the autosave snapshots under `refs/brothersbe/` in any repository where the hook fired (list them with `git for-each-ref refs/brothersbe/`, delete with `git update-ref -d <ref>`).
+
 ## A 60-second first run
 
 Run the eval bed. Each case is a real failure class turned into a fixture with a planted defect, plus an assertion that the matching check CATCHES it. This is the mechanism behind the "proven" claim: the checks are tested against the defect classes the operating record produced, not asserted.
