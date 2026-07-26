@@ -118,6 +118,51 @@ class TestAutosave(unittest.TestCase):
             self.assertNotEqual(envobj.returncode, 0, ".env leaked into the autosave snapshot")
 
 
+class TestAutosaveRecover(unittest.TestCase):
+    def test_recover_writes_nothing_into_the_source_worktree(self):
+        """recover must check the snapshot out into a NEW worktree, never into
+        the live one. The old mode printed an in-place `git restore` that could
+        delete a tracked file the snapshot never captured; this test pins the
+        replacement: source tree byte-identical before and after, no in-place
+        restore command in the output, snapshot content present in the new
+        worktree. It does not test permissions enforcement (platform-dependent,
+        reported by the tool rather than promised)."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        if not os.path.exists(sh):
+            self.skipTest("sbe_autosave.sh not present")
+        with tempfile.TemporaryDirectory() as repo:
+            def git(*a):
+                return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True)
+            git("init", "-q")
+            git("config", "user.email", "t@t.t"); git("config", "user.name", "t")
+            io.open(os.path.join(repo, "tracked.txt"), "w").write("v1")
+            git("add", "-A"); git("commit", "-qm", "init")
+            io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED")
+            vdir = tempfile.mkdtemp()
+            env = dict(os.environ, BROTHERSBE_VAULT=vdir)
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; recover output is asserted below
+                           text=True, env=env)
+            # Simulate the loss the autosave exists for: the WIP file is gone.
+            os.remove(os.path.join(repo, "wip.txt"))
+            before_status = git("status", "--porcelain").stdout
+            before_files = sorted(os.listdir(repo))
+            r = subprocess.run(["sh", sh, "recover", repo], capture_output=True,
+                               text=True, env=env)
+            # Source worktree byte-identical: recover wrote nothing here.
+            self.assertEqual(before_status, git("status", "--porcelain").stdout)
+            self.assertEqual(before_files, sorted(os.listdir(repo)))
+            # The data-loss path must be gone from the output, not merely warned about.
+            self.assertNotIn("--worktree .", r.stdout, "in-place restore path resurfaced")
+            self.assertIn("never touched", r.stdout)
+            # The new worktree exists and contains the lost work.
+            lines = [l.strip() for l in r.stdout.splitlines()]
+            wt = next((l for l in lines if os.path.isdir(l)), "")
+            self.assertTrue(wt, "recover did not print a recovery worktree path:\n%s" % r.stdout)
+            body = io.open(os.path.join(wt, "wip.txt")).read()
+            self.assertEqual(body, "UNLANDED")
+            git("worktree", "remove", "--force", wt)
+
+
 class TestHandoff(unittest.TestCase):
     def test_handoff_redacts_and_preserves(self):
         with tempfile.TemporaryDirectory() as v:

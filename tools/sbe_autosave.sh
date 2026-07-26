@@ -140,19 +140,40 @@ case "$1" in
     ;;
 
   recover)
-    # How to get the saved work back. Printed for a human to read and run.
+    # Get the saved work back WITHOUT touching the live working tree. An
+    # earlier version printed an in-place `git restore --source=<ref>
+    # --worktree .` command, which can DELETE a tracked file the snapshot
+    # never captured; a recovery path that can destroy work is worse than
+    # none. This mode now checks the snapshot out into a NEW detached
+    # worktree at a temporary path. It does NOT modify your files, your
+    # index, or your branch: you copy back what you want, by hand.
     repo="${2:-$PWD}"
-    cd "$repo" 2>/dev/null
+    cd "$repo" 2>/dev/null || { echo "sbe_autosave: cannot enter $repo"; exit 0; }
     sha="$(git rev-parse -q --verify "$AUTOSAVE_REF" 2>/dev/null)"
     if [ -z "$sha" ]; then
       echo "sbe_autosave: no autosave found in $repo (ref $AUTOSAVE_REF is empty)."
       exit 0
     fi
-    echo "sbe_autosave: last autosave is $sha"
-    echo "  inspect it:      git -C $repo show --stat $AUTOSAVE_REF"
-    echo "  see the diff:     git -C $repo diff $AUTOSAVE_REF"
-    echo "  restore files:    git -C $repo restore --source=$AUTOSAVE_REF --worktree ."
-    echo "  (restore copies the saved files back into your working tree; commit when happy)"
+    # mktemp -d creates the directory at mode 0700 (owner-only). The chmod is
+    # defense in depth, not the load-bearing half. The directory is NOT
+    # removed before `git worktree add`: git accepts an existing empty
+    # directory and leaves its mode alone, so there is no window where the
+    # checkout could land at the process umask instead of owner-only.
+    tmpdir="$(mktemp -d 2>/dev/null)" || { echo "sbe_autosave: could not create a temporary directory."; exit 0; }
+    chmod 700 "$tmpdir" 2>/dev/null
+    if ! git worktree add --detach "$tmpdir" "$sha" >/dev/null 2>&1; then
+      rmdir "$tmpdir" 2>/dev/null
+      echo "sbe_autosave: could not create a recovery worktree for $sha."
+      exit 0
+    fi
+    # Report the mode the platform actually gave, not the one we asked for.
+    perms="$(ls -ld "$tmpdir" 2>/dev/null | awk '{print $1}')"
+    echo "sbe_autosave: recovered snapshot $sha into a NEW worktree at:"
+    echo "  $tmpdir"
+    echo "  permissions: $perms (owner-only intended; this line reports what the platform gave, it does not promise enforcement on platforms that ignore POSIX modes)"
+    echo "  Your live working tree at $repo was never touched. Inspect the folder"
+    echo "  above, copy back what you need, then remove it with:"
+    echo "  git -C $repo worktree remove $tmpdir"
     ;;
 
   *)
