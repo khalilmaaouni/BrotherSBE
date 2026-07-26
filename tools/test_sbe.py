@@ -7,7 +7,7 @@ brief that a test would have caught. Each test here guards a claim the project
 makes about itself: secrets are redacted, sensitive files are owner-only, project
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
-import io, os, json, stat, sys, tempfile, subprocess, importlib.util
+import io, os, json, re, stat, sys, tempfile, subprocess, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -116,6 +116,25 @@ class TestAutosave(unittest.TestCase):
                            text=True, env=env)
             envobj = git("cat-file", "-e", "refs/brothersbe/autosave:.env")
             self.assertNotEqual(envobj.returncode, 0, ".env leaked into the autosave snapshot")
+
+
+class TestDigestCap(unittest.TestCase):
+    def test_digest_fits_the_cap_the_hook_comment_names(self):
+        """sbe_sessionstart.sh injects DIGEST.md into session context and its
+        own comment names the injection cap. The digest once grew to 16 KB
+        while that comment kept promising "we stay far under", so the file
+        making the claim contradicted the file it claimed about. This test
+        reads the cap out of the hook comment instead of hardcoding a second
+        number, so the two cannot disagree again. It does not verify the
+        harness's real cap: that figure is the hook comment's own claim."""
+        hook = io.open(os.path.join(HERE, "sbe_sessionstart.sh")).read()
+        m = re.search(r"(\d+)k char cap", hook)
+        self.assertTrue(m, "hook comment no longer names its injection cap")
+        cap = int(m.group(1)) * 1000
+        size = os.path.getsize(os.path.join(HERE, "..", "DIGEST.md"))
+        self.assertLess(size, cap,
+                        "DIGEST.md is %d bytes but the hook comment promises a %d cap; "
+                        "move the growth into LAWS-REFERENCE.md" % (size, cap))
 
 
 class TestAutosaveRecover(unittest.TestCase):

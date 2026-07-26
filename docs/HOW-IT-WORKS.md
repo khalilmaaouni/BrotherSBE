@@ -439,8 +439,13 @@ are not re-proposed without new evidence.
 
 `DIGEST.md` is maintained BY HAND against `SKILL.md` and updated in the same
 change. No generator exists and nothing mechanically compares the two, so a
-divergence is caught by review, not by a tool; it is the file injected at
-session start, which is why every edit to a law carries an edit here.
+divergence in CONTENT is caught by review, not by a tool; it is the file
+injected at session start, which is why every edit to a law carries an edit
+here. Its SIZE is checked: the digest must fit the injection cap the hook
+comment in `tools/sbe_sessionstart.sh` names, `tools/test_sbe.py` reads that
+cap out of the comment and fails when the file outgrows it, and the
+qualifications each digest line compresses live in `LAWS-REFERENCE.md`, which
+is not injected and enforces nothing.
 
 A practice becomes a law by acquiring a check. It moves from `PRACTICES.md` into
 `SKILL.md` in the law form (WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY), with the new

@@ -2070,6 +2070,7 @@ SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-C
                 # opens nothing is the absent-file defect in a tuple.
                 "docs/guides/03-work-doctrines.md", "docs/guides/04-teams-and-evolution.md",
                 "docs/guides/05-a-worked-engagement.md", "evals/README.md", "DIGEST.md",
+                "LAWS-REFERENCE.md",
                 # STATE.md was named here and is excluded by .gitignore, so it is in
                 # nobody's clone. The guard below caught it as an absent file, and
                 # only in a fresh clone: on the author's machine the untracked file
