@@ -1091,13 +1091,25 @@ def madr1(root):
     # DEFINITION, and every bullet under it was counted as a rejected
     # alternative: the two-alternatives floor was satisfiable by
     # chosen-plus-one, the exact single-alternative ADR it exists to refuse.
+    # This fixture carries the three re-entry routes round 10 found, so the
+    # closure is pinned at its boundaries, not at its center: the chosen name
+    # is 66 characters (a 60-character collection cap once made it unequal to
+    # itself), the chosen line WRAPS mid-name at prose width (a line-anchored
+    # regex once compared its first line only), and a Pros and Cons table
+    # restates both options shortened (each rendering once counted again).
     write(root, "03-adr.md",
           "# ADR\n## Context and Problem Statement\nRetried refunds double-settle.\n"
           "## Decision Drivers\nsettlement latency, audit trail\n"
-          "## Considered Options\n- Idempotency key: dedupe retries at the boundary.\n"
+          "## Considered Options\n"
+          "- Append-only retry ledger keyed by an idempotency token per request\n"
           "- Nightly batch reconciliation: sweep duplicates after the fact.\n"
-          "## Decision Outcome\nChosen option: \"Idempotency key\", because it stops the "
-          "double-settle before it lands.\n"
+          "## Decision Outcome\nChosen option: \"Append-only retry ledger keyed by an "
+          "idempotency token\nper request\", because it stops the double-settle before "
+          "it lands.\n"
+          "## Pros and Cons of the Options\n"
+          "| Option | Verdict | Why |\n| --- | --- | --- |\n"
+          "| Append-only retry ledger | chosen | every retry observable |\n"
+          "| Nightly batch reconciliation | rejected | misses the daily deadline |\n"
           "## Consequences\nOne more key to mint and store.\n"
           "## What would flip this\nSub-second settlement becoming a requirement.\n")
 
@@ -1118,6 +1130,40 @@ def madr2(root):
           "double-settle before it lands.\n"
           "## Consequences\nOne more key to mint and store.\n"
           "## What would flip this\nSub-second settlement becoming a requirement.\n")
+    line = gate_line(root, "adr")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    if "2 distinct rejected alternatives" not in line:
+        return "count wrong: %s" % line
+    return "counted" if "counted as the decision" in line else "exclusion undisclosed: %s" % line
+
+
+@case("a-table-rendering-of-a-rejection-is-one-rejection-not-two", "evidence", "counted")
+def madr3(root):
+    # The way people actually write a full MADR: the option's full name in the
+    # Considered Options list, a SHORTENED name in the Pros and Cons table.
+    # Each real rejection counted once per rendering, so an honest two-
+    # rejection dossier printed "5 distinct rejected alternatives" (two
+    # spellings each plus the truncation-escaped chosen bullet). A table row
+    # whose name-words are a subset of a listed option's name-words is the
+    # same option written twice; two options of the SAME list are never
+    # merged, so honest neighbours survive.
+    write(root, "03-adr.md",
+          "# ADR\n## Context and Problem Statement\nPartner payouts double-settle on retry.\n"
+          "## Decision Drivers\ncorrectness of money movement, audit trail\n"
+          "## Considered Options\n"
+          "- Append-only settlement ledger with an idempotency token per payout instruction\n"
+          "- Synchronous ledger call into the partner bank API before acknowledging\n"
+          "- Nightly batch reconciliation sweeping duplicate settlements after the fact\n"
+          "## Decision Outcome\nChosen option: \"Append-only settlement ledger with an "
+          "idempotency token\nper payout instruction\", because every retry becomes observable.\n"
+          "## Pros and Cons of the Options\n"
+          "| Option | Verdict | Why |\n| --- | --- | --- |\n"
+          "| Append-only settlement ledger | chosen | retries observable, no lock |\n"
+          "| Synchronous ledger call | rejected | blocks checkout on partner latency |\n"
+          "| Nightly batch reconciliation | rejected | misses the settlement deadline |\n"
+          "## Consequences\nOne more table to operate.\n"
+          "## What would flip this\nA partner API that becomes idempotent on its own side.\n")
     line = gate_line(root, "adr")
     if line.split()[1:2] != ["PASS"]:
         return line
