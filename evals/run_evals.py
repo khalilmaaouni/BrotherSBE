@@ -3955,6 +3955,110 @@ def q5(root):
             else "exit %d: %s" % (out.returncode, out.stdout.strip()[:120]))
 
 
+# ---------------------------------------------------------------------------
+# Honest forms a competent engineer writes, each previously refused.
+
+
+@case("a-bold-entity-name-is-an-entity-name", "datamodel", "PASS")
+def f1(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- **Order**: a customer order. system of record: oms\n"
+          "- **OrderLine**: a line on an order. system of record: oms\n"
+          "## Relationships\n- Order one-to-many OrderLine\n")
+
+
+@case("a-bold-entity-in-a-table-is-an-entity", "datamodel", "PASS")
+def f2(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "| Entity | Meaning | System of record |\n| --- | --- | --- |\n"
+          "| **Order** | a customer order | oms |\n"
+          "| **OrderLine** | a line on an order | oms |\n"
+          "## Relationships\n- Order one-to-many OrderLine\n")
+
+
+@case("an-entity-bullet-without-a-colon-still-names-its-owner", "datamodel", "PASS")
+def f3(root):
+    # The FAIL used to quote a line containing "system of record" in the same
+    # sentence it claimed named none, because with no colon the whole sentence
+    # became the entity NAME.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Order. The OMS is the system of record.\n"
+          "- OrderLine. The OMS is the system of record.\n"
+          "## Relationships\n- Order one-to-many OrderLine\n")
+
+
+@case("adr-alternatives-as-a-comparison-table-count", "adr", "PASS")
+def f4(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nlatency, auditability\n"
+          "## Alternatives considered\n"
+          "| Option | Verdict | Why |\n| --- | --- | --- |\n"
+          "| Synchronous ledger call | rejected | ties checkout to ledger uptime |\n"
+          "| Nightly batch | rejected | misses the one business day deadline |\n"
+          "| Event queue | chosen | decouples checkout from settlement |\n"
+          "## Decision\nPublish refund events to a queue.\n"
+          "## Consequences\nOne more moving part.\n"
+          "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("a-trade-offs-considered-heading-is-an-alternatives-heading", "adr", "PASS")
+def f5(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nlatency, auditability\n"
+          "## Trade-offs considered\n"
+          "- Synchronous ledger call: ties checkout to ledger uptime.\n"
+          "- Nightly batch: misses the deadline.\n"
+          "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
+          "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("cardinality-written-in-prose-is-cardinality", "datamodel", "PASS")
+def f6(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Order: system of record: oms\n- OrderLine: system of record: oms\n"
+          "## Relationships\n"
+          "- An Order has many OrderLines, and every OrderLine belongs to exactly one Order.\n")
+
+
+@case("relationships-as-an-erdiagram-are-relationships", "datamodel", "PASS")
+def f7(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Order: system of record: oms\n- OrderLine: system of record: oms\n"
+          "## Relationships\n```mermaid\nerDiagram\n  Order ||--o{ OrderLine : contains\n```\n")
+
+
+@case("a-technology-map-written-as-bullets-declares-components", "diagrams", "PASS")
+def f8(root):
+    # L5's INPUTS promises component bullets "in either file"; only
+    # 06-diagrams.md was read, so an honest bulleted technology map produced
+    # orphans and the law overclaimed against its own tool.
+    write(root, "04-technology-map.md",
+          "# Technology map\n## Components\n"
+          "- feedqueue: SQS, owned by platform, fails on poison messages, recovers via DLQ\n"
+          "- ingestworker: Python on ECS, owned by supply, fails on parse error, recovers by replay\n")
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- FeedFile: system of record: the landing bucket.\n"
+          "## Relationships\n- FeedFile to FeedFile: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nflowchart LR\n  feedqueue --> ingestworker\n```\n")
+
+
+@case("an-asterisk-bullet-fence-line-is-a-fence-line", "score", "FAIL")
+def f9(root):
+    # Markdown treats `*` and `-` as the same bullet; the fence checks read only
+    # `- `, so an asterisk-bulleted registry got permanently green fence
+    # discipline over untagged live fences.
+    write(root, "reg/STATE.md",
+          "# State\n## Fences\n* agent: builder | objective: ship the refund gate | open\n")
+    return score_check("budget-vs-tier", root,
+                       env={"BROTHERSBE_REGISTRIES": os.path.join(root, "reg", "*.md")})
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
