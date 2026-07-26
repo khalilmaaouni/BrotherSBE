@@ -626,6 +626,73 @@ _CONFUSABLES = {
 }
 
 
+def _letter_families(word):
+    """The Unicode script family of every letter in a word, by RULE not table.
+
+    unicodedata.name() carries the script as its first word for every named
+    letter, so this covers the scripts nobody has typed yet, which a curated
+    table by construction cannot. The one deliberate grouping: the three
+    Japanese scripts count as one family, because ordinary Japanese words mix
+    them by design; everything outside that grouping stays separate, so the
+    direction of error is toward refusal. A letter Unicode cannot name is its
+    own family, which also errs toward refusal.
+    """
+    fams = set()
+    for ch in unicodedata.normalize("NFKD", word):
+        if not ch.isalpha() or unicodedata.category(ch) == "Mn":
+            continue
+        try:
+            fam = unicodedata.name(ch).split()[0]
+        except ValueError:
+            fam = "UNNAMED-U+%04X" % ord(ch)
+        if fam in ("CJK", "HIRAGANA", "KATAKANA", "KATAKANA-HIRAGANA"):
+            fam = "JAPANESE"
+        fams.add(fam)
+    return fams
+
+
+def unreadable_identity_words(text):
+    """The words of an identity this project cannot honestly compare, and why.
+
+    The self-approval guard certifies that two identities are DIFFERENT
+    people, and that certification used to rest on a curated confusable table:
+    one code point outside the table (a Coptic o, a Latin small capital)
+    rendered as the author's name and compared as a second person, restoring
+    the self-approval PASS on the money gate. A list cannot close that class,
+    so the rule is about what the comparison can READ, not about which
+    lookalikes somebody has catalogued:
+
+      1. a word that, after normalization and confusable folding (skeleton),
+         still mixes ASCII letters with non-ASCII letters is a word whose
+         non-ASCII residue is exactly what the fold could not vouch for, so
+         no comparison built on the fold may certify difference over it;
+      2. a word whose letters span more than one script family is not a word
+         in any script, which is the shape identities are forged in and not
+         the shape they are honestly written in.
+
+    Wholly one-script words in any script pass through: a fully Japanese name
+    is readable and comparable. Returns [(word, why)]; an empty list means
+    every word reads as one alphabet. Callers on a certifying path REFUSE
+    (FAIL) when this is non-empty, with the sentence naming the word, because
+    the direction of error on a money gate is toward refusal, never assurance.
+    """
+    out = []
+    for word in plain_text(str(text or "")).split():
+        sk = skeleton(word)
+        ascii_letters = any(ch.isalpha() and ch.isascii() for ch in sk)
+        other = sorted({ch for ch in sk if ch.isalpha() and not ch.isascii()})
+        if ascii_letters and other:
+            out.append((word, "mixes ASCII letters with %s, which no normalization or "
+                              "confusable fold this host has maps to ASCII"
+                              % ", ".join("%r (U+%04X)" % (c, ord(c)) for c in other[:4])))
+            continue
+        fams = _letter_families(word)
+        if len(fams) > 1:
+            out.append((word, "mixes letters from more than one script (%s)"
+                              % ", ".join(sorted(fams))))
+    return out
+
+
 def skeleton(text):
     """A string reduced to what a reader SEES: the anti-forgery identity form.
 

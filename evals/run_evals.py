@@ -454,6 +454,52 @@ def c13i9(root):
     return _approval_with_sig(root, "G", approver="D\u0430n\u0430 Author")
 
 
+@case("a-confusable-outside-the-curated-table-is-refused-not-passed", "sig", "FAIL")
+def c13i10(root):
+    # COPTIC SMALL LETTER O (U+2C9F) renders as `o` and sat outside the
+    # curated homoglyph table, so `Dana Authⲟr` compared as a second
+    # person and restored the self-approval PASS on the money gate. The rule
+    # replaces the table as the load-bearing part: a word mixing alphabets
+    # after normalization and confusable folding is refused by name, so
+    # certification of difference no longer depends on table coverage.
+    return _approval_with_sig(root, "G", approver="Dana Authⲟr")
+
+
+@case("a-same-script-lookalike-letter-is-refused-not-passed", "sig", "FAIL")
+def c13i11(root):
+    # LATIN LETTER SMALL CAPITAL A (U+1D00): same script family as ASCII, in
+    # no confusable table, renders as the author's name. A mixed-SCRIPT rule
+    # alone would pass it; the alphabet-readability rule refuses it, which is
+    # the probe that the closure is a rule over the class and not a wider list.
+    return _approval_with_sig(root, "G", approver="Dᴀna Author")
+
+
+@case("a-multi-script-forgery-is-refused-whatever-scripts-it-uses", "sig", "FAIL")
+def c13i12(root):
+    # Armenian vo (U+0578, renders as n) plus Coptic o: two scripts the table
+    # holds no rows for, in one identity. The forge must not depend on any
+    # single script being catalogued.
+    return _approval_with_sig(root, "G", approver="Daոa Authⲟr")
+
+
+@case("a-partially-mapped-single-script-word-is-refused-not-passed", "sig", "FAIL")
+def c13i13(root):
+    # Cyrillic `Дана` (Dana): some letters fold to ASCII
+    # through the confusable table and Д does not, so the folded word
+    # mixes alphabets, which is precisely the point where table coverage runs
+    # out. The refusal fires exactly there instead of certifying a difference
+    # the fold cannot vouch for.
+    return _approval_with_sig(root, "G", approver="Дана Author")
+
+
+@case("a-wholly-single-script-approver-still-passes", "sig", "PASS")
+def c13i14(root):
+    # The control: an honest identity written wholly in one script reads and
+    # compares. Refusing every non-Latin approver would be the gate rejecting
+    # correct work, which is how gates get switched off.
+    return _approval_with_sig(root, "G", approver="田中太郎 <tanaka@example.com>")
+
+
 @case("an-invisible-character-is-not-an-answer-and-not-a-derivation", "numbers", "FAIL")
 def c14inv(root):
     # snapshot_id is TODO plus a zero-width space; the second derivation is the
@@ -741,7 +787,7 @@ def ev_arrows(root):
     for label, line in sorted(ARROW_FORMS.items()):
         body = ("x\n```mermaid\nsequenceDiagram\n  participant Alpha\n  participant Beta\n"
                 "  %s\n```\n" % line)
-        nodes, _kinds, _skipped, _states = _design_mod._diagram_nodes(body)
+        nodes, _kinds, _skipped, _states, _unread = _design_mod._diagram_nodes(body)
         if sorted(nodes) != ["Alpha", "Beta"]:
             return "%s -> %s" % (label, sorted(nodes))
     for label, block in (
@@ -750,7 +796,7 @@ def ev_arrows(root):
             ("state -->", "stateDiagram-v2\n  Alpha --> Beta"),
             ("class --|>", "classDiagram\n  Alpha --|> Beta"),
             ("er ||--o{", "erDiagram\n  Alpha ||--o{ Beta : has")):
-        nodes, _kinds, _skipped, _states = _design_mod._diagram_nodes(
+        nodes, _kinds, _skipped, _states, _unread = _design_mod._diagram_nodes(
             "x\n```mermaid\n%s\n```\n" % block)
         if sorted(nodes) != ["Alpha", "Beta"]:
             return "%s -> %s" % (label, sorted(nodes))
@@ -778,6 +824,178 @@ def ar2(root):
           "# Diagrams\n```mermaid\nsequenceDiagram\n"
           "  Customer->>+Customer: self check\n"
           "  Customer-->>-totally-undeclared-service: reply lands on a ghost\n```\n")
+
+
+@case("a-japanese-data-model-is-a-data-model", "datamodel", "PASS")
+def uni1(root):
+    # Every name grammar required an ASCII first letter while its continuation
+    # class was Unicode-wide, so a dossier whose ubiquitous language is not
+    # ASCII-first FAILed with a message instructing the author to do exactly
+    # what they had done. A name starts at any letter, by property.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- 注文: system of record: the order service.\n"
+          "- 注文明細: system of record: the order service.\n"
+          "## Relationships\n- 注文 to 注文明細: one-to-many.\n")
+
+
+@case("a-japanese-diagram-traces-to-japanese-entities", "diagrams", "PASS")
+def uni2(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- 注文: system of record: the order service.\n"
+          "- 注文明細: system of record: the order service.\n"
+          "## Relationships\n- 注文 to 注文明細: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nerDiagram\n  注文 ||--o{ 注文明細 : 含む\n```\n")
+
+
+@case("a-non-latin-ghost-node-is-an-orphan-not-a-silent-drop", "diagrams", "FAIL")
+def uni3(root):
+    # The 9a-C6 shape: a node in a non-Latin script was dropped by the ASCII
+    # grammar and the check printed "all traceable" over what was left, with
+    # the dropped token absent even from the disclosure channel.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Order: system of record: the OMS.\n"
+          "- Payment: system of record: the ledger.\n"
+          "## Relationships\n- Order to Payment: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nerDiagram\n  Order ||--o{ Payment : has\n"
+          "  幽霊サービス ||--o{ Order : haunts\n```\n")
+
+
+@case("an-accented-ghost-in-a-sequence-message-is-caught", "diagrams", "FAIL")
+def uni4(root):
+    # The 9b-2 shape: _SEQ_MESSAGE anchored on an ASCII sender, so a message
+    # line whose first identifier starts with a non-ASCII letter was skipped
+    # WHOLE, ghost included, and "all traceable" printed over the remainder.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Journal: system of record: the ledger.\n"
+          "- Écriture: system of record: the ledger.\n"
+          "## Relationships\n- Journal to Écriture: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n  participant Écriture\n"
+          "  Écriture->>règlement-fantôme: not declared anywhere\n```\n")
+
+
+@case("an-accented-entity-is-counted-not-silently-dropped", "evidence", "counted")
+def uni5(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Journal: system of record: the ledger.\n"
+          "- Écriture: system of record: the ledger.\n"
+          "## Relationships\n- Journal to Écriture: one-to-many.\n")
+    line = gate_line(root, "datamodel")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return "counted" if "2 entities" in line else line
+
+
+@case("create-participant-keeps-its-alias-and-traces", "diagrams", "PASS")
+def uni6(root):
+    # Documented Mermaid syntax (v10.3+): `create participant A as
+    # audit-worker` lost the alias, so A could not trace to the declared
+    # component and an honest diagram FAILed naming an id the author never
+    # meant to trace, with create and destroy dropped in silence.
+    write(root, "04-technology-map.md",
+          "# Technology map\n## Components\n| Component | Runtime |\n| --- | --- |\n"
+          "| gateway | Go |\n| audit-worker | Python |\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n  participant G as gateway\n"
+          "  create participant A as audit-worker\n  G->>A: audit this\n  destroy A\n```\n")
+
+
+@case("the-skipped-list-names-canonical-note-and-destroy", "evidence", "named")
+def uni7(root):
+    # Mermaid's docs write `Note over G,W: text` capitalized; the statement
+    # set held lowercase members and membership did not fold, so the canonical
+    # spelling vanished from the skipped list the docstring promises is
+    # complete, and so did create/destroy.
+    body = ("x\n```mermaid\nsequenceDiagram\n  participant G\n  participant W\n"
+            "  G->>W: go\n  Note over G,W: settled\n  destroy W\n```\n")
+    _nodes, _kinds, skipped, _states, unread = _design_mod._diagram_nodes(body)
+    if unread:
+        return "unread: %s" % unread
+    named = "; ".join(skipped)
+    if "Note (" not in named:
+        return "Note dropped from the skipped list: %s" % named
+    if "destroy (" not in named:
+        return "destroy dropped from the skipped list: %s" % named
+    return "named"
+
+
+@case("an-ampersand-multi-edge-reads-every-member", "diagrams", "FAIL")
+def uni8(root):
+    # `A & B --> C & D` is documented flowchart syntax; only arrow-adjacent
+    # identifiers were read, so a ghost in an outer position passed "all
+    # traceable" over a false node count.
+    write(root, "04-technology-map.md",
+          "# Technology map\n## Components\n| Component | Runtime |\n| --- | --- |\n"
+          "| gateway | Go |\n| ledger | Java |\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nflowchart LR\n"
+          "  totally-undeclared-shadow & gateway --> ledger\n```\n")
+
+
+@case("an-ampersand-ghost-as-last-destination-is-caught", "diagrams", "FAIL")
+def uni9(root):
+    write(root, "04-technology-map.md",
+          "# Technology map\n## Components\n| Component | Runtime |\n| --- | --- |\n"
+          "| gateway | Go |\n| ledger | Java |\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nflowchart LR\n"
+          "  gateway --> ledger & totally-undeclared-shadow\n```\n")
+
+
+@case("a-line-the-parser-cannot-read-refuses-all-traceable", "diagrams", "NO-DATA")
+def uni10(root):
+    # A dropped-in-silence line was how every ghost above traveled. What the
+    # parser cannot read at all is now a confession in the verdict, and the
+    # completeness sentence is refused: a node could be hiding in it.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Order: system of record: the OMS.\n"
+          "## Relationships\n- Order to Order: one-to-one, self.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n  participant Order\n"
+          "  Order->>Order: check\n  🧾->>Order: a sender no grammar reads\n```\n")
+
+
+@case("a-faithful-madr-with-one-rejection-fails-the-floor", "adr", "FAIL")
+def madr1(root):
+    # MADR's Considered Options section includes the chosen option BY
+    # DEFINITION, and every bullet under it was counted as a rejected
+    # alternative: the two-alternatives floor was satisfiable by
+    # chosen-plus-one, the exact single-alternative ADR it exists to refuse.
+    write(root, "03-adr.md",
+          "# ADR\n## Context and Problem Statement\nRetried refunds double-settle.\n"
+          "## Decision Drivers\nsettlement latency, audit trail\n"
+          "## Considered Options\n- Idempotency key: dedupe retries at the boundary.\n"
+          "- Nightly batch reconciliation: sweep duplicates after the fact.\n"
+          "## Decision Outcome\nChosen option: \"Idempotency key\", because it stops the "
+          "double-settle before it lands.\n"
+          "## Consequences\nOne more key to mint and store.\n"
+          "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("a-madr-with-two-real-rejections-passes-with-an-honest-count", "evidence", "counted")
+def madr2(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Context and Problem Statement\nRetried refunds double-settle.\n"
+          "## Decision Drivers\nsettlement latency, audit trail\n"
+          "## Considered Options\n- Idempotency key: dedupe retries at the boundary.\n"
+          "- Nightly batch reconciliation: sweep duplicates after the fact.\n"
+          "- Synchronous ledger call: ties checkout to ledger availability.\n"
+          "### Pros and Cons of the Options\n"
+          "#### Idempotency key\nGood, because it stops the double-settle early.\n"
+          "#### Nightly batch reconciliation\nBad, because it misses the daily deadline.\n"
+          "#### Synchronous ledger call\nBad, because it couples availability.\n"
+          "## Decision Outcome\nChosen option: \"Idempotency key\", because it stops the "
+          "double-settle before it lands.\n"
+          "## Consequences\nOne more key to mint and store.\n"
+          "## What would flip this\nSub-second settlement becoming a requirement.\n")
+    line = gate_line(root, "adr")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    if "2 distinct rejected alternatives" not in line:
+        return "count wrong: %s" % line
+    return "counted" if "counted as the decision" in line else "exclusion undisclosed: %s" % line
 
 
 @case("a-gfm-table-without-leading-pipes-is-a-table", "datamodel", "PASS")

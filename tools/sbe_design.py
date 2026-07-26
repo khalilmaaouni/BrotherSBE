@@ -883,6 +883,60 @@ def _required_section(t, label, problems):
                         "heading is a promise of content, not content" % label)
 
 
+# The decision's own text, wherever the ADR states it as a chosen option. MADR,
+# the most common ADR template in the wild, lists EVERY considered option
+# (including the winner) under "## Considered Options" and names the winner
+# under "## Decision Outcome" as `Chosen option: "..."`. Counting every bullet
+# under the options heading counted the DECISION as a rejected alternative, so
+# the two-alternatives floor was satisfiable by chosen-plus-one, which is
+# precisely the single-alternative ADR the floor exists to refuse, and the
+# evidence sentence stated a count that was false about the artifact. The
+# comparison table already leaves the chosen row out; the list form now obeys
+# the same rule.
+_CHOSEN_LINE = re.compile(r"(?im)^\s*(?:[-*]\s*)?chosen\s+(?:option|approach|alternative)"
+                          r"\s*[:=]\s*(.+?)\s*$")
+
+
+def _chosen_phrases(t):
+    """Every phrase this ADR names as the chosen option, derivation-folded."""
+    out = []
+    for m in _CHOSEN_LINE.finditer(t):
+        val = re.split(r"(?i),\s*because\b", m.group(1))[0].strip().strip("\"'*`").strip()
+        if val:
+            out.append(derivation_fold(val))
+    # The heading form: a Decision section spelled `## Chosen option` whose
+    # first content line IS the chosen option's name.
+    for title, body in _sections(t):
+        if re.match(r"(?i)^\s*chosen\s+(?:option|approach|alternative)\b", title):
+            line = next((l.strip() for l in body if l.strip()), "")
+            val = re.split(r"(?i),\s*because\b", _plain(line))[0].strip().strip("\"'*`-: ").strip()
+            if val:
+                out.append(derivation_fold(val))
+    return [p for p in out if p]
+
+
+_REJECT_MARKER = re.compile(
+    r"(?i)^(?:we\s+|i\s+)?(?:%s)\b[:\s]*"
+    % "|".join(r"%s" % w.replace(" ", r"\s+").replace("'", "'?")
+               for w in REJECTED_HEADING_WORDS))
+
+
+def _alternative_name(a):
+    """An alternative's identity is its NAME: the text before its first colon,
+    after any leading rejection marker ("Rejected:", "Not chosen:") is removed.
+
+    A full MADR names each option once as a Considered Options bullet and once
+    as a Pros and Cons sub-heading, and both survived derivation_fold as
+    distinct texts, so each real rejection counted twice and the chosen option
+    counted once: "5 distinct rejected alternatives" over two rejections and a
+    decision. Two entries sharing a name are one alternative described twice;
+    the marker is stripped first so "Rejected: microservices" and "Rejected:
+    single script" are two names rather than one name spelled "rejected".
+    """
+    name = _REJECT_MARKER.sub("", a.strip()).split(":", 1)[0].strip()
+    return derivation_fold(name) or derivation_fold(a)
+
+
 def check_adr(root):
     problem = read_problem(root, ARTIFACT_FILES["03"])
     if problem:
@@ -903,16 +957,29 @@ def check_adr(root):
     # the derivation fold, not the plain one, because a trailing period bought
     # a second alternative: two spellings of one sentence are one sentence
     # however they are punctuated.
-    alternatives, dupes = distinct(_rejected_alternatives(t), reduce=derivation_fold)
+    alternatives, dupes = distinct(_rejected_alternatives(t), reduce=_alternative_name)
+    # The chosen option is the decision, not a rejected alternative, so it is
+    # left out of the floor and out of the count, exactly as the comparison
+    # table's chosen row already is. Without this, a faithful MADR (whose
+    # Considered Options section includes the winner by definition) satisfied
+    # "an ADR needs at least 2" with one real rejection plus the decision.
+    chosen = _chosen_phrases(t)
+    chosen_out = [a for a in alternatives if _alternative_name(a) in chosen]
+    alternatives = [a for a in alternatives if _alternative_name(a) not in chosen]
+    chosen_note = ("" if not chosen_out else
+                   "; %d option(s) matching the Decision's chosen option counted as the "
+                   "decision, not as alternatives" % len(chosen_out))
     rejected = len(alternatives)
     if rejected < 2:
         problems.append("only %d distinct rejected alternative(s) found under a "
-                        "rejected-alternatives heading%s; an ADR needs at least 2, each with at "
+                        "rejected-alternatives heading%s%s; an ADR needs at least 2, each with at "
                         "least one line saying why it lost (an empty heading is not an "
-                        "alternative). The heading is accepted as anything containing any of: %s. "
+                        "alternative, and the chosen option is the decision, not an alternative). "
+                        "The heading is accepted as anything containing any of: %s. "
                         "Accepted forms under it: %s"
                         % (rejected,
                            "" if not dupes else " (%d duplicate line(s) counted once)" % dupes,
+                           chosen_note,
                            ", ".join(REJECTED_HEADING_WORDS), "; ".join(ALTERNATIVE_FORMS)))
     # The FAIL text above promises "at least one line saying why it lost", and
     # `- a` satisfied it. An override reason carries a reviewability threshold;
@@ -951,11 +1018,11 @@ def check_adr(root):
     # measured and names the part that is human review.
     return ("PASS", "%d distinct rejected alternatives, each carrying at least %d words and %d "
                     "characters of its own text (that the text says why the option lost, rather "
-                    "than restating its name, is human review)%s, and criteria, "
+                    "than restating its name, is human review)%s%s, and criteria, "
                     "decision, consequences and flip condition each carry content"
                     % (rejected, ALTERNATIVE_MIN_WORDS, ALTERNATIVE_MIN_CHARS,
                        "" if not dupes else
-                       " (%d duplicate line(s) counted once)" % dupes))
+                       " (%d duplicate line(s) counted once)" % dupes, chosen_note))
 
 
 # An entity name may carry a hyphen or a dot. `[A-Za-z_][\w ]*?` could match
@@ -963,7 +1030,16 @@ def check_adr(root):
 # dropped from the set and the PASS line asserted "each with a system of record"
 # over a set it had silently truncated. That is the same defect as a gate passing
 # over an empty manifest, one function deeper.
-_ENTITY_BULLET = re.compile(r"^\s*[-*]\s*([A-Za-z_][\w .\-]*?)\s*(?::(.*))?$")
+#
+# And a name may start with ANY letter, not an ASCII one. `[A-Za-z_]` with a
+# Unicode `\w` continuation meant `Café` was a name while `Écriture` and `注文`
+# were not: a dossier whose ubiquitous language is not ASCII-first FAILed two
+# gates at once with messages instructing the author to do exactly what they had
+# done, and an accented ghost participant slid through unread. The coherence
+# extractor (`_TERM`, above) already crossed this bridge; the entity and diagram
+# grammars now start at the same rule: `[^\W\d]` is "any letter or underscore"
+# in Unicode terms, a property, not a range somebody typed.
+_ENTITY_BULLET = re.compile(r"^\s*[-*]\s*([^\W\d][\w .\-]*?)\s*(?::(.*))?$")
 _ENTITY_HEADING = re.compile(r"(?i)entit")
 # Markdown emphasis is presentation, not identity. `- **Order**: ...` and a
 # table cell `| **Order** |` were invisible to patterns anchored on a letter,
@@ -1039,7 +1115,7 @@ def _table_entities(lines):
         if row == 2 or not set(s) - set("|-: "):
             continue        # separator, or a row with nothing in it
         name = cells[0]
-        if not name or not re.match(r"^[A-Za-z_][\w .\-]*$", name):
+        if not name or not re.match(r"^[^\W\d][\w .\-]*$", name):
             continue
         # Joined with the cell separator, so a value cannot run into the next
         # column: see the note beside _SOR.
@@ -1119,7 +1195,7 @@ def _entity_bullets(t):
                     # "does not name the system that owns it" about a line
                     # naming one in plain sight. The name is the first
                     # sentence; the rest is its description.
-                    m2 = re.match(r"^\s*[-*]\s*([A-Za-z_][\w.-]*(?:\s+[A-Za-z_][\w.-]*){0,3}?)"
+                    m2 = re.match(r"^\s*[-*]\s*([^\W\d][\w.-]*(?:\s+[^\W\d][\w.-]*){0,3}?)"
                                   r"\s*[.;,]\s+(.*\S)\s*$", line)
                     if m2:
                         out[m2.group(1).strip()] = m2.group(2).strip()
@@ -1184,7 +1260,7 @@ _NO_SOR = re.compile(r"(?i)\bno\s+(?:%s)(?![\w-])" % _SOR_ALT)
 # the OMS, and capturing only what follows the phrase left "." as the value, so
 # an honest sentence FAILed as "names a system of record with no value".
 _SOR_BEFORE = re.compile(
-    r"(?i)\b((?:the\s+|our\s+|its\s+)?[A-Za-z_][\w.-]*(?:\s+[A-Za-z_][\w.-]*){0,4}?)"
+    r"(?i)\b((?:the\s+|our\s+|its\s+)?[^\W\d][\w.-]*(?:\s+[^\W\d][\w.-]*){0,4}?)"
     r"\s+(?:is|are|was|remains)\s+(?:the\s+|our\s+|its\s+)?(?:%s)(?![\w-])" % _SOR_ALT)
 # The list of values that name the absence of an answer used to live HERE, as a
 # private constant, and that is precisely how the fourth round of this defect
@@ -1396,10 +1472,11 @@ _C4_REL = {"Rel", "BiRel", "Rel_U", "Rel_D", "Rel_L", "Rel_R", "Rel_Up", "Rel_Do
            "Rel_Left", "Rel_Right", "Rel_Back", "RelIndex"}
 _C4_GROUPING = {"Boundary", "Enterprise_Boundary", "System_Boundary", "Container_Boundary",
                 "Node_Boundary", "Deployment_Node"}
-_C4_CALL = re.compile(r"^\s*([A-Za-z_]\w*)\s*\(\s*([A-Za-z_](?:[\w.]|-(?=[\w.]))*)\s*(?:,\s*\"([^\"]*)\")?")
+_C4_CALL = re.compile(r"^\s*([A-Za-z_]\w*)\s*\(\s*([^\W\d](?:[\w.]|-(?=[\w.]))*)\s*(?:,\s*\"([^\"]*)\")?")
 _BLOCK_STATEMENTS = {"columns", "space", "block", "end", "style", "classDef", "class",
                      "click", "direction", "down", "up", "%%"}
-_BLOCK_TOKEN = re.compile(r"(?<![\w.\-\[\"])([A-Za-z_](?:[\w.]|-(?=[\w.]))*)(?::\d+)?(?![\w.\-\[\"(])")
+_BLOCK_STATEMENTS_CF = frozenset(w.casefold() for w in _BLOCK_STATEMENTS)
+_BLOCK_TOKEN = re.compile(r"(?<![\w.\-\[\"])([^\W\d](?:[\w.]|-(?=[\w.]))*)(?::\d+)?(?![\w.\-\[\"(])")
 DIRECTIONS = {"LR", "RL", "TB", "TD", "BT"}
 # Statement keywords that begin a line without naming a node. A token skipped for
 # being one of these is REPORTED, never dropped: a diagram whose four nodes were
@@ -1409,7 +1486,15 @@ _FLOW_STATEMENTS = {"subgraph", "end", "click", "style", "classDef", "class",
                     "linkStyle", "direction", "accTitle", "accDescr", "%%"}
 _SEQ_STATEMENTS = {"activate", "deactivate", "note", "loop", "alt", "else", "opt",
                    "end", "par", "and", "rect", "autonumber", "title", "critical",
-                   "break", "box", "link", "%%"}
+                   "break", "box", "link", "destroy", "%%"}
+# Membership is tested CASE-FOLDED. Mermaid's own documentation writes notes as
+# `Note over A,B: text`, and a case-sensitive set held lowercase "note" only,
+# so the canonical spelling was dropped WITHOUT an entry in the skipped list
+# while the lowercase spelling was named: the docstring's completeness promise
+# for that list broke on the documentation's own example. One fold, all
+# dialects, so the promise does not depend on how a keyword was capitalized.
+_FLOW_STATEMENTS_CF = frozenset(w.casefold() for w in _FLOW_STATEMENTS)
+_SEQ_STATEMENTS_CF = frozenset(w.casefold() for w in _SEQ_STATEMENTS)
 
 _SHAPE = (r"\[\[[^\]\n]*\]\]|\[\([^)\n]*\)\]|\[/[^\]\n]*/\]|\[[^\]\n]*\]|"
           r"\(\(\([^)\n]*\)\)\)|\(\([^)\n]*\)\)|\([^)\n]*\)|"
@@ -1420,10 +1505,18 @@ _SHAPE = (r"\[\[[^\]\n]*\]\]|\[\([^)\n]*\)\]|\[/[^\]\n]*/\]|\[[^\]\n]*\]|"
 # The same no-trailing-hyphen identifier as _IDENT below, spelled out here
 # because these three are defined before it: a flowchart `A--->B` minted a
 # phantom `A-` through the same greedy class the sequence dialect had.
-_FLOW_IDENT = r"[A-Za-z_](?:[\w.]|-(?=[\w.]))*"
+_FLOW_IDENT = r"[^\W\d](?:[\w.]|-(?=[\w.]))*"
 _NODE_LABELLED = re.compile(r"(%s)\s*(%s)" % (_FLOW_IDENT, _SHAPE))
-_NODE_SOURCE = re.compile(r"(%s)\s*(?:--|==|-\.|~~)" % _FLOW_IDENT)
-_NODE_DEST = re.compile(r"(?:--+>|--+|==+>|-\.-*>|~~+)\s*(?:\|[^|]*\|\s*)?(%s)" % _FLOW_IDENT)
+# `A & B --> C & D` is documented flowchart syntax for multi-edges, and only
+# the arrow-ADJACENT identifier was read: {B, C} entered the node set and A and
+# D were dropped with no entry in the skipped list, so an undeclared service in
+# an outer position passed "all traceable" over a false node count. The
+# identifier position is an &-separated LIST of identifiers, and every member
+# is a node.
+_AMP_LIST = r"%s(?:\s*&\s*%s)*" % (_FLOW_IDENT, _FLOW_IDENT)
+_NODE_SOURCE = re.compile(r"(%s)\s*(?:--|==|-\.|~~)" % _AMP_LIST)
+_NODE_DEST = re.compile(r"(?:--+>|--+|==+>|-\.-*>|~~+)\s*(?:\|[^|]*\|\s*)?(%s)" % _AMP_LIST)
+_AMP_SPLIT = re.compile(r"\s*&\s*")
 # `A -- places --> B`: the words of an inline edge label are not nodes.
 _INLINE_EDGE_LABEL = re.compile(r"--\s*[^-|>\n]+?\s*(--+>|--+)")
 
@@ -1464,7 +1557,7 @@ def _strip_edge_labels(s, skipped):
 # rejected the most ordinary reply idiom in Mermaid. A hyphen may only sit
 # BETWEEN word characters, never at the end, so the identifier grammar and the
 # arrow grammar are disjoint by construction in all dialects at once.
-_IDENT = r"[A-Za-z_](?:[\w.]|-(?=[\w.]))*"
+_IDENT = r"[^\W\d](?:[\w.]|-(?=[\w.]))*"
 # erDiagram relationship line: ENTITY <cardinality> ENTITY : label
 # Cardinality tokens (||--o{, }o--||, ||--||, }|..|{, ...) are built from the
 # characters | o { } . and dash, and at least one of them is never a dash: a run
@@ -1475,6 +1568,14 @@ _IDENT = r"[A-Za-z_](?:[\w.]|-(?=[\w.]))*"
 _ER_LINE = re.compile(r"(%s)\s+[|o{}.\-]*[|o{}][|o{}.\-]*\s+(%s)\s*:" % (_IDENT, _IDENT))
 _ER_BLOCK = re.compile(r"^\s*(%s)\s*\{" % _IDENT)
 _SEQ_PARTICIPANT = re.compile(r"^\s*(?:participant|actor)\s+(%s)(?:\s+as\s+(.+?))?\s*$" % _IDENT)
+# Mermaid's create/destroy participant syntax (v10.3+): `create participant A
+# as audit-worker` matched neither the participant pattern (the line starts
+# with "create") nor the message pattern, so the ALIAS was lost, A entered the
+# node set via its messages with no label, could not trace to the declared
+# component, and an honest documented diagram FAILed naming a node id the
+# author never intended to trace, with the cause named nowhere.
+_SEQ_CREATE = re.compile(r"^\s*create\s+(?:participant|actor)\s+(%s)(?:\s+as\s+(.+?))?\s*$"
+                         % _IDENT)
 # Every arrow form the sequence dialect ships: solid/dashed (- / --), head
 # (>, >>, x, ), and the +/- activation suffix. The suffix was unmatched, so
 # `B-->>-A: resp`, the canonical deactivation reply in the official docs,
@@ -1495,7 +1596,7 @@ def _label_text(raw):
 
 
 def _diagram_nodes(t):
-    """(nodes, kinds, skipped, states) for every fenced diagram in an artifact.
+    """(nodes, kinds, skipped, states, unread) for every fenced diagram in an artifact.
 
     nodes maps a node id to the label written on it, because a node is traceable
     by either. kinds lists the diagram types declared. skipped names every token
@@ -1504,11 +1605,19 @@ def _diagram_nodes(t):
     the subset of node ids that came out of a state diagram, because a state is
     neither an entity nor a runtime component and holding it to either was a
     false failure with no documented way out.
+
+    unread is the fifth channel and it is a CONFESSION, not a skip: a line this
+    parser could not read as a node, a statement or an attribute. A skipped
+    token is one the parser READ and deliberately set aside; an unread line is
+    one it could not read at all, and a ghost service can be hiding in it, so
+    check_diagrams refuses the "all traceable" sentence whenever one exists.
+    The dropped-in-silence `continue` this replaces is how an accented sender
+    made a whole message line vanish, ghost included, under a PASS.
     """
     # HTML comments are not diagram source. Left in, the "-->" that closes one
     # reads as a Mermaid edge and invents a node out of the next word.
     t = without_comments(t)
-    nodes, kinds, skipped, states = {}, [], [], set()
+    nodes, kinds, skipped, states, unread = {}, [], [], set(), []
 
     def add(nid, label=""):
         if nid in DIRECTIONS and not label and nid not in nodes:
@@ -1547,11 +1656,26 @@ def _diagram_nodes(t):
             skipped.append("%s%s (the diagram declaration: type%s)"
                            % (first, (" " + " ".join(rest)) if rest else "",
                               " and direction" if rest else ""))
+        in_body_block = 0     # brace depth inside an erDiagram/classDiagram body
         for line in body:
             s = line.strip()
             word = s.split()[0] if s.split() else ""
+
+            def could_not_read():
+                # The confession channel: only lines that could name something.
+                if re.search(r"\w", s):
+                    unread.append("%s (a %s line this parser could not read as a node or "
+                                  "statement)" % (s[:48], first))
             if kind == "sequence":
-                if word in _SEQ_STATEMENTS or s.startswith("%%"):
+                m = _SEQ_CREATE.match(s)
+                if m:
+                    # Checked BEFORE the statement set: `create participant A
+                    # as audit-worker` carries the alias, and losing it made
+                    # an honest documented diagram fail on an id the author
+                    # never meant to trace.
+                    add(m.group(1), (m.group(2) or "").strip())
+                    continue
+                if word.casefold() in _SEQ_STATEMENTS_CF or s.startswith("%%"):
                     skipped.append("%s (a %s statement, not a participant)" % (word, first))
                     continue
                 m = _SEQ_PARTICIPANT.match(s)
@@ -1562,33 +1686,75 @@ def _diagram_nodes(t):
                 if m:
                     add(m.group(1))
                     add(m.group(2))
+                    continue
+                could_not_read()
                 continue
             if kind == "er":
+                if in_body_block:
+                    in_body_block += s.count("{") - s.count("}")
+                    if re.search(r"\w", s):
+                        skipped.append("%s (an attribute inside an erDiagram entity block, "
+                                       "not a node)" % word)
+                    continue
                 m = _ER_BLOCK.match(s)
                 if m:
                     add(m.group(1))
+                    in_body_block = 1
                     continue
                 m = _ER_LINE.search(s)
                 if m:
                     add(m.group(1))
                     add(m.group(2))
+                    continue
+                could_not_read()
                 continue
             if kind == "class":
+                if in_body_block:
+                    in_body_block += s.count("{") - s.count("}")
+                    if re.search(r"\w", s):
+                        skipped.append("%s (a member inside a classDiagram body, not a node)"
+                                       % word)
+                    continue
                 m = _CLASS_DECL.match(s)
                 if m:
                     add(m.group(1))
+                    if s.rstrip().endswith("{"):
+                        in_body_block = 1
                     continue
                 m = _CLASS_REL.search(s)
                 if m:
                     add(m.group(1))
                     add(m.group(2))
+                    continue
+                could_not_read()
                 continue
             if kind == "state":
+                found = False
                 for m in _STATE_EDGE.finditer(s):
+                    found = True
                     for g in (m.group(1), m.group(2)):
                         if g != "[*]":
                             add(g)
                             states.add(g)
+                if found:
+                    continue
+                m = re.match(r"^state\s+(?:\"[^\"]*\"\s+as\s+)?(%s)" % _IDENT, s)
+                if m:
+                    add(m.group(1))
+                    states.add(m.group(1))
+                    continue
+                if re.fullmatch(_IDENT, s):
+                    # A bare identifier on its own line declares a state, the
+                    # way it declares a node in a flowchart. Dropping it in
+                    # silence hid undeclared states from the orphan check.
+                    add(s)
+                    states.add(s)
+                    continue
+                if word.casefold() in ("note", "direction", "end") or s.startswith(
+                        ("%%", "}", "--")):
+                    skipped.append("%s (a %s statement, not a state)" % (word, first))
+                    continue
+                could_not_read()
                 continue
             if kind == "mindmap":
                 if s.startswith("::") or word.startswith("::icon"):
@@ -1623,13 +1789,13 @@ def _diagram_nodes(t):
                 if keyword in _C4_REL:
                     args = [a.strip().strip("\"") for a in s[s.find("(") + 1:].split(",")]
                     for a in args[:2]:
-                        if re.match(r"^[A-Za-z_][\w.-]*$", a):
+                        if re.match(r"^[^\W\d][\w.-]*$", a):
                             add(a)
                     continue
                 skipped.append("%s (a %s statement, not an element)" % (keyword, first))
                 continue
             if kind == "block":
-                if word.split(":")[0] in _BLOCK_STATEMENTS or s.startswith("%%"):
+                if word.split(":")[0].casefold() in _BLOCK_STATEMENTS_CF or s.startswith("%%"):
                     skipped.append("%s (a %s statement, not a block)" % (word, first))
                     continue
                 s = _strip_edge_labels(s, skipped)
@@ -1637,24 +1803,38 @@ def _diagram_nodes(t):
                     add(m.group(1), _label_text(m.group(2)))
                 bare = _NODE_LABELLED.sub(" ", s)
                 for m in _BLOCK_TOKEN.finditer(bare):
-                    if m.group(1) not in _BLOCK_STATEMENTS:
+                    if m.group(1).casefold() not in _BLOCK_STATEMENTS_CF:
                         add(m.group(1))
                 continue
             if kind == "none":
                 continue
             # flowchart, graph and the node-shaped types
-            if word in _FLOW_STATEMENTS or s.startswith("%%"):
+            if word.casefold() in _FLOW_STATEMENTS_CF or s.startswith("%%"):
                 skipped.append("%s (a %s statement, not a node)" % (word, first))
                 continue
             s = _strip_edge_labels(s, skipped)
+            found = False
             for m in _NODE_LABELLED.finditer(s):
                 add(m.group(1), _label_text(m.group(2)))
+                found = True
             bare = _NODE_LABELLED.sub(" ", s)
             for m in _NODE_SOURCE.finditer(bare):
-                add(m.group(1))
+                found = True
+                for part in _AMP_SPLIT.split(m.group(1)):
+                    add(part)
             for m in _NODE_DEST.finditer(bare):
-                add(m.group(1))
-    return nodes, kinds, sorted(set(skipped)), states
+                found = True
+                for part in _AMP_SPLIT.split(m.group(1)):
+                    add(part)
+            if found:
+                continue
+            if re.fullmatch(_FLOW_IDENT, s):
+                # A bare identifier on its own line declares a node. Dropping
+                # it in silence hid an undeclared service that stood alone.
+                add(s)
+                continue
+            could_not_read()
+    return nodes, kinds, sorted(set(skipped)), states, sorted(set(unread))
 
 
 _COMPONENT_HEADING = re.compile(r"(?i)component|runtime|technology map")
@@ -1662,7 +1842,12 @@ _STATE_HEADING = re.compile(r"(?i)state|status|lifecycle")
 
 
 def _norm(s):
-    return re.sub(r"[^a-z0-9]", "", s.lower())
+    # By property, not by ASCII range: `[^a-z0-9]` erased every non-ASCII
+    # letter, so two Japanese entity names both normalized to the empty string
+    # and a ghost written in ANY non-Latin script "traced" to whatever else
+    # normalized to nothing. A name's identity keeps its letters and digits in
+    # every script and drops punctuation, spacing and case in every script.
+    return re.sub(r"[\W_]", "", s.casefold())
 
 
 def _declared_components(root):
@@ -1773,11 +1958,14 @@ def check_diagrams(root):
     t = read(root, ARTIFACT_FILES["06"])
     if t is None:
         return "NO-DATA", "no 06-diagrams.md in this dossier"
-    nodes, kinds, skipped, states = _diagram_nodes(t)
+    nodes, kinds, skipped, states, unread = _diagram_nodes(t)
     # Every skipped token, on every verdict line. A parser that discards tokens in
     # silence and then reports "all traceable" is asserting completeness over a
     # set it truncated itself.
     note = ("; tokens read as diagram syntax rather than as nodes: %s" % ", ".join(skipped)) if skipped else ""
+    if unread:
+        note += ("; %d diagram line(s) this parser could NOT read at all, so nothing in them "
+                 "was traced: %s" % (len(unread), "; ".join(unread[:4])))
     if not kinds:
         return "FAIL", ("no fenced code block holding a diagram; a diagram artifact with no diagram "
                         "in it is a defect. Diagrams are code: put the Mermaid source in a "
@@ -1818,7 +2006,7 @@ def check_diagrams(root):
         # writing `R[Refund]` has named the entity; insisting the id spell it out
         # tells them to rename every node or switch the gate off.
         for candidate in (nid, label):
-            if candidate and _norm(candidate) in known:
+            if candidate and _norm(candidate) and _norm(candidate) in known:
                 return _norm(candidate)
         return None
 
@@ -1853,6 +2041,15 @@ def check_diagrams(root):
                            "| shipped` line, and they become traceable%s"
                            % (len(nodes), ", ".join(sorted(set(kinds))), len(untraced_states),
                               ", ".join(untraced_states[:6]), ARTIFACT_FILES["05"], note))
+    if unread:
+        # A ghost can be hiding in a line the parser could not read, so the
+        # completeness sentence is refused rather than printed over a set the
+        # parser truncated itself. NO-DATA, not FAIL: an unreadable line is a
+        # limit of this parser, not proof of a defect, and failing honest
+        # exotic syntax is how a gate gets switched off.
+        return "NO-DATA", ("%d diagram node(s) read and %d line(s) not read, so this check "
+                           "cannot say every element traces; a node could be hiding in what "
+                           "it could not parse%s" % (len(nodes), len(unread), note))
     hits = [resolved(nid, label) for nid, label in nodes.items()]
     comp_hits = [h for h in hits if h in components and h not in entities]
     # Declaration and use in one file is a weaker trace than a cross-artifact
