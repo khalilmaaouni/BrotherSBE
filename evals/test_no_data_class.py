@@ -246,10 +246,24 @@ def tool_sources():
 
 PRUNED_WITH_SOURCE = []
 DENIED_DIRS = []
+# Scenarios a declared exemption matched, printed in the summary line so a
+# waiver cannot hide inside an unchanged scenario total.
+WAIVED = [0]
 # Raised when checks are added, never lowered: the count of discovered checks
 # may only grow, and a shrink is a failure this file reports itself rather than
 # leaving to a doc guard elsewhere.
 FLOOR_CHECKS = 20
+# The exemption budget, counted in SCENARIOS and not in keys, because one key
+# waives every scenario sharing its sid prefix: the three-key cap in the Check
+# constructor was satisfied while a single JSON-leaf key waived that leaf's
+# whole value sweep (14 scenarios and growing), which is exactly the breadth a
+# check needs to hide a real regression on that leaf behind one
+# plausible-sounding sentence, with the printed scenario total unchanged. The
+# cap sits above the widest honest exemption this suite has ever needed (a
+# markdown section, 2 scenarios) and below what any single JSON leaf's sweep
+# generates, so a leaf of a receipt cannot be exempted at all: narrow the PASS
+# sentence instead. Lowered never, raised only with a reason written here.
+WAIVED_SCENARIO_CAP = 8
 
 
 def load_tool_modules():
@@ -1120,16 +1134,18 @@ def access_cases(tool, check):
 # ---------------------------------------------------------------------------
 
 def counts():
-    """(checks, registries, scenarios) without running anything.
+    """(checks, registries, scenarios, waived) without running anything.
 
     Exists so a doc that prints this test's summary line can be checked against
     it mechanically. Three shipped docs printed an eval count the suite had not
     produced for a whole wave, which is the same defect as a stale evidence
-    string: a number asserted where nothing recomputed it.
+    string: a number asserted where nothing recomputed it. `waived` counts the
+    scenarios a declared exemption matches, computed the same way the run
+    counts them, so the summary line's waived figure is checkable too.
     """
     mods, _failed = load_tool_modules()
     registries, _ = discover_registries(mods)
-    checks = scenarios = regs = 0
+    checks = scenarios = regs = waived = 0
     for fn, attr, reg in registries:
         tool = ADAPTERS.get((fn, attr))
         if tool is None:
@@ -1137,9 +1153,12 @@ def counts():
         regs += 1
         for _name, check in reg.items():
             checks += 1
-            scenarios += (len(legacy_cases(tool, check)) + len(hollow_cases(tool, check))
-                          + len(access_cases(tool, check)))
-    return checks, regs, scenarios
+            scs = (legacy_cases(tool, check) + hollow_cases(tool, check)
+                   + access_cases(tool, check))
+            scenarios += len(scs)
+            waived += sum(1 for sc in scs
+                          if check.optional_leaves.get(sc.sid.split("|")[0]))
+    return checks, regs, scenarios, waived
 
 
 def main():
@@ -1209,6 +1228,7 @@ def main():
             invoked_count = 0
             saw_full = False
             used_exemptions = set()
+            matched_exempt = 0
             for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
                     for rel, content in subst(sc.files, d).items():
@@ -1234,6 +1254,8 @@ def main():
                 exempt = check.optional_leaves.get(sc.sid.split("|")[0])
                 if exempt:
                     used_exemptions.add(sc.sid.split("|")[0])
+                    matched_exempt += 1
+                    WAIVED[0] += 1
                 if got == "PASS" and sc.forbid_pass and not exempt:
                     bad.append("a PASS over evidence that declares nothing is the defect this "
                                "whole project exists to prevent")
@@ -1262,6 +1284,13 @@ def main():
                 failures.append("%s %s: the declared full_fixture did not produce %s, so nothing "
                                 "here proves the check body ran or that its worked example is a "
                                 "real one" % (fn, name, check.full_expect))
+            if matched_exempt > WAIVED_SCENARIO_CAP:
+                failures.append("%s %s: its declared exemptions matched %d scenario(s) of this "
+                                "sweep, over the cap of %d. An exemption is a per-leaf instrument, "
+                                "and a key wide enough to waive this much of the sweep is wide "
+                                "enough to hide a regression behind an unchanged scenario total; "
+                                "narrow the PASS sentence instead of exempting the evidence"
+                                % (fn, name, matched_exempt, WAIVED_SCENARIO_CAP))
             for dead in sorted(set(check.optional_leaves) - used_exemptions):
                 # An exemption no scenario matches exempts nothing and reads as
                 # if it did: it either names a section the fixture no longer
@@ -1289,8 +1318,9 @@ def main():
                         "used to shrink this count in silence, with the anti-shrinkage guarantee "
                         "living only in the eval suite and a number in a doc; the floor is raised "
                         "when checks are added and never lowered" % (checked, FLOOR_CHECKS))
-    print("\n%d checks discovered from %d registries in %d module(s), %d scenarios run, %d failure(s)."
-          % (checked, len(known), len(mods), ran, len(failures)))
+    print("\n%d checks discovered from %d registries in %d module(s), %d scenarios run, "
+          "%d waived by declared exemption, %d failure(s)."
+          % (checked, len(known), len(mods), ran, WAIVED[0], len(failures)))
     for f in failures:
         print("  FAIL %s" % f)
     sys.exit(1 if failures else 0)

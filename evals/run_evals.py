@@ -527,6 +527,66 @@ def ev_inv1(root):
     return "refused" if got == [None] * len(vals) else "read %r" % (got,)
 
 
+def _check_with_exemption(key):
+    return _checks.Check(lambda r: ("NO-DATA", "x"), reads=("x.json",), kind="json",
+                         severity="soft",
+                         full_fixture={"files": {"x.json": {"a": "b"}}},
+                         optional_leaves={key: "a stated reason long enough to clear the floor"})
+
+
+@case("a-scenario-id-prefix-is-not-an-exemption-key", "guard", "refused")
+def gd_exempt1(root):
+    # "seeded" is the prefix every seeded scenario id shares, so as an
+    # exemption key it waived the whole generative mode for a check while the
+    # summary counts never moved. A key now has to name a leaf or section of
+    # the check's own fixture, so the id space outside the fixture is
+    # unreachable.
+    for key in ("seeded", "access", "full", "totally-free-form"):
+        try:
+            _check_with_exemption(key)
+            return "constructed with key %r" % key
+        except ValueError as e:
+            if "exemption key" not in str(e):
+                return "wrong error for %r: %s" % (key, e)
+    return "refused"
+
+
+@case("a-fixture-leaf-key-still-constructs", "guard", "ok")
+def gd_exempt2(root):
+    # The control: the structural rule must not refuse the shape the shipped
+    # registries actually use.
+    try:
+        _check_with_exemption("x.json::a")
+    except ValueError as e:
+        return "refused the honest shape: %s" % e
+    return "ok"
+
+
+@case("one-exemption-key-cannot-waive-a-whole-leaf-sweep", "guard", "capped")
+def gd_exempt3(root):
+    # The demonstrated bypass: a legal-format key naming one JSON leaf of the
+    # numbers fixture matched the leaf's entire value sweep, and one such key
+    # hid a real regression on that leaf behind an unchanged scenario total.
+    # The meta-test now caps waived SCENARIOS per check; this eval rebuilds the
+    # numbers check with exactly that key and asserts its sweep breadth is
+    # over the cap, so the meta-test would fail it by count.
+    meta = SourceFileLoader("tndc_guard", os.path.join(HERE, "test_no_data_class.py")).load_module()
+    fx = _gate.GATES["numbers"].full_fixture
+    clone = _checks.Check(_gate.gate_numbers, reads=(_gate.MANIFEST,), kind="json",
+                          severity="gate", item_key="figures", full_fixture=fx,
+                          optional_leaves={
+                              "numbers-manifest.json::figures[0].snapshot_id":
+                                  "a plausible-sounding sentence shaped like the shipped ones"})
+    tool = meta.ADAPTERS[("sbe_gate.py", "GATES")]
+    scs = (meta.legacy_cases(tool, clone) + meta.hollow_cases(tool, clone)
+           + meta.access_cases(tool, clone))
+    matched = sum(1 for sc in scs if clone.optional_leaves.get(sc.sid.split("|")[0]))
+    if matched <= meta.WAIVED_SCENARIO_CAP:
+        return ("a leaf key matches only %d scenario(s), inside the cap of %d, so the cap "
+                "no longer bites" % (matched, meta.WAIVED_SCENARIO_CAP))
+    return "capped"
+
+
 T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
               "reversible_under_hour": True, "touches_sensitive": False, "consumers": "some"}
 T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,
@@ -2264,18 +2324,21 @@ def dc2(root):
     import re as _re
     meta = SourceFileLoader("test_no_data_class",
                             os.path.join(HERE, "test_no_data_class.py")).load_module()
-    checks, regs, scen = meta.counts()
+    checks, regs, scen, waived = meta.counts()
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
         if not os.path.isfile(p):
             continue
         for m in _re.finditer(r"(\d+) checks discovered from (\d+) registries in (\d+) module\(s\), "
-                              r"(\d+) scenarios run", open(p, errors="replace").read()):
+                              r"(\d+) scenarios run(?:, (\d+) waived by declared exemption)?",
+                              open(p, errors="replace").read()):
             got = (int(m.group(1)), int(m.group(2)), int(m.group(4)))
-            if got != (checks, regs, scen):
-                wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d scenarios"
-                             % (rel, m.group(0), checks, regs, scen))
+            if got != (checks, regs, scen) or (m.group(5) is not None
+                                               and int(m.group(5)) != waived):
+                wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d "
+                             "scenarios, %d waived"
+                             % (rel, m.group(0), checks, regs, scen, waived))
     return "consistent" if not wrong else "; ".join(wrong[:4])
 
 
