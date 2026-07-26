@@ -78,7 +78,7 @@ import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
-                        derivation_fold, distinct, fold, Pruner, evidence_problem)
+                        derivation_fold, distinct, fold, unit_of, Pruner, evidence_problem)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -318,12 +318,21 @@ def gate_numbers(root):
                 problems.append("%s in %s records no label (%r), so nothing in the report can say "
                                 "which figure was checked"
                                 % (label, os.path.relpath(m, root), fig.get("label")))
-            if answered(fig.get("snapshot_id")) is None:
+            sid = fig.get("snapshot_id")
+            if answered(sid) is None:
                 problems.append("%s: no snapshot_id recorded (%r); a live warehouse drifts, so pin "
                                 "the read. A placeholder is not a pin"
-                                % (label, fig.get("snapshot_id")))
+                                % (label, sid))
+            elif isinstance(sid, bool):
+                # answered() deliberately keeps False as an answer (a zero row
+                # count is an answer), and that let `"snapshot_id": false` read
+                # as a pinned read. A boolean names no snapshot.
+                problems.append("%s: snapshot_id is %r, a boolean, which pins nothing" % (label, sid))
             else:
-                snapshots.append(answered(fig.get("snapshot_id")))
+                # Folded, because the reuse disclosure below compared raw ids
+                # while every other comparison in this file folds, so two ids
+                # differing only in case lost the disclosure.
+                snapshots.append(fold(str(sid)))
             # REDUCED FIRST, then tested, and this order is the whole fix. The
             # previous order asked `answered()` about the raw text and folded it
             # afterwards, so a `second_derivation` of `"#"`, or of `"-- rerun on
@@ -376,6 +385,14 @@ def gate_numbers(root):
                                 "and not a zero-drift pass" % (label, unread))
             elif primary != secondary:
                 problems.append("%s: DRIFT primary=%s secondary=%s (zero drift required)" % (label, r["primary"], r["secondary"]))
+            elif unit_of(r.get("primary")) != unit_of(r.get("secondary")):
+                # numeric() strips "%" and "$" as formatting, so "50%" and
+                # "$50" compared equal and bought "re-run to zero drift". The
+                # number is the value; the unit is what it is a value of, and
+                # two units are two different figures agreeing by accident.
+                problems.append("%s: primary %r and secondary %r are recorded in different units, "
+                                "so they are not two derivations of one figure"
+                                % (label, r.get("primary"), r.get("secondary")))
     if unreadable:
         return "FAIL", ("manifest present but unparseable: %s; a receipt that cannot be read is a broken claim, not an absent one"
                         % ", ".join(unreadable))
@@ -419,12 +436,14 @@ def gate_migration(root):
     nothing = []
     checked = 0      # receipts that recorded both legs
     compared = 0     # row-count comparisons actually made
+    bodies = []      # parsed receipts, for the shared dedupe rule
     for m in receipts:
         rel = os.path.relpath(m, root)
         d, err = load_receipt(m)
         if d is None:
             unreadable.append("%s: %s" % (rel, err))
             continue
+        bodies.append(d)
         legs = {k: d.get(k) for k in ("forward", "reverse")}
         if all(v is None for v in legs.values()) and "row_counts" not in d:
             other = ", ".join(sorted(d)) or "nothing at all"
@@ -500,9 +519,16 @@ def gate_migration(root):
                            "counts (%s); the reverse restoring the rows is the half this gate cannot "
                            "assert, so it does not"
                            % (checked, len(nothing), "; ".join(nothing[:4])))
+    # The shared dedupe rule, adopted here because its docstring already said
+    # "gate_numbers learned it and its three siblings did not": one rehearsal
+    # receipt copied into two directories is one rehearsal, and the count in
+    # this sentence is what a reader takes as the amount of work checked.
+    unique, dupes = distinct(bodies)
     return "PASS", ("%d receipt(s): forward and reverse both ran against a restore, %d row-count "
-                    "comparison(s) matched, and a rehearsal id string is recorded%s"
-                    % (checked, compared, pruned))
+                    "comparison(s) matched, and a rehearsal id string is recorded%s%s"
+                    % (len(unique), compared,
+                       "" if not dupes else
+                       "; %d identical receipt(s) counted once" % dupes, pruned))
 
 
 def gate_approval(root):
@@ -627,6 +653,7 @@ def gate_ran(root):
     unreadable = []
     nothing = []
     checked = 0
+    entries = []     # every check object, for the shared dedupe rule
     for m in receipts:
         d, err = load_receipt(m)
         if d is None:
@@ -636,6 +663,7 @@ def gate_ran(root):
         if not chks:
             nothing.append("%s: %s" % (os.path.relpath(m, root), note))
             continue
+        entries.extend(chks)
         for chk in chks:
             checked += 1
             if not isinstance(chk, dict):
@@ -682,8 +710,14 @@ def gate_ran(root):
                            % "; ".join(nothing))
     if nothing:
         return _partial(nothing, checked, "ran-receipt", "check(s)")
-    return "PASS", ("%d recorded check(s), each with a zero exit and a nonzero duration%s"
-                    % (checked, pruned))
+    # One check object written five times is one check: sbe_checks.distinct,
+    # whose docstring already named this gate as a sibling that had not learned
+    # the rule its neighbour had.
+    unique, dupes = distinct(entries)
+    return "PASS", ("%d recorded check(s), each with a zero exit and a nonzero duration%s%s"
+                    % (len(unique),
+                       "" if not dupes else
+                       "; %d identical entry/entries counted once" % dupes, pruned))
 
 
 # The registry is the contract. Each gate declares the evidence it opens, what its
@@ -734,12 +768,33 @@ def main():
     argv = [a for a in sys.argv[1:] if a != "--strict"]
     strict = "--strict" in sys.argv
     root = "."
+    roots = []
     which = list(GATES)
     for a in argv:
+        if a in GATES and os.path.isdir(a):
+            # `numbers` the gate and `numbers/` the directory are both plausible
+            # readings, and picking one silently consumed the other: a directory
+            # named after a gate was eaten as a selector and root stayed ".".
+            print("sbe_gate: %r is both a gate name and a directory here; pass ./%s for the "
+                  "directory" % (a, a))
+            sys.exit(1)
         if a in GATES:
             which = [a]
         elif os.path.isdir(a):
+            roots.append(a)
             root = a
+        else:
+            # Mirrors sbe_design: an argument this tool cannot read is refused
+            # by name, never silently dropped.
+            print("sbe_gate: %r is neither a gate name (%s) nor a directory."
+                  % (a, ", ".join(GATES)))
+            sys.exit(1)
+    if len(roots) > 1:
+        # The last one used to win in silence, so the first directory was
+        # neither checked nor mentioned.
+        print("sbe_gate: one directory at a time, got %d (%s)."
+              % (len(roots), ", ".join(roots)))
+        sys.exit(1)
     try:
         root = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"],
                               capture_output=True, text=True, timeout=10).stdout.strip() or root

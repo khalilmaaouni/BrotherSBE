@@ -57,7 +57,7 @@ fld() everywhere.
 import json, os, sys, glob, re, datetime, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import distinct, evidence_problem, without_comments
+from sbe_checks import distinct, evidence_problem, without_comments, answered, fold
 
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
@@ -536,17 +536,31 @@ def prediction_counts():
             break
         if in_ledger and line.strip().startswith("20") and "|" in line:
             parts = [p.strip() for p in line.split("|")]
-            if len(parts) >= 5 and parts[2] not in ("n/a", ""):
+            # The seal column goes through the shared answered(), not a third
+            # private two-token list: "TBD" and "- " cleared a hardcoded
+            # ("n/a", "") test and five TBD seals counted as "5 sealed".
+            if len(parts) >= 5 and answered(parts[2]) is not None:
                 rows.append(parts)
-    unique, dupes = distinct([" | ".join(p) for p in rows])
-    for parts in [p.split(" | ") for p in unique]:
+    # Deduplicated by the PREDICTION, not by the whole row: the date column made
+    # every row unique, so the fold this function's own docstring promises could
+    # never fold anything, and one prediction written five times on five dates
+    # cleared the "at least 5 sealed" threshold.
+    seen, unique, dupes = set(), [], 0
+    for parts in rows:
+        key = fold(parts[1])
+        if key in seen:
+            dupes += 1
+            continue
+        seen.add(key)
+        unique.append(parts)
+    for parts in unique:
         out["sealed"] += 1
         if parts[4].lower().startswith(("yes", "hit", "no", "miss")):
             out["scored"] += 1
             if parts[4].lower().startswith(("yes", "hit")):
                 out["hits"] += 1
     if dupes:
-        out["note"] = "; %d identical ledger row(s) counted once" % dupes
+        out["note"] = "; %d repeated prediction(s) counted once" % dupes
     return out
 
 
