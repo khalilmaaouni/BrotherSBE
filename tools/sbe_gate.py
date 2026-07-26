@@ -80,7 +80,7 @@ import json, os, sys, re, subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
                         derivation_fold, distinct, fold, one_line, skeleton, unit_of,
-                        Pruner, evidence_problem)
+                        Pruner, evidence_problem, unreadable_identity_words)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -577,6 +577,31 @@ def gate_approval(root):
         return "FAIL", ("the Approved-by trailer records %r, which names no identity; a "
                         "placeholder where an approver belongs is a broken claim, not an "
                         "approval" % trailer.group(1).strip())
+    # An identity this comparison cannot READ is an identity it must not
+    # certify. The self-approval guard's PASS asserts the approver is a
+    # DIFFERENT person from the author, and that certification used to rest on
+    # a curated homoglyph table: one code point outside the table (a Coptic o,
+    # a Latin small capital A) rendered as the author's own name and compared
+    # as a second person, restoring the self-approval PASS on the money gate.
+    # The rule replaces the table's coverage as the load-bearing part: a word
+    # that mixes alphabets after normalization and confusable folding is
+    # refused BY NAME, on either side of the comparison, because the direction
+    # of error here is toward refusal with an honest sentence, never toward
+    # assurance. An honest identity written wholly in one script still reads.
+    if trailer:
+        unreadable = unreadable_identity_words(trailer.group(1))
+        for who in authors:
+            unreadable += [(w, "in the author/committer identity %r, %s" % (who, why))
+                           for w, why in unreadable_identity_words(who)]
+        if unreadable:
+            w, why = unreadable[0]
+            return "FAIL", ("this gate cannot certify the approver and the author are different "
+                            "people, because the identity word %r %s. A word this comparison "
+                            "cannot read as one alphabet is exactly how a forged identity renders "
+                            "as the author while comparing as a second person, so it is refused "
+                            "rather than passed (%d unreadable word(s) in all). Record the "
+                            "identity in one script, or use a Reviewed-in id"
+                            % (w, why, len(unreadable)))
     # Self-approval is not approval, and the gate did not look. One person, one
     # key: they authored the commit, signed the commit and wrote their own name
     # into the Approved-by trailer, and this gate printed "signed commit carries
@@ -617,7 +642,7 @@ def gate_approval(root):
     if trailer and sig == "G":
         return "PASS", ("signed commit carries Approved-by: %s, this host verified the signature "
                         "against a trusted key, and that identity is not the commit's author or "
-                        "committer (%s)%s"
+                        "committer (%s), compared after normalization and confusable folding%s"
                         % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded", pruned))
     if trailer and sig == "U":
         return "NO-DATA", ("signature is cryptographically valid but the key matched no principal "
