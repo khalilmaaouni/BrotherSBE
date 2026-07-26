@@ -50,6 +50,10 @@ and `SECURITY.md` lets you verify the zero-network claim yourself:
 grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
 ```
 
+(Expected result: around thirty hits, none of them a network call; every hit
+is subprocess-for-git, a word inside a message string, or a redaction-test
+fixture. `SECURITY.md` states the same expectation beside the command.)
+
 A lesson crosses from the private side to the shared side exactly once, and only
 one way: a reviewed pull request into `LEARNED.md`. Everything in this doc hangs
 off that sentence.
@@ -95,7 +99,7 @@ python3 ~/.claude/skills/brothersbe/tools/sbe_gate.py numbers
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
 ```
 
 Change `secondary` to `4820109` and the same gate prints
@@ -196,7 +200,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  388 evals: 388 passed, 0 regressions.
+  391 evals: 391 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

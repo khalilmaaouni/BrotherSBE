@@ -2708,6 +2708,88 @@ def dc6(root):
     return "consistent" if not problems else "; ".join(sorted(set(problems))[:4])
 
 
+@case("every-quoted-verdict-line-in-the-docs-carries-its-declared-severity", "docs", "consistent")
+def dc7(root):
+    """The doc-quote guard for verdict lines. A formatting change landed in the
+    tools (the severity suffix) and 45 quoted verdict lines across five docs
+    kept the old shape, silently: the class was unguarded because nothing
+    mechanical connected a pasted verdict line to the tool that prints it.
+    This sweeps every shipped doc for lines shaped like a check verdict
+    (a registered check name followed by PASS/FAIL/NO-DATA) and requires each
+    to end with the severity suffix the registry declares for that check, so
+    the next formatting change fails here instead of going stale on the page.
+    Byte-exactness of whole engagements is the replay harness's job (dc9);
+    this pins the shape and the severity of every quoted line everywhere."""
+    import re as _re
+    _score = SourceFileLoader("sbe_score_docquote",
+                              os.path.join(_REPO, "tools", "sbe_score.py")).load_module()
+    severities = {}
+    for reg in (_gate.GATES, _design_mod.CHECKS, _score.CHECKS):
+        for name, check in reg.items():
+            severities[name] = check.severity
+    names = "|".join(sorted(severities))
+    line_re = _re.compile(r"^\s*(%s)\s+(PASS|FAIL|NO-DATA)\b.*$" % names)
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        for n, line in enumerate(open(p, errors="replace").read().splitlines(), 1):
+            m = line_re.match(line)
+            if not m:
+                continue
+            if "so this check opened no file" in line:
+                # The design tool's no-dossier reporter prints these fallback
+                # lines itself, without a severity suffix, because no check
+                # produced a verdict; the load-bearing phrase is the same one
+                # the meta-test keys on. A quote of one is correct as printed.
+                continue
+            want = "[severity: %s]" % severities[m.group(1)]
+            if not line.rstrip().endswith(want):
+                wrong.append("%s:%d quotes a %s verdict line without its %s suffix"
+                             % (rel, n, m.group(1), want))
+    return "consistent" if not wrong else "; ".join(wrong[:6])
+
+
+@case("guide-01s-verbatim-workflow-fence-is-the-shipped-workflow", "docs", "consistent")
+def dc8(root):
+    # The one doc that promises the FULL file "verbatim" handed out a copy
+    # without the hardening the workflow's own header calls the control
+    # everything else rests on (no SHA pinning, no read-only permissions, no
+    # seeded meta-test), and a prior sync claim about this fence was false.
+    # Byte comparison, so "verbatim" means verbatim.
+    guide = open(os.path.join(_REPO, "docs/guides/01-quickstart.md"), errors="replace").read()
+    wf = open(os.path.join(_REPO, ".github/workflows/brothersbe-gates.yml"),
+              errors="replace").read()
+    marker = "The workflow, verbatim:"
+    if marker not in guide:
+        return "guide 01 no longer carries the verbatim marker"
+    i = guide.index(marker)
+    try:
+        start = guide.index("```yaml\n", i) + len("```yaml\n")
+        end = guide.index("\n```", start)
+    except ValueError:
+        return "no yaml fence follows the verbatim marker"
+    return "consistent" if guide[start:end + 1] == wf else \
+        "the fence under 'verbatim' differs from the shipped workflow"
+
+
+@case("guide-05s-output-blocks-are-what-the-tools-print", "docs", "consistent")
+def dc9(root):
+    # The guide's opening claim, made mechanical: evals/replay_guide05.py
+    # writes every artifact block byte for byte, runs every command block, and
+    # diffs each captured output against the block the guide shows. A stale
+    # quote fails the gate instead of going stale on the page; a maintainer
+    # repairs it with `python3 evals/replay_guide05.py --write`, which pastes
+    # the LIVE output, so nobody ever hand-types an expected block.
+    out = subprocess.run([sys.executable, os.path.join(HERE, "replay_guide05.py")],
+                         capture_output=True, text=True, timeout=310)
+    tail = out.stdout.strip().splitlines()[-1] if out.stdout.strip() else "(no output)"
+    if out.returncode == 0 and tail.endswith(", 0 differ"):
+        return "consistent"
+    return tail
+
+
 @case("no-copy-ready-ci-block-shows-fewer-steps-than-the-shipped-workflow", "docs", "consistent")
 def dc3(root):
     # A reader who copies a CI fence gets what the fence shows. Three docs showed
@@ -2818,6 +2900,11 @@ def dc7(root):
                 continue
             seen += 1
             evidence = " ".join(m.group(4).split())
+            # The severity suffix is appended by each tool's main(), outside
+            # every evidence template, so it is stripped before template
+            # matching; that the suffix is present and correct on quoted lines
+            # is its own guard above.
+            evidence = _re.sub(r"\s*\[severity: (?:gate|soft)\]$", "", evidence)
             for fragment in [evidence] + evidence.split("; "):
                 if any(rx.fullmatch(fragment) for rx in templates):
                     break

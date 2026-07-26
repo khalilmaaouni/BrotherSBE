@@ -150,11 +150,11 @@ deleted.
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   >> dossier WAIVED   templates/dossier: .sbe-exempt waives adr, artifacts, datamodel, diagrams, placeholder here (of 5 design checks), stated reason: These are the shipped dossier TEMPLATES, not a dossier. They carry the SBE-TEMPLATE-UNFILLED marker on purpose and have no 00-intake.json, because nobody filled them in for a real change. Copy them in. Nothing opened a file for any check in that directory, so this is a waiver and not a verdict about the work
   dossier    NO-DATA  every dossier found under . (1) is waived by a .sbe-exempt, so no check opened a file. The waiver line(s) above name each one and the reason given
-  artifacts  NO-DATA  no dossier under ., so this check opened no file
-  adr        NO-DATA  no dossier under ., so this check opened no file
-  datamodel  NO-DATA  no dossier under ., so this check opened no file
-  diagrams   NO-DATA  no dossier under ., so this check opened no file
-  placeholder NO-DATA  no dossier under ., so this check opened no file
+  artifacts  NO-DATA  every dossier under . is waived, so this check opened no file
+  adr        NO-DATA  every dossier under . is waived, so this check opened no file
+  datamodel  NO-DATA  every dossier under . is waived, so this check opened no file
+  diagrams   NO-DATA  every dossier under . is waived, so this check opened no file
+  placeholder NO-DATA  every dossier under . is waived, so this check opened no file
 WAIVERS: 5 check(s) were waived by a .sbe-exempt and examined nothing. A waiver is not a pass; run `--strict --strict-waivers` to make one block a merge.
 ```
 

@@ -87,7 +87,7 @@ number.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
 ```
 
 ### Worked FAIL
@@ -112,7 +112,7 @@ second derivation disagree.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   FAIL     five_year_total: DRIFT primary=1938 secondary=432 (zero drift required)
+  numbers   FAIL     five_year_total: DRIFT primary=1938 secondary=432 (zero drift required) [severity: gate]
 ```
 
 The gate names the label and prints both numbers. A human reading that line knows in
@@ -184,7 +184,7 @@ came back to where it started.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded [severity: gate]
 ```
 
 ### Worked FAIL
@@ -201,7 +201,7 @@ Here the reverse claims it ran against a restore but records no run id.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration FAIL     reverse: no rehearsal_run_id recorded (None). This gate checks the id is present, is a string, is not blank and is not one of the tokens this project refuses as a stated value; it cannot resolve it against a job system
+  migration FAIL     reverse: no rehearsal_run_id recorded (None). This gate checks the id is present, is a string, is not blank and is not one of the tokens this project refuses as a stated value; it cannot resolve it against a job system [severity: gate]
 ```
 
 Two other FAIL paths exist and are worth knowing: a leg with
@@ -279,7 +279,7 @@ trailer, but the commit is unsigned. A name in a text field is not a control.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  approval  FAIL     approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
+  approval  FAIL     the APPROVAL file declares 'partner billing change', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]
 ```
 
 ### Worked PASS
@@ -292,7 +292,7 @@ Reviewed-in: gh_pr_1421
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  approval  NO-DATA  commit records Reviewed-in: gh_pr_1421. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict
+  approval  NO-DATA  commit records Reviewed-in: gh_pr_1421. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict [severity: gate]
 ```
 
 A signed commit with `Approved-by:` that this host verified passes and prints
@@ -310,7 +310,7 @@ A change that touches no money or partner path has no `APPROVAL` file and no
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  approval  NO-DATA  no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct
+  approval  NO-DATA  no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct [severity: gate]
 ```
 
 ### What makes the receipt hard to fake
@@ -360,7 +360,7 @@ The fields the gate reads per check: `name`, `exit_code`, `duration_ms`.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration
+  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration [severity: gate]
 ```
 
 ### Worked FAIL
@@ -378,7 +378,7 @@ check exited nonzero.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       FAIL     row_parity: check exited nonzero (1)
+  ran       FAIL     row_parity: check exited nonzero (1) [severity: gate]
 ```
 
 The other FAIL path is a check with no `exit_code` at all, which FAILs with "row_parity:

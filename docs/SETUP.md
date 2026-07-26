@@ -55,11 +55,15 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 
 ## 4. Prove it works, in 60 seconds
 
+Section 1 cloned the repo and left you wherever you were, so enter the clone first;
+every command from here down is relative to it.
+
 ```
+cd ~/.claude/skills/brothersbe
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "388 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "391 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
@@ -142,4 +146,4 @@ Doing neither is legal and honest: approvals then report NO-DATA in CI, and the 
 
 ## What you get, and what you do not
 
-You get a colleague that arrives with its checks already run and says UNVERIFIED when they are not, plus a memory that improves through reviewed pull requests. You do not get autonomy, an oracle, or enforcement without the CI step above. Those omissions are the point: see [DESIGN.md](DESIGN.md), "7. The register, and what it refuses".
+You get a colleague that arrives with its checks already run and is bound by law to write UNVERIFIED next to anything that has not cleared them (the label is the agent's to write; no tool applies it), plus a memory that improves through reviewed pull requests. You do not get autonomy, an oracle, or enforcement without the CI step above. Those omissions are the point: see [DESIGN.md](DESIGN.md), "7. The register, and what it refuses".

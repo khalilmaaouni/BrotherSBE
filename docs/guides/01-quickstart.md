@@ -38,7 +38,7 @@ contract every time:
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one
+  numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one [severity: gate]
 ```
 
 Before you trust the gates, watch them fail on purpose. The eval suite plants the
@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-388 evals: 388 passed, 0 regressions.
+391 evals: 391 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -129,7 +129,7 @@ python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
 ```
 
 The figure is pinned, derived two independent ways, and both derivations returned
@@ -150,7 +150,7 @@ python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   FAIL     gmv: DRIFT primary=17570 secondary=17998 (zero drift required)
+  numbers   FAIL     gmv: DRIFT primary=17570 secondary=17998 (zero drift required) [severity: gate]
 ```
 
 The gate names the label, both numbers, and the rule. You do not ship a figure whose
@@ -220,7 +220,7 @@ python3 "$SBE/tools/sbe_gate.py" ran ~/sbe-demo
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration
+  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration [severity: gate]
 ```
 
 Now the change is done in the sense the gate means: its check executed and left
@@ -259,7 +259,8 @@ python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo --strict ; echo "exit=$?"
 ```
 
 ```
-  numbers   FAIL     gmv: DRIFT primary=17570 secondary=17998 (zero drift required)
+BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
+  numbers   FAIL     gmv: DRIFT primary=17570 secondary=17998 (zero drift required) [severity: gate]
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 exit=1
 ```
@@ -283,7 +284,18 @@ first). The workflow, verbatim:
 # BrotherSBE enforcement: this is what turns the gates from advisory into blocking.
 # Cloning the skill gives you the tools; this file wires them into your CI so a
 # merge is stopped when a hard gate fails. Copy it into the repo you want guarded.
+#
+# Hardening, because this file is the control everything else rests on:
+# - Actions are pinned to full commit SHAs (the tag each SHA corresponds to is
+#   the trailing comment; both verified against the live repositories with
+#   `git ls-remote` on 2026-07-27), so a moved tag cannot change what runs here.
+# - permissions is read-only: nothing in this workflow needs to write.
+# - The job runs on Linux and macOS. Windows is genuinely untested, not
+#   quietly implied: the two sh tools and the POSIX file-mode tests have never
+#   been exercised there (docs/KNOWN-LIMITS.md).
 name: BrotherSBE gates
+permissions:
+  contents: read
 on: [pull_request]
 env:
   # Where your dossiers live. Empty means "search the whole checkout": every
@@ -356,6 +368,11 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+      # Severity is declared per check and printed on every verdict line: --strict
+      # blocks on gate severity (the lints), and --strict-soft is the visible
+      # opt-in that makes soft-severity (graded) FAILs block too. This workflow
+      # passes both, which is this repository's choice, not a default; drop
+      # --strict-soft to let graded checks fail without stopping a merge.
       - name: Silent-failure lints and code-graded checks block on failure
         run: python3 tools/sbe_score.py --strict --strict-soft .
       # The gates above are only worth what their tests are worth. These two ran
@@ -363,8 +380,14 @@ jobs:
       # than a gate: a fixture no merge runs cannot stop anything.
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
+      # Two passes: the fixed sweep, then a seeded random composition of the
+      # same hollowing operations (--seed). The seeds are fixed so CI is
+      # reproducible; a failing scenario prints its seed in its id. A wider
+      # search is one more --seed here, not new test code.
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
-        run: python3 evals/test_no_data_class.py
+        run: |
+          python3 evals/test_no_data_class.py
+          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
       - name: Tool tests (redaction, permissions, identity, autosave)
         run: python3 tools/test_sbe.py
 ```
