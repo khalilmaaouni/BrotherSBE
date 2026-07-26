@@ -576,6 +576,30 @@ def skeleton(text):
     return "".join(_CONFUSABLES.get(ch, ch) for ch in t)
 
 
+# Every kind of line break, including the Unicode separators a terminal renders
+# as new lines. NOT the Cf class: these are Cc/Zl/Zp and plain_text leaves them
+# alone, because inside a document a newline is structure; inside a ONE-LINE
+# report field it is a forgery vector.
+_LINE_BREAKS = re.compile("[\r\n\v\f\x85\u2028\u2029]+")
+
+
+def one_line(text):
+    """An evidence sentence flattened onto the single line the report owns.
+
+    A verdict is one printed line, and the parsers this project ships (and the
+    humans reading a CI log) take the first line whose first token is a check
+    name. Several evidence strings interpolate receipt-authored values with %s,
+    and nothing anywhere flattened them, so a receipt field containing newlines
+    wrote verdict lines FOR THE OTHER GATES into the report: a directory with
+    no APPROVAL file printed "approval PASS signed commit carries ..." because
+    a figure label said so. The artifact under inspection must not get to write
+    any part of the report except inside its own line, so every print site
+    passes its evidence through this, and a line break becomes the visible
+    two-character escape a reader can see and question.
+    """
+    return _LINE_BREAKS.sub(" \\\\n ", str(text))
+
+
 _BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
 _LINE_COMMENT = re.compile(r"(?:--|#)[^\n]*")
 
