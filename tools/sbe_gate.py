@@ -79,7 +79,7 @@ import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
-                        derivation_fold, distinct, fold, one_line, skeleton, unit_of,
+                        derivation_fold, distinct, fold, one_line, say, skeleton, unit_of,
                         Pruner, evidence_problem, unreadable_identity_words)
 
 MANIFEST = "numbers-manifest.json"
@@ -826,7 +826,7 @@ def main():
             # `numbers` the gate and `numbers/` the directory are both plausible
             # readings, and picking one silently consumed the other: a directory
             # named after a gate was eaten as a selector and root stayed ".".
-            print("sbe_gate: %r is both a gate name and a directory here; pass ./%s for the "
+            say("sbe_gate: %r is both a gate name and a directory here; pass ./%s for the "
                   "directory" % (a, a))
             sys.exit(1)
         if a in GATES:
@@ -837,13 +837,13 @@ def main():
         else:
             # Mirrors sbe_design: an argument this tool cannot read is refused
             # by name, never silently dropped.
-            print("sbe_gate: %r is neither a gate name (%s) nor a directory."
+            say("sbe_gate: %r is neither a gate name (%s) nor a directory."
                   % (a, ", ".join(GATES)))
             sys.exit(1)
     if len(roots) > 1:
         # The last one used to win in silence, so the first directory was
         # neither checked nor mentioned.
-        print("sbe_gate: one directory at a time, got %d (%s)."
+        say("sbe_gate: one directory at a time, got %d (%s)."
               % (len(roots), ", ".join(roots)))
         sys.exit(1)
     # The directory this tool examines is the directory it was told to examine.
@@ -870,9 +870,9 @@ def main():
         # and a label containing newlines used to write verdict lines for the
         # OTHER gates into this report, which the report's own parsers then read.
         # The artifact under inspection writes nothing outside its own line.
-        print("  %-9s %-8s %s [severity: %s]" % (name, verdict, one_line(ev), GATES[name].severity))
+        say("  %-9s %-8s %s [severity: %s]" % (name, verdict, one_line(ev), GATES[name].severity))
     if strict and fails:
-        print("STRICT: %d hard gate(s) failed; exiting nonzero to block the merge." % fails)
+        say("STRICT: %d hard gate(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)
     sys.exit(0)
 
@@ -882,5 +882,5 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         # A broken gate must not silently pass work. In strict mode a crash blocks.
-        print("sbe_gate: error %r" % (e,))
+        say("sbe_gate: error %r" % (e,))
         sys.exit(1 if "--strict" in sys.argv else 0)

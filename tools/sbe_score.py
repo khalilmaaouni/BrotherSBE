@@ -21,7 +21,7 @@ from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSION
                           real_sessions)
 from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, derivation_fold,
                         distinct, Pruner, evidence_problem, glob_with_denials, numeric,
-                        one_line, without_comments)
+                        one_line, say, without_comments)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -963,10 +963,11 @@ def main():
     for n, v, e in results:
         # one_line: evidence quotes ledger fields and file names, and a value
         # carrying a newline must not get to write its own report lines.
-        print("%-*s  %-7s  %s [severity: %s]" % (width, n, v, one_line(e), CHECKS[n].severity))
-    print("\n%d checks: %d PASS, %d FAIL, %d NO-DATA. LLM judge scores only the residue."
-          % (len(results), sum(1 for _, v, _ in results if v == "PASS"), fails,
-             sum(1 for _, v, _ in results if v == "NO-DATA")))
+        say("%-*s  %-7s  %s [severity: %s]" % (width, n, v, one_line(e), CHECKS[n].severity))
+    print("")
+    say("%d checks: %d PASS, %d FAIL, %d NO-DATA. LLM judge scores only the residue."
+        % (len(results), sum(1 for _, v, _ in results if v == "PASS"), fails,
+           sum(1 for _, v, _ in results if v == "NO-DATA")))
     # Two modes, same checks: the local hook stays advisory (exit 0, never blocks a
     # session), but strict runs exit nonzero so CI can block a merge. Which FAILs
     # block is the severity each check declared at write time, printed on its
@@ -979,14 +980,14 @@ def main():
     strict_soft = "--strict-soft" in sys.argv
     strict = "--strict" in sys.argv or strict_soft
     if strict and gate_fails:
-        print("STRICT: %d gate-severity check(s) failed; exiting nonzero to fail the CI gate." % gate_fails)
+        say("STRICT: %d gate-severity check(s) failed; exiting nonzero to fail the CI gate." % gate_fails)
         sys.exit(1)
     if strict_soft and soft_fails:
-        print("STRICT-SOFT: %d soft-severity check(s) failed; exiting nonzero because "
+        say("STRICT-SOFT: %d soft-severity check(s) failed; exiting nonzero because "
               "--strict-soft opts graded checks into blocking." % soft_fails)
         sys.exit(1)
     if strict and soft_fails:
-        print("NOTE: %d soft-severity check(s) failed. --strict blocks on gate severity only; "
+        say("NOTE: %d soft-severity check(s) failed. --strict blocks on gate severity only; "
               "add --strict-soft to block on these too." % soft_fails)
     sys.exit(0)
 
@@ -997,5 +998,5 @@ if __name__ == "__main__":
     except Exception as e:
         # A broken checker must not silently waive the gate. In strict mode a crash
         # blocks, exactly as in sbe_gate.py; advisory mode still never blocks a session.
-        print("sbe_score: error %r" % (e,))
+        say("sbe_score: error %r" % (e,))
         sys.exit(1 if ("--strict" in sys.argv or "--strict-soft" in sys.argv) else 0)

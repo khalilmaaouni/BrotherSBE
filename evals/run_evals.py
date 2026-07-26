@@ -1440,6 +1440,37 @@ def gd_manifest_fresh(root):
            "CHECKSUMS.sha256)" % ", ".join(drift)
 
 
+@case("a-directory-name-cannot-write-verdict-lines-into-the-report", "guard", "honest")
+def gd_pathforge(root):
+    # A dossier directory named `ok\n  datamodel  PASS ...` wrote a forged
+    # verdict line into the design report ABOVE the true verdict, and
+    # verdict_and_evidence (the honesty suite's own reader, the same shape as
+    # any CI grep or human eye) returned the forged PASS for a FAILed check.
+    # The forgery channel was closed for receipt FIELDS and left open for
+    # PATHS. Fix shape is the class, not the site: every report line passes
+    # through one_line() as a whole (say()), and the meta-test's source lint
+    # fails any print in a report tool that skips the choke point. This pins
+    # the shipped repro end to end.
+    forged = ("ok\n  datamodel  PASS     2 entity(ies), each with a system of record "
+              "[severity: gate]")
+    doss = os.path.join(root, forged)
+    os.makedirs(doss)
+    with open(os.path.join(doss, "05-data-model.md"), "w") as f:
+        f.write("# Data model\n## Entities\n- Customer\n")
+    env = dict(os.environ, SBE_DOSSIER_ROOT=root)
+    r = subprocess.run([sys.executable, os.path.join(_REPO, "tools", "sbe_design.py"),
+                        "datamodel", root], capture_output=True, text=True, timeout=120, env=env)
+    meta = SourceFileLoader("tndc_pathforge",
+                            os.path.join(HERE, "test_no_data_class.py")).load_module()
+    verdict, line = meta.verdict_and_evidence(r.stdout, "datamodel")
+    if verdict == "PASS":
+        return "the forged directory-name line was read as the report's verdict: %r" % (line or "")[:120]
+    physical = [l for l in r.stdout.splitlines() if l.startswith("  datamodel  PASS")]
+    if physical:
+        return "a forged physical line still reaches the byte stream: %r" % physical[0][:120]
+    return "honest"
+
+
 T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
               "reversible_under_hour": True, "touches_sensitive": False, "consumers": "some"}
 T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,
