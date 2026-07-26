@@ -1461,6 +1461,48 @@ def d2(root):
     write(root, "01-purpose.md", PURPOSE)
 
 
+@case("an-all-common-word-artifact-is-filler-not-an-unmeasured-script", "artifacts", "FAIL")
+def d2b(root):
+    # The provoked refusal: an artifact written entirely in stopwords yielded
+    # the empty term set, took the branch whose stated purpose is non-Latin
+    # scripts, and the gate FAIL became a PASS whose printed reason blamed the
+    # writing system of an ASCII English file. Two defects, both pinned here:
+    # the sentence must be true about the file (the extractor segmented it
+    # fine; the words were common), and a refusal must never upgrade a FAIL.
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "04-technology-map.md", "# Technology map\nThe payment-router service talks to "
+                                        "the ledger-writer component over the settlement queue.\n")
+    write(root, "01-purpose.md", "# Purpose\nThe system changes the data and the process uses the "
+                                 "same design document.\nEvery step of the plan will update the "
+                                 "record and the result of the work.\n")
+
+
+@case("an-artifact-the-extractor-cannot-segment-is-nodata-not-pass", "artifacts", "NO-DATA")
+def d2c(root):
+    # Coherence genuinely not measurable: no run of three or more word
+    # characters anywhere, so the extractor reads no word at all. The honest
+    # verdict is NO-DATA naming the limit, never a PASS whose leading clause
+    # asserts the coherence that was not measured.
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "04-technology-map.md", "# Technology map\nThe payment-router service talks to "
+                                        "the ledger-writer component over the settlement queue.\n")
+    write(root, "01-purpose.md", "# Purpose\n目的 は 別 の 話 で あり この 設計 と は 関係 ない 事 を "
+                                 "記す 熟成 の 手入 れ に つい て 記す\n")
+
+
+@case("cross-script-siblings-are-nodata-not-pass", "artifacts", "NO-DATA")
+def d2d(root):
+    # The sibling branch of the same escape: a wholly-Japanese purpose beside a
+    # wholly-English map shares no script, so the shared-word test cannot run.
+    # Unmeasured is NO-DATA here exactly as it is everywhere else in the tool.
+    write(root, "00-intake.json", {"tier": "T1", "answers": T1_ANSWERS, "override": None})
+    write(root, "04-technology-map.md", "# Technology map\nThe payment-router service talks to "
+                                        "the ledger-writer component over the settlement queue.\n")
+    write(root, "01-purpose.md", "# Purpose\n支払経路の設計目的を述べる。\n"
+                                 "決済台帳と照合処理の関係を整理する。\n"
+                                 "部分的な失敗を検知する仕組みを定める。\n")
+
+
 @case("adr-without-rejected-alternatives-caught", "adr", "FAIL")
 def d3(root):
     write(root, "03-adr.md", "# ADR\n## Decision\nUse a modular monolith.\n## Consequences\nOne deploy.\n")
