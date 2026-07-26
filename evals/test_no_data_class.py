@@ -127,7 +127,17 @@ VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")
                   # "still unknown", which is not in a list that holds
                   # "unknown". This token proves the vacuity test re-reads its
                   # own reduction's output to a fixpoint.
-                  ("v", "copula-remnant", "is still unknown")]
+                  ("v", "copula-remnant", "is still unknown"),
+                  # The invisible-wearing placeholder: a zero-width space, a
+                  # soft hyphen, a fullwidth spelling. Each renders as TODO on
+                  # every screen, and each defeated a normalization that
+                  # stripped a hand-typed five-code-point list instead of the
+                  # class: the value was present, non-empty, and said nothing
+                  # a reader can see. These three prove the vacuity test reads
+                  # the text as it renders, not as it is encoded.
+                  ("v", "todo-zero-width", "TODO\u200b"),
+                  ("v", "todo-soft-hyphen", "T\u00adODO"),
+                  ("v", "todo-fullwidth", "\uff34\uff2f\uff24\uff2f")]
 
 # Values that are numbers and still record no measurement. json.load accepts a
 # bare NaN, `NaN <= 0` is False, and a hand-rolled duration check accepted one
