@@ -76,7 +76,7 @@ import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
-                        derivation_fold, distinct, fold, Pruner)
+                        derivation_fold, distinct, fold, Pruner, evidence_problem)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -98,7 +98,14 @@ def load_receipt(path):
     never ran, nothing printed a verdict for any of them, and advisory mode
     exited 0. A crash that deletes a gate is the absent-check defect wearing a
     traceback. The type is checked here, once, where the file is opened.
+
+    ACCESS is checked BEFORE open(): a FIFO where a receipt was expected used to
+    hang this tool forever in both modes, with no verdict line at all, which is
+    worse than any crash because a crash at least prints a FAIL.
     """
+    problem = evidence_problem(path)
+    if problem:
+        return None, problem
     try:
         with open(path) as f:
             obj = json.load(f)
@@ -138,16 +145,29 @@ def find(root, name):
     project's headline defect class wearing the walker's clothes.
     """
     hits = []
+    misplaced = []
     pruner = Pruner()
-    for dp, dns, fns in os.walk(root):
+    # onerror: a directory this walk cannot enter must land in the note, not in
+    # silence. os.walk swallows the OSError by default, so a chmod 000 directory
+    # holding a receipt used to vanish from a sentence that read as complete.
+    for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
         # Match directory NAMES, not a substring of the path: `.git` as a
         # substring test also hid `.github/`, so the workflow that wires these
         # gates into CI was invisible to every one of them. And then not by name
         # at all: see sbe_checks.skip_reason.
+        if name in dns:
+            # A DIRECTORY wearing the receipt's name is not a receipt, and
+            # consuming the name in silence printed "no <receipt> found" over a
+            # tree holding something by that name.
+            misplaced.append(os.path.join(dp, name))
         dns[:] = pruner(dp, dns)
         if name in fns:
             hits.append(os.path.join(dp, name))
-    return hits, pruner.note(lambda f: f == name)
+    note = pruner.note(lambda f: f == name)
+    if misplaced:
+        note += ("; a DIRECTORY named %s sits at %s and was not read, because a receipt "
+                 "is a file" % (name, ", ".join(misplaced[:2])))
+    return hits, note
 
 
 def _partial(nothing, checked, kind, unit):

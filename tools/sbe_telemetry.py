@@ -57,7 +57,7 @@ fld() everywhere.
 import json, os, sys, glob, re, datetime, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import distinct
+from sbe_checks import distinct, evidence_problem
 
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
@@ -515,6 +515,13 @@ def prediction_counts():
     with gate_numbers and the other two thresholds that did not have it.
     """
     out = {"sealed": 0, "scored": 0, "hits": 0, "note": ""}
+    # ACCESS before open(): a FIFO at this path would hang the scorecard forever,
+    # and an unreadable file would read as an absent ledger. The counts stay
+    # zero and the note says why; the scorer's own check FAILs on the same test.
+    problem = evidence_problem(OPERATOR_MODEL)
+    if problem:
+        out["note"] = "; %s is %s, so no prediction row was read" % (OPERATOR_MODEL, problem)
+        return out
     if not os.path.isfile(OPERATOR_MODEL):
         return out
     in_ledger = False

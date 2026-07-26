@@ -3225,6 +3225,153 @@ def w13(root):
             % (m.group(0), got[0], got[1]))
 
 
+# ---------------------------------------------------------------------------
+# The ACCESS axis: evidence that exists and cannot be opened. The suite held
+# zero occurrences of chmod, symlink or mkfifo, so no fixture had ever
+# distinguished a check that read clean evidence from a check that read nothing.
+# The meta-test sweeps the class per check; these pin the mixed shapes it cannot
+# generate (some evidence readable, some not) and the evidence sentences.
+
+_CAN_DROP_ACCESS = os.name == "posix" and os.geteuid() != 0
+
+
+@case("an-unreadable-source-file-fails-the-lint", "lints", "FAIL")
+def x1(root):
+    # chmod 000 on a source file removed it from the lint, from the count, and
+    # from the sentence: "1 file(s) scanned, clean" over a directory holding a
+    # swallowed error the scan was refused access to.
+    if not _CAN_DROP_ACCESS:
+        return "FAIL"      # as root, access cannot be taken away; the meta-test declares the same limit
+    write(root, "clean.py", "def f():\n    return 1\n")
+    write(root, "evil.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    os.chmod(os.path.join(root, "evil.py"), 0)
+    return run_score_lints([root])
+
+
+@case("an-unreadable-directory-fails-the-lint", "lints", "FAIL")
+def x2(root):
+    if not _CAN_DROP_ACCESS:
+        return "FAIL"
+    write(root, "ok.py", "def f():\n    return 1\n")
+    write(root, "locked/evil.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    os.chmod(os.path.join(root, "locked"), 0)
+    try:
+        return run_score_lints([root])
+    finally:
+        os.chmod(os.path.join(root, "locked"), 0o755)
+
+
+@case("a-symlinked-source-directory-is-disclosed-not-silent", "evidence", "disclosed")
+def x3(root):
+    # os.walk does not follow directory symlinks, so a symlinked tree holding a
+    # hit was neither walked, nor pruned, nor recorded, and the verdict printed
+    # "clean" over a set that silently excluded it.
+    write(root, "repo/ok.py", "def f():\n    return 1\n")
+    write(root, "elsewhere/evil.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    os.symlink(os.path.join(root, "elsewhere"), os.path.join(root, "repo", "vendor_link"))
+    line = score_lint_line([os.path.join(root, "repo")])
+    return ("disclosed" if "symlinked directory" in line and "vendor_link" in line
+            else line or "no-lint-line")
+
+
+@case("unreadable-registry-files-never-shrink-the-registry", "score", "FAIL")
+def x4(root):
+    # chmod 000 on the registry files holding the violations turned two FAILs
+    # into two PASSes whose sentences said "untagged in: none", over a registry
+    # set silently reduced from five files to one.
+    if not _CAN_DROP_ACCESS:
+        return "FAIL"
+    for i in (1, 2, 3, 4):
+        write(root, "reg/bad%d.md" % i,
+              "# State\n## Fences\n- agent: builder | objective: ship gate %d | open\n" % i)
+    write(root, "reg/good.md",
+          "# State\n## Fences\n- agent: builder | tier T2 | objective: ship the refund gate\n")
+    for i in (1, 2, 3, 4):
+        os.chmod(os.path.join(root, "reg", "bad%d.md" % i), 0)
+    return score_check("budget-vs-tier", root,
+                       env={"BROTHERSBE_REGISTRIES": os.path.join(root, "reg", "*.md")})
+
+
+@case("an-unreadable-artifact-is-a-broken-claim-not-an-absence", "datamodel", "FAIL")
+def x5(root):
+    if not _CAN_DROP_ACCESS:
+        # As root, read access cannot be taken away, so the fixture degrades to
+        # a model that FAILs for a readable reason; the meta-test declares the
+        # same host limit on its access scenarios.
+        write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer\n"
+                                        "## Relationships\n- Customer to Customer: one-to-one.\n")
+        return
+    write(root, "05-data-model.md", "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+                                    "## Relationships\n- Customer to Customer: one-to-one.\n")
+    os.chmod(os.path.join(root, "05-data-model.md"), 0)
+
+
+@case("a-directory-wearing-an-artifacts-name-is-not-an-absence", "evidence", "named")
+def x6(root):
+    # `mkdir 05-data-model.md` used to produce "no 05-data-model.md in this
+    # dossier", a sentence asserting absence over something present. The intake
+    # beside it is what makes the directory a dossier the walk enters.
+    write(root, "00-intake.json", "{}")
+    os.makedirs(os.path.join(root, "05-data-model.md"))
+    line = gate_line(root, "datamodel")
+    if line.split()[1:2] != ["FAIL"]:
+        return line
+    return "named" if "a directory, not a file" in line else line
+
+
+@case("an-unenterable-directory-is-named-not-vanished", "evidence", "named")
+def x7(root):
+    # chmod 000 on a dossier directory made the run print "no directory contains
+    # 00-intake.json" about a tree that held one, with five checks silently
+    # removed at exit 0.
+    if not _CAN_DROP_ACCESS:
+        return "named"
+    write(root, "design/00-intake.json", "{}")
+    os.chmod(os.path.join(root, "design"), 0)
+    try:
+        out = subprocess.run([sys.executable, DESIGN, root], capture_output=True, text=True,
+                             env=dict(os.environ, SBE_DOSSIER_ROOT=""))
+    finally:
+        os.chmod(os.path.join(root, "design"), 0o755)
+    return ("named" if "could not be entered" in out.stdout else
+            "the refused directory is not named anywhere in the run")
+
+
+@case("a-fifo-receipt-is-refused-not-hung", "gaterun", "FAIL")
+def x8(root):
+    # A FIFO where a receipt was expected hung all three tools forever, in both
+    # modes, with no verdict line at all: worse than a crash, because a crash at
+    # least prints a FAIL.
+    os.mkfifo(os.path.join(root, "ran-receipt.json"))
+    try:
+        out = subprocess.run([sys.executable, GATE, "ran", root], capture_output=True,
+                             text=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        return "the tool hung on a FIFO"
+    for line in out.stdout.splitlines():
+        if line.strip().startswith("ran"):
+            return line.split()[1]
+    return "no-verdict-line"
+
+
+@case("a-pruned-tree-past-the-inspection-budget-is-still-disclosed", "evidence", "disclosed")
+def x9(root):
+    # The 4000-directory inspection budget was decremented in silence: once it
+    # ran out, every remaining pruned tree was discarded without being looked
+    # at, hidden() returned the same [] it returns when nothing was hidden, and
+    # the disclosure vanished on exactly the trees it exists for (a real
+    # node_modules routinely exceeds 4000 directories).
+    write(root, "clean.py", "def f():\n    return 1\n")
+    write(root, "aaa_cache/CACHEDIR.TAG", "")
+    for i in range(4100):
+        os.makedirs(os.path.join(root, "aaa_cache", "d%04d" % i))
+    write(root, "zzz_cache/CACHEDIR.TAG", "")
+    write(root, "zzz_cache/evil.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    line = score_lint_line([root])
+    return ("disclosed" if "not fully inspected" in line and "budget ran out" in line
+            else line or "no-lint-line")
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

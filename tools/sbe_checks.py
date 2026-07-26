@@ -51,9 +51,48 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
-import json, math, os, re
+import errno, json, math, os, re, stat
 
 KINDS = ("json", "jsonl", "text", "tree", "git")
+
+
+def evidence_problem(path):
+    """Why this path exists and still cannot be read as evidence, or "" if it can.
+
+    The ACCESS axis. Seven review rounds probed what the evidence SAYS: absent
+    files, absent keys, empty values, vacuous values, wrong order. The axis nobody
+    probed was whether the tool could OPEN the evidence at all: a chmod 000 source
+    file vanished from a lint's count, a chmod 000 registry file turned two FAILs
+    into two PASSes whose sentences said "none", and a FIFO where a receipt was
+    expected hung every tool forever with no verdict in either mode.
+
+    The rule, in one place so every tool applies the same one: a path that is
+    absent is an absence (the caller's NO-DATA); a path that EXISTS and cannot be
+    read is a broken claim and is named. A FIFO, socket or device is refused here
+    BY ITS STAT, before any open(), because open() on a FIFO blocks forever and a
+    gate that vanishes is worse than a gate that fails.
+
+    Returns "" both for an absent path and for a readable regular file: the
+    caller distinguishes those two with os.path.lexists, which never blocks.
+    """
+    if not os.path.lexists(path):
+        return ""
+    try:
+        st = os.stat(path)
+    except OSError as e:
+        if getattr(e, "errno", None) == errno.ELOOP:
+            return "a symlink loop, which resolves to nothing"
+        if isinstance(e, FileNotFoundError):
+            return "a symlink pointing at nothing"
+        return "present but not statable (%s)" % type(e).__name__
+    if stat.S_ISDIR(st.st_mode):
+        return "a directory, not a file"
+    if not stat.S_ISREG(st.st_mode):
+        return ("not a regular file (a pipe, socket or device; opening one can block "
+                "forever, so it is refused by name instead)")
+    if not os.access(path, os.R_OK):
+        return "present but unreadable (permission denied)"
+    return ""
 
 # Directories no check walks into, in one place because the three tools that walk
 # a repository each carried their own list and the shortest of them was on the one
@@ -133,38 +172,92 @@ class Pruner:
 
     def __init__(self):
         self.pruned = []            # (path, reason)
+        self.denied = []            # directories os.walk could not enter
 
     def __call__(self, parent, dirnames):
         """For os.walk's `dns[:] = pruner(dp, dns)`."""
         keep = []
         for d in sorted(dirnames):
+            path = os.path.join(parent, d)
+            if os.path.islink(path):
+                # os.walk(followlinks=False) never descends into a symlinked
+                # directory, and nothing said so: a symlinked source tree holding
+                # a lint hit was neither walked, nor pruned, nor recorded, and the
+                # verdict printed "clean" over a set that silently excluded it.
+                # Recorded as pruned, so hidden() inspects the target and note()
+                # names it when it holds evidence this walk was looking for.
+                self.pruned.append((path, "a symlinked directory, which this walk does not follow"))
+                continue
             why = skip_reason(parent, d)
             if why is None:
                 keep.append(d)
             else:
-                self.pruned.append((os.path.join(parent, d), why))
+                self.pruned.append((path, why))
         return keep
 
+    def onerror(self, err):
+        """For os.walk's `onerror=`: a directory the walk could not enter.
+
+        os.walk swallows the OSError and yields nothing by default, so a
+        chmod 000 directory was neither walked, nor pruned, nor reported, and
+        the meta-test's own guarantee sentence returned to "0 failure(s)" over a
+        tree it could not see into. Every walker passes this, and note() names
+        what was refused on every verdict.
+        """
+        self.denied.append(getattr(err, "filename", None) or "?")
+
     def hidden(self, wanted):
-        """Pruned trees that hold a file this walk was looking for, `wanted(name)`."""
-        out, budget = [], self.LIMIT
+        """(pruned trees holding a wanted file, pruned trees the budget left uninspected).
+
+        The budget used to be silent: once its 4000 directories were spent, every
+        remaining pruned path was discarded without wanted() being called, and
+        hidden() returned the same [] it returns when nothing was hidden. A real
+        node_modules exceeds 4000 directories, so on exactly the trees this
+        machinery exists for, the disclosure vanished. Exhaustion is now its own
+        channel and note() prints it.
+        """
+        out, uninspected, budget = [], [], self.LIMIT
         for path, why in self.pruned:
+            if budget <= 0:
+                uninspected.append("%s (%s)" % (path, why))
+                continue
+            found = False
             for _dp, _dns, fns in os.walk(path):
                 budget -= 1
-                if budget <= 0:
-                    break
                 if any(wanted(f) for f in fns):
                     out.append("%s (%s)" % (path, why))
+                    found = True
                     break
-        return sorted(set(out))
+                if budget <= 0:
+                    break
+            if budget <= 0 and not found:
+                uninspected.append("%s (%s)" % (path, why))
+        return sorted(set(out)), sorted(set(uninspected))
 
     def note(self, wanted):
-        """The sentence a verdict carries when pruning removed candidate evidence."""
-        h = self.hidden(wanted)
-        if not h:
-            return ""
-        return ("; %d pruned director(y/ies) hold file(s) this check reads and were NOT examined, "
-                "so this verdict does not cover them: %s" % (len(h), "; ".join(h[:4])))
+        """The sentence a verdict carries when this walk did not examine something.
+
+        Three channels, each printed: pruned trees that hold candidate evidence,
+        pruned trees the inspection budget never reached, and directories the
+        walk was refused entry to. A verdict that stays silent about any of them
+        is a completeness sentence over a set the tool truncated itself.
+        """
+        h, uninspected = self.hidden(wanted)
+        parts = []
+        if h:
+            parts.append("; %d pruned director(y/ies) hold file(s) this check reads and were NOT "
+                         "examined, so this verdict does not cover them: %s"
+                         % (len(h), "; ".join(h[:4])))
+        if uninspected:
+            parts.append("; %d pruned director(y/ies) were not fully inspected (the %d-directory "
+                         "inspection budget ran out), so this verdict cannot say whether they hold "
+                         "files this check reads: %s"
+                         % (len(uninspected), self.LIMIT, "; ".join(uninspected[:4])))
+        if self.denied:
+            d = sorted(set(self.denied))
+            parts.append("; %d director(y/ies) could not be entered (permission or I/O error), so "
+                         "this verdict does not cover them: %s" % (len(d), "; ".join(d[:4])))
+        return "".join(parts)
 
 
 VERDICTS = ("PASS", "FAIL", "NO-DATA")

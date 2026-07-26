@@ -31,7 +31,7 @@ import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import (Check, run_guarded, answered, vacuous, domain_vacuous, all_vacuous,
-                        distinct, Pruner)
+                        distinct, Pruner, evidence_problem)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -81,11 +81,32 @@ ARTIFACT_MIN_CHARS = 8
 
 
 def read(root, name):
+    """The artifact's text, or None when nothing readable is there.
+
+    None is the ABSENCE answer only. A path that exists and cannot be read (a
+    chmod 000 file, a directory wearing the name, a FIFO, a broken symlink) is
+    the ACCESS axis, reported by read_problem below; every check asks that
+    question first, because "no 05-data-model.md in this dossier" printed over a
+    file that is present and unreadable is a false sentence, and a FIFO opened
+    here used to hang the whole tool with no verdict in either mode.
+
+    A UTF-8 byte-order mark is presentation, not content: left in place it glued
+    itself to the first heading, which then matched no heading pattern, so a
+    BOM'd artifact silently lost its first section.
+    """
     path = os.path.join(root, name)
+    if evidence_problem(path):
+        return None
     try:
-        return open(path, errors="replace").read()
+        text = open(path, errors="replace").read()
     except OSError:
         return None
+    return text.lstrip("\ufeff")
+
+
+def read_problem(root, name):
+    """Why this artifact exists here and cannot be read, or "" (absent or readable)."""
+    return evidence_problem(os.path.join(root, name))
 
 
 def _substantive_lines(t):
@@ -274,6 +295,10 @@ def _reviewability_problem(text, what, min_words=OVERRIDE_MIN_WORDS,
 
 
 def check_artifacts(root):
+    problem = read_problem(root, INTAKE)
+    if problem:
+        return "FAIL", ("%s is %s, so no tier can be read; an intake that exists and cannot be "
+                        "read is a broken claim, not an absence" % (INTAKE, problem))
     intake = read(root, INTAKE)
     if intake is None:
         others = sorted(n for n in ARTIFACT_FILES.values() if read(root, n) is not None)
@@ -383,8 +408,13 @@ def check_artifacts(root):
         return "NO-DATA", ("tier %s requires no artifact, so this check opened none and there is "
                            "nothing here it can vouch for%s" % (tier, label))
     wanted = [ARTIFACT_FILES[n] for n in need]
-    missing = [n for n in wanted if read(root, n) is None]
-    empty = [n for n in wanted if n not in missing and not present(root, n)]
+    # The ACCESS axis: an artifact that exists and cannot be read is neither
+    # missing nor empty, and reporting it as "missing" is a false sentence about
+    # a file that is sitting right there.
+    unreadable = ["%s (%s)" % (n, read_problem(root, n)) for n in wanted if read_problem(root, n)]
+    missing = [n for n in wanted if read(root, n) is None and not read_problem(root, n)]
+    empty = [n for n in wanted if n not in missing and not read_problem(root, n)
+             and not present(root, n)]
     # The content rule four of the seven artifacts never had: see
     # _coherence_problem. Only artifacts that are present and non-empty are asked,
     # because "this file is empty" and "this file is about something else" are two
@@ -405,10 +435,13 @@ def check_artifacts(root):
             unmeasured.append(n)
         elif problem:
             unrelated.append(problem)
-    if missing or empty or unrelated:
+    if missing or empty or unrelated or unreadable:
         parts = []
         if missing:
             parts.append("missing: %s" % ", ".join(missing))
+        if unreadable:
+            parts.append("present but not readable: %s (an artifact this check cannot open is a "
+                         "broken claim, not an absent one)" % ", ".join(unreadable))
         if empty:
             parts.append("present but carrying no content of their own: %s (a zero-byte artifact, one "
                          "holding only headings and comments, one whose every line is a placeholder, "
@@ -437,7 +470,16 @@ def check_placeholder(root):
     """A copied, unedited template is not a design. Reject the shipped marker."""
     found = {}
     blank = []
+    unreadable = []
     for name in ARTIFACT_FILES.values():
+        problem = read_problem(root, name)
+        if problem:
+            # A file this check could not open is a file it cannot call scanned,
+            # and "none still carrying an unfilled-template marker" over a set
+            # that silently excluded it is a completeness sentence over a
+            # truncated set.
+            unreadable.append("%s (%s)" % (name, problem))
+            continue
         t = read(root, name)
         if t is None:
             continue
@@ -450,6 +492,11 @@ def check_placeholder(root):
             blank.append(name)
         else:
             found[name] = t
+    if unreadable:
+        return "FAIL", ("artifact(s) present that this check could not read: %s; a file that "
+                        "cannot be opened cannot be scanned for the unfilled-template marker, so "
+                        "passing over it would be reporting a clean scan of nothing"
+                        % ", ".join(unreadable))
     if not found and not blank:
         return "NO-DATA", "no dossier artifacts here, so nothing to check for unfilled template sections"
     if blank:
@@ -682,6 +729,10 @@ def _required_section(t, label, problems):
 
 
 def check_adr(root):
+    problem = read_problem(root, ARTIFACT_FILES["03"])
+    if problem:
+        return "FAIL", ("%s is %s; an artifact that exists and cannot be read is a broken claim, "
+                        "not an absent one" % (ARTIFACT_FILES["03"], problem))
     t = read(root, ARTIFACT_FILES["03"])
     if t is None:
         return "NO-DATA", "no 03-adr.md in this dossier"
@@ -963,6 +1014,10 @@ def _stated_value(v):
 
 
 def check_data_model(root):
+    problem = read_problem(root, ARTIFACT_FILES["05"])
+    if problem:
+        return "FAIL", ("%s is %s; an artifact that exists and cannot be read is a broken claim, "
+                        "not an absent one" % (ARTIFACT_FILES["05"], problem))
     t = read(root, ARTIFACT_FILES["05"])
     if t is None:
         return "NO-DATA", "no 05-data-model.md in this dossier"
@@ -1416,6 +1471,10 @@ def _declared_states(root):
 
 
 def check_diagrams(root):
+    problem = read_problem(root, ARTIFACT_FILES["06"])
+    if problem:
+        return "FAIL", ("%s is %s; an artifact that exists and cannot be read is a broken claim, "
+                        "not an absent one" % (ARTIFACT_FILES["06"], problem))
     t = read(root, ARTIFACT_FILES["06"])
     if t is None:
         return "NO-DATA", "no 06-diagrams.md in this dossier"
@@ -1652,7 +1711,12 @@ def find_dossiers(root):
     """
     hits, exempt, refused = [], [], []
     pruner = Pruner()
-    for dp, dns, fns in os.walk(root):
+    # onerror: a directory this walk cannot enter may hold a dossier, and os.walk
+    # swallows the refusal by default, so a chmod 000 design/ directory made the
+    # run print "no directory contains 00-intake.json" about a tree that held
+    # one, at exit 0, with five checks silently removed. The refusal now lands in
+    # the note every dossier line prints.
+    for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
         dns[:] = pruner(dp, dns)
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
@@ -1777,8 +1841,16 @@ def main():
         # verdict the check itself produced, so a scenario cannot be counted as
         # covering a check it never reached. Change it in both places or not at all.
         for name in which:
-            print("  %-10s %-8s %s" % (name, "NO-DATA",
-                  "no dossier under %s, so this check opened no file%s" % (root, pruned)))
+            # Two different absences, two different sentences: "no dossier under
+            # X" printed two lines under a waiver naming one was a run
+            # contradicting itself. The load-bearing phrase stays in both.
+            if exempt:
+                print("  %-10s %-8s %s" % (name, "NO-DATA",
+                      "every dossier under %s is waived, so this check opened no file%s"
+                      % (root, pruned)))
+            else:
+                print("  %-10s %-8s %s" % (name, "NO-DATA",
+                      "no dossier under %s, so this check opened no file%s" % (root, pruned)))
     if targets and pruned:
         # A dossier the walk refused to enter is a dossier no verdict below covers.
         print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
