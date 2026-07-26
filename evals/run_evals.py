@@ -374,9 +374,51 @@ def c13g(root):
     return _approval_with_sig(root, "G")
 
 
-@case("valid-untrusted-signature-U-approval-passes", "sig", "PASS")
+@case("valid-untrusted-signature-U-is-not-an-approval", "sig", "NO-DATA")
 def c13g2(root):
+    # U is "cryptographically valid, no matching principal". Under SSH signing,
+    # the default for teams adopting commit signing today, that is exactly what
+    # a key the agent generated for itself produces ("No principal matched"),
+    # so accepting U made L9's "an agent without the private key cannot produce
+    # it" false in four commands: ssh-keygen, two git configs, one commit.
     return _approval_with_sig(root, "U")
+
+
+@case("a-trailing-period-does-not-make-a-second-person", "sig", "FAIL")
+def c13i(root):
+    return _approval_with_sig(root, "G", approver="Dana Author.")
+
+
+@case("a-reordered-name-does-not-make-a-second-person", "sig", "FAIL")
+def c13i2(root):
+    return _approval_with_sig(root, "G", approver="Author, Dana")
+
+
+@case("an-initial-does-not-make-a-second-person", "sig", "FAIL")
+def c13i3(root):
+    return _approval_with_sig(root, "G", approver="D. Author")
+
+
+@case("a-plus-address-does-not-make-a-second-person", "sig", "FAIL")
+def c13i4(root):
+    return _approval_with_sig(root, "G", approver="dana+ops@example.com")
+
+
+@case("a-role-suffix-does-not-make-a-second-person", "sig", "FAIL")
+def c13i5(root):
+    return _approval_with_sig(root, "G", approver="Dana Author (approver)")
+
+
+@case("approved-by-todo-names-no-approver", "sig", "FAIL")
+def c13i6(root):
+    return _approval_with_sig(root, "G", approver="TODO")
+
+
+@case("a-genuinely-different-approver-still-passes", "sig", "PASS")
+def c13i7(root):
+    # The control: hardening the identity comparison must not read every
+    # colleague as the author.
+    return _approval_with_sig(root, "G", approver="Robin Reviewer <robin@example.com>")
 
 
 @case("bad-signature-B-is-not-an-approval", "sig", "FAIL")

@@ -266,8 +266,10 @@ file and the HEAD commit trailers.
   (no signature), and similar.
 
 The binding rule: an `Approved-by:` trailer counts only when the signature state is
-`G` or `U` (this host verified the signature). `E` means this host could not check
-the signature, which is NO-DATA and never an approval. A `Reviewed-in:` trailer
+`G` (this host verified the signature against a trusted key). `U` means the
+signature is valid but the key matched no trusted principal, which is what a
+self-generated key produces under SSH signing, so it is NO-DATA. `E` means this
+host could not check the signature, which is NO-DATA and never an approval. A `Reviewed-in:` trailer
 counts as a platform review id on its own.
 
 ### Worked FAIL
@@ -500,7 +502,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:666, sbe_telemetry.py:286, sbe_telemetry.py:743, sbe_telemetry.py:796, sbe_telemetry.py:941, and 3 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:746, sbe_telemetry.py:286, sbe_telemetry.py:743, sbe_telemetry.py:796, sbe_telemetry.py:941, and 3 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over
@@ -538,7 +540,7 @@ the four gates hold your work to, applied to the gates themselves.
 | --- | --- | --- | --- |
 | numbers | `numbers-manifest.json` | `snapshot_id`, `query` vs `second_derivation`, `rerun.ran`, `rerun.primary`/`secondary` | a total that disagrees with its own components |
 | migration | `migration-receipt.json` | `forward`/`reverse.ran_against_restore`, `reverse.rehearsal_run_id`, `row_counts.before`/`after_reverse` | a reverse nobody rehearsed against a restore |
-| approval | `APPROVAL` + commit trailers | `Approved-by:` with a signature this host verified (`%G?` in G or U). A `Reviewed-in:` id is NO-DATA, an unverifiable signature is NO-DATA | a typed name standing in for a control |
+| approval | `APPROVAL` + commit trailers | `Approved-by:` with a signature this host verified against a trusted key (`%G?` = G alone). A valid-but-untrusted signature (U) is NO-DATA, a `Reviewed-in:` id is NO-DATA, an unverifiable signature is NO-DATA | a typed name standing in for a control |
 | ran | `ran-receipt.json` | `checks[].exit_code`, `checks[].duration_ms` | a green the agent reported but did not run |
 
 Advisory in a session, `--strict` in CI. NO-DATA is never a pass. Output that has not

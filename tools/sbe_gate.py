@@ -32,9 +32,11 @@ The classes (ratified 2026-07-24):
   approval  Money or partner-facing change carries a named human approval bound
             to something stronger than a typed name. Two paths, and they are NOT
             equally strong, so this says exactly what each one proves:
-              Approved-by: with a signature THIS HOST verified (git %G? = G or U)
-                proves a key holder signed the commit. The agent cannot produce
-                this without the private key.
+              Approved-by: with a signature THIS HOST verified against a key it
+                TRUSTS (git %G? = G, and G alone) proves a trusted key holder
+                signed the commit. U (valid signature, no matching principal) is
+                what a self-generated key produces under SSH signing, so it is
+                NO-DATA, never an approval.
               Reviewed-in: <review id> proves only that a non-vacuous id was
                 written into the commit message. This gate does not resolve it
                 against any platform, so an agent can type one. It is a pointer
@@ -214,24 +216,62 @@ def git_trailers(root):
         return "", "N", []
 
 
-def _identity_tokens(text):
-    """The comparable identities inside a name-and-email string.
+_EMAIL = re.compile(r"[^\s<>,;()]+@[^\s<>,;()]+")
 
-    `Dana Author <dana@example.com>` is compared as two tokens, so a trailer that
-    carries only the name still matches an author git records with both, and a
-    trailer that carries only the address matches too. Case and whitespace are
-    folded, because `DANA@example.com` is Dana.
+
+def _identity_parts(text):
+    """(canonical emails, name word-sets) inside one name-and-email string.
+
+    The comparison this feeds is a SELF-APPROVAL guard on the money gate, so it
+    reads identities the way a person forges them, not the way a parser enjoys
+    them. The old version folded case and whitespace and compared whole strings,
+    so every one of these defeated it while the PASS line printed "that identity
+    is not the commit's author or committer" beside a parenthesis naming the
+    identity it matched: a trailing period (`Dana Author.`), a reordering
+    (`Author, Dana`), an initial (`D. Author`), a plus-address
+    (`dana+ops@example.com`) and a role suffix (`Dana Author (approver)`).
+
+    So: emails are canonicalized (case folded, a `+tag` in the local part
+    dropped, because `dana+ops@` is the same mailbox as `dana@`); names are
+    compared as SETS of words with trailing punctuation stripped, so order and
+    a stray period stop mattering; a parenthesized suffix is annotation, not
+    identity; and a single-letter word is an initial, matched against any word
+    sharing its first letter by _names_overlap.
     """
-    out = set()
-    for m in re.finditer(r"<([^>]+)>", text or ""):
-        out.add(fold(m.group(1)))
-    stripped = re.sub(r"<[^>]*>", " ", text or "")
-    name = fold(stripped.strip(" \t,;"))
-    if name:
-        out.add(name)
-    for m in re.finditer(r"[^\s<>,;]+@[^\s<>,;]+", text or ""):
-        out.add(fold(m.group(0)))
-    return {t for t in out if t}
+    emails, names = set(), []
+    for m in _EMAIL.finditer(text or ""):
+        e = fold(m.group(0)).strip(" .,;:'\"<>")
+        local, _, domain = e.partition("@")
+        emails.add(local.split("+")[0] + "@" + domain)
+    rest = re.sub(r"<[^>]*>", " ", text or "")
+    rest = _EMAIL.sub(" ", rest)
+    rest = re.sub(r"\([^)]*\)", " ", rest)
+    words = frozenset(w.strip(".,;:'\"!?") for w in fold(rest).split()) - frozenset(("",))
+    if words:
+        names.append(words)
+    return emails, names
+
+
+def _names_overlap(a, b):
+    """True when two name word-sets read as the same person.
+
+    Equal sets are one person however the words are ordered. A subset is one
+    person written shorter (`Dana` against `Dana Author`), and an initial
+    expands against the other side's words first, so `D. Author` and
+    `Dana Author` overlap. The direction of error is deliberate: this guards
+    against self-approval on the money gate, and a rare false FAIL costs a
+    reviewer one clarifying commit while a false PASS costs the control.
+    """
+    def expanded(x, against):
+        out = set()
+        for w in x:
+            if len(w) == 1:
+                out.add(next((v for v in against if v.startswith(w)), w))
+            else:
+                out.add(w)
+        return out
+    ea, eb = expanded(a, b), expanded(b, a)
+    return bool(ea) and bool(eb) and (ea <= eb or eb <= ea)
 
 
 def gate_numbers(root):
@@ -481,6 +521,15 @@ def gate_approval(root):
     if not approvals and not trailer:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
                            "money or partner path that is correct%s" % pruned)
+    # The trailer's VALUE is a field like any other, so it goes through the same
+    # answered() every receipt field does. It did not: `Approved-by: TODO` and
+    # `Approved-by: ???` cleared the strongest sentence this project prints,
+    # because answered() was applied to the weaker Reviewed-in path four lines
+    # down and never to this one.
+    if trailer and answered(trailer.group(1)) is None:
+        return "FAIL", ("the Approved-by trailer records %r, which names no identity; a "
+                        "placeholder where an approver belongs is a broken claim, not an "
+                        "approval" % trailer.group(1).strip())
     # Self-approval is not approval, and the gate did not look. One person, one
     # key: they authored the commit, signed the commit and wrote their own name
     # into the Approved-by trailer, and this gate printed "signed commit carries
@@ -489,29 +538,46 @@ def gate_approval(root):
     # cannot prove a SECOND party looked, and a second party is the entire content
     # of the word approval.
     if trailer:
-        approver = _identity_tokens(trailer.group(1))
-        wrote = set()
+        appr_emails, appr_names = _identity_parts(trailer.group(1))
+        wrote_emails, wrote_names = set(), []
         for who in authors:
-            wrote |= _identity_tokens(who)
-        overlap = sorted(approver & wrote)
-        if overlap:
+            e, n = _identity_parts(who)
+            wrote_emails |= e
+            wrote_names.extend(n)
+        same_email = sorted(appr_emails & wrote_emails)
+        same_name = next((" ".join(sorted(a)) for a in appr_names for b in wrote_names
+                          if _names_overlap(a, b)), "")
+        if same_email or same_name:
             return "FAIL", ("the Approved-by identity is the identity that wrote the commit (%s); "
                             "author and committer are %s. Self-approval is not approval: a "
                             "signature proves a key holder signed, and it cannot prove a second "
-                            "party reviewed. Have the approver sign, or record a Reviewed-in id "
-                            "pointing at a review somebody else performed"
-                            % (", ".join(overlap), ", ".join(authors) or "unrecorded"))
-    # An approval was claimed: now it must be bound to a forgeable-resistant identity.
-    # Only a signature that VERIFIED counts. git's %G? returns G (good) and U (good,
-    # untrusted-but-valid) for a signature this host actually checked. E means the
-    # signature could not be checked at all, which on a runner with no imported keys
-    # is the expected result for every signed commit, including one signed by a key
-    # nobody on the team recognises. Accepting E would trust the unknown while
-    # rejecting a known key that had merely expired, so E is NO-DATA, not an approval.
-    if trailer and sig in ("G", "U"):
-        return "PASS", ("signed commit carries Approved-by: %s, and that identity is not the "
-                        "commit's author or committer (%s)%s"
+                            "party reviewed. A trailing period, a reordered name, an initial, a "
+                            "plus-address or a role suffix does not make a second person. Have the "
+                            "approver sign, or record a Reviewed-in id pointing at a review "
+                            "somebody else performed"
+                            % (", ".join(same_email) or same_name,
+                               ", ".join(authors) or "unrecorded"))
+    # An approval was claimed: now it must be bound to a forgery-resistant identity.
+    # Only a signature this host verified AGAINST A PRINCIPAL IT TRUSTS counts,
+    # and that is %G? = G alone. U means the signature is cryptographically valid
+    # and the key matched nothing the host trusts; under SSH signing, the default
+    # for teams adopting commit signing today, U is exactly what a key the agent
+    # generated for itself produces ("No principal matched"), so accepting U made
+    # L9's sentence "an agent without the private key cannot produce it" false in
+    # four commands. E means the signature could not be checked at all, the
+    # normal result on a runner with no imported keys. Neither is an approval;
+    # both are NO-DATA naming what the host could not do.
+    if trailer and sig == "G":
+        return "PASS", ("signed commit carries Approved-by: %s, this host verified the signature "
+                        "against a trusted key, and that identity is not the commit's author or "
+                        "committer (%s)%s"
                         % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded", pruned))
+    if trailer and sig == "U":
+        return "NO-DATA", ("signature is cryptographically valid but the key matched no principal "
+                           "this host trusts (git %G? = U; under SSH signing that is an unknown "
+                           "key, which anyone, including an agent, can generate). Add the "
+                           "signer's key to the allowed signers or keyring trust and this becomes "
+                           "a verdict; an unknown key holder is not an approval")
     if review_id and answered(review_id.group(1)) is not None:
         # NO-DATA, not PASS, and the argument is internal consistency rather than
         # taste. Four lines below, a signature THIS HOST COULD NOT VERIFY returns
@@ -535,7 +601,21 @@ def gate_approval(root):
         return "NO-DATA", ("signature present but this host could not verify it (git %G? = E): import the signer's public key "
                            "into the verifying keyring, or use a Reviewed-in: review id, which needs no keyring. "
                            "An unverifiable signature is not an approval")
-    return "FAIL", "approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)"
+    # The APPROVAL file's own words, read and quoted, because this gate declared
+    # reads=(APPROVAL,) and never opened it: the claim being refused deserves to
+    # be named, and a registry declaration that nothing exercises is fiction.
+    claim = ""
+    for p in approvals[:1]:
+        if not evidence_problem(p):
+            try:
+                first = open(p, errors="replace").readline().strip()
+            except OSError:
+                first = ""
+            if first:
+                claim = "the APPROVAL file declares %r, but " % first[:60]
+    return "FAIL", ("%sapproval is a typed name with no signature or review id; a name in a text "
+                    "field is not a control (add a signed Approved-by trailer or a Reviewed-in "
+                    "review id)" % claim)
 
 
 def gate_ran(root):
