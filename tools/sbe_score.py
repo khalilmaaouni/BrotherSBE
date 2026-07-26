@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner)
+from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
+                        evidence_problem)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -57,9 +58,18 @@ class Ledger:
 
     def __init__(self, path):
         self.path = path
-        self.exists = os.path.isfile(path)
+        self.exists = os.path.lexists(path)
         self.rows = []
         self.errors = []
+        # The ACCESS axis, before any open(): a ledger path that is a chmod 000
+        # file, a directory, or a FIFO is present and unreadable, and "no
+        # outcomes.jsonl, so nothing was opened" printed over it is a false
+        # sentence (a FIFO also hangs the open forever). Present-and-unreadable
+        # is a broken record, which FAILs by the rule two lines down.
+        problem = evidence_problem(path)
+        if problem:
+            self.errors.append("%s is %s" % (path, problem))
+            return
         if not self.exists:
             return
         try:
@@ -248,8 +258,13 @@ def check_vault_log_per_active_day(ctx):
         return "NO-DATA", ("no active days in the last 7d, so no day was checked for a session log; "
                            "'no missing logs' over zero days is not compliance")
     # filename date OR mtime date counts, so a dated backfill note clears an old miss
-    log_days, blank = set(), []
+    log_days, blank, logs = set(), [], 0
     for f in glob.glob(SESSIONS_GLOB):
+        # ACCESS first: a chmod 000 log, a directory wearing a log's name, or a
+        # FIFO is not a log this check read, and opening a FIFO would hang here.
+        if evidence_problem(f):
+            blank.append("%s (%s)" % (os.path.basename(f), evidence_problem(f)))
+            continue
         try:
             # A zero-byte file, a file holding only its own headings, and a file
             # whose every line under those headings says TODO are all not a
@@ -264,50 +279,72 @@ def check_vault_log_per_active_day(ctx):
         except OSError:
             blank.append(os.path.basename(f))
             continue
+        logs += 1
         m = re.match(r"^(\d{4}-\d{2}-\d{2})", os.path.basename(f))
         if m:
             log_days.add(m.group(1))
         try:
-            log_days.add(datetime.date.fromtimestamp(os.path.getmtime(f)).isoformat())
+            # The UTC date, because the active days it is compared against come
+            # from UTC timestamps: a local-time date here made a log written near
+            # midnight cover the wrong day in some timezones and no day in others.
+            log_days.add(datetime.datetime.fromtimestamp(
+                os.path.getmtime(f), datetime.timezone.utc).date().isoformat())
         except OSError:
             continue
     missing = sorted(d for d in ctx.days if d not in log_days)
-    note = ("; %d file(s) in the session folders hold nothing and were not counted as logs (%s)"
-            % (len(blank), ", ".join(sorted(blank)[:4]))) if blank else ""
+    note = ("; %d file(s) in the session folders hold nothing readable and were not counted as "
+            "logs (%s)" % (len(blank), ", ".join(sorted(blank)[:4]))) if blank else ""
+    # The count printed is the count of LOG FILES, not of dates. One file used to
+    # contribute up to two entries to a set of dates (its filename date and its
+    # mtime date) and the sentence printed that set's size as "2 dated session
+    # log(s)" over a folder holding one file.
     return ("PASS" if not missing else "FAIL",
-            "%d active day(s) checked against %d dated session log(s) with content; days without "
-            "any log: %s%s" % (len(ctx.days), len(log_days), missing or "none", note))
+            "%d active day(s) checked against %d session log file(s) with content (a log covers "
+            "its filename date and its last-modified date); days without any log: %s%s"
+            % (len(ctx.days), logs, missing or "none", note))
 
 
 def _registry_lines(ctx, max_age_days=None):
-    """(lines, read, skipped, ahead) across the configured registries.
+    """(lines, read, old, unreadable, ahead) across the configured registries.
 
     `ahead` names registry files whose mtime is in the future. Without it, one
     `touch -t 203001010000` made a file fresh forever: every fence in it was
     younger than two days by arithmetic and the hygiene check said so.
+
+    `old` and `unreadable` used to be one list, consumed only on the NO-DATA
+    branch, so a chmod 000 on the registry files holding the violations shrank
+    the set in silence and turned two FAILs into two PASSes whose sentences said
+    "untagged in: none". Skipping a file for AGE is a deliberate filter; failing
+    to OPEN a file that is sitting there is the ACCESS axis, and the callers turn
+    it into a FAIL, because a registry this check cannot read is a broken record
+    and never a smaller registry.
     """
-    lines, read, skipped, ahead = [], 0, [], []
+    lines, read, old, unreadable, ahead = [], 0, [], [], []
     for p in ctx.registries:
+        problem = evidence_problem(p)
+        if problem:
+            unreadable.append("%s (%s)" % (os.path.basename(p), problem))
+            continue
         try:
             age = (datetime.datetime.now().timestamp() - os.path.getmtime(p)) / 86400
-        except OSError:
-            skipped.append(os.path.basename(p))
+        except OSError as e:
+            unreadable.append("%s (%s)" % (os.path.basename(p), type(e).__name__))
             continue
         if age < 0:
             ahead.append(os.path.basename(p))
             continue
         if max_age_days is not None and age > max_age_days:
-            skipped.append(os.path.basename(p))
+            old.append(os.path.basename(p))
             continue
         try:
             body = open(p, errors="replace").read().splitlines()
-        except OSError:
-            skipped.append(os.path.basename(p))
+        except OSError as e:
+            unreadable.append("%s (%s)" % (os.path.basename(p), type(e).__name__))
             continue
         read += 1
         for line in body:
             lines.append((p, age, line.strip()))
-    return lines, read, skipped, ahead
+    return lines, read, old, unreadable, ahead
 
 
 def _is_live_fence(s):
@@ -317,13 +354,20 @@ def _is_live_fence(s):
 def check_fence_hygiene(ctx):
     if not ctx.registries:
         return "NO-DATA", "set BROTHERSBE_REGISTRIES to enable; nothing was opened"
-    lines, read, skipped, ahead = _registry_lines(ctx)
+    lines, read, old, unreadable, ahead = _registry_lines(ctx)
     if ahead:
         return "FAIL", ("%d registry file(s) carry a modification time in the future (%s): %s"
                         % (len(ahead), ", ".join(sorted(ahead)[:4]), AGE_IS_BROKEN))
+    if unreadable:
+        # Never a smaller registry: the verdict this check would print over the
+        # remaining files reads as covering the whole configured set.
+        return "FAIL", ("%d of %d configured registry file(s) exist and could not be read (%s); a "
+                        "registry this check cannot open is a broken record, not an absent one, and "
+                        "a staleness verdict over the rest would read as covering it"
+                        % (len(unreadable), len(ctx.registries), ", ".join(sorted(unreadable)[:4])))
     if not read:
-        return "NO-DATA", ("%d registry path(s) configured, none readable (%s), so no fence line was "
-                           "examined" % (len(ctx.registries), ", ".join(skipped[:4])))
+        return "NO-DATA", ("%d registry path(s) configured, none readable, so no fence line was "
+                           "examined" % len(ctx.registries))
     stale = sorted({os.path.basename(p) for p, age, s in lines if _is_live_fence(s) and age > 2})
     fences = sum(1 for _, _, s in lines if _is_live_fence(s))
     if not fences:
@@ -370,10 +414,15 @@ def check_budget_vs_tier(ctx):
     if not ctx.registries:
         return "NO-DATA", ("set BROTHERSBE_REGISTRIES to enable; no registry was opened, so no fence "
                            "line was checked for a tier tag")
-    lines, read, skipped, ahead = _registry_lines(ctx, max_age_days=7)
+    lines, read, old, unreadable, ahead = _registry_lines(ctx, max_age_days=7)
     if ahead:
         return "FAIL", ("%d registry file(s) carry a modification time in the future (%s): %s"
                         % (len(ahead), ", ".join(sorted(ahead)[:4]), AGE_IS_BROKEN))
+    if unreadable:
+        return "FAIL", ("%d of %d configured registry file(s) exist and could not be read (%s); a "
+                        "registry this check cannot open is a broken record, not an absent one, and "
+                        "a tier-tag verdict over the rest would read as covering it"
+                        % (len(unreadable), len(ctx.registries), ", ".join(sorted(unreadable)[:4])))
     if not read:
         return "NO-DATA", ("%d registry path(s) configured, none touched in the last 7d or none "
                            "readable, so no fence line was checked" % len(ctx.registries))
@@ -393,6 +442,10 @@ def check_budget_vs_tier(ctx):
 
 
 def check_prediction_seals(ctx):
+    problem = evidence_problem(OPERATOR_MODEL)
+    if problem:
+        return "FAIL", ("%s is %s; a prediction ledger that exists and cannot be read is a broken "
+                        "record, not an absent one" % (OPERATOR_MODEL, problem))
     if not os.path.isfile(OPERATOR_MODEL):
         return "NO-DATA", "no %s, so no prediction ledger was opened" % OPERATOR_MODEL
     p = prediction_counts()
@@ -530,10 +583,13 @@ def silent_failure_lints(ctx=None):
                            "so there is nothing to call clean")
     if not os.path.isdir(root):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
-    hits, exempt, self_skipped, empties = [], [], [], []
+    hits, exempt, self_skipped, empties, unopened = [], [], [], [], []
     scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
     pruner = Pruner()
-    for dp, dns, fns in os.walk(root):
+    # onerror: a chmod 000 directory under the lint root used to vanish from the
+    # walk, from the count, and from the sentence, so one chmod was a silent
+    # bypass of the gate this project calls unwaivable. It is now a FAIL below.
+    for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
         # Shared with the other two walkers, and by CONTENT rather than by name:
         # a virtualenv named .venv-whisper put third-party code through THIS gate,
         # which is the one gate a .sbe-exempt cannot waive, and then pruning by
@@ -555,9 +611,20 @@ def silent_failure_lints(ctx=None):
             if not fn.endswith(SCANNABLE):
                 continue
             path = path_here
+            # The ACCESS axis: a chmod 000 source file used to fall out of the
+            # lint, out of the count, and out of the sentence via a bare
+            # `continue`, so one chmod silently bypassed the gate this project
+            # calls unwaivable. A source file that exists and cannot be read is
+            # named and FAILs below; a FIFO or device is refused without open(),
+            # which would block forever.
+            problem = evidence_problem(path)
+            if problem:
+                unopened.append("%s (%s)" % (os.path.relpath(path, root), problem))
+                continue
             try:
                 lines = open(path, errors="replace").read().splitlines()
-            except OSError:
+            except OSError as e:
+                unopened.append("%s (%s)" % (os.path.relpath(path, root), type(e).__name__))
                 continue
             scanned += 1
             src = "\n".join(lines)
@@ -609,6 +676,15 @@ def silent_failure_lints(ctx=None):
         note += ("; this tool's own source was not scanned (%s), because it declares these "
                  "patterns as strings and would match itself"
                  % ", ".join(sorted(self_skipped)))
+    # Evidence the lint was refused access to beats every other verdict: a
+    # verdict over the files it could open would read as covering the tree, and
+    # one chmod must never turn a FAIL into a PASS or into an absence.
+    if unopened or pruner.denied:
+        refused = sorted(set(unopened)) + sorted(set(pruner.denied))
+        return "FAIL", ("%d file(s) or director(y/ies) under %s exist and could not be read (%s); "
+                        "source this lint cannot open is source this verdict cannot cover, so it "
+                        "cannot call the tree clean; %d file(s) were scanned%s"
+                        % (len(refused), root, _first_named(refused, "; "), scanned, note))
     if not scanned:
         return "NO-DATA", ("lint root %s holds no scannable source (%s), so nothing was opened%s"
                            % (root, " ".join(SCANNABLE), note))

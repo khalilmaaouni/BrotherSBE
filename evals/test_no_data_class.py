@@ -182,23 +182,31 @@ def tool_sources():
     """
     out = []
     pruner = Pruner()
-    for dp, dns, fns in os.walk(TOOLS_DIR):
+    # onerror: os.walk swallows a refused directory by default, so one chmod 000
+    # under tools/ dropped a module from the walk, the count fell from 8 to 7,
+    # and the guarantee sentence returned to "0 failure(s)" over a tree this test
+    # could not see into. A directory the walk cannot enter is a failure below.
+    for dp, dns, fns in os.walk(TOOLS_DIR, onerror=pruner.onerror):
         dns[:] = pruner(dp, dns)
         for fn in fns:
             if fn.endswith(".py"):
                 out.append(os.path.relpath(os.path.join(dp, fn), TOOLS_DIR))
-    hidden = pruner.hidden(lambda f: f.endswith(".py"))
-    if hidden:
-        # A pruned directory holding Python is a directory this test's coverage
-        # claim does not cover, and the claim is printed on every run. Naming it
-        # in the sources list would import somebody else's code; naming it here
-        # is how the count stops being a completeness sentence over a truncated
-        # set. main() turns this into a failure.
+    hidden, uninspected = pruner.hidden(lambda f: f.endswith(".py"))
+    if hidden or uninspected:
+        # A pruned directory holding Python, or one the inspection budget never
+        # reached, is a directory this test's coverage claim does not cover, and
+        # the claim is printed on every run. Naming it in the sources list would
+        # import somebody else's code; naming it here is how the count stops
+        # being a completeness sentence over a truncated set. main() turns this
+        # into a failure.
         PRUNED_WITH_SOURCE.extend(hidden)
+        PRUNED_WITH_SOURCE.extend(uninspected)
+    DENIED_DIRS.extend(pruner.denied)
     return sorted(out)
 
 
 PRUNED_WITH_SOURCE = []
+DENIED_DIRS = []
 
 
 def load_tool_modules():
@@ -358,6 +366,8 @@ NOT_A_VERDICT = {
     ("sbe_checks.py", "run_guarded"): "the shared runner; it returns whatever the check it wrapped "
                                       "returned, and every check it can wrap is itself registered",
     ("sbe_checks.py", "distinct"): "returns (items, duplicate count), not a verdict",
+    ("sbe_checks.py", "hidden"): "returns (pruned trees holding wanted files, trees the inspection "
+                                 "budget left uninspected), not a verdict",
     ("sbe_checks.py", "answered_as"): "returns a reduced value, never a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
@@ -393,7 +403,16 @@ def pass_returning_functions(mods=None):
     """
     out = []
     for fn in tool_sources():
-        tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
+        # Guarded for the same reason load_tool_modules guards its import: a
+        # module this lint cannot parse (a newer syntax on an older Python, an
+        # unreadable file) is a module whose verdict paths it cannot see, which
+        # is a named failure and never a traceback or a skip.
+        try:
+            tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
+        except (SyntaxError, OSError, ValueError) as e:
+            out.append((fn, "<module>", "could not be parsed (%s: %s), so any verdict-producing "
+                                        "function in it is invisible to this lint" % (type(e).__name__, e)))
+            continue
         pass_names = _pass_valued_names(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -558,8 +577,18 @@ def drop_section(text, title):
 def run(script, args, env_extra):
     env = dict(os.environ)
     env.update(env_extra)
-    return subprocess.run([sys.executable, os.path.join(RUN_DIR, script)] + args,
-                          capture_output=True, text=True, env=env)
+    # Timeboxed, because the ACCESS scenarios place FIFOs where receipts are
+    # expected and a tool that opens one blocks forever. A suite that can hang
+    # proves nothing; a tool that did not finish is reported as producing no
+    # verdict at all, which is the defect the timeout exists to expose.
+    try:
+        return subprocess.run([sys.executable, os.path.join(RUN_DIR, script)] + args,
+                              capture_output=True, text=True, env=env, timeout=90)
+    except subprocess.TimeoutExpired as e:
+        return subprocess.CompletedProcess(
+            e.cmd, 124, stdout=(e.output or ""),
+            stderr="the tool did not finish within 90s; a check that hangs prints no verdict "
+                   "in either mode, which is worse than a crash")
 
 
 def verdict_and_evidence(stdout, name):
@@ -573,9 +602,15 @@ def verdict_and_evidence(stdout, name):
 class DirTool:
     """sbe_gate.py and sbe_design.py: evidence is a file in the target directory."""
 
-    def __init__(self, script, env=None):
+    def __init__(self, script, env=None, has_fallback=False):
         self.script = script
         self.env = env or {}
+        # True only for a tool that can answer WITHOUT running the check (the
+        # design tool's no-dossier fallback). The invoked heuristic below greps
+        # for that fallback's load-bearing phrase, and for a tool that has no
+        # such fallback the grep is constant-true and measures nothing, so the
+        # accounting is only claimed where it means something.
+        self.has_fallback = has_fallback
 
     def root(self, d):
         return d
@@ -594,6 +629,8 @@ class DirTool:
 
 class ScoreTool:
     """sbe_score.py: evidence lives under the vault, or behind an env var."""
+
+    has_fallback = False    # every scorer check runs unconditionally; see DirTool
 
     def __init__(self, script):
         self.script = script
@@ -618,7 +655,8 @@ class ScoreTool:
 
 ADAPTERS = {
     ("sbe_gate.py", "GATES"): DirTool("sbe_gate.py"),
-    ("sbe_design.py", "CHECKS"): DirTool("sbe_design.py", env={"SBE_DOSSIER_ROOT": ""}),
+    ("sbe_design.py", "CHECKS"): DirTool("sbe_design.py", env={"SBE_DOSSIER_ROOT": ""},
+                                         has_fallback=True),
     ("sbe_score.py", "CHECKS"): ScoreTool("sbe_score.py"),
 }
 
@@ -655,7 +693,7 @@ class Scenario:
     """One run: files to write, env to set, the verdict that would be a defect."""
 
     def __init__(self, sid, label, files, env=None, expect=None, forbid_pass=True,
-                 expect_invoked=True):
+                 expect_invoked=True, setup=None):
         self.sid = sid
         self.label = label
         self.files = files
@@ -663,6 +701,16 @@ class Scenario:
         self.expect = expect          # an exact verdict, or None for "anything but PASS"
         self.forbid_pass = forbid_pass
         self.expect_invoked = expect_invoked
+        # A callable run against the scenario directory after the files are
+        # written: the ACCESS scenarios use it to chmod evidence to 000, replace
+        # it with a broken symlink or a FIFO, or plant a symlink loop. The
+        # runner restores read access before the temp directory is cleaned up.
+        self.setup = setup
+        # True when the fixture's declared git state must be applied: the "full"
+        # scenario always applies it; an access scenario that asserts the full
+        # verdict (loop-beside-evidence) needs the same commit or it would be
+        # asserting the wrong baseline.
+        self.use_git = False
 
 
 def legacy_cases(tool, check):
@@ -780,6 +828,107 @@ def hollow_cases(tool, check):
     return out
 
 
+# The ACCESS axis. Seven rounds of scenarios probed what the evidence SAYS: this
+# is the first set that probes whether the tool could OPEN it. The suite held
+# zero occurrences of chmod, symlink or mkfifo in 4200 lines of test code, so no
+# scenario had ever distinguished a check that read clean evidence from a check
+# that read nothing: a chmod 000 source file vanished from a lint count, chmod
+# 000 registry files turned two FAILs into two PASSes saying "none", and a FIFO
+# hung all three tools with no verdict, in both modes, forever.
+ACCESS_APPLIES = os.name == "posix" and os.geteuid() != 0
+
+def _chmod_000(rel):
+    def setup(d):
+        os.chmod(os.path.join(d, rel), 0)
+    return setup
+
+
+def _broken_symlink(rel):
+    def setup(d):
+        p = os.path.join(d, rel)
+        os.remove(p)
+        os.symlink(os.path.join(d, "no-such-target"), p)
+    return setup
+
+
+def _symlink_loop(rel):
+    def setup(d):
+        p = os.path.join(d, rel)
+        os.remove(p)
+        os.symlink(os.path.basename(p), p)      # a link that resolves to itself
+    return setup
+
+
+def _fifo(rel):
+    def setup(d):
+        p = os.path.join(d, rel)
+        os.remove(p)
+        os.mkfifo(p)
+    return setup
+
+
+def _loop_beside(d):
+    os.symlink(".", os.path.join(d, "selfloop-dir"))
+
+
+def restore_access(top):
+    """Give everything under the scenario directory its read bits back.
+
+    tempfile.TemporaryDirectory cannot delete a chmod 000 entry, so a scenario
+    that took access away gives it back before cleanup. Top-down, so a 000
+    directory is reopened before the walk needs to enter it.
+    """
+    try:
+        os.chmod(top, 0o755)
+    except OSError:
+        return
+    for dp, dns, fns in os.walk(top):
+        for n in dns + fns:
+            p = os.path.join(dp, n)
+            if os.path.islink(p):
+                continue
+            try:
+                os.chmod(p, 0o755 if n in dns else 0o644)
+            except OSError:  # sbe: allow-silent cleanup only; the temp dir is deleted right after and an entry this cannot reopen fails loudly there
+                pass
+
+
+def access_cases(tool, check):
+    """Evidence that exists and cannot be opened must never read as clean or absent.
+
+    Four shapes per check, each derived from the check's own worked example: the
+    evidence file unreadable (chmod 000), replaced by a broken symlink, replaced
+    by a symlink loop, and replaced by a FIFO (which blocks any open() forever,
+    so it also proves the tool terminates). A fifth plants a self-referential
+    directory symlink beside intact evidence and demands the walk terminates
+    without changing the verdict. Not applicable when running as root (chmod
+    cannot take access away from root) and declared so rather than skipped.
+    """
+    fx = check.full_fixture
+    if not ACCESS_APPLIES or fx is None:
+        return []
+    files, env = fx["files"], fx.get("env", {})
+    declared = tool.relpath(check.reads[0])
+    target = declared if declared in files else sorted(files)[0]
+    out = [
+        Scenario("access::%s|chmod-000" % target, "x", files, env=env,
+                 setup=_chmod_000(target)),
+        Scenario("access::%s|broken-symlink" % target, "x", files, env=env,
+                 setup=_broken_symlink(target)),
+        Scenario("access::%s|symlink-loop" % target, "x", files, env=env,
+                 setup=_symlink_loop(target)),
+        Scenario("access::%s|fifo" % target, "x", files, env=env,
+                 setup=_fifo(target)),
+        # Evidence intact, a loop planted beside it: the walk must terminate and
+        # the verdict must be exactly what the worked example produces.
+        Scenario("access::loop-beside-evidence", "x", files, env=env,
+                 setup=_loop_beside, expect=check.full_expect,
+                 forbid_pass=(check.full_expect != "PASS")),
+    ]
+    out[-1].use_git = True
+    return out
+
+
 # ---------------------------------------------------------------------------
 
 def counts():
@@ -800,7 +949,8 @@ def counts():
         regs += 1
         for _name, check in reg.items():
             checks += 1
-            scenarios += len(legacy_cases(tool, check)) + len(hollow_cases(tool, check))
+            scenarios += (len(legacy_cases(tool, check)) + len(hollow_cases(tool, check))
+                          + len(access_cases(tool, check)))
     return checks, regs, scenarios
 
 
@@ -840,6 +990,14 @@ def main():
         failures.append("%s was pruned from the walk and holds Python source, so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "
                         "the summary line below still counts as if it were not" % path)
+    for path in sorted(set(DENIED_DIRS)):
+        failures.append("%s could not be entered (permission or I/O error), so any registry or "
+                        "verdict-producing function in it is outside this test's coverage while "
+                        "the summary line below still counts as if it were not" % path)
+    if not ACCESS_APPLIES:
+        notapplicable.append("the ACCESS scenarios (chmod, broken symlink, symlink loop, FIFO) do "
+                             "not apply on this host: running as root, or not POSIX, so taking "
+                             "read access away is not possible; declared rather than skipped")
 
     for (fn, attr), (tool, reg) in sorted(known.items()):
         print("\n%s.%s  (%d checks discovered)" % (fn, attr, len(reg)))
@@ -857,20 +1015,29 @@ def main():
                                      % (fn, name, check.full_expect, check.full_expect_reason))
             for path, why in sorted(check.optional_leaves.items()):
                 exemptions.append("%s %s [%s]: %s" % (fn, name, path, why))
-            scenarios = legacy_cases(tool, check) + hollow_cases(tool, check)
+            scenarios = (legacy_cases(tool, check) + hollow_cases(tool, check)
+                         + access_cases(tool, check))
             invoked_count = 0
             saw_full = False
             for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
                     for rel, content in subst(sc.files, d).items():
                         tool.place(d, rel, content)
-                    git = (check.full_fixture or {}).get("git") if sc.label == "full" else None
+                    git = ((check.full_fixture or {}).get("git")
+                           if (sc.label == "full" or sc.use_git) else None)
                     if git:
                         git_commit(d, git["message"])
+                    if sc.setup:
+                        sc.setup(d)
                     out = tool.invoke(d, name, subst(sc.env, d))
                     ran += 1
+                    restore_access(d)
                 got, line = verdict_and_evidence(out.stdout, name)
-                invoked = NOT_INVOKED not in line
+                # The invoked heuristic greps for the design tool's no-target
+                # fallback phrase. For a tool with no such fallback the grep is
+                # constant-true and would measure nothing, so it is only applied,
+                # and only reported, where a fallback exists to fall into.
+                invoked = (NOT_INVOKED not in line) if tool.has_fallback else True
                 invoked_count += invoked
                 saw_full = saw_full or (sc.label == "full" and got == check.full_expect)
                 bad = []
@@ -884,9 +1051,11 @@ def main():
                     bad.append("no verdict line for this check at all (%s)" % got)
                 if "Traceback" in out.stderr:
                     bad.append("a traceback escaped to stderr")
-                if out.returncode != 0:
+                if out.returncode == 124:
+                    bad.append("the tool hung: %s" % out.stderr)
+                elif out.returncode != 0:
                     bad.append("advisory mode exited %d" % out.returncode)
-                if sc.expect_invoked and not invoked:
+                if sc.expect_invoked and tool.has_fallback and not invoked:
                     bad.append("the scenario never reached the check: the tool answered from its "
                                "no-target fallback")
                 mark = "ok" if not bad else ("FAILED: " + "; ".join(bad))
@@ -901,8 +1070,13 @@ def main():
                 failures.append("%s %s: the declared full_fixture did not produce %s, so nothing "
                                 "here proves the check body ran or that its worked example is a "
                                 "real one" % (fn, name, check.full_expect))
-            print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
-                                  % (invoked_count, len(scenarios))))
+            if tool.has_fallback:
+                print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
+                                      % (invoked_count, len(scenarios))))
+            else:
+                print("  %-26s %s" % (name, "-> invocation accounting n/a: this tool runs every "
+                                            "check unconditionally, so there is no fallback to "
+                                            "fall into"))
 
     print("\ndeclared not-applicable (printed, never skipped silently):")
     for n in notapplicable:
