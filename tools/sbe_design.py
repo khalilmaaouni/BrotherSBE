@@ -50,6 +50,8 @@ CARDINALITY_FORMS = (
     "1:1, 1:N, N:1, N:M, 1:many (crow's foot shorthand)",
     "1..1, 0..1, 1..*, 0..* (UML multiplicity)",
     "1-to-many, N to 1 and the other mixed spellings of the same two ends",
+    "prose: has one / has many / belongs to exactly one / zero or more",
+    "a Mermaid erDiagram relationship line, whose cardinality symbols count",
 )
 INTAKE = "00-intake.json"
 # Every shipped template carries this marker. Deleting it is part of filling the
@@ -607,6 +609,9 @@ REJECTED_HEADING_WORDS = (
     "rejected", "alternatives", "alternative", "options", "roads not taken",
     "not taken", "not chosen", "ruled out", "discarded", "dropped", "declined",
     "did not pick", "did not choose", "didn't pick", "didn't choose", "why not",
+    # "Trade-offs considered" is how half the ADRs in the wild spell this
+    # section, and it failed with 0 alternatives found.
+    "trade-offs", "tradeoffs", "trade offs", "trade-off", "tradeoff",
 )
 _REJECTED_HEADING = re.compile(
     r"(?i)(?:%s)" % "|".join(r"\b%s\b" % w.replace(" ", r"\s+").replace("'", "'?")
@@ -623,7 +628,10 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+(.*\S)\s*$")
 # of them, is a gate that gets argued with and then switched off.
 ALTERNATIVE_FORMS = ("a bullet list (- or *)", "a numbered list (1. or 2))",
                      "one sub-heading per alternative, each with a body",
-                     "one paragraph per alternative")
+                     "one paragraph per alternative",
+                     "a comparison table (one row per alternative; a row whose "
+                     "verdict-like column says chosen is the decision, not an "
+                     "alternative)")
 
 
 def _rejected_alternatives(t):
@@ -651,6 +659,10 @@ def _rejected_alternatives(t):
         for _title, items, body in blocks:
             if items:
                 found.extend(items)
+                continue
+            table = _table_alternatives(body)
+            if table:
+                found.extend(table)
                 continue
             paragraphs, current = [], []
             for l in body:
@@ -695,6 +707,35 @@ def _rejected_alternatives(t):
             blocks[-1][2].append(line)
     close()
     return found
+
+
+def _table_alternatives(body):
+    """Rejected alternatives written as rows of a comparison table.
+
+    The data-model check reads tables and this one did not, so an ADR whose
+    alternatives sat in an Option / Verdict / Why table failed with "only 1
+    distinct rejected alternative(s)" over a section naming three. One row is
+    one alternative; a row whose verdict-shaped column says the option was
+    chosen is the decision, not an alternative, and is left out.
+    """
+    rows = [l.strip() for l in body if l.strip().startswith("|")]
+    if len(rows) < 3:
+        return []
+    header = [c.strip() for c in rows[0].strip("|").split("|")]
+    verdict_col = next((i for i, h in enumerate(header)
+                        if re.search(r"(?i)verdict|decision|status|outcome|chosen", h)), None)
+    out = []
+    for r in rows[2:]:
+        if not set(r) - set("|-: "):
+            continue
+        cells = [c.strip() for c in r.strip("|").split("|")]
+        if not cells or not cells[0]:
+            continue
+        if verdict_col is not None and verdict_col < len(cells) and re.search(
+                r"(?i)\b(chosen|selected|accepted|picked|winner)\b", cells[verdict_col]):
+            continue
+        out.append(" | ".join(c for c in cells if c)[:60])
+    return out
 
 
 def _sections(t):
@@ -832,6 +873,16 @@ def check_adr(root):
 # over an empty manifest, one function deeper.
 _ENTITY_BULLET = re.compile(r"^\s*[-*]\s*([A-Za-z_][\w .\-]*?)\s*(?::(.*))?$")
 _ENTITY_HEADING = re.compile(r"(?i)entit")
+# Markdown emphasis is presentation, not identity. `- **Order**: ...` and a
+# table cell `| **Order** |` were invisible to patterns anchored on a letter,
+# and the FAIL message then described the exact form the author had used.
+# Paired ** __ * and backticks are unwrapped; single underscores are left
+# alone, because identifiers carry them.
+_EMPHASIS = re.compile(r"(\*\*|__|\*|`)(\S(?:[^*`]*?\S)?)\1")
+
+
+def _plain(s):
+    return _EMPHASIS.sub(r"\2", s or "")
 
 
 def _joined_bullets(lines):
@@ -948,7 +999,7 @@ def _entity_bullets(t):
     a set this function had to guess at is not a set the evidence line may count.
     """
     out = {}
-    t = without_comments(t)
+    t = _plain(without_comments(t))
     body = re.split(r"(?im)^#+\s*relationships", t)[0]
     sections = []
     current = None
@@ -969,6 +1020,18 @@ def _entity_bullets(t):
             out.update(_table_entities(sec))
             for line in sec:
                 m = _ENTITY_BULLET.match(line)
+                if m and m.group(2) is None and _SOR.search(line):
+                    # No colon, but the bullet names an owner in prose:
+                    # `- Order. The OMS is the system of record.` used to read
+                    # the WHOLE sentence as the entity name and then print
+                    # "does not name the system that owns it" about a line
+                    # naming one in plain sight. The name is the first
+                    # sentence; the rest is its description.
+                    m2 = re.match(r"^\s*[-*]\s*([A-Za-z_][\w.-]*(?:\s+[A-Za-z_][\w.-]*){0,3}?)"
+                                  r"\s*[.;,]\s+(.*\S)\s*$", line)
+                    if m2:
+                        out[m2.group(1).strip()] = m2.group(2).strip()
+                        continue
                 if m:
                     out[m.group(1).strip()] = (m.group(2) or "").strip()
         return out, True
@@ -990,7 +1053,7 @@ def _entities(t):
     print a count uses `_entity_bullets`, which says which set it got and refuses
     to count a set it guessed at.
     """
-    t = without_comments(t)
+    t = _plain(without_comments(t))
     ents, declared = _entity_bullets(t)
     if declared:
         return ents
@@ -1025,6 +1088,12 @@ _SOR = re.compile(r"(?i)(?<![\w-])(?:%s)(?![\w-])\s*[:=]?\s*([^|]+)" % _SOR_ALT)
 # A table COLUMN whose heading is one of the phrases and nothing else.
 _SOR_HEADER = re.compile(r"(?i)^\s*(?:%s)\s*$" % _SOR_ALT)
 _NO_SOR = re.compile(r"(?i)\bno\s+(?:%s)(?![\w-])" % _SOR_ALT)
+# The value may sit BEFORE the phrase: "The OMS is the system of record." names
+# the OMS, and capturing only what follows the phrase left "." as the value, so
+# an honest sentence FAILed as "names a system of record with no value".
+_SOR_BEFORE = re.compile(
+    r"(?i)\b((?:the\s+|our\s+|its\s+)?[A-Za-z_][\w.-]*(?:\s+[A-Za-z_][\w.-]*){0,4}?)"
+    r"\s+(?:is|are|was|remains)\s+(?:the\s+|our\s+|its\s+)?(?:%s)(?![\w-])" % _SOR_ALT)
 # The list of values that name the absence of an answer used to live HERE, as a
 # private constant, and that is precisely how the fourth round of this defect
 # happened: this file refused the token "todo" as a system of record while
@@ -1042,6 +1111,14 @@ _CARDINALITY = re.compile(
     r" | %s \s*:\s* %s"                            # 1:N, N:1, 1:1, many:1
     r" | [0-9*]+ \s*\.\.\s* [0-9*]+"               # 1..*, 0..1 (UML multiplicity)
     r")(?![\w-])" % (_CARD_END, _CARD_END, _CARD_END, _CARD_END))
+# Cardinality written as an English sentence: "An Order has many OrderLines,
+# and every OrderLine belongs to exactly one Order" carries both ends and
+# failed with a message listing every notation except the one people speak.
+_CARD_PROSE = re.compile(
+    r"(?ix)\b(?:has|have|holds|hold|contains|contain|owns|own)\s+"
+    r"(?:exactly\s+|at\s+least\s+|at\s+most\s+)?(?:one|many|zero\s+or\s+more|one\s+or\s+more)\b"
+    r"|\bbelongs?\s+to\s+(?:exactly\s+)?one\b"
+    r"|\bexactly\s+one\b")
 
 
 def _stated_value(v):
@@ -1070,8 +1147,9 @@ def check_data_model(root):
         return "NO-DATA", "no 05-data-model.md in this dossier"
     # The rendered text, for the same reason as check_adr: a commented-out
     # entity list read as "2 entities, each with a system of record" while the
-    # artifacts check called the same file the absence of an artifact.
-    t = without_comments(t)
+    # artifacts check called the same file the absence of an artifact. Emphasis
+    # is unwrapped so a bolded entity name is still an entity name.
+    t = _plain(without_comments(t))
     problems = []
     ents, declared_by_heading = _entity_bullets(t)
     # What this check had to guess at, said in the verdict rather than folded into
@@ -1109,9 +1187,17 @@ def check_data_model(root):
             problems.append("entity '%s' does not name the system that owns it (accepted as any of: "
                             "%s, as `<phrase>: the OMS` on the bullet, or as a table column headed "
                             "with one of them)" % (name, ", ".join(SOR_PHRASES)))
-        elif not _stated_value(m.group(1)):
-            problems.append("entity '%s' names a system of record with no value (%r); an undecided source is not a source"
-                            % (name, m.group(1).strip()[:24]))
+        else:
+            value = _stated_value(m.group(1))
+            if not value:
+                # The name may sit before the phrase: "The OMS is the system of
+                # record." is an owner named in the discipline's most ordinary
+                # sentence shape.
+                mb = _SOR_BEFORE.search(meta)
+                value = _stated_value(mb.group(1)) if mb else ""
+            if not value:
+                problems.append("entity '%s' names a system of record with no value (%r); an undecided source is not a source"
+                                % (name, m.group(1).strip()[:24]))
     # Relationships were read as "every bullet after the Relationships heading",
     # which had it wrong in both directions. A section heading with nothing under
     # it, and a section written as a markdown table, both produced zero inspected
@@ -1120,7 +1206,13 @@ def check_data_model(root):
     # authoring forms are read, and the count is in the verdict so a reader can
     # tell ten checked relationships from none.
     rel_body = _section_body(t, r"^#+\s*relationships")
-    rels, table_row = [], 0
+    rels, er_rels, table_row = [], [], 0
+    for line in (rel_body or []):
+        # A Mermaid erDiagram under the Relationships heading IS a relationship
+        # list, and its cardinality symbols are cardinality: refusing it told an
+        # author to restate their own diagram as bullets.
+        if _ER_LINE.search(line.strip()):
+            er_rels.append(line.strip())
     # Folded for the same reason the entity bullets are: a relationship wrapped
     # at 80 columns kept its name on the first line and its cardinality on the
     # second, and FAILed as "has no cardinality" against a line that carried one.
@@ -1133,9 +1225,10 @@ def check_data_model(root):
             if table_row > 2 and set(s) - set("|-: "):   # skip header and separator
                 rels.append(s)
     for line in rels:
-        if not _CARDINALITY.search(line):
+        if not (_CARDINALITY.search(line) or _CARD_PROSE.search(line)):
             problems.append("relationship '%s' names no cardinality this tool can read (accepted: "
                             "%s)" % (line[:48], "; ".join(CARDINALITY_FORMS)))
+    rels = rels + er_rels
     if problems:
         # The truncation is named. Six of eight sourceless entities were printed
         # and the other two were dropped out of a message that reads as the whole
@@ -1164,7 +1257,7 @@ def check_data_model(root):
                            % (len(ents),
                               "no Relationships heading" if rel_body is None
                               else "the Relationships heading has nothing under it that reads as a "
-                                   "relationship: list them as bullets or as table rows"))
+                                   "relationship: list them as bullets, table rows, or an erDiagram"))
     return "PASS", ("%d entities, each with a system of record; %d relationship line(s) read, each "
                     "carrying cardinality" % (len(ents), len(rels)))
 
@@ -1478,7 +1571,7 @@ def _declared_components(root):
     out = {}
     tech = read(root, ARTIFACT_FILES["04"])
     if tech is not None:
-        tech = without_comments(tech)
+        tech = _plain(without_comments(tech))
         in_table = 0
         for line in tech.splitlines():
             s = line.strip()
@@ -1491,11 +1584,17 @@ def _declared_components(root):
             cell = s.strip("|").split("|")[0].strip()
             if cell:
                 out.setdefault(_norm(cell), "%s: %s" % (ARTIFACT_FILES["04"], cell))
-    diagrams = read(root, ARTIFACT_FILES["06"])
-    if diagrams is not None:
-        diagrams = without_comments(diagrams)
+    # Bullets under a component-naming heading count in EITHER file, which is
+    # what L5's INPUTS line promises: a technology map written as bullets is
+    # the honest form half the discipline uses, and reading bullets only out of
+    # 06-diagrams.md made the law overclaim against its own tool.
+    for artifact in (ARTIFACT_FILES["04"], ARTIFACT_FILES["06"]):
+        text = read(root, artifact)
+        if text is None:
+            continue
+        text = _plain(without_comments(text))
         in_components = False
-        for line in diagrams.splitlines():
+        for line in text.splitlines():
             h = _HEADING.match(line)
             if h:
                 in_components = bool(_COMPONENT_HEADING.search(h.group(2)))
@@ -1506,7 +1605,7 @@ def _declared_components(root):
             if m:
                 name = m.group(1).split(":")[0].strip()
                 if name:
-                    out.setdefault(_norm(name), "%s: %s" % (ARTIFACT_FILES["06"], name))
+                    out.setdefault(_norm(name), "%s: %s" % (artifact, name))
     return out
 
 
@@ -1630,11 +1729,12 @@ def check_diagrams(root):
                             "it one." % ", ".join(placeholders[:4]))
         return "FAIL", ("diagram element(s) appear nowhere else in the dossier: %s.%s Every node must be an "
                         "entity in %s or a declared component (a row in %s, or a bullet under a Components "
-                        "heading in %s), matched on the node id or on its label. A state diagram's states "
+                        "heading in %s or %s), matched on the node id or on its label. A state diagram's states "
                         "trace to states declared as bullets under a States, Status or Lifecycle heading, "
                         "or to a `status: draft | placed | shipped` line in %s%s"
                         % (", ".join(orphans[:6]), placeholder_note, ARTIFACT_FILES["05"],
-                           ARTIFACT_FILES["04"], ARTIFACT_FILES["06"], ARTIFACT_FILES["05"], note))
+                           ARTIFACT_FILES["04"], ARTIFACT_FILES["04"], ARTIFACT_FILES["06"],
+                           ARTIFACT_FILES["05"], note))
     if untraced_states:
         return "NO-DATA", ("%d diagram node(s) in %s, of which %d are lifecycle state(s) this dossier "
                            "declares nowhere (%s), so their traceability was not checked and this "

@@ -382,7 +382,12 @@ def _registry_lines(ctx, max_age_days=None):
 
 
 def _is_live_fence(s):
-    return s.startswith("- ") and "agent" in s.lower() and "LANDED" not in s and "ADOPTED" not in s
+    # Both markdown bullets: `*` and `-` render identically, and this project's
+    # own entity rule accepts both, so an operator whose registry uses asterisk
+    # bullets used to get permanently green fence discipline over untagged live
+    # fences.
+    return (s.startswith(("- ", "* ")) and "agent" in s.lower()
+            and "LANDED" not in s and "ADOPTED" not in s)
 
 
 def check_fence_hygiene(ctx):
