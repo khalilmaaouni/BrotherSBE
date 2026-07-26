@@ -200,7 +200,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  416 evals: 416 passed, 0 regressions.
+  424 evals: 424 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

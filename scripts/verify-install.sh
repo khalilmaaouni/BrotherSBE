@@ -108,7 +108,17 @@ done < "$MANIFEST"
 MANIFEST_ABS=$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")
 MANIFEST_REL=$(printf '%s\n' "$MANIFEST_ABS" | sed "s|^$TARGET/||")
 
-find "$TARGET" -type f \
+# Every directory entry, whatever its TYPE, not just `-type f`. A manifest is
+# a set of hashes of regular files, and `find -type f` never returns a
+# symlink, so a planted tools/backdoor.py that is a SYMLINK to code outside
+# the tree was neither a MISMATCH, nor a MISSING, nor an EXTRA: it was
+# reported as nothing at all, while it ran automatically like every other
+# module and the honesty suite imported and executed it. A control-flow file
+# the manifest cannot hash is exactly the shape of a planted backdoor, so
+# every non-regular entry (symlink, FIFO, socket) inside the install tree is
+# named loudly here, never skipped. `-type f -o -type l -o ...` enumerates
+# them all; the type of each is decided per entry below.
+find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -path "$TARGET/.git/*" \
     ! -path '*/__pycache__/*' \
     ! -path "$TARGET/.superpowers/*" \
@@ -121,10 +131,20 @@ find "$TARGET" -type f \
     > "$WORKDIR/installed_raw"
 
 EXTRA=0
+NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
     rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
     [ "$rel" = "$MANIFEST_REL" ] && continue
+    # A non-regular entry is a failure in its own right: a manifest is hashes
+    # of regular files, and it cannot vouch for what a symlink points at or
+    # what a FIFO yields, so a control-flow path this check cannot hash is
+    # named rather than measured against a set of hashes it can never be in.
+    if [ ! -f "$full" ] || [ -L "$full" ]; then
+        echo "NON-REGULAR: $rel (a symlink, pipe, or other non-regular file in the install tree; the manifest hashes regular files only, so it cannot vouch for what this resolves to, and something on this host may run it)"
+        NONREGULAR=$((NONREGULAR + 1))
+        continue
+    fi
     if ! grep -q -x -F "$rel" "$WORKDIR/manifest_paths"; then
         echo "EXTRA:     $rel"
         EXTRA=$((EXTRA + 1))
@@ -168,10 +188,10 @@ done < "$WORKDIR/excluded_files"
 
 echo ""
 echo "verify-install: checked against $MANIFEST"
-echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest)"
+echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest), $NONREGULAR non-regular (a symlink or pipe the manifest cannot hash)"
 echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED file(s), $EXCLUDED_SOURCE of them source code."
 
-if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ]; then
+if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$NONREGULAR" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \
          "understand why the files above differ from the published manifest." >&2
     if [ "$EXTRA" -gt 0 ]; then
@@ -179,6 +199,12 @@ if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$
              "planted backdoor: it runs automatically along with everything" \
              "else in this installation, and the manifest says nothing" \
              "about it because nothing here declared it." >&2
+    fi
+    if [ "$NONREGULAR" -gt 0 ]; then
+        echo "verify-install: a NON-REGULAR file is the same shape by another" \
+             "mechanism: a symlink or pipe the manifest cannot hash, pointing" \
+             "at code the manifest never saw, invisible to a check that only" \
+             "walked regular files." >&2
     fi
     if [ "$EXCLUDED_SOURCE" -gt 0 ]; then
         echo "verify-install: an EXCLUDED-SOURCE file is the same shape one" \

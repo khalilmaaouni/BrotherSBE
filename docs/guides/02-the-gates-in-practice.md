@@ -282,7 +282,7 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   approval  FAIL     the APPROVAL file declares 'partner billing change', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]
 ```
 
-### Worked PASS
+### Worked NO-DATA: a review id is a pointer, not a control
 
 Amend the same commit to carry a platform review id instead:
 

@@ -182,7 +182,9 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
-        run: python3 evals/test_no_data_class.py
+        run: |
+          python3 evals/test_no_data_class.py
+          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
       - name: Tool tests (redaction, permissions, identity, autosave)
         run: python3 tools/test_sbe.py
 ```
@@ -240,7 +242,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-416 evals: 416 passed, 0 regressions.
+424 evals: 424 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -259,7 +261,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-20 checks discovered from 3 registries in 7 module(s), 1677 scenarios run, 4 waived by declared exemption, 0 failure(s).
+20 checks discovered from 3 registries in 7 module(s), 1677 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

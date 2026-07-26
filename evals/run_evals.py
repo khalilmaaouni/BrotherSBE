@@ -710,6 +710,52 @@ def gd_exempt2(root):
     return "ok"
 
 
+@case("an-exemption-key-naming-no-fixture-leaf-is-refused", "guard", "refused")
+def gd_exempt_leaf(root):
+    # The prefix check passed the FILE half and left the leaf half unvalidated,
+    # so a constructor-legal key could name a leaf the fixture does not have,
+    # and where a fixture file shared a name with a derived scenario namespace
+    # one key waived a whole axis. The WHOLE key resolves now: a `::` leaf must
+    # be a leaf or subtree of that file's JSON.
+    for key in ("x.json::nonexistent", "x.json::a.deeper.path", "x.json::*"):
+        try:
+            _check_with_exemption(key)
+            return "constructed with key %r naming no fixture leaf" % key
+        except ValueError as e:
+            if "not a leaf or subtree" not in str(e):
+                return "wrong error for %r: %s" % (key, e)
+    # The control: a real subtree path still constructs.
+    try:
+        _checks.Check(lambda r: ("NO-DATA", "x"), reads=("x.json",), kind="json", severity="soft",
+                      full_fixture={"files": {"x.json": {"a": {"b": 1}}}},
+                      optional_leaves={"x.json::a/*": "a stated reason long enough to clear the floor"})
+    except ValueError as e:
+        return "refused an honest subtree key: %s" % e
+    return "refused"
+
+
+@case("an-access-scenario-cannot-be-waived-by-any-key", "guard", "unwaivable")
+def gd_exempt_axis(root):
+    # The derived scenario-id namespace and the fixture-filename namespace were
+    # the same string space, so a check whose fixture held a file named
+    # `access` could write a legal key that matched the whole ACCESS axis under
+    # the cap. Exemptibility is structural now: legacy, access and
+    # declared-reads scenarios are non-exemptible whatever a key spells,
+    # because "no PASS over evidence this tool could not open" is not a
+    # sentence any exemption may narrow.
+    meta = SourceFileLoader("tndc_axis", os.path.join(HERE, "test_no_data_class.py")).load_module()
+    tool = meta.ADAPTERS[("sbe_gate.py", "GATES")]
+    check = _gate.GATES["numbers"]
+    for maker in (meta.legacy_cases, meta.access_cases):
+        for sc in maker(tool, check):
+            if sc.exemptible:
+                return "a %s scenario (%s) is marked exemptible" % (sc.label, sc.sid)
+    # And a hollowing scenario IS exemptible, so the flag is not constant-false.
+    if not any(sc.exemptible for sc in meta.hollow_cases(tool, check)):
+        return "no hollowing scenario is exemptible, so the flag means nothing"
+    return "unwaivable"
+
+
 @case("one-exemption-key-cannot-waive-a-whole-leaf-sweep", "guard", "capped")
 def gd_exempt3(root):
     # The demonstrated bypass: a legal-format key naming one JSON leaf of the
@@ -733,6 +779,48 @@ def gd_exempt3(root):
         return ("a leaf key matches only %d scenario(s), inside the cap of %d, so the cap "
                 "no longer bites" % (matched, meta.WAIVED_SCENARIO_CAP))
     return "capped"
+
+
+@case("a-dead-waiver-that-excuses-nothing-is-a-meta-test-failure", "guard", "flagged dead")
+def gd_dead_waiver(root):
+    # Two of the four declared waivers shielded nothing: the placeholder
+    # exemption's own scenarios FAILed anyway, so it excused no PASS while the
+    # summary counted it. A waiver is alive (it excuses a real PASS) or it is
+    # red, because a waiver that shields nothing is a pre-approved mark waiting
+    # for a regression to hide under. This rebuilds the diagrams check with a
+    # legal key on a leaf whose sweep never needs excusing (a booleanish leaf
+    # that FAILs on any hollowing) and asserts the meta-test flags it dead.
+    meta = SourceFileLoader("tndc_dead", os.path.join(HERE, "test_no_data_class.py")).load_module()
+    fx = _design_mod.CHECKS["diagrams"].full_fixture
+    # 05-data-model.md##Entities: hollowing the Entities section makes the
+    # diagram untraceable, so every matched scenario FAILs and the waiver
+    # excuses nothing.
+    clone = _checks.Check(_design_mod.check_diagrams,
+                          reads=_design_mod.CHECKS["diagrams"].reads, kind="text",
+                          severity="gate", empty_expect="FAIL",
+                          empty_note="x",
+                          full_fixture=fx,
+                          optional_leaves={"05-data-model.md##Entities":
+                                           "a reason long enough to clear the reviewability floor"})
+    tool = meta.ADAPTERS[("sbe_design.py", "CHECKS")]
+    scs = (meta.legacy_cases(tool, clone) + meta.hollow_cases(tool, clone)
+           + meta.access_cases(tool, clone))
+    excused = 0
+    for sc in scs:
+        if not (sc.exemptible and clone.optional_leaves.get(sc.sid.split("|")[0])):
+            continue
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            for rel, content in meta.subst(sc.files, d).items():
+                tool.place(d, rel, content)
+            if sc.setup:
+                sc.setup(d)
+            out = tool.invoke(d, "diagrams", meta.subst(sc.env, d))
+            meta.restore_access(d)
+        got, _ = meta.verdict_and_evidence(out.stdout, "diagrams")
+        if got == "PASS":
+            excused += 1
+    return "flagged dead" if excused == 0 else "the waiver excused %d PASS(es), so it is alive" % excused
 
 
 @case("a-module-planted-in-a-bytecode-cache-is-refused-not-executed", "guard", "refused unrun")
@@ -1218,6 +1306,98 @@ def gd_vinstall(root):
     if "EXCLUDED-SOURCE" not in planted.stdout or "planted.py" not in planted.stdout:
         return "the failure does not name the planted file"
     return "named and failed"
+
+
+@case("a-symlinked-planted-module-fails-the-install-check", "guard", "named and failed")
+def gd_vinstall_symlink(root):
+    # `find -type f` never returns a symlink, so a planted tools/backdoor.py
+    # pointing at code OUTSIDE the tree was reported as nothing at all by
+    # verify-install and imported-and-executed by the honesty suite. The check
+    # enumerates every directory entry regardless of type now, and a
+    # non-regular entry the manifest cannot hash is its own failure.
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    os.makedirs(os.path.join(inst, "tools"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, "inst/tools/real.py", "def f():\n    return 1\n")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in ("tools/real.py", "scripts/verify-install.sh"):
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    clean = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                            os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                           capture_output=True, text=True)
+    if clean.returncode != 0:
+        return "the control tree failed: %s" % (clean.stdout + clean.stderr)[-200:]
+    payload = os.path.join(root, "outside-payload.py")
+    write(root, "outside-payload.py", "print('PLANTED')\n")
+    os.symlink(payload, os.path.join(inst, "tools", "backdoor.py"))
+    planted = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                              os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                             capture_output=True, text=True)
+    if planted.returncode == 0:
+        return "the symlinked planted module still passes"
+    if "NON-REGULAR" not in planted.stdout or "backdoor.py" not in planted.stdout:
+        return "the failure does not name the symlinked module: %s" % planted.stdout[-200:]
+    return "named and failed"
+
+
+@case("a-symlinked-module-under-tools-fails-the-honesty-suite", "guard", "refused unwalked")
+def gd_symlink_module(root):
+    # The other half of the same hole: tool_sources() walked with `find`-like
+    # semantics and imported every .py, symlinks included, so the planted
+    # module RAN inside the suite whose one job is refusing to report over
+    # what it did not examine. A non-regular .py under tools/ is refused by
+    # name now, never imported.
+    import shutil
+    for rel in ("tools", "evals"):
+        shutil.copytree(os.path.join(_REPO, rel), os.path.join(root, rel))
+    payload = os.path.join(root, "outside-payload.py")
+    marker = os.path.join(root, "PLANTED-RAN")
+    write(root, "outside-payload.py", "open(%r, 'w').write('ran')\n" % marker)
+    os.symlink(payload, os.path.join(root, "tools", "backdoor.py"))
+    meta = SourceFileLoader("tndc_symlink",
+                            os.path.join(root, "evals", "test_no_data_class.py")).load_module()
+    sources = meta.tool_sources()
+    if os.path.exists(marker):
+        return "the symlinked module was executed"
+    if any("backdoor.py" in s for s in sources):
+        return "the symlinked module was walked as source"
+    if not any("backdoor.py" in p for p in meta.NONREGULAR_SOURCE):
+        return "the symlinked module was dropped in silence, not named"
+    return "refused unwalked"
+
+
+@case("the-tracked-manifest-matches-the-tree-it-ships-with", "guard", "matches")
+def gd_manifest_fresh(root):
+    # A pristine clone of HEAD failed its own integrity check: CHECKSUMS.sha256
+    # went stale across a whole fix wave because nothing gated the manifest
+    # against the tree, so the security page's first verification called every
+    # honest fresh install untrustworthy and the shipped harness a planted
+    # backdoor. This recomputes the manifest from the tracked tree and diffs it
+    # against the committed one, so a stale manifest is a red suite (the same
+    # shape as the doc-count guards) and no commit can leave one behind.
+    import re as _re
+    gen = subprocess.run(["sh", os.path.join(_REPO, "scripts", "checksums.sh")],
+                         capture_output=True, text=True, cwd=_REPO)
+    if gen.returncode != 0:
+        return "checksums.sh did not run: %s" % (gen.stderr or gen.stdout)[-200:]
+    committed = open(os.path.join(_REPO, "CHECKSUMS.sha256"), errors="replace").read()
+    # The generator omits the manifest file itself; compare the rest verbatim.
+    want = "".join(l + "\n" for l in gen.stdout.splitlines()
+                   if l.strip() and not l.endswith("CHECKSUMS.sha256"))
+    have = "".join(l + "\n" for l in committed.splitlines()
+                   if l.strip() and not l.endswith("CHECKSUMS.sha256"))
+    if want == have:
+        return "matches"
+    wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}
+    hl = {l.split("  ", 1)[1]: l[:64] for l in have.splitlines() if "  " in l}
+    drift = [p for p in sorted(set(wl) | set(hl))
+             if wl.get(p) != hl.get(p)][:4]
+    return "the tracked manifest is stale for: %s (regenerate with scripts/checksums.sh " \
+           "CHECKSUMS.sha256)" % ", ".join(drift)
 
 
 T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
@@ -2934,6 +3114,31 @@ SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-C
 _REPO = os.path.abspath(os.path.join(HERE, ".."))
 
 
+@case("every-eval-case-invariants-md-cites-is-a-case-the-suite-defines", "docs", "consistent")
+def dc_inv(root):
+    # INVARIANTS.md names the asserting test for each promise, on the argument
+    # that "a promise nothing asserts is a wish with a serial number". The
+    # citation IS the promise's evidence, and it was asserted by nobody: a
+    # rename in the suite left the register pointing at a case that no longer
+    # exists, silently. This parses every backticked hyphenated token in
+    # INVARIANTS.md and fails on one that is not a defined eval case, so the
+    # register's own citations degrade loudly the way the counts already do.
+    import re as _re
+    body = open(os.path.join(_REPO, "INVARIANTS.md"), errors="replace").read()
+    names = {name for name, _k, _e, _fn in CASES}
+    # A citation-shaped token: backticked, hyphenated, all lowercase words, no
+    # slash (a path) and no space. The reinjection table cites case names in
+    # this exact shape; a plain-English hyphenated word (there are none today)
+    # would have to also be a real case name to pass, which is the point.
+    cited = {t for t in _re.findall(r"`([a-z][a-z0-9-]{6,})`", body) if "-" in t}
+    unknown = sorted(c for c in cited if c not in names)
+    if not cited:
+        return "INVARIANTS.md cites no eval case at all, so this guard proved nothing"
+    return "consistent" if not unknown else (
+        "INVARIANTS.md cites %d case(s) the suite does not define: %s"
+        % (len(unknown), ", ".join(unknown[:4])))
+
+
 @case("no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce", "docs", "consistent")
 def dc1(root):
     import re as _re
@@ -3137,6 +3342,36 @@ def dc3(root):
                 wrong.append("%s: a copy-ready CI block omits %d of the %d shipped steps (%s)"
                              % (rel, len(missing), len(real), "; ".join(missing[:3])))
     return "consistent" if not wrong else "; ".join(wrong[:3])
+
+
+@case("no-copy-ready-ci-block-runs-the-meta-test-weaker-than-the-workflow", "docs", "consistent")
+def dc_seed(root):
+    # A reader assembling CI from a doc fragment gets what the fragment shows.
+    # Three docs showed the meta-test step as one unseeded command while the
+    # shipped workflow runs it twice (the fixed sweep, then the seeded random
+    # composition --seed 1 --seed 2 --seed 3), so the assemble-the-steps path
+    # silently installed weaker coverage than the copy-the-file path. The
+    # workflow's own seeded invocation is the bar; any doc CI block that runs
+    # the meta-test at all must run it too, or it degrades in silence.
+    import re as _re
+    wf = open(os.path.join(_REPO, ".github/workflows/brothersbe-gates.yml"),
+              errors="replace").read()
+    if "--seed" not in wf:
+        return "the shipped workflow no longer runs the seeded meta-test, so this guard is stale"
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        body = open(p, errors="replace").read()
+        for m in _re.finditer(r"(?sm)^```yaml\n(.*?)^```$", body):
+            block = m.group(1)
+            if "test_no_data_class.py" not in block:
+                continue
+            if "--seed" not in block:
+                wrong.append("%s: a CI block runs the meta-test without the seeded pass the "
+                             "shipped workflow runs" % rel)
+    return "consistent" if not wrong else "; ".join(sorted(set(wrong))[:3])
 
 
 _CHECK_LINE = None
@@ -4199,16 +4434,50 @@ def w13(root):
     def _n(tok):
         return int(tok) if tok.isdigit() else words.get(tok.lower(), -1)
     said = (_n(m.group(1)), _n(m.group(2)))
-    out = subprocess.run([sys.executable, SCORE, _REPO], capture_output=True, text=True)
+    # Over the TRACKED tree, not the live working directory. The lint walks
+    # whatever it is pointed at, so an untracked scratch directory holding
+    # Python (a reviewer's probe copy) flipped this eval for the local
+    # developer while CI, on a fresh checkout with no untracked files, stayed
+    # green: the gate's verdict depended on files in nobody's clone, and the
+    # message it printed then blamed SKILL.md's pinned numbers. The tracked
+    # files copied with their WORKING-TREE content are exactly what a reader
+    # gets on their next pull, and the copy excludes the untracked scratch, so
+    # this is hermetic without lagging the edit under test.
+    import shutil
+    listing = subprocess.run(["git", "-C", _REPO, "ls-files", "-z"],
+                             capture_output=True)
+    if listing.returncode != 0:
+        return "could not list the tracked tree: %s" % (
+            listing.stderr.decode("utf-8", "replace")[:120])
+    with tempfile.TemporaryDirectory() as d:
+        for rel in listing.stdout.decode("utf-8", "surrogateescape").split("\0"):
+            if not rel:
+                continue
+            src = os.path.join(_REPO, rel)
+            if not os.path.isfile(src):
+                continue
+            dst = os.path.join(d, rel)
+            os.makedirs(os.path.dirname(dst) or d, exist_ok=True)
+            shutil.copy(src, dst)
+        # Run the COPIED scorer, so its self-skip (samefile against __file__)
+        # resolves to the copy it is scanning rather than the original in the
+        # repo; pointed at its own tree, exactly the shipped invocation.
+        copied_score = os.path.join(d, "tools", "sbe_score.py")
+        out = subprocess.run([sys.executable, copied_score, d], capture_output=True, text=True)
     line = next((l for l in out.stdout.splitlines()
                  if l.strip().startswith("silent-failure-lints")), "")
+    verdict = line.split()[1] if len(line.split()) > 1 else "?"
+    if verdict != "PASS":
+        # When the lint itself did not PASS, say so, rather than reporting the
+        # absence of the counts it wanted to read as if SKILL.md had drifted.
+        return "the tracked-tree lint did not PASS (got %s): %s" % (verdict, line.strip()[:120])
     waived = _re.search(r"(\d+) suppressed", line)
     clean = _re.search(r"(\d+) file\(s\) holding no match at all", line)
     if not waived or not clean:
-        return "the lint line for this repository printed no suppressed or clean-file count"
+        return "the tracked-tree lint line printed no suppressed or clean-file count: %s" % line.strip()[:120]
     got = (int(waived.group(1)), int(clean.group(1)))
     return ("consistent" if said == got else
-            "SKILL.md says %r but the run has %d waived hits and %d clean files"
+            "SKILL.md says %r but the tracked tree has %d waived hits and %d clean files"
             % (m.group(0), got[0], got[1]))
 
 

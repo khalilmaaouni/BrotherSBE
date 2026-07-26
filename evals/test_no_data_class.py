@@ -73,7 +73,7 @@ defects: the scenarios and the expected verdicts are data held here, the code
 under test is whatever --tools points at. A test that can only be run against the
 fixed code proves nothing about what it caught.
 """
-import ast, copy, datetime, json, os, random, subprocess, sys, tempfile
+import ast, copy, datetime, json, os, random, stat, subprocess, sys, tempfile
 from importlib.machinery import SourceFileLoader
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -255,6 +255,22 @@ def tool_sources():
                 if "__pycache__" in rel.split(os.sep):
                     PLANTED_SOURCE.append(rel)
                     continue
+                # A module that is not a REGULAR file is refused by name and
+                # never imported. `find -type f` never returns a symlink, so a
+                # planted tools/backdoor.py pointing at code outside the tree
+                # was invisible to the install verifier, and this suite
+                # imported and EXECUTED it while the module count moved with
+                # no comment. The rule covers the members nobody has planted
+                # yet: symlink, FIFO, socket, device are all "not a regular
+                # file", named loudly, never walked as source.
+                full = os.path.join(dp, fn)
+                try:
+                    regular = not os.path.islink(full) and stat.S_ISREG(os.lstat(full).st_mode)
+                except OSError:
+                    regular = False
+                if not regular:
+                    NONREGULAR_SOURCE.append(rel)
+                    continue
                 out.append(rel)
     hidden, uninspected = pruner.hidden(lambda f: f.endswith(".py"))
     if hidden or uninspected:
@@ -275,6 +291,9 @@ DENIED_DIRS = []
 # Python files found inside a bytecode-cache directory: refused, never
 # imported, reported as failures by name. See tool_sources().
 PLANTED_SOURCE = []
+# Python files under tools/ that are not regular files (a symlink, FIFO,
+# socket, device): refused, never imported, reported as failures by name.
+NONREGULAR_SOURCE = []
 # Scenarios a declared exemption matched, printed in the summary line so a
 # waiver cannot hide inside an unchanged scenario total.
 WAIVED = [0]
@@ -838,7 +857,7 @@ class Scenario:
     """One run: files to write, env to set, the verdict that would be a defect."""
 
     def __init__(self, sid, label, files, env=None, expect=None, forbid_pass=True,
-                 expect_invoked=True, setup=None):
+                 expect_invoked=True, setup=None, exemptible=False):
         self.sid = sid
         self.label = label
         self.files = files
@@ -846,6 +865,17 @@ class Scenario:
         self.expect = expect          # an exact verdict, or None for "anything but PASS"
         self.forbid_pass = forbid_pass
         self.expect_invoked = expect_invoked
+        # Only a HOLLOWING scenario may be excused by a declared exemption.
+        # The exemption key space and the derived scenario-id space used to be
+        # the same string space, so a check whose fixture held a file named
+        # `access` could write a constructor-legal key that waived the whole
+        # ACCESS axis: five scenarios, under the cap, with the printed total
+        # unchanged. The rule is structural now: scenarios from the legacy,
+        # access and declared-reads classes are non-exemptible by
+        # construction, whatever any key spells, because "no PASS over
+        # evidence this tool could not open" is not a sentence any check's
+        # exemption may narrow.
+        self.exemptible = exemptible
         # A callable run against the scenario directory after the files are
         # written: the ACCESS scenarios use it to chmod evidence to 000, replace
         # it with a broken symlink or a FIFO, or plant a symlink loop. The
@@ -912,7 +942,7 @@ def hollow_cases(tool, check):
             return
         merged = dict(files)
         merged[rel] = content
-        out.append(Scenario(sid, label, merged, env=env))
+        out.append(Scenario(sid, label, merged, env=env, exemptible=True))
 
     for rel, content in files.items():
         if isinstance(content, (dict, list)):
@@ -1209,7 +1239,7 @@ def counts():
                    + access_cases(tool, check))
             scenarios += len(scs)
             waived += sum(1 for sc in scs
-                          if check.optional_leaves.get(sc.sid.split("|")[0]))
+                          if sc.exemptible and check.optional_leaves.get(sc.sid.split("|")[0]))
     return checks, regs, scenarios, waived
 
 
@@ -1255,6 +1285,13 @@ def main():
                         "planted file or a misplaced module; it was NOT imported, it is NOT counted "
                         "in the module total, and this run fails until it is removed or moved where "
                         "the walk and the install manifest can see it" % path)
+    for path in sorted(set(NONREGULAR_SOURCE)):
+        failures.append("tools/%s is a .py path that is not a regular file (a symlink, FIFO, "
+                        "socket or device). A manifest cannot hash what it points at and this "
+                        "suite will not import it: a symlinked module is invisible to `find "
+                        "-type f` and to the install verifier, so it was NOT imported, NOT "
+                        "counted, and this run fails until it is a regular file the walk and the "
+                        "manifest can both vouch for" % path)
     for path in sorted(set(DENIED_DIRS)):
         failures.append("%s could not be entered (permission or I/O error), so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "
@@ -1278,14 +1315,13 @@ def main():
                 notapplicable.append("%s %s: its worked example asserts %s rather than PASS, "
                                      "declared reason: %s"
                                      % (fn, name, check.full_expect, check.full_expect_reason))
-            for path, why in sorted(check.optional_leaves.items()):
-                exemptions.append("%s %s [%s]: %s" % (fn, name, path, why))
             scenarios = (legacy_cases(tool, check) + hollow_cases(tool, check)
                          + access_cases(tool, check)
                          + seeded_cases(tool, check, SEEDS))
             invoked_count = 0
             saw_full = False
-            used_exemptions = set()
+            matched_by_key = {}
+            excused_by_key = {}
             matched_exempt = 0
             for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
@@ -1309,11 +1345,14 @@ def main():
                 invoked_count += invoked
                 saw_full = saw_full or (sc.label == "full" and got == check.full_expect)
                 bad = []
-                exempt = check.optional_leaves.get(sc.sid.split("|")[0])
+                key = sc.sid.split("|")[0]
+                exempt = check.optional_leaves.get(key) if sc.exemptible else None
                 if exempt:
-                    used_exemptions.add(sc.sid.split("|")[0])
+                    matched_by_key[key] = matched_by_key.get(key, 0) + 1
                     matched_exempt += 1
                     WAIVED[0] += 1
+                    if got == "PASS":
+                        excused_by_key[key] = excused_by_key.get(key, 0) + 1
                 if got == "PASS" and sc.forbid_pass and not exempt:
                     bad.append("a PASS over evidence that declares nothing is the defect this "
                                "whole project exists to prevent")
@@ -1349,7 +1388,15 @@ def main():
                                 "enough to hide a regression behind an unchanged scenario total; "
                                 "narrow the PASS sentence instead of exempting the evidence"
                                 % (fn, name, matched_exempt, WAIVED_SCENARIO_CAP))
-            for dead in sorted(set(check.optional_leaves) - used_exemptions):
+            for path, why in sorted(check.optional_leaves.items()):
+                # The listing carries what the exemption actually DID this
+                # run, beside what it claims, so a reader can tell a live
+                # waiver from a decorative one without re-deriving anything.
+                exemptions.append("%s %s [%s]: %s (matched %d scenario(s), excused %d PASS(es) "
+                                  "this run)" % (fn, name, path, why,
+                                                 matched_by_key.get(path, 0),
+                                                 excused_by_key.get(path, 0)))
+            for dead in sorted(set(check.optional_leaves) - set(matched_by_key)):
                 # An exemption no scenario matches exempts nothing and reads as
                 # if it did: it either names a section the fixture no longer
                 # has, or was written against a sid that never existed. Either
@@ -1357,6 +1404,21 @@ def main():
                 failures.append("%s %s: optional_leaves[%r] matched no scenario in this sweep, so "
                                 "it exempts nothing while reading as if it did; remove it or fix "
                                 "its key" % (fn, name, dead))
+            for dead in sorted(k for k in matched_by_key if not excused_by_key.get(k)):
+                # The dishonest sibling of the unmatched key: an exemption
+                # whose every matched scenario satisfies the law WITHOUT it
+                # shields nothing today, and it is armed: if the rule it
+                # secretly duplicates ever regresses, exactly these scenarios
+                # start PASSing under a pre-approved mark with no failure
+                # anywhere. Two of the four shipped waived scenarios were this
+                # shape, and the one summary number a reader had ("4 waived")
+                # counted them as if they excused something. A waiver is alive
+                # (it excuses real PASSes) or it is red.
+                failures.append("%s %s: optional_leaves[%r] excused nothing: every scenario it "
+                                "matches already satisfies the law without it, so the waiver "
+                                "shields nothing while reading as if it did, and it would hide "
+                                "a future regression on exactly those scenarios; remove it"
+                                % (fn, name, dead))
             if tool.has_fallback:
                 print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
                                       % (invoked_count, len(scenarios))))

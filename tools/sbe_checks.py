@@ -56,6 +56,40 @@ import errno, glob as _glob, json, math, os, re, stat, unicodedata
 KINDS = ("json", "jsonl", "text", "tree", "git")
 
 
+def _fixture_paths(content):
+    """Every rendered leaf and subtree path of a JSON fixture value.
+
+    The path spelling matches the honesty sweep's scenario ids
+    (`figures[0].snapshot_id`, `rerun/*`), so an exemption key can be checked
+    against the fixture it claims to name instead of being trusted as a
+    string. A subtree path is rendered with its `/*` suffix, the way the
+    sweep's own subtree scenarios spell it.
+    """
+    out = set()
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                walk(v, path + ("." if path else "") + str(k))
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                walk(v, path + "[%d]" % i)
+        if isinstance(obj, (dict, list)):
+            if path:
+                out.add(path + "/*")
+        elif path:
+            out.add(path)
+
+    walk(content, "")
+    return out
+
+
+def _fixture_headings(text):
+    """The heading titles of a text fixture, the way the sweep renders them."""
+    return {line.strip("# ").strip() for line in str(text).splitlines()
+            if line.lstrip().startswith("#")}
+
+
 def evidence_problem(path):
     """Why this path exists and still cannot be read as evidence, or "" if it can.
 
@@ -384,6 +418,42 @@ class Check:
                     "of this check's own full_fixture (files: %s). A key matched by scenario-id "
                     "prefix instead of by fixture leaf can waive an entire sweep at once"
                     % (path, ", ".join(sorted(fixture_files)) or "none"))
+            # The half after the separator used to be unvalidated, so a key
+            # that was legal to this constructor could name a leaf the fixture
+            # does not have, and where a fixture FILE shared a name with a
+            # derived scenario namespace, one key waived a whole axis. The
+            # WHOLE key resolves now: a `::` leaf must be a leaf or subtree
+            # path of that file's JSON, and a `##` heading must be a heading
+            # of that file's text. Anything else is refused at registration,
+            # loudly, which is the rule for everything outside what a key can
+            # honestly name.
+            f = next(f for f in fixture_files
+                     if path.startswith(f + "::") or path.startswith(f + "##"))
+            content, half = fixture_files[f], path[len(f) + 2:]
+            if path[len(f):len(f) + 2] == "::":
+                if not isinstance(content, (dict, list)):
+                    raise ValueError(
+                        "optional_leaves[%r] uses '::', which names a JSON leaf, on fixture "
+                        "file %r whose content is text; a text fixture's parts are its "
+                        "headings ('%s##<heading>')" % (path, f, f))
+                if half not in _fixture_paths(content):
+                    raise ValueError(
+                        "optional_leaves[%r] names %r, which is not a leaf or subtree of the "
+                        "fixture %r (valid: %s). An exemption that resolves to nothing in the "
+                        "fixture is a free-form waiver wearing a leaf key's clothes"
+                        % (path, half, f, ", ".join(sorted(_fixture_paths(content))) or "none"))
+            else:
+                if not isinstance(content, str):
+                    raise ValueError(
+                        "optional_leaves[%r] uses '##', which names a markdown heading, on "
+                        "fixture file %r whose content is JSON; a JSON fixture's parts are "
+                        "its leaves ('%s::<leaf path>')" % (path, f, f))
+                if half not in _fixture_headings(content):
+                    raise ValueError(
+                        "optional_leaves[%r] names the heading %r, which is not a heading of "
+                        "the fixture %r (headings: %s)"
+                        % (path, half, f,
+                           ", ".join(sorted(_fixture_headings(content))) or "none"))
         if len(optional_leaves or {}) > 3:
             # The exemption list had no cap and its key space includes scenario
             # ids, so a check that examines nothing could exempt itself from
