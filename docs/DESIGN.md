@@ -94,8 +94,8 @@ T0 is the common case and it produces nothing at all. The five answers are writt
 to `00-intake.json`, and the artifacts check reads the tier from that file rather
 than from anyone's judgment, so two engineers answering the same five questions
 land on the same tier. An override is legal in either direction, and it sets both
-a tier and a reason: a tier moved with a null reason is an edit, not an override,
-and is treated as the computed tier.
+a tier and a reason: a tier moved with either field missing is an edit, not an
+override, and the design check FAILs it by name rather than trusting either value.
 
 ## 4. Deciding shape: decision tables, not preference
 
@@ -136,8 +136,11 @@ Physical last: engine-specific types, indexes, partitioning, clustering,
 constraints, and the migration path with its reverse.
 
 The gate between logical and physical is mechanical: every entity names a system
-of record, and every relationship carries one of one-to-one, one-to-many,
-many-to-one, many-to-many. An entity with no system of record fails by name. No
+of record, and every relationship carries a cardinality in any accepted
+notation: the word forms (one-to-one, one-to-many, many-to-one, many-to-many),
+crow's foot shorthand (1:1, 1:N, N:1, N:M), UML multiplicity (1..1, 0..1, 1..*,
+0..*), prose (has many, belongs to exactly one), or an erDiagram's own symbols.
+An entity with no system of record fails by name. No
 entities at all is a failure, not a pass.
 
 Three lenses apply at that gate, in this order, and they are not a review ritual:
@@ -278,8 +281,9 @@ reader holding three verified numbers and one labeled UNVERIFIED is better off t
 one holding four numbers of unknown standing.
 
 Overrides exist, because a hard gate with no pressure valve gets bypassed off the
-books. They are named, logged, and read back at the weekly review, and they do not
-exist on the CI path at all: `--strict` changes only by a human editing the workflow
+books. They are named and logged; nothing mechanically surfaces them at the weekly
+review, which L15 says in the same words rather than claiming a reader nothing
+schedules. They do not exist on the CI path at all: `--strict` changes only by a human editing the workflow
 in a reviewed change.
 
 The reason this section is last is the reason the document is ordered this way. A

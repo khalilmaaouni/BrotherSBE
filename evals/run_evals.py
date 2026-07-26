@@ -2970,7 +2970,7 @@ def r6be(root):
 
 
 # ---------------------------------------------------------------------------
-# Round 7. Two laws that claimed an enforcement their tool did not deliver, which
+# Two laws that claimed an enforcement their tool did not deliver, which
 # is this project's own worst failure class rather than an edge case.
 #
 # L15 said an override sets BOTH fields and that they must agree. Only the reason
@@ -3072,7 +3072,7 @@ def s7h(root):
 
 
 # ---------------------------------------------------------------------------
-# Round 7, second half: the law-by-law sweep. Each of these is a sentence a law
+# The law-by-law sweep. Each of these is a sentence a law
 # printed that its tool did not do, or a tool doing something its law never said.
 # The fix went to whichever side was wrong, and the fixture pins it either way.
 

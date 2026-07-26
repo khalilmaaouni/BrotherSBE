@@ -30,7 +30,10 @@ observation to make on the day, not a claim this document makes on its own behal
       counts, blocking-defect counts, scores and ratings are the private record of
       how this was built and are not part of what it is:
       `git ls-files -z | xargs -0 grep -inE 'audit round|blocking defect|auditors|
-      review round|cold persona' | grep -v PUBLISH-CHECKLIST` must return nothing.
+      review round|cold persona|round [0-9]|wave [0-9]|fix wave' | grep -v
+      PUBLISH-CHECKLIST` must return nothing. The pattern list matches the rule
+      above it: it grew after history-shaped comments shipped while the five
+      original patterns returned green, a check narrower than its own sentence.
       This line is excluded because it names the terms it searches for, which is
       the one place in the tree where they are the checklist and not the history.
 - [ ] The install command in `README.md` and `docs/SETUP.md` resolves. It points at
@@ -56,8 +59,8 @@ observation to make on the day, not a claim this document makes on its own behal
 2. Add it as the remote and push via GitHub Desktop (the standing release tool),
    the founder authorizing the push at the GUI. Credentials are never automated.
 3. Confirm the pushed tree matches the intended one: no `sections/`, `verify/`,
-   `WHITEPAPER.md` and no `STATE.md` (gitignored, never re-added), and exactly one
-   `.docx`, the whitepaper, which is tracked on purpose.
+   `WHITEPAPER.md`, no `STATE.md` (gitignored, never re-added), and NO `.docx` at
+   all, matching the earlier checkbox: the whitepaper is handed over out of band.
 
 ## After publish
 - Optionally publish the whitepaper separately as the rationale document; it names
