@@ -895,6 +895,36 @@ def w5b(root):
     return "registered under a severity the exit-code mapping does not define"
 
 
+@case("a-planted-extra-file-fails-the-install-check", "guard", "planted-file-caught")
+def w5d(root):
+    # verify-install.sh checks both directions. The one-direction version of
+    # this script reports PASSED with a planted file still present, because an
+    # added file is neither a MISMATCH nor a MISSING; this fixture plants one
+    # and requires exit 1 naming it as EXTRA.
+    import shutil
+    sdir = os.path.join(root, "scripts")
+    os.makedirs(sdir)
+    for s in ("checksums.sh", "verify-install.sh"):
+        shutil.copy(os.path.join(_REPO, "scripts", s), os.path.join(sdir, s))
+    write(root, "tools/ok.py", "def f():\n    return 1\n")
+    write(root, "README.md", "a tiny install\n")
+    gen = subprocess.run(["sh", os.path.join(sdir, "checksums.sh"), "CHECKSUMS.sha256"],
+                         capture_output=True, text=True, cwd=root, timeout=60)
+    if gen.returncode != 0:
+        return "manifest generation failed: %s" % gen.stderr[:80]
+    clean = subprocess.run(["sh", os.path.join(sdir, "verify-install.sh")],
+                           capture_output=True, text=True, cwd=root, timeout=60)
+    if clean.returncode != 0:
+        return "clean tree did not verify: %s" % (clean.stdout + clean.stderr)[:120]
+    write(root, "planted.py", "import os\n")
+    planted = subprocess.run(["sh", os.path.join(sdir, "verify-install.sh")],
+                             capture_output=True, text=True, cwd=root, timeout=60)
+    if planted.returncode != 1:
+        return "planted file exited %d, not 1" % planted.returncode
+    return ("planted-file-caught" if "EXTRA:     planted.py" in planted.stdout
+            else "exit 1 without naming the extra file")
+
+
 @case("every-verdict-line-names-its-severity", "gaterun", "printed")
 def w5c(root):
     # The declaration is only visible if the output carries it: a severity a

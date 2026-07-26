@@ -135,6 +135,12 @@ class TestDigestCap(unittest.TestCase):
         self.assertLess(size, cap,
                         "DIGEST.md is %d bytes but the hook comment promises a %d cap; "
                         "move the growth into LAWS-REFERENCE.md" % (size, cap))
+        # The injected block says which version it came from, and that claim
+        # tracks the VERSION file rather than a human's memory at cut time.
+        version = io.open(os.path.join(HERE, "..", "VERSION")).read().strip()
+        digest_head = io.open(os.path.join(HERE, "..", "DIGEST.md")).readline()
+        self.assertIn("version %s" % version, digest_head,
+                      "DIGEST.md header does not name the version in VERSION (%s)" % version)
 
 
 class TestAutosaveRecover(unittest.TestCase):
