@@ -229,6 +229,10 @@ def tool_sources():
 
 PRUNED_WITH_SOURCE = []
 DENIED_DIRS = []
+# Raised when checks are added, never lowered: the count of discovered checks
+# may only grow, and a shrink is a failure this file reports itself rather than
+# leaving to a doc guard elsewhere.
+FLOOR_CHECKS = 20
 
 
 def load_tool_modules():
@@ -437,6 +441,16 @@ def pass_returning_functions(mods=None):
                                         "function in it is invisible to this lint" % (type(e).__name__, e)))
             continue
         pass_names = _pass_valued_names(tree)
+        # Functions in this module that return a 2-tuple anywhere, including
+        # through a conditional expression: a `return helper()` forwarding one
+        # of these forwards its verdict too.
+        pair_fns = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for sub in ast.walk(node):
+                    if (isinstance(sub, ast.Return) and sub.value is not None
+                            and _pair_shaped(sub.value)):
+                        pair_fns.add(node.name)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -447,24 +461,66 @@ def pass_returning_functions(mods=None):
             for sub in ast.walk(node):
                 if isinstance(sub, ast.Return) and sub.value is not None:
                     returns.append(sub.value)
+            flagged = None
             for value in returns:
-                head = None
-                if isinstance(value, ast.Tuple) and len(value.elts) == 2:
-                    head = value.elts[0]
-                elif isinstance(value, ast.Name) and value.id in pass_names:
-                    head = value
-                elif isinstance(value, ast.Lambda):
-                    continue
-                if head is None:
-                    continue
-                if _returns_pass(head, pass_names):
-                    out.append((fn, name, "returns the verdict PASS"))
+                for head in _verdict_heads(value, pass_names, pair_fns):
+                    if head is UNKNOWN_HEAD:
+                        flagged = ("returns a (verdict, evidence) pair whose verdict this "
+                                   "lint cannot prove is never PASS")
+                    elif _returns_pass(head, pass_names):
+                        flagged = "returns the verdict PASS"
+                        break
+                    elif not _provably_not_pass(head, pass_names):
+                        flagged = ("returns a (verdict, evidence) pair whose verdict this "
+                                   "lint cannot prove is never PASS")
+                if flagged == "returns the verdict PASS":
                     break
-                if not _provably_not_pass(head, pass_names):
-                    out.append((fn, name, "returns a (verdict, evidence) pair whose verdict this "
-                                          "lint cannot prove is never PASS"))
-                    break
+            if flagged:
+                out.append((fn, name, flagged))
     return sorted(set(out))
+
+
+UNKNOWN_HEAD = object()   # a verdict position this lint cannot read at all
+
+
+def _pair_shaped(value):
+    """True when this return value is a (verdict, evidence)-shaped pair."""
+    if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == 2:
+        return True
+    if isinstance(value, ast.IfExp):
+        return _pair_shaped(value.body) or _pair_shaped(value.orelse)
+    return False
+
+
+def _verdict_heads(value, pass_names, pair_fns):
+    """Every verdict-position expression this return value can produce.
+
+    The four shapes an audit found the old single-shape reader missing, each an
+    ordinary way to write the same return: `return ("PASS", ev) if x else
+    (...)` (an IfExp OVER tuples rather than inside one), `return _helper()`
+    (forwarding another function's pair), `return ["PASS", ev]` (a list is a
+    pair too), and `return (*PAIR,)` (a starred rebuild, unreadable, so it is
+    UNKNOWN rather than skipped). Yields UNKNOWN_HEAD for anything it cannot
+    read, which the caller flags, because the safe direction is a line in the
+    allowlist and never a silent skip.
+    """
+    if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == 2:
+        if any(isinstance(e, ast.Starred) for e in value.elts):
+            yield UNKNOWN_HEAD
+        else:
+            yield value.elts[0]
+    elif isinstance(value, (ast.Tuple, ast.List)) and any(
+            isinstance(e, ast.Starred) for e in value.elts):
+        yield UNKNOWN_HEAD
+    elif isinstance(value, ast.IfExp):
+        for branch in (value.body, value.orelse):
+            for h in _verdict_heads(branch, pass_names, pair_fns):
+                yield h
+    elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) \
+            and value.func.id in pair_fns:
+        yield UNKNOWN_HEAD
+    elif isinstance(value, ast.Name) and value.id in pass_names:
+        yield value
 
 
 def _provably_not_pass(head, pass_names):
@@ -1060,6 +1116,7 @@ def main():
                          + access_cases(tool, check))
             invoked_count = 0
             saw_full = False
+            used_exemptions = set()
             for sc in scenarios:
                 with tempfile.TemporaryDirectory() as d:
                     for rel, content in subst(sc.files, d).items():
@@ -1083,6 +1140,8 @@ def main():
                 saw_full = saw_full or (sc.label == "full" and got == check.full_expect)
                 bad = []
                 exempt = check.optional_leaves.get(sc.sid.split("|")[0])
+                if exempt:
+                    used_exemptions.add(sc.sid.split("|")[0])
                 if got == "PASS" and sc.forbid_pass and not exempt:
                     bad.append("a PASS over evidence that declares nothing is the defect this "
                                "whole project exists to prevent")
@@ -1111,6 +1170,14 @@ def main():
                 failures.append("%s %s: the declared full_fixture did not produce %s, so nothing "
                                 "here proves the check body ran or that its worked example is a "
                                 "real one" % (fn, name, check.full_expect))
+            for dead in sorted(set(check.optional_leaves) - used_exemptions):
+                # An exemption no scenario matches exempts nothing and reads as
+                # if it did: it either names a section the fixture no longer
+                # has, or was written against a sid that never existed. Either
+                # way it is a claim of coverage nothing exercises.
+                failures.append("%s %s: optional_leaves[%r] matched no scenario in this sweep, so "
+                                "it exempts nothing while reading as if it did; remove it or fix "
+                                "its key" % (fn, name, dead))
             if tool.has_fallback:
                 print("  %-26s %s" % (name, "-> %d/%d scenarios reached the check body"
                                       % (invoked_count, len(scenarios))))
@@ -1125,6 +1192,11 @@ def main():
     print("\ndeclared exemptions from the empty-value sweep (each states its reason):")
     for e in exemptions or ["none"]:
         print("  %s" % e)
+    if checked < FLOOR_CHECKS:
+        failures.append("only %d check(s) discovered, below the floor of %d. Deleting a check "
+                        "used to shrink this count in silence, with the anti-shrinkage guarantee "
+                        "living only in the eval suite and a number in a doc; the floor is raised "
+                        "when checks are added and never lowered" % (checked, FLOOR_CHECKS))
     print("\n%d checks discovered from %d registries in %d module(s), %d scenarios run, %d failure(s)."
           % (checked, len(known), len(mods), ran, len(failures)))
     for f in failures:

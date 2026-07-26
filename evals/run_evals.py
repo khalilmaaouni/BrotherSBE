@@ -3899,6 +3899,62 @@ def u20(root):
           "## What would flip this\nSub-second freshness becomes a requirement.\n")
 
 
+# ---------------------------------------------------------------------------
+# The decision tool: ghost votes, silent ties, swallowed arguments.
+
+DECIDE = os.path.join(HERE, "..", "tools", "sbe_decide.py")
+
+
+@case("a-vote-for-a-ghost-option-is-reported-not-counted", "decide", "reported")
+def q1(root):
+    table = {"options": ["alpha", "beta"], "flip": "flip line",
+             "criteria": [{"name": "c1", "kind": "choice", "note": "", "scores": {"yes": ["gamma"]}},
+                          {"name": "c2", "kind": "choice", "note": "", "scores": {"yes": ["alpha"]}}]}
+    r = _decide.recommend(table, {"c1": "yes", "c2": "yes"})
+    ghost_named = any("gamma" in u and "not among this table's options" in u
+                      for u in r["unrecognized"])
+    return ("reported" if ghost_named and r["evidence"] == 1 else
+            "evidence=%d unrecognized=%r" % (r["evidence"], r["unrecognized"]))
+
+
+@case("an-exact-tie-is-disclosed-not-decided-in-silence", "decide", "disclosed")
+def q2(root):
+    table = {"options": ["alpha", "beta"], "flip": "flip line",
+             "criteria": [{"name": "c1", "kind": "choice", "note": "",
+                           "scores": {"yes": ["alpha", "beta"]}}]}
+    r = _decide.recommend(table, {"c1": "yes"})
+    return "disclosed" if r["tie"] == ["alpha", "beta"] else "tie=%r" % r["tie"]
+
+
+@case("key-value-answers-are-read-not-swallowed", "guard", "answered")
+def q3(root):
+    # Every argument after the table name used to be discarded without a word,
+    # and the tool then asked its questions interactively: key=value is the
+    # first thing an engineer or an agent tries.
+    out = subprocess.run([sys.executable, DECIDE, "shape", "deploying_teams=1",
+                          "consistency=strong", "ops_maturity=low", "failure_isolation=low"],
+                         input="", capture_output=True, text=True, timeout=20)
+    return ("answered" if out.returncode == 0 and "Recommendation: modular monolith" in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:80]))
+
+
+@case("an-argument-the-table-cannot-read-is-refused-by-name", "guard", "refused")
+def q4(root):
+    out = subprocess.run([sys.executable, DECIDE, "shape", "THIS_IS_GARBAGE=999"],
+                         input="", capture_output=True, text=True, timeout=20)
+    return ("refused" if out.returncode == 1 and "THIS_IS_GARBAGE" in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:80]))
+
+
+@case("a-closed-stdin-is-a-named-refusal-not-a-repr", "guard", "named")
+def q5(root):
+    out = subprocess.run([sys.executable, DECIDE, "shape"], input="",
+                         capture_output=True, text=True, timeout=20)
+    return ("named" if out.returncode == 1 and "stdin closed before" in out.stdout
+            and "EOFError" not in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:120]))
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
