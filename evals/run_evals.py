@@ -500,6 +500,31 @@ def c13i14(root):
     return _approval_with_sig(root, "G", approver="田中太郎 <tanaka@example.com>")
 
 
+@case("a-whole-word-small-capital-name-is-the-author-not-a-second-person", "sig", "FAIL")
+def c13i15(root):
+    # EVERY letter of the approver in the Latin small-capital block (U+1D00 and
+    # neighbours): no word mixes anything, so both mixture rules pass it, and
+    # the block has no decomposition and no confusable-table row, so it used to
+    # certify "not the commit's author or committer" over the author's own name
+    # on the money gate. The Unicode-name fold now reads each letter's rendered
+    # base out of the character database (a rule, not a table), the name folds
+    # to the author, and the verdict is the self-approval FAIL. Direction
+    # pinned: refusal, never PASS.
+    return _approval_with_sig(root, "G",
+                              approver="ᴅᴀɴᴀ ᴀᴜᴛʜᴏʀ")
+
+
+@case("a-latin-letter-with-no-readable-base-is-refused-not-passed", "sig", "FAIL")
+def c13i16(root):
+    # LATIN SMALL LETTER ALPHA (U+0251) and GAMMA (U+0263): wholly one word,
+    # wholly Latin family, no decomposition, no table row, and their Unicode
+    # names carry no single base letter, so no fold this host has can reduce
+    # them. The readability rule refuses the word by name instead of certifying
+    # a difference the fold cannot vouch for; this is the probe that the
+    # closure is a rule over the whole Latin family and not a wider table.
+    return _approval_with_sig(root, "G", approver="ɑɣɑ Author")
+
+
 @case("an-invisible-character-is-not-an-answer-and-not-a-derivation", "numbers", "FAIL")
 def c14inv(root):
     # snapshot_id is TODO plus a zero-width space; the second derivation is the
@@ -510,6 +535,21 @@ def c14inv(root):
         "label": "gmv", "snapshot_id": "TODO\u200b",
         "query": "SELECT SUM(amount) FROM orders",
         "second_derivation": "SELECT SUM(amount) FROM orders\u00ad",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-small-capital-placeholder-is-not-a-pin", "numbers", "FAIL")
+def c14sc(root):
+    # snapshot_id is TODO spelled in the Latin small-capital block: present,
+    # non-empty, renders as TODO on every screen, survives NFKC/NFKD and the
+    # confusable table (the block has neither a decomposition nor a row). The
+    # sixth disguise of one placeholder. The Unicode-name fold reads it as the
+    # word it renders as, and the gate refuses the pin; a Latin value the fold
+    # cannot reduce at all is refused by the residue rule the same way.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "ᴛᴏᴅᴏ",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
         "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
 
 
