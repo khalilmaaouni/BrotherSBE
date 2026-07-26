@@ -723,17 +723,27 @@ def silent_failure_lints(ctx=None):
             # sentence over a set the tool truncated in silence is the class this
             # gate exists to catch.
             #
-            # realpath, not abspath: abspath normalizes and does NOT resolve
-            # symlinks, so the same tree reached through a symlinked spelling
-            # (macOS /tmp vs /private/tmp, a symlinked home, a bind mount)
-            # compared unequal, the tool scanned ITSELF, and the unwaivable
-            # gate FAILed an honest tree with four "defects" that were its own
-            # regex literals, while the self-skip disclosure vanished from the
-            # sentence. One path, one identity, however it was spelled.
-            if os.path.realpath(path_here) == os.path.realpath(__file__):
-                self_skipped.append(os.path.relpath(path_here, root))
-                continue
+            # samefile, not a path-string comparison: realpath resolved
+            # symlinks and nothing else, so the same file reached through a
+            # case-different spelling (TOOLS/ on the case-insensitive
+            # filesystem macOS ships by default) was two identities, the tool
+            # scanned ITSELF, and the unwaivable gate FAILed an honest tree
+            # with four "defects" that were its own regex literals, while the
+            # self-skip disclosure vanished from the sentence. The identity of
+            # a file is the file: samefile compares inodes, which covers case,
+            # symlinks, hardlinks, bind mounts and every spelling nobody has
+            # typed yet in one call. A path that vanishes between the walk and
+            # this stat is a named problem, never a silent skip.
             if not fn.endswith(SCANNABLE):
+                continue
+            try:
+                is_self = os.path.samefile(path_here, __file__)
+            except OSError as e:
+                unopened.append("%s (vanished or unstattable during the walk: %s)"
+                                % (os.path.relpath(path_here, root), type(e).__name__))
+                continue
+            if is_self:
+                self_skipped.append(os.path.relpath(path_here, root))
                 continue
             path = path_here
             # The ACCESS axis: a chmod 000 source file used to fall out of the

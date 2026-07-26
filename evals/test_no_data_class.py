@@ -137,7 +137,14 @@ VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")
                   # the text as it renders, not as it is encoded.
                   ("v", "todo-zero-width", "TODO\u200b"),
                   ("v", "todo-soft-hyphen", "T\u00adODO"),
-                  ("v", "todo-fullwidth", "\uff34\uff2f\uff24\uff2f")]
+                  ("v", "todo-fullwidth", "\uff34\uff2f\uff24\uff2f"),
+                  # The shape-wearing placeholder: `[TBD]` is none of the
+                  # tokens and cleared the money gate with its strongest
+                  # sentence. The vacuity test now folds SHAPES (wrapping,
+                  # trailing owners, dotted initialisms) to a fixpoint, and
+                  # this token proves the folding is CALLED everywhere, with a
+                  # member the fix's own examples never listed per leaf.
+                  ("v", "bracketed-tbd", "[TBD]")]
 
 # Values that are numbers and still record no measurement. json.load accepts a
 # bare NaN, `NaN <= 0` is False, and a hand-rolled duration check accepted one

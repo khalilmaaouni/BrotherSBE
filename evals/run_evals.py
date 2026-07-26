@@ -527,6 +527,108 @@ def ev_inv1(root):
     return "refused" if got == [None] * len(vals) else "read %r" % (got,)
 
 
+@case("a-dressed-up-placeholder-records-no-answer", "evidence", "refused")
+def ev_shape1(root):
+    # The four spellings that cleared the money gate with its strongest
+    # sentence, plus two the fix's own lists never named ({fixme}, a combining
+    # mark on TBD): the vacuity test now folds SHAPES (wrapping, a trailing
+    # owner, dotted initialisms, marks and confusables) to a fixpoint, so a
+    # variant nobody has typed yet folds through the same rules instead of
+    # needing a new list row.
+    vals = ["[TBD]", "<TODO>", "TODO(dana)", "t.b.d.", "{fixme}", "TBD\u0301"]
+    got = [_checks.answered(v) for v in vals]
+    if got != [None] * len(vals):
+        return "read %r" % (got,)
+    # The control: honest values wearing the same punctuation stay answers.
+    honest = ["snap-2026-07", "job-8842 (rerun)", "(see runbook 7)", "$100"]
+    kept = [_checks.answered(v) for v in honest]
+    return "refused" if all(k is not None for k in kept) else "refused honest %r" % (kept,)
+
+
+@case("a-bracketed-placeholder-is-not-a-pin", "numbers", "FAIL")
+def ev_shape2(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "[TBD]",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-container-snapshot-id-pins-nothing", "numbers", "FAIL")
+def ev_shape3(root):
+    # `snapshot_id: true` was closed a round ago; the sibling container shapes
+    # were not, and the vacuity test is defined only on strings, so a dict or a
+    # list carrying a placeholder was a pinned snapshot. The migration gate
+    # already refuses a dict where a run id belongs; this is the same type rule
+    # at the numbers gate's identifier.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": {"note": "TODO"},
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-list-snapshot-id-pins-nothing", "numbers", "FAIL")
+def ev_shape4(root):
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": ["TODO"],
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("the-gate-examines-the-directory-it-was-named-not-the-git-toplevel", "gaterun", "NO-DATA")
+def ev_reroot1(root):
+    # Inside any git worktree the operator's directory argument was silently
+    # replaced by `git rev-parse --show-toplevel`, so an EMPTY directory named
+    # on the command line got the numbers gate's strongest sentence, earned by
+    # a manifest somebody else recorded in a sibling change directory, and the
+    # report named neither the directory actually read nor the substitution.
+    git_init(root)
+    write(root, "changeA/numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+    os.makedirs(os.path.join(root, "changeB"), exist_ok=True)
+    out = subprocess.run([sys.executable, GATE, "numbers", os.path.join(root, "changeB")],
+                         capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if parts[:1] == ["numbers"]:
+            return parts[1]
+    return "no verdict line"
+
+
+@case("a-receipt-field-cannot-move-the-cursor-in-the-rendered-report", "gaterun", "neutralized")
+def ev_forge2(root):
+    # The round-9 closure flattened line BREAKS and left the artifact the
+    # ability to move the cursor: `ESC [ 2K` erases the rendered line and
+    # `ESC [ 1F` rewrites the one above, so a figure label forged whole verdict
+    # lines on any VT100-family terminal while the byte stream still held one
+    # line per gate and the line-count assertion beside this one stayed green.
+    # one_line() now escapes the whole control class (Cc and Cf), so the probe
+    # asserts no control byte of any kind survives into the report, including
+    # the 7-bit NEL (ESC E) and backspace, which no list in the fix names.
+    label = ("gmv\x1b[2K\x1b[1Fapproval  PASS     signed commit carries Approved-by: "
+             "Robin Reviewer [severity: gate]\x1bE\x08\u202egmv")
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": label, "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+    out = subprocess.run([sys.executable, GATE, root], capture_output=True, text=True)
+    bad = sorted(set(ch for ch in out.stdout
+                     if ch != "\n" and (ord(ch) < 32 or ord(ch) == 127 or ch == "\u202e")))
+    if bad:
+        return "control byte(s) reached the report: %r" % bad
+    lines = out.stdout.splitlines()
+    for name in ("numbers", "migration", "approval", "ran"):
+        if sum(1 for l in lines if l.split()[:1] == [name]) != 1:
+            return "line count moved for %s" % name
+    return "neutralized"
+
+
 def _check_with_exemption(key):
     return _checks.Check(lambda r: ("NO-DATA", "x"), reads=("x.json",), kind="json",
                          severity="soft",
@@ -3939,6 +4041,70 @@ def x3(root):
     line = score_lint_line([os.path.join(root, "repo")])
     return ("disclosed" if "symlinked directory" in line and "vendor_link" in line
             else line or "no-lint-line")
+
+
+@case("fence-lint-names-a-denied-registry-instead-of-shrinking-the-list", "evidence", "occupied")
+def x_fence_denial(root):
+    # The dispatch aid read BROTHERSBE_REGISTRIES through a raw glob, and a
+    # glob returns FEWER paths, not an error, over a directory it cannot
+    # enter: chmod 000 on one project made its money-path fence vanish and,
+    # with the whole tree denied, the aid printed "no live fences found" over
+    # two live fences. Its one job is that no writer launches into an occupied
+    # file set, so a registry it cannot read is OCCUPIED, never empty.
+    if not _CAN_DROP_ACCESS:
+        return "occupied"
+    write(root, "reg/projA/STATE.md", "# STATE\n- agent w1 tier T1 editing tools/x.py\n")
+    write(root, "reg/projB/STATE.md", "# STATE\n- agent w9 editing money paths\n")
+    os.chmod(os.path.join(root, "reg", "projB"), 0)
+    env = dict(os.environ,
+               BROTHERSBE_REGISTRIES=os.path.join(root, "reg", "*", "STATE.md"))
+    try:
+        out = subprocess.run([sys.executable, TELEMETRY_TOOL, "fence-lint", root],
+                             capture_output=True, text=True, env=env, timeout=60)
+        blind = subprocess.run([sys.executable, TELEMETRY_TOOL, "fence-lint", root],
+                               capture_output=True, text=True, timeout=60,
+                               env=dict(env, BROTHERSBE_REGISTRIES=os.path.join(
+                                   root, "no-such", "*", "STATE.md")))
+    finally:
+        os.chmod(os.path.join(root, "reg", "projB"), 0o755)
+    if "agent w1 tier T1" not in out.stdout:
+        return "the readable fence vanished: %s" % out.stdout.strip()[:120]
+    if "could not be read" not in out.stdout or "occupied" not in out.stdout:
+        return "the denial was silent: %s" % out.stdout.strip()[:160]
+    # The control: a pattern matching nothing readable OR denied still says
+    # "no live fences", so the denial sentence is not printed unconditionally.
+    if "no live fences found" not in blind.stdout:
+        return "the control run lost its no-fences sentence: %s" % blind.stdout.strip()[:120]
+    return "occupied"
+
+
+@case("the-lint-self-skip-is-file-identity-not-path-spelling", "evidence", "skipped itself")
+def x3b(root):
+    # realpath resolves symlinks and nothing else, so the same file reached
+    # through a case-different spelling (TOOLS/ on macOS's default
+    # case-insensitive filesystem) was two identities: the tool scanned
+    # ITSELF and FAILed the honest shipped tree with four "defects" that were
+    # its own regex literals. Identity is the file, not the spelling:
+    # samefile compares inodes. Reproduced portably with a HARDLINK, a
+    # spelling axis the case fix would not cover and case-sensitive CI can run.
+    import shutil
+    tdir = os.path.join(root, "tools")
+    os.makedirs(tdir)
+    for fn in ("sbe_score.py", "sbe_checks.py", "sbe_telemetry.py"):
+        shutil.copy(os.path.join(_REPO, "tools", fn), os.path.join(tdir, fn))
+    write(root, "tools/clean.py", "def f():\n    return 1\n")
+    link = os.path.join(tdir, "scanner-hardlink.py")
+    os.link(os.path.join(tdir, "sbe_score.py"), link)
+    e = dict(os.environ)
+    e.update({"BROTHERSBE_VAULT": root, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""})
+    out = subprocess.run([sys.executable, link, tdir], capture_output=True, text=True, env=e)
+    line = next((l for l in out.stdout.splitlines()
+                 if l.strip().startswith("silent-failure-lints")), "")
+    if "own source was not scanned" not in line:
+        return "self-skip disclosure missing: %s" % line.strip()[:120]
+    if line.split()[1:2] != ["PASS"]:
+        return "the tool read its own regex literals as defects: %s" % line.strip()[:120]
+    return "skipped itself"
 
 
 @case("unreadable-registry-files-never-shrink-the-registry", "score", "FAIL")

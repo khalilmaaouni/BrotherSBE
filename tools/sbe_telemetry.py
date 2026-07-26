@@ -58,7 +58,7 @@ import json, os, sys, glob, re, datetime, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (distinct, derivation_fold, evidence_problem, without_comments,
-                        answered, fold)
+                        answered, fold, glob_with_denials)
 
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
@@ -781,13 +781,29 @@ def cmd_fence_lint(argv):
             cwd = ""
     cwd = cwd or os.getcwd()
     hits = []
+    unread = []
     # The project's own STATE.md plus any registries the user declared via
     # BROTHERSBE_REGISTRIES (colon-separated glob patterns).
+    #
+    # Discovery accounts for what it could not see: a raw glob returns FEWER
+    # paths, not an error, over a directory it cannot enter, so a denied
+    # registry directory silently shrank the fence list and two writers ended
+    # up in one file set. This aid's one job is that no writer launches into
+    # an occupied file set, and an occupied file set it cannot READ has to be
+    # treated as occupied, not as empty. Same rule, same shared helper, as the
+    # sibling scorer check that already adopted it.
     pats = [os.path.join(cwd, "STATE.md")]
     pats += [p.strip() for p in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":") if p.strip()]
     for pat in pats:
-        for p in glob.glob(pat, recursive=True):
-            for line in open(p, errors="replace"):
+        paths, denied = glob_with_denials(pat)
+        unread.extend(denied)
+        for p in paths:
+            try:
+                lines = list(open(p, errors="replace"))
+            except OSError:
+                unread.append(p)
+                continue
+            for line in lines:
                 s = line.strip()
                 if s.startswith("- ") and "agent" in s.lower() and "LANDED" not in s and "ADOPTED" not in s:
                     tier = "" if re.search(r"\btier T[123]\b", s) else " [NO-TIER: declare T1/T2/T3]"
@@ -796,7 +812,12 @@ def cmd_fence_lint(argv):
         print("LIVE FENCES (fence-then-dispatch; overlap means queue):")
         for h in hits[:8]:
             print("  " + h)
-    else:
+    if unread:
+        u = sorted(set(unread))
+        print("fence-lint: %d registry path(s) could not be read (%s); any fence in them is "
+              "INVISIBLE to this list, so treat those file sets as occupied rather than free"
+              % (len(u), ", ".join(u[:4])))
+    if not hits and not unread:
         print("fence-lint: no live fences found under %s" % cwd)
 
 
