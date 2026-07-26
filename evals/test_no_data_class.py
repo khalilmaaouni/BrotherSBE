@@ -577,6 +577,58 @@ def pass_returning_functions(mods=None):
     return sorted(set(out))
 
 
+# The modules whose stdout this suite (and any CI grep, and any human) parses
+# for verdict lines. Their printed report IS the interface under test, so every
+# print in them is held to the choke-point rule below.
+REPORT_TOOLS = ("sbe_gate.py", "sbe_design.py", "sbe_score.py")
+
+
+def unflattened_report_prints():
+    """Source-level: every print in a report tool that skips the one_line choke point.
+
+    The verdict-forgery channel was closed value by value: evidence fields
+    went through one_line(), and the round-10 probe walked past every wrapped
+    value by hiding in one nobody wrapped (a dossier DIRECTORY NAME carrying a
+    newline wrote a byte-perfect verdict line into the report, and
+    verdict_and_evidence, this suite's own reader, believed it). Wrapping
+    values is a list of instances. The rule is the class: a report tool may
+    print a bare string constant (its own fixed header), or a line that
+    passed through one_line()/say() AS A WHOLE after formatting. Any other
+    print is an interpolation some future value can climb through, and it is
+    flagged here whether or not anyone has typed that value yet.
+
+    Returns [(file, line, why)].
+    """
+    out = []
+    for fn in REPORT_TOOLS:
+        try:
+            tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
+        except (SyntaxError, OSError, ValueError) as e:
+            out.append((fn, 0, "could not be parsed (%s: %s), so its print sites are invisible "
+                               "to this lint" % (type(e).__name__, e)))
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "print"):
+                continue
+            ok = False
+            if not node.args and not node.keywords:
+                ok = True
+            elif len(node.args) == 1 and not node.keywords:
+                a = node.args[0]
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    ok = True
+                elif (isinstance(a, ast.Call) and isinstance(a.func, ast.Name)
+                        and a.func.id in ("one_line", "say")):
+                    ok = True
+            if not ok:
+                out.append((fn, node.lineno,
+                            "prints a line the one_line() choke point never flattened; a report "
+                            "line is one line by construction, so route it through say() (or "
+                            "print a bare constant)"))
+    return sorted(out)
+
+
 UNKNOWN_HEAD = object()   # a verdict position this lint cannot read at all
 
 
@@ -1287,6 +1339,11 @@ def main():
     if unregistered:
         failures.append("function(s) that can return the verdict PASS but sit in no registry, so "
                         "no scenario in this file reaches them: %s" % ", ".join(unregistered))
+    # Every print in a report tool goes through the one_line choke point, so no
+    # interpolated value (a path, a root, an error repr) can write a second
+    # report line: the class behind the directory-name verdict forgery.
+    for fn, lineno, why in unflattened_report_prints():
+        failures.append("%s:%s %s" % (fn, lineno, why))
     for path in sorted(set(PRUNED_WITH_SOURCE)):
         failures.append("%s was pruned from the walk and holds Python source, so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "

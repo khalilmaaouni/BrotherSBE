@@ -920,6 +920,24 @@ def one_line(text):
     return "".join(out)
 
 
+def say(line):
+    """The one print a report tool owns: the WHOLE rendered line is flattened.
+
+    one_line() used to be applied value by value at each print site, and the
+    forgery walked past every wrapped value by hiding in one nobody wrapped: a
+    dossier DIRECTORY NAME carrying a newline wrote a byte-perfect verdict
+    line into the design report, above the true verdict, and the honesty
+    suite's own reader (verdict_and_evidence) believed it. Wrapping values is
+    a list of instances; the rule is the choke point. Every report line
+    passes through one_line() as a whole, after formatting, so no
+    interpolated value of any kind (a path, a root, a pruner note, a waiver
+    target, an error repr) can move the cursor or open a second line. The
+    source lint in evals/test_no_data_class.py fails any print in a report
+    tool that does not come through here or print a bare constant.
+    """
+    print(one_line(line))
+
+
 _BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
 _LINE_COMMENT = re.compile(r"(?:--|#)[^\n]*")
 

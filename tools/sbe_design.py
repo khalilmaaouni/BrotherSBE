@@ -31,7 +31,7 @@ import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import (Check, run_guarded, answered, answered_as, derivation_fold, vacuous,
-                        domain_vacuous, all_vacuous, distinct, one_line, Pruner,
+                        domain_vacuous, all_vacuous, distinct, one_line, say, Pruner,
                         evidence_problem, without_comments)
 
 ARTIFACT_FILES = {
@@ -2306,14 +2306,14 @@ def main():
             roots.append(a)
             root = a
         else:
-            print("sbe_design: %r is neither a check name (%s) nor a directory."
+            say("sbe_design: %r is neither a check name (%s) nor a directory."
                   % (a, ", ".join(CHECKS)))
             sys.exit(1)
     if len(roots) > 1:
         # The last one used to win in silence: a failing dossier passed first
         # on the command line was neither checked nor mentioned while --strict
         # exited 0 on the survivor.
-        print("sbe_design: one directory at a time, got %d (%s)."
+        say("sbe_design: one directory at a time, got %d (%s)."
               % (len(roots), ", ".join(roots)))
         sys.exit(1)
     # SBE_DOSSIER_ROOT is the declaration that this repository keeps dossiers.
@@ -2356,7 +2356,7 @@ def main():
         # dossier from last year blocking every unrelated merge forever is a gate
         # that gets switched off instead.
         waivers += len(waived)
-        print("  %-10s %-8s %s" % (">> dossier", "WAIVED", one_line(
+        say("  %-10s %-8s %s" % (">> dossier", "WAIVED", one_line(
               "%s: %s waives %s here (of %d design checks), stated reason: %s. Nothing opened a file "
               "for %s in that directory, so this is a waiver and not a verdict about the work"
               % (os.path.relpath(d, root), EXEMPT, ", ".join(sorted(waived)), len(CHECKS),
@@ -2364,7 +2364,7 @@ def main():
                  "those checks" if len(waived) < len(CHECKS) else "any check"))))
     for d, problem in refused:
         fails += 1
-        print("  %-10s %-8s %s" % ("dossier", "FAIL", one_line(
+        say("  %-10s %-8s %s" % ("dossier", "FAIL", one_line(
               "%s carries a %s that does not exempt anything: %s. An exemption waives all %d design "
               "checks for a dossier, which is more than a tier override waives, so it states a "
               "reviewable reason or it does not exempt; this dossier is checked below"
@@ -2374,18 +2374,18 @@ def main():
             # Saying "no dossier found under X" underneath a waiver naming one is
             # a false sentence, and with SBE_DOSSIER_ROOT set it FAILed with
             # "holds no dossier" about a root that demonstrably held one.
-            print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
+            say("  %-10s %-8s %s" % ("dossier", "NO-DATA",
                   "every dossier found under %s (%d) is waived by a %s, so no check opened a file. "
                   "The waiver line(s) above name each one and the reason given"
                   % (root, len(exempt), EXEMPT)))
         elif configured:
             fails += 1
-            print("  %-10s %-8s %s" % ("dossier", "FAIL",
+            say("  %-10s %-8s %s" % ("dossier", "FAIL",
                   "SBE_DOSSIER_ROOT=%s holds no dossier (no directory under it contains %s or any of "
                   "01 through 07); this repository declares that it keeps dossiers, so an empty dossier "
                   "root is a broken configuration, not an absence%s" % (root, INTAKE, pruned)))
         else:
-            print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
+            say("  %-10s %-8s %s" % ("dossier", "NO-DATA",
                   "no dossier found under %s: no directory contains %s or any of 01 through 07. If this "
                   "repository is supposed to carry one, set SBE_DOSSIER_ROOT to where dossiers live and "
                   "this becomes a FAIL instead of a report%s" % (root, INTAKE, pruned)))
@@ -2401,24 +2401,24 @@ def main():
             # X" printed two lines under a waiver naming one was a run
             # contradicting itself. The load-bearing phrase stays in both.
             if exempt:
-                print("  %-10s %-8s %s" % (name, "NO-DATA",
+                say("  %-10s %-8s %s" % (name, "NO-DATA",
                       "every dossier under %s is waived, so this check opened no file%s"
                       % (root, pruned)))
             else:
-                print("  %-10s %-8s %s" % (name, "NO-DATA",
+                say("  %-10s %-8s %s" % (name, "NO-DATA",
                       "no dossier under %s, so this check opened no file%s" % (root, pruned)))
     if targets and pruned:
         # A dossier the walk refused to enter is a dossier no verdict below covers.
-        print("  %-10s %-8s %s" % ("dossier", "NO-DATA",
+        say("  %-10s %-8s %s" % ("dossier", "NO-DATA",
               "%d dossier(s) checked under %s%s" % (len(targets), root, pruned)))
     for target in targets:
         if len(targets) > 1 or os.path.abspath(target) != os.path.abspath(root):
-            print("  dossier: %s" % os.path.relpath(target, root))
+            say("  dossier: %s" % os.path.relpath(target, root))
         skip = waived_by.get(os.path.abspath(target), set())
         for name in which:
             if name in skip:
                 waivers += 1
-                print("  %-10s %-8s %s" % (">> " + name, "WAIVED",
+                say("  %-10s %-8s %s" % (">> " + name, "WAIVED",
                       "%s in %s names this check, so nothing opened a file for it here"
                       % (EXEMPT, os.path.relpath(target, root))))
                 continue
@@ -2427,15 +2427,15 @@ def main():
                 fails += 1
             # one_line: evidence quotes artifact content, and an artifact
             # carrying a newline must not write its own report lines.
-            print("  %-10s %-8s %s [severity: %s]"
+            say("  %-10s %-8s %s [severity: %s]"
                   % (name, verdict, one_line(ev), CHECKS[name].severity))
     if waivers:
-        print("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
+        say("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
               "pass; run `--strict --strict-waivers` to make one block a merge." % (waivers, EXEMPT))
     if strict_waivers and waivers:
         fails += waivers
     if strict and fails:
-        print("STRICT: %d design check(s) failed; exiting nonzero to block the merge." % fails)
+        say("STRICT: %d design check(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)
     sys.exit(0)
 
@@ -2444,5 +2444,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print("sbe_design: error %r" % (e,))
+        say("sbe_design: error %r" % (e,))
         sys.exit(1 if "--strict" in sys.argv else 0)
