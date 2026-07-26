@@ -729,20 +729,20 @@ def gate_ran(root):
 # the honesty test can empty any one of them and demand the PASS goes away.
 GATES = {
     "numbers": Check(
-        gate_numbers, reads=(MANIFEST,), kind="json", item_key="figures",
+        gate_numbers, reads=(MANIFEST,), kind="json", severity="gate", item_key="figures",
         full_fixture={"files": {MANIFEST: {"figures": [{
             "label": "gmv", "snapshot_id": "snap-2026-07",
             "query": "SELECT SUM(amount) FROM orders",
             "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
             "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]}}}),
     "migration": Check(
-        gate_migration, reads=(MIGRATION_RECEIPT,), kind="json",
+        gate_migration, reads=(MIGRATION_RECEIPT,), kind="json", severity="gate",
         full_fixture={"files": {MIGRATION_RECEIPT: {
             "forward": {"ran_against_restore": True},
             "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
             "row_counts": {"before": 100, "after_reverse": 100}}}}),
     "approval": Check(
-        gate_approval, reads=(APPROVAL_FILE,), kind="git", empty_expect="FAIL",
+        gate_approval, reads=(APPROVAL_FILE,), kind="git", severity="gate", empty_expect="FAIL",
         empty_fixture="",
         empty_note="the presence of an APPROVAL file IS the claim that this change touches a "
                    "money or partner path. An empty one is that claim with no identity behind "
@@ -758,7 +758,7 @@ GATES = {
             "strongest evidence a fixture can carry is the keyless Reviewed-in trailer, whose "
             "honest verdict is NO-DATA, so that is what the worked example asserts")),
     "ran": Check(
-        gate_ran, reads=(RAN_RECEIPT,), kind="json", item_key="checks",
+        gate_ran, reads=(RAN_RECEIPT,), kind="json", severity="gate", item_key="checks",
         full_fixture={"files": {RAN_RECEIPT: {"checks": [
             {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]}}}),
 }
@@ -809,7 +809,7 @@ def main():
         verdict, ev = run_guarded(name, GATES[name], root)
         if verdict == "FAIL":
             fails += 1
-        print("  %-9s %-8s %s" % (name, verdict, ev))
+        print("  %-9s %-8s %s [severity: %s]" % (name, verdict, ev, GATES[name].severity))
     if strict and fails:
         print("STRICT: %d hard gate(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)

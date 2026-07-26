@@ -155,6 +155,14 @@ field, a CI step, or the words "human review" when nothing mechanical exists).
 A rule that cannot name an enforcement point is not a law. It is advice, and it lives in
 [PRACTICES.md](PRACTICES.md), which says so.
 
+Every registered check also declares its severity at write time, in its constructor:
+`gate` means a FAIL blocks a `--strict` run, `soft` means a FAIL is graded and blocks only
+under the opt-in `--strict-soft`. The severity prints on every verdict line, and
+`tools/sbe_checks.py` refuses to register a check that declares neither, the same way it
+refuses one whose empty state is PASS. Severity states only what a FAIL does to the exit
+code; it does not change what a check examines or reports, and it does not decide what a
+FAIL is worth reading: a soft FAIL is still a finding.
+
 ### L1. Tier before work
 WHEN: any task arrives that will change code, data, or infrastructure.
 INPUTS: the five intake answers (changes_contract, crosses_boundary, reversible_under_hour, touches_sensitive, consumers), written to `00-intake.json`. The first four are yes/no and are recorded as a JSON boolean or as one of `y`, `yes`, `true`, `n`, `no`, `false` (case, surrounding space and surrounding punctuation do not matter, so `no.`, `NO!` and `'no'` are read as the no they are). The fifth is one of `none`, `some`, `many`. Any other value is REFUSED by name rather than guessed at, because reading these five for truthiness meant an intake answering "n" to every question computed the highest tier and one answering "no" to "is this reversible in under an hour" computed the lowest, which owes no artifact at all.
@@ -265,7 +273,7 @@ WHEN: an operator instruction, time pressure, or convenience would skip L7 to L1
 INPUTS: the CI workflow, the gate config, the requested exception.
 RULE: session overrides exist for defaults, never for hard gates. On the CI path, `--strict` is not overridable by a session at all: it changes only by a human editing the gate config, and a pull request that edits the workflow is visible in the diff. Stated rather than implied: nothing in this repository makes that edit REQUIRE a review. No CODEOWNERS file and no branch-protection config ships, so "in a reviewed change" is your repository's setting to make, not something cloning this skill gives you. In session, the gate still runs, and unclear output gets the label UNVERIFIED from the agent, with the reason; that label is the agent's to write, as L7 already states, and no tool applies it.
 OUTPUT: refuse (and say what would make the gate pass).
-ENFORCED BY: `.github/workflows/brothersbe-gates.yml` (runs `tools/sbe_gate.py --strict`, `tools/sbe_design.py --strict`, `tools/sbe_score.py --strict`, `evals/run_evals.py`, `evals/test_no_data_class.py` and `tools/test_sbe.py` on every pull request), with one condition stated wherever this workflow is named: the file guards nothing until an operator copies it into the repository they want guarded. Cloning the skill gives you the tools, not the enforcement.
+ENFORCED BY: `.github/workflows/brothersbe-gates.yml` (runs `tools/sbe_gate.py --strict`, `tools/sbe_design.py --strict`, `tools/sbe_score.py --strict --strict-soft`, `evals/run_evals.py`, `evals/test_no_data_class.py` and `tools/test_sbe.py` on every pull request), with one condition stated wherever this workflow is named: the file guards nothing until an operator copies it into the repository they want guarded. Cloning the skill gives you the tools, not the enforcement.
 
 ### L17. The run closes on disk
 WHEN: a session ends, or a milestone lands.

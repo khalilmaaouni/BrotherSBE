@@ -206,8 +206,13 @@ class TestHandoff(unittest.TestCase):
 
 
 class TestStrictMode(unittest.TestCase):
-    def test_strict_exits_nonzero_on_fail(self):
-        # A vault with an active session but no session log forces a FAIL check.
+    def test_severity_decides_what_a_strict_run_blocks_on(self):
+        """The severity each check declares at write time is what a FAIL does to
+        the exit code, and nothing else: advisory runs exit 0 whatever they
+        find, --strict blocks on gate severity, and soft severity blocks only
+        under the opt-in --strict-soft. A vault with an active session but no
+        session log forces a soft FAIL (vault-log-per-active-day); a bare
+        except with no waiver forces a gate FAIL (silent-failure-lints)."""
         import datetime
         with tempfile.TemporaryDirectory() as v:
             teld = os.path.join(v, "99-System", "telemetry")
@@ -216,14 +221,34 @@ class TestStrictMode(unittest.TestCase):
             io.open(os.path.join(teld, "outcomes.jsonl"), "w").write(
                 json.dumps({"schema": 2, "ts": now, "session_id": "x", "project": "p",
                             "tool_calls": 5, "api_msgs": 9}) + "\n")
-            env = dict(os.environ, BROTHERSBE_VAULT=v)
+            env = dict(os.environ, BROTHERSBE_VAULT=v, SBE_LINT_ROOT="")
             score = os.path.join(HERE, "sbe_score.py")
-            strict = subprocess.run([sys.executable, score, "--strict"], env=env,
-                                    capture_output=True, text=True)
             advisory = subprocess.run([sys.executable, score], env=env,
                                       capture_output=True, text=True)
-            self.assertEqual(strict.returncode, 1, "--strict must exit nonzero on a FAIL")
+            strict = subprocess.run([sys.executable, score, "--strict"], env=env,
+                                    capture_output=True, text=True)
+            strict_soft = subprocess.run([sys.executable, score, "--strict", "--strict-soft"],
+                                         env=env, capture_output=True, text=True)
             self.assertEqual(advisory.returncode, 0, "advisory mode must never block (exit 0)")
+            self.assertEqual(strict.returncode, 0,
+                             "--strict must not block on a soft-severity FAIL alone")
+            self.assertIn("soft-severity", strict.stdout,
+                          "--strict must NAME the soft FAILs it declined to block on")
+            self.assertEqual(strict_soft.returncode, 1,
+                             "--strict-soft must block on a soft-severity FAIL")
+            # A gate-severity FAIL blocks under plain --strict: point the lint at
+            # a tree holding an unwaived bare except.
+            lintdir = os.path.join(v, "src")
+            os.makedirs(lintdir)
+            io.open(os.path.join(lintdir, "evil.py"), "w").write(
+                "try:\n    f()\nexcept Exception:\n    pass\n")
+            env2 = dict(env, SBE_LINT_ROOT=lintdir)
+            strict_gate = subprocess.run([sys.executable, score, "--strict"], env=env2,
+                                         capture_output=True, text=True)
+            self.assertEqual(strict_gate.returncode, 1,
+                             "--strict must exit nonzero on a gate-severity FAIL")
+            self.assertIn("[severity: gate]", strict_gate.stdout,
+                          "the verdict line must print the severity it declared")
 
 
 if __name__ == "__main__":
