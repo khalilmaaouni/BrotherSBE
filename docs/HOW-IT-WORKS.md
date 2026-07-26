@@ -58,8 +58,9 @@ Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
 2. **adr.** At least two rejected alternatives, plus Criteria, Decision,
    Consequences, and a "What would flip this" section. All five, or it fails.
 3. **datamodel.** Every entity names a system of record with a value; every
-   relationship carries one of one-to-one, one-to-many, many-to-one, many-to-many as
-   a standalone token. A system of record recorded as TBD or explicitly absent fails
+   relationship carries a cardinality as a standalone token, in any accepted
+   notation: word forms (one-to-many), crow's foot (1:N), UML multiplicity (0..*),
+   prose (has many, belongs to exactly one), or an erDiagram's symbols. A system of record recorded as TBD or explicitly absent fails
    like one that is missing, and "one-to-many-ish" is not a cardinality. No entities
    at all is a failure, not a pass.
 4. **diagrams.** At least one diagram node exists, and every node traces to an
@@ -199,7 +200,7 @@ returns one shape:
 | `deciding_criteria` | one line per criterion that contributed |
 | `evidence` | how many criteria contributed |
 | `unrecognized` | one line per supplied value matching none of a criterion's keys |
-| `flip_condition` | the table's flip line, unconditionally |
+| `flip_condition` | the flip line for the RECOMMENDATION (the table's `flips` map), falling back to the table-wide line |
 | `scores` | the raw tally per option |
 
 The suppression is the point: when nothing contributed, the recommendation is
@@ -436,9 +437,10 @@ the measured signal it should move. The next review compares strictly and revert
 any amendment whose signal did not move. Rejected amendments keep their reasons and
 are not re-proposed without new evidence.
 
-`DIGEST.md` is generated from `SKILL.md` and updated in the same change: a hand
-edit to it is a defect by definition, because it is the file injected at session
-start and it has to say what the law says.
+`DIGEST.md` is maintained BY HAND against `SKILL.md` and updated in the same
+change. No generator exists and nothing mechanically compares the two, so a
+divergence is caught by review, not by a tool; it is the file injected at
+session start, which is why every edit to a law carries an edit here.
 
 A practice becomes a law by acquiring a check. It moves from `PRACTICES.md` into
 `SKILL.md` in the law form (WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY), with the new

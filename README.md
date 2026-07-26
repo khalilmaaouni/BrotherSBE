@@ -41,6 +41,7 @@ A design engagement produces at most seven files in one directory. Templates wit
 **How much of it you write is computed, not chosen.** Five objective questions produce a tier, first match wins: T3 (money, partner data, personal data, production state, or not reversible in an hour) requires all seven; T2 (a contract change, or many consumers) requires six; T1 (one boundary crossed, or some consumers) requires the purpose brief; T0 requires nothing at all. T0 is the common case.
 
 ```bash
+mkdir -p design/my-project                      # the intake refuses a directory that does not exist
 python3 tools/sbe_intake.py design/my-project   # five questions, writes its 00-intake.json there
 python3 tools/sbe_design.py .          # artifacts, adr, datamodel, diagrams, placeholder
 python3 tools/sbe_decide.py tables/architecture.json shape   # asks for each criterion on stdin
@@ -200,8 +201,9 @@ Run the eval bed. Each case is a real failure class turned into a fixture with a
 python3 evals/run_evals.py
 ```
 
-The last ten lines of the run, verbatim. The last four are the honest path, which a gate is
-only worth having if it clears, and the last two are the docs checking their own numbers:
+Eight of its lines and the closing count, each verbatim (the suite grows, so these are picked
+lines rather than the tail): the dossier lines are the honest path, which a gate is only worth
+having if it clears, and the two consistency lines are the docs checking their own numbers:
 
 ```
   cache-counters-that-are-not-counts-are-caught want=FAIL     got=FAIL     ok

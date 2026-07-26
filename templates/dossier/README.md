@@ -1,7 +1,9 @@
 # Dossier templates
 
-Copy these into `design/<project>/` at the start of an engagement. The tier from
-`sbe_intake.py` decides which are required. `sbe_design.py` checks completeness:
+Copy these into `design/<project>/` at the start of an engagement, then run
+`python3 tools/sbe_intake.py design/<project>` there: the tier it computes
+decides which templates are required, and without its `00-intake.json` the
+design check FAILs the directory by name. `sbe_design.py` checks completeness:
 run it advisory while you work, and in CI with `--strict` to block a merge.
 
 This directory itself carries a `.sbe-exempt` file. Seven dossier-shaped files in
