@@ -13,6 +13,14 @@ the mechanism behind the claim that the gates are proven, not asserted: they are
 tested against the exact defect classes the operating record produced. Every
 fixture is generalized and carries no private data.
 
+The meta-test also has a seeded generative mode: `--seed N` composes the same
+hollowing operations at random depths and combinations over each check's own
+worked example, still asserting never PASS, and prints the seed in every
+scenario id so a finding reproduces. The shipped CI runs a small fixed set of
+seeds. What this mode does not do: invent new emptiness values or turn the
+sweep into a proof; it widens the search over shapes nobody imagined, nothing
+more.
+
 The resulting calibration is published rather than implied:
 [INVARIANTS.md](../INVARIANTS.md) records one representative defect reinjection
 per shipped check, the eval case that caught it, the date and the command. That

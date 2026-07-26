@@ -97,7 +97,13 @@ jobs:
       # than a gate: a fixture no merge runs cannot stop anything.
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
+      # Two passes: the fixed sweep, then a seeded random composition of the
+      # same hollowing operations (--seed). The seeds are fixed so CI is
+      # reproducible; a failing scenario prints its seed in its id. A wider
+      # search is one more --seed here, not new test code.
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
-        run: python3 evals/test_no_data_class.py
+        run: |
+          python3 evals/test_no_data_class.py
+          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
       - name: Tool tests (redaction, permissions, identity, autosave)
         run: python3 tools/test_sbe.py
