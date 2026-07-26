@@ -305,6 +305,18 @@ class Check:
                     "optional_leaves[%r] has no reason. A field exempted from the empty-value "
                     "sweep is a field nobody tests, so the exemption states why the PASS "
                     "sentence does not assert over it" % path)
+        if len(optional_leaves or {}) > 3:
+            # The exemption list had no cap and its key space includes scenario
+            # ids, so a check that examines nothing could exempt itself from
+            # every scenario with a page of boilerplate reasons and still count
+            # as covered. Three is a ceiling, not a budget: no shipped check
+            # needs more than one, and a check that wants four exemptions is a
+            # check whose sentence asserts too much.
+            raise ValueError(
+                "optional_leaves declares %d exemptions; at most 3 are allowed. A check that "
+                "exempts more of its own fixture than that is exempting itself from the sweep "
+                "that exists to test it; narrow the PASS sentence instead"
+                % len(optional_leaves))
         self.fn = fn
         self.reads = tuple(reads)
         self.kind = kind

@@ -70,17 +70,37 @@ def recommend(table, context):
                 unrecognized.append("%s=%s is not a recognized value" % (crit["name"], val))
                 continue
             winners = crit["scores"][key]
-        for opt in winners:
-            if opt in tally:
-                tally[opt] += 1
-        if winners:
-            deciding.append("%s=%s favours %s" % (crit["name"], val, ", ".join(winners)))
+        # A vote for an option the table does not declare is a TABLE defect,
+        # and it was discarded in silence: `c1=yes favours gamma` counted as a
+        # deciding criterion while contributing nothing to any score, so
+        # `evidence: 2` was printed over one contributing criterion and
+        # `unrecognized`, whose documented job is making a typo distinguishable
+        # from an omission, stayed empty.
+        real = [opt for opt in winners if opt in tally]
+        ghosts = [opt for opt in winners if opt not in tally]
+        if ghosts:
+            unrecognized.append("%s=%s favours %s, which %s not among this table's options (%s); "
+                                "a vote for an option the table does not declare decides nothing"
+                                % (crit["name"], val, ", ".join(ghosts),
+                                   "are" if len(ghosts) > 1 else "is",
+                                   ", ".join(table["options"])))
+        for opt in real:
+            tally[opt] += 1
+        if real:
+            deciding.append("%s=%s favours %s" % (crit["name"], val, ", ".join(real)))
     ranked = sorted(tally, key=lambda o: (-tally[o], table["options"].index(o)))
     verdict = "OK" if deciding else "NO-DATA"
+    # An exact tie used to be broken by declaration order in silence, so the
+    # operator was handed a confident, specific answer the table did not
+    # produce, with the loser listed beside options that scored zero. The tie
+    # is its own field and main() prints it with the raw scores.
+    tie = ([o for o in ranked if tally[o] == tally[ranked[0]]]
+           if verdict == "OK" and len(ranked) > 1 and tally[ranked[0]] == tally[ranked[1]]
+           else [])
     return {"recommendation": ranked[0] if verdict == "OK" else None,
             "alternatives": ranked[1:3] if verdict == "OK" else [],
             "deciding_criteria": deciding, "evidence": len(deciding),
-            "verdict": verdict, "unrecognized": unrecognized,
+            "verdict": verdict, "unrecognized": unrecognized, "tie": tie,
             "flip_condition": (table.get("flips", {}).get(ranked[0], table["flip"])
                                if verdict == "OK" else table["flip"]),
             "scores": tally}
@@ -136,9 +156,34 @@ def main():
     if err:
         print("sbe_decide: %s" % err)
         sys.exit(1)
+    # key=value arguments answer criteria without the interview. They used to be
+    # swallowed: every argument after the table name was discarded without a
+    # word and the tool then asked the questions interactively, in a tool whose
+    # law is about not silently ignoring an input it cannot read. An argument
+    # that is neither a criterion nor key=value is refused by name.
+    known = {crit["name"]: crit for crit in table["criteria"]}
     context = {}
+    extra = sys.argv[2:] if path == DEFAULT_TABLE_FILE else sys.argv[3:]
+    for a in extra:
+        name, eq, raw = a.partition("=")
+        if not eq or name not in known:
+            print("sbe_decide: %r is not an answer this table can read; answers are given as "
+                  "key=value for the criteria: %s" % (a, ", ".join(known)))
+            sys.exit(1)
+        crit = known[name]
+        context[name] = int(raw) if crit["kind"] == "number" and raw.isdigit() else raw
     for crit in table["criteria"]:
-        raw = input("%s (%s): " % (crit["name"], crit["note"])).strip()
+        if crit["name"] in context:
+            continue
+        try:
+            raw = input("%s (%s): " % (crit["name"], crit["note"])).strip()
+        except EOFError:
+            # The named failure path for a closed stdin, exactly as sbe_intake
+            # has: a Python repr here read as a broken tool rather than as
+            # "nobody answered".
+            print("\nsbe_decide: stdin closed before %s was answered; answer the remaining "
+                  "criteria as key=value arguments, or run interactively." % crit["name"])
+            sys.exit(1)
         if not raw:
             continue
         context[crit["name"]] = int(raw) if crit["kind"] == "number" and raw.isdigit() else raw
@@ -148,6 +193,11 @@ def main():
     else:
         print("\nRecommendation: %s" % r["recommendation"])
         print("Alternatives: %s" % ", ".join(r["alternatives"]))
+        if r["tie"]:
+            print("Tie: %s scored equal top marks; the recommendation is the table's declared "
+                  "order, not a measured difference (scores: %s)"
+                  % (", ".join(r["tie"]),
+                     ", ".join("%s=%d" % (o, r["scores"][o]) for o in r["scores"])))
         print("Decided by:")
         for d in r["deciding_criteria"]:
             print("  - %s" % d)

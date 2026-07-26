@@ -213,7 +213,7 @@ only worth having if it clears, and the last two are the docs checking their own
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-343 evals: 343 passed, 0 regressions.
+348 evals: 348 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
