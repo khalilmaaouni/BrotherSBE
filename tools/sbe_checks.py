@@ -51,7 +51,7 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
-import errno, json, math, os, re, stat, unicodedata
+import errno, glob as _glob, json, math, os, re, stat, unicodedata
 
 KINDS = ("json", "jsonl", "text", "tree", "git")
 
@@ -74,9 +74,27 @@ def evidence_problem(path):
 
     Returns "" both for an absent path and for a readable regular file: the
     caller distinguishes those two with os.path.lexists, which never blocks.
+
+    An "absent" path is only known to be absent when the tree above it can be
+    entered. The axis was closed on the evidence FILE and stayed open one level
+    up: chmod 000 on a PARENT directory made lexists() return False, the
+    caller read that as an absence, and a FAIL became a NO-DATA (or a PASS
+    saying "none") over evidence sitting on disk. So absence is now checked
+    against the nearest existing ancestor: if that ancestor cannot be entered,
+    this path's existence is unknowable, which is a broken claim and is named.
     """
     if not os.path.lexists(path):
-        return ""
+        parent = os.path.dirname(os.path.abspath(path))
+        while True:
+            if os.path.lexists(parent):
+                if os.path.isdir(parent) and not os.access(parent, os.X_OK | os.R_OK):
+                    return ("inside a directory that cannot be entered (%s), so whether it "
+                            "even exists could not be checked" % parent)
+                return ""
+            up = os.path.dirname(parent)
+            if up == parent:
+                return ""
+            parent = up
     try:
         st = os.stat(path)
     except OSError as e:
@@ -93,6 +111,40 @@ def evidence_problem(path):
     if not os.access(path, os.R_OK):
         return "present but unreadable (permission denied)"
     return ""
+
+def glob_with_denials(pattern):
+    """(paths this glob matches, directories it could not look inside).
+
+    glob.glob returns FEWER paths, not an error, when a directory along the
+    pattern cannot be entered: an unreadable parent never enters the result,
+    so to the caller the evidence is not unreadable, it is absent, and a FAIL
+    over the files inside it became a PASS whose sentence said "none". The
+    per-file ACCESS check ran only over what discovery returned, which is the
+    file-level fix applied to the file it was going to open rather than to the
+    evidence the pattern claimed to cover.
+
+    So discovery itself accounts for what it could not see: every directory
+    matched by any PREFIX of the pattern is checked for enterability, and the
+    denied ones come back by name for the caller's verdict to carry. The
+    checks that consume this treat a denial like an unreadable registry file:
+    a FAIL, never a smaller evidence set.
+    """
+    pattern = os.path.expanduser(pattern)
+    hits = _glob.glob(pattern, recursive=True)
+    denied = []
+    parts = pattern.split(os.sep)
+    for i in range(1, len(parts)):
+        prefix = os.sep.join(parts[:i])
+        if not prefix.strip(os.sep):
+            continue
+        for d in _glob.glob(prefix, recursive=True):
+            if os.path.isdir(d) and not os.access(d, os.X_OK | os.R_OK):
+                denied.append(d)
+    for d in hits:
+        if os.path.isdir(d) and not os.access(d, os.X_OK | os.R_OK):
+            denied.append(d)
+    return hits, sorted(set(denied))
+
 
 # Directories no check walks into, in one place because the three tools that walk
 # a repository each carried their own list and the shortest of them was on the one

@@ -20,17 +20,27 @@ from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSION
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
 from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
-                        evidence_problem, numeric, one_line, without_comments)
+                        evidence_problem, glob_with_denials, numeric, one_line,
+                        without_comments)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
 # glob patterns, for example:
 #   export BROTHERSBE_REGISTRIES="$HOME/work/*/STATE.md:$HOME/work/*/.plans/**/*STATE*.md"
 # Unset, the registry checks report NO-DATA instead of guessing at paths.
+# Discovery accounts for what it could not see: glob returns FEWER paths, not
+# an error, over a directory it cannot enter, so one chmod on a registry's
+# PARENT removed its files from this list in silence and the per-file ACCESS
+# check was never asked about them. The denials ride beside the hits and the
+# fence checks FAIL over them by name, exactly as they do for an unreadable
+# registry file.
 REGISTRIES = []
+REGISTRY_DENIALS = []
 for _pat in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":"):
     if _pat.strip():
-        REGISTRIES.extend(glob.glob(os.path.expanduser(_pat.strip()), recursive=True))
+        _hits, _denied = glob_with_denials(_pat.strip())
+        REGISTRIES.extend(_hits)
+        REGISTRY_DENIALS.extend(_denied)
 
 CACHE_RATIO_FLOOR = 90.0
 
@@ -167,6 +177,10 @@ class Ctx:
         return REGISTRIES
 
     @property
+    def registry_denials(self):
+        return REGISTRY_DENIALS
+
+    @property
     def sessions(self):
         return self._once("sessions", lambda: real_sessions(self.ledger.rows))
 
@@ -286,8 +300,16 @@ def check_vault_log_per_active_day(ctx):
         return "NO-DATA", ("no active days in the last 7d, so no day was checked for a session log; "
                            "'no missing logs' over zero days is not compliance")
     # filename date OR mtime date counts, so a dated backfill note clears an old miss
+    # Discovery first: a Sessions directory that exists and cannot be entered
+    # hides the very log that would clear a day this check is about to name,
+    # and glob returns fewer files rather than an error over it.
+    session_files, denied = glob_with_denials(SESSIONS_GLOB)
+    if denied:
+        return "FAIL", ("%d session folder(s) exist and cannot be entered (%s); a log inside one "
+                        "would change this verdict, so no day is reported over a set discovery "
+                        "silently truncated" % (len(denied), ", ".join(denied[:4])))
     log_days, blank, logs = set(), [], 0
-    for f in glob.glob(SESSIONS_GLOB):
+    for f in session_files:
         # ACCESS first: a chmod 000 log, a directory wearing a log's name, or a
         # FIFO is not a log this check read, and opening a FIFO would hang here.
         if evidence_problem(f):
@@ -391,6 +413,15 @@ def _is_live_fence(s):
 
 
 def check_fence_hygiene(ctx):
+    if ctx.registry_denials:
+        # Before the empty test, because a denied parent directory is exactly
+        # how the configured set silently became smaller: the files inside it
+        # never entered ctx.registries, so "none readable" and even a PASS
+        # saying "none" were sentences over evidence sitting on disk.
+        return "FAIL", ("%d director(y/ies) named by BROTHERSBE_REGISTRIES exist and cannot be "
+                        "entered (%s); the registry files inside never entered discovery, so a "
+                        "verdict over the rest would read as covering them"
+                        % (len(ctx.registry_denials), ", ".join(ctx.registry_denials[:4])))
     if not ctx.registries:
         return "NO-DATA", "set BROTHERSBE_REGISTRIES to enable; nothing was opened"
     lines, read, old, unreadable, ahead = _registry_lines(ctx)
@@ -450,6 +481,11 @@ def check_budget_vs_tier(ctx):
     fence-discipline line sourced from the author's machine. It reads the
     configured registries and nothing else.
     """
+    if ctx.registry_denials:
+        return "FAIL", ("%d director(y/ies) named by BROTHERSBE_REGISTRIES exist and cannot be "
+                        "entered (%s); the registry files inside never entered discovery, so a "
+                        "tier-tag verdict over the rest would read as covering them"
+                        % (len(ctx.registry_denials), ", ".join(ctx.registry_denials[:4])))
     if not ctx.registries:
         return "NO-DATA", ("set BROTHERSBE_REGISTRIES to enable; no registry was opened, so no fence "
                            "line was checked for a tier tag")
