@@ -457,6 +457,8 @@ NOT_A_VERDICT = {
     ("sbe_gate.py", "_identity_parts"): "returns (canonical emails, name word-sets), not a verdict",
     ("sbe_design.py", "_entity_bullets"): "returns (the entity set, whether a heading declared it), "
                                           "not a verdict",
+    ("sbe_design.py", "_coherence_problem"): "returns a problem string, or an (unmeasured, why) "
+                                             "pair naming a script limit; never a verdict",
     ("sbe_intake.py", "read_answers"): "returns (answers read, answers refused), not a verdict",
     ("sbe_score.py", "_rel"): "returns a path",
     ("sbe_decide.py", "load_table"): "returns (parsed table, load error), not a verdict",
