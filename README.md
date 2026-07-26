@@ -259,7 +259,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-20 checks discovered from 3 registries in 7 module(s), 1495 scenarios run, 4 waived by declared exemption, 0 failure(s).
+20 checks discovered from 3 registries in 7 module(s), 1515 scenarios run, 4 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

@@ -426,6 +426,8 @@ NOT_A_VERDICT = {
     ("sbe_checks.py", "hidden"): "returns (pruned trees holding wanted files, trees the inspection "
                                  "budget left uninspected), not a verdict",
     ("sbe_checks.py", "answered_as"): "returns a reduced value, never a verdict",
+    ("sbe_checks.py", "glob_with_denials"): "returns (glob hits, directories it could not enter), "
+                                            "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
     ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
@@ -1045,6 +1047,16 @@ def _chmod_000(rel):
     return setup
 
 
+def _chmod_000_parent(rel):
+    # The axis one level up: the evidence file untouched, its PARENT directory
+    # unenterable. Discovery (a glob, a walk) returns fewer paths rather than
+    # an error over one of these, so the per-file ACCESS check was never asked
+    # and a FAIL became a PASS whose sentence said "none".
+    def setup(d):
+        os.chmod(os.path.dirname(os.path.join(d, rel)) or d, 0)
+    return setup
+
+
 def _broken_symlink(rel):
     def setup(d):
         p = os.path.join(d, rel)
@@ -1126,8 +1138,15 @@ def access_cases(tool, check):
         Scenario("access::loop-beside-evidence", "x", files, env=env,
                  setup=_loop_beside, expect=check.full_expect,
                  forbid_pass=(check.full_expect != "PASS")),
+        # Evidence intact, its PARENT unenterable. expect_invoked=False: a tool
+        # whose dossier walk is refused at the door cannot reach the check body,
+        # and answering from the fallback WITH THE DENIAL NAMED is the honest
+        # verdict; what this scenario forbids is a PASS, or a clean-sounding
+        # absence produced by discovery silently returning fewer paths.
+        Scenario("access::%s|parent-chmod-000" % target, "x", files, env=env,
+                 setup=_chmod_000_parent(target), expect_invoked=False),
     ]
-    out[-1].use_git = True
+    out[-2].use_git = True
     return out
 
 
