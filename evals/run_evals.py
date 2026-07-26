@@ -4059,6 +4059,20 @@ def f9(root):
                        env={"BROTHERSBE_REGISTRIES": os.path.join(root, "reg", "*.md")})
 
 
+@case("a-self-declared-component-trace-is-disclosed", "evidence", "disclosed")
+def f10(root):
+    # One file declaring its own nodes as Components bullets is declaration and
+    # use in one place; still accepted, now said out loud instead of counted
+    # silently inside "all traceable".
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Components\n- Alpha\n- Beta\n## Context\n"
+          "```mermaid\nflowchart LR\n  Alpha --> Beta\n```\n")
+    line = gate_line(root, "diagrams")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return "disclosed" if "declared in this artifact itself" in line else line
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

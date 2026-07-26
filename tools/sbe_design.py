@@ -1744,14 +1744,26 @@ def check_diagrams(root):
                            % (len(nodes), ", ".join(sorted(set(kinds))), len(untraced_states),
                               ", ".join(untraced_states[:6]), ARTIFACT_FILES["05"], note))
     hits = [resolved(nid, label) for nid, label in nodes.items()]
+    comp_hits = [h for h in hits if h in components and h not in entities]
+    # Declaration and use in one file is a weaker trace than a cross-artifact
+    # one, and the sentence used to hide the difference: a lone 06-diagrams.md
+    # listing its own nodes as Components bullets satisfied "all traceable"
+    # without anything outside the file agreeing. Still accepted (the bullet is
+    # a declaration a reader can find), but said out loud.
+    self_declared = sorted(set(h for h in comp_hits
+                               if components[h].startswith(ARTIFACT_FILES["06"])))
+    self_note = ("" if not self_declared else
+                 "; %d of the component trace(s) resolve to bullets declared in this artifact "
+                 "itself, so for those the declaration and the diagram are one file; a row in %s "
+                 "is the cross-artifact form" % (len(self_declared), ARTIFACT_FILES["04"]))
     return "PASS", ("%d diagram node(s) in %s, all traceable: %d to entities in %s, %d to declared "
-                    "components, %d to declared lifecycle states%s"
+                    "components, %d to declared lifecycle states%s%s"
                     % (len(nodes), ", ".join(sorted(set(kinds))),
                        sum(1 for h in hits if h in entities),
                        ARTIFACT_FILES["05"],
-                       sum(1 for h in hits if h in components and h not in entities),
+                       len(comp_hits),
                        sum(1 for h in hits if h in declared_states and h not in entities
-                           and h not in components), note))
+                           and h not in components), self_note, note))
 
 
 # Worked dossier fragments that SHOULD pass. The honesty meta-test hollows these:
