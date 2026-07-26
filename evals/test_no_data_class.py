@@ -840,6 +840,23 @@ def hollow_cases(tool, check):
                     variant("%s::every-section-%s" % (rel, vname), "v", rel, filled)
             for title, _body in heading_sections(content):
                 variant("%s##%s" % (rel, title), "s", rel, drop_section(content, title))
+            # The comment-shaped hollowing, which no sweep had: an author does
+            # not empty a section, they comment it out, and a section that
+            # renders as empty was scaffolding to four readers and content to
+            # four others in the same file. Whole file first, then one heading's
+            # body at a time. Markdown only: an HTML comment is a markdown
+            # notion, and a source file holding one is just text to the lint.
+            if rel.endswith(".md"):
+                variant("%s::commented-out" % rel, "k", rel,
+                        "<!-- moved to the wiki\n%s\n-->\n" % content)
+                for title, _body in heading_sections(content):
+                    gutted = drop_section(content, title).replace(
+                        "# %s" % title,
+                        "# %s\n<!-- the %s section moved to the wiki -->" % (title, title), 1)
+                    # The "|" keeps the sid's exemption key identical to the
+                    # dropped-section sweep's: a declared optional leaf covers
+                    # the same section whichever way it was emptied.
+                    variant("%s##%s|commented" % (rel, title), "k", rel, gutted)
         variant("%s::zero-bytes" % rel, "i", rel, "")
 
     # (i) in its purest form: every file the check DECLARES it reads exists with

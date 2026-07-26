@@ -20,7 +20,7 @@ from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSION
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
 from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
-                        evidence_problem, numeric)
+                        evidence_problem, numeric, without_comments)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -272,7 +272,11 @@ def check_vault_log_per_active_day(ctx):
             # the check then reported "0 days without any log" over a file with
             # nothing written in it.
             body = open(f, errors="replace").read()
-            if all_vacuous(body) or not [l for l in body.splitlines()
+            # The rendered body: a log whose whole content sits inside an HTML
+            # comment renders as nothing, and its comment lines used to count
+            # as content here while all_vacuous stripped them two lines up.
+            rendered = without_comments(body)
+            if all_vacuous(body) or not [l for l in rendered.splitlines()
                                          if l.strip() and not l.lstrip().startswith("#")]:
                 blank.append(os.path.basename(f))
                 continue
@@ -337,7 +341,9 @@ def _registry_lines(ctx, max_age_days=None):
             old.append(os.path.basename(p))
             continue
         try:
-            body = open(p, errors="replace").read().splitlines()
+            # Rendered: a fence line inside an HTML comment is invisible to the
+            # reader of the registry, so it is invisible to the fence checks.
+            body = without_comments(open(p, errors="replace").read()).splitlines()
         except OSError as e:
             unreadable.append("%s (%s)" % (os.path.basename(p), type(e).__name__))
             continue

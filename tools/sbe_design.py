@@ -31,7 +31,8 @@ import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import (Check, run_guarded, answered, answered_as, derivation_fold, vacuous,
-                        domain_vacuous, all_vacuous, distinct, Pruner, evidence_problem)
+                        domain_vacuous, all_vacuous, distinct, Pruner, evidence_problem,
+                        without_comments)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -116,7 +117,7 @@ def _substantive_lines(t):
     the author. Neither says anything about the design, so neither is what a tier
     asked for.
     """
-    body = re.sub(r"(?s)<!--.*?-->", "", t or "")
+    body = without_comments(t)
     return [l for l in body.splitlines()
             if l.strip() and not l.lstrip().startswith("#")]
 
@@ -177,7 +178,22 @@ simple site sites size sizes state states step steps stop system systems
 table tables task tasks team teams test tests thing things time times tool
 tools type types unit units update updates user users value values version
 versions view views week weeks work works year years
+therefore furthermore additionally moreover meanwhile nevertheless nonetheless
+consequently hence likewise similarly instead otherwise anyway besides indeed
+perhaps maybe currently approximately overall broadly accordingly notably
+specifically typically generally essentially effectively basically certainly
+clearly obviously importantly usually often sometimes always already finally
+initially eventually recently previously later earlier soon mostly mainly
+largely slightly fairly quite really truly actually
 """.split())
+# The last block is the connective and adverb class, added because the coherence
+# rule was defeated by ONE of them: four artifacts about bananas, lawnmowers, a
+# tractor fleet and Mars each carried the word "Therefore" and that word alone
+# tied them into a dossier, so the fixture this rule's own docstring names still
+# cleared five of five. A word list is still a list, disclosed as such below;
+# what changed is that the class these words belong to (words that connect
+# sentences rather than naming anything) is named here, so the next one found
+# joins its class instead of being one more instance.
 _TERM = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 
 
@@ -193,7 +209,7 @@ def _subject_terms(text):
     # inside its ```mermaid fence and nowhere else, and stripping it made an
     # honest 06-diagrams.md read as an artifact about the words "Context" and
     # "Sequence".
-    body = re.sub(r"(?s)<!--.*?-->", " ", text or "")
+    body = without_comments(text)
     out = set()
     for w in _TERM.findall(body):
         lw = w.lower()
@@ -487,8 +503,14 @@ def check_placeholder(root):
         # every line says TODO. Both are the shipped template with the marker
         # deleted and nothing put in its place, which is the state this check
         # exists to name, so both are the absence of an artifact rather than a
-        # clean scan of one.
-        if t.strip() == "" or all_vacuous(t):
+        # clean scan of one. A file whose body was commented out is the same
+        # state one edit later: nothing renders, so nothing was written. The
+        # marker is searched in the RAW text first, because the templates ship
+        # it inside a comment, and a template that still carries it is named as
+        # the template it is rather than as a blank.
+        if _MARKER_COMMENT.search(t):
+            found[name] = t
+        elif t.strip() == "" or all_vacuous(t) or not _substantive_lines(t):
             blank.append(name)
         else:
             found[name] = t
@@ -500,10 +522,11 @@ def check_placeholder(root):
     if not found and not blank:
         return "NO-DATA", "no dossier artifacts here, so nothing to check for unfilled template sections"
     if blank:
-        return "FAIL", ("artifact(s) with nothing written in them: %s. A zero-byte file, and a file "
-                        "whose every line under its headings is a placeholder, carry no "
-                        "unfilled-template marker, so passing them would be reporting a clean scan "
-                        "of nothing" % ", ".join(sorted(blank)))
+        return "FAIL", ("artifact(s) with nothing written in them: %s. A zero-byte file, a file "
+                        "whose every line under its headings is a placeholder, and a file whose "
+                        "whole body sits inside HTML comments, carry no unfilled-template marker, "
+                        "so passing them would be reporting a clean scan of nothing"
+                        % ", ".join(sorted(blank)))
     unfilled = sorted(n for n, t in found.items() if _MARKER_COMMENT.search(t))
     if unfilled:
         return "FAIL", ("still the shipped template, unedited: %s; each carries its %s marker comment, which the template says to "
@@ -736,6 +759,10 @@ def check_adr(root):
     t = read(root, ARTIFACT_FILES["03"])
     if t is None:
         return "NO-DATA", "no 03-adr.md in this dossier"
+    # The rendered text: a decision record whose alternatives or criteria sit
+    # inside an HTML comment is a record that renders without them, and four
+    # sibling functions in this file already read it that way.
+    t = without_comments(t)
     problems = []
     # Deduplicated by the shared rule, because `gate_numbers` learned that a
     # figure listed twice is one figure and this threshold did not: the same
@@ -918,6 +945,7 @@ def _entity_bullets(t):
     a set this function had to guess at is not a set the evidence line may count.
     """
     out = {}
+    t = without_comments(t)
     body = re.split(r"(?im)^#+\s*relationships", t)[0]
     sections = []
     current = None
@@ -959,6 +987,7 @@ def _entities(t):
     print a count uses `_entity_bullets`, which says which set it got and refuses
     to count a set it guessed at.
     """
+    t = without_comments(t)
     ents, declared = _entity_bullets(t)
     if declared:
         return ents
@@ -1036,6 +1065,10 @@ def check_data_model(root):
     t = read(root, ARTIFACT_FILES["05"])
     if t is None:
         return "NO-DATA", "no 05-data-model.md in this dossier"
+    # The rendered text, for the same reason as check_adr: a commented-out
+    # entity list read as "2 entities, each with a system of record" while the
+    # artifacts check called the same file the absence of an artifact.
+    t = without_comments(t)
     problems = []
     ents, declared_by_heading = _entity_bullets(t)
     # What this check had to guess at, said in the verdict rather than folded into
@@ -1250,7 +1283,7 @@ def _diagram_nodes(t):
     """
     # HTML comments are not diagram source. Left in, the "-->" that closes one
     # reads as a Mermaid edge and invents a node out of the next word.
-    t = re.sub(r"(?s)<!--.*?-->", "", t)
+    t = without_comments(t)
     nodes, kinds, skipped, states = {}, [], [], set()
 
     def add(nid, label=""):
@@ -1410,6 +1443,7 @@ def _declared_components(root):
     out = {}
     tech = read(root, ARTIFACT_FILES["04"])
     if tech is not None:
+        tech = without_comments(tech)
         in_table = 0
         for line in tech.splitlines():
             s = line.strip()
@@ -1424,6 +1458,7 @@ def _declared_components(root):
                 out.setdefault(_norm(cell), "%s: %s" % (ARTIFACT_FILES["04"], cell))
     diagrams = read(root, ARTIFACT_FILES["06"])
     if diagrams is not None:
+        diagrams = without_comments(diagrams)
         in_components = False
         for line in diagrams.splitlines():
             h = _HEADING.match(line)
@@ -1461,6 +1496,7 @@ def _declared_states(root):
         text = read(root, artifact)
         if text is None:
             continue
+        text = without_comments(text)
         in_states = False
         for line in _joined_bullets(text.splitlines()):
             h = _HEADING.match(line)
