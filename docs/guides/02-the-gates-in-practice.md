@@ -502,7 +502,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 17 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_gate.py:811, sbe_telemetry.py:287, sbe_telemetry.py:841, sbe_telemetry.py:894, and 12 more not named), 3 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 16 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_telemetry.py:287, sbe_telemetry.py:862, sbe_telemetry.py:915, sbe_telemetry.py:1061, and 11 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over

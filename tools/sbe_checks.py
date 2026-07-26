@@ -652,6 +652,15 @@ def skeleton(text):
 _LINE_BREAKS = re.compile("[\r\n\v\f\x85\u2028\u2029]+")
 
 
+def _visible_escape(ch):
+    n = ord(ch)
+    if n <= 0xFF:
+        return "\\x%02x" % n
+    if n <= 0xFFFF:
+        return "\\u%04x" % n
+    return "\\U%08x" % n
+
+
 def one_line(text):
     """An evidence sentence flattened onto the single line the report owns.
 
@@ -665,8 +674,30 @@ def one_line(text):
     any part of the report except inside its own line, so every print site
     passes its evidence through this, and a line break becomes the visible
     two-character escape a reader can see and question.
+
+    Line breaks are not the whole class, and flattening only them was the
+    list-of-instances failure at the render layer: a terminal defines "its own
+    line" by the cursor, not by newline characters, and `ESC [ 1F` moves the
+    cursor to the previous line as surely as a newline opens a new one, so a
+    receipt field carrying cursor escapes rewrote the RENDERED report while the
+    byte stream still held one line per gate. The rule is now the class: every
+    control character (category Cc, which covers ESC, backspace and DEL), every
+    format character (category Cf, which covers the bidi overrides that reorder
+    a rendered line), and every stray surrogate is replaced by its visible
+    escape, so a forgery arrives as text a reader can see and question. A tab
+    becomes a space, because it is the one control character whose only power
+    here is column alignment.
     """
-    return _LINE_BREAKS.sub(" \\\\n ", str(text))
+    t = _LINE_BREAKS.sub(" \\\\n ", str(text))
+    out = []
+    for ch in t:
+        if ch == "\t":
+            out.append(" ")
+        elif unicodedata.category(ch) in ("Cc", "Cf", "Cs"):
+            out.append(_visible_escape(ch))
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 _BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
@@ -693,6 +724,39 @@ def derivation_fold(text):
     t = _BLOCK_COMMENT.sub(" ", str(text))
     t = _LINE_COMMENT.sub(" ", t)
     return fold(t).strip(" \t;.,")
+
+
+# The shape reductions vacuous() runs at its fixpoint. Each is a RULE about a
+# way engineers dress a non-answer, not a longer token list: `[TBD]`, `<TODO>`,
+# `TODO(dana)` and `t.b.d.` all cleared the money gate because the token list
+# compared whole strings and the strip set was a hand-picked handful of
+# punctuation. A wrapped token is the token; a trailing parenthesis is an
+# annotation, not an answer (the identity comparison already treats it that
+# way); an initialism written with dots is the initialism; and a combining mark
+# or confusable letter is read as what it renders as (skeleton). Every
+# reduction's OUTPUT re-enters the whole test, so a remnant is judged by the
+# same rules as the original, and a shape nobody has typed yet folds through
+# the same rules rather than needing a new list row.
+def _strip_owner(v):
+    """`todo(dana)` is a TODO with an owner: the trailing parenthesis is annotation.
+
+    Only a TRAILING parenthesis after content. A value that is entirely one
+    parenthesized phrase is not an annotation on anything; the wrapping rule
+    below unwraps it so its words are judged as the words they are.
+    """
+    return re.sub(r"(?<=\S)\s*\([^()]*\)\s*$", "", v)
+
+
+def _collapse_initialism(v):
+    """`t.b.d.` and `n.a.` are the initialism their letters spell."""
+    if re.fullmatch(r"(?:[^\W\d_]\.){2,}", v + ("" if v.endswith(".") else ".")):
+        return v.replace(".", "")
+    return v
+
+
+def _strip_wrapping(v):
+    """Any leading or trailing run of non-alphanumerics is wrapping, not content."""
+    return re.sub(r"^[\W_]+|[\W_]+$", "", v)
 
 
 def vacuous(value, allow=()):
@@ -743,6 +807,16 @@ def vacuous(value, allow=()):
         if v in VACUOUS_VALUES:
             return True
         stripped = _LEADING_NOISE.sub("", v).strip(" \t.;,:!\"'`")
+        if stripped == v:
+            # The shape reductions, tried one at a time so each remnant
+            # re-enters the WHOLE test: see the comment block above vacuous().
+            # skeleton first, so a mark-wearing or confusable spelling is read
+            # as it renders before any shape rule looks at it.
+            for reduce_ in (skeleton, _strip_owner, _collapse_initialism, _strip_wrapping):
+                r = reduce_(v)
+                if r != v:
+                    stripped = r
+                    break
         if stripped == v:
             return False
         v = stripped

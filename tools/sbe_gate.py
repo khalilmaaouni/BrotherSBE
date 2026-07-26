@@ -2,8 +2,9 @@
 """BrotherSBE hard gates: the four silent-failure classes made mechanical.
 
 This is the teeth of the trust architecture. Each subcommand inspects a
-deliverable directory (default: the current git worktree) for the receipts that
-prove a check RAN, and reports PASS / FAIL / NO-DATA per the class. Two modes,
+deliverable directory (default: the current directory, and exactly the
+directory named, never a silently substituted git top level) for the receipts
+that prove a check RAN, and reports PASS / FAIL / NO-DATA per the class. Two modes,
 one truth:
   default   advisory. Prints the verdict, exits 0. A session gets told.
   --strict  enforcing. Exits nonzero on any FAIL. CI runs this. A merge gets stopped.
@@ -338,6 +339,16 @@ def gate_numbers(root):
                 # count is an answer), and that let `"snapshot_id": false` read
                 # as a pinned read. A boolean names no snapshot.
                 problems.append("%s: snapshot_id is %r, a boolean, which pins nothing" % (label, sid))
+            elif not isinstance(sid, (str, int, float)):
+                # The sibling gate already refuses a container where an id
+                # belongs ("rehearsal_run_id is dict, not a run id string") and
+                # this branch did not, so `{"note": "TODO"}` and `["TODO"]`
+                # were each "an answer" and the sentence asserted a pinned
+                # read over a container holding a placeholder. An identifier
+                # is a text (or number) value; a container is not one.
+                problems.append("%s: snapshot_id is %s, not a snapshot id string; a container "
+                                "where an identifier belongs pins nothing, whatever it holds"
+                                % (label, type(sid).__name__))
             else:
                 # Folded, because the reuse disclosure below compared raw ids
                 # while every other comparison in this file folds, so two ids
@@ -805,11 +816,17 @@ def main():
         print("sbe_gate: one directory at a time, got %d (%s)."
               % (len(roots), ", ".join(roots)))
         sys.exit(1)
-    try:
-        root = subprocess.run(["git", "-C", root, "rev-parse", "--show-toplevel"],
-                              capture_output=True, text=True, timeout=10).stdout.strip() or root
-    except Exception:  # sbe: allow-silent not a git worktree; root stays as given and every gate below still runs and still prints
-        pass
+    # The directory this tool examines is the directory it was told to examine.
+    # It used to re-root itself at `git rev-parse --show-toplevel` in silence,
+    # so inside any git worktree the operator's argument was discarded: an
+    # EMPTY directory named on the command line got a PASS earned by a manifest
+    # somebody else committed two directories away, the report named neither
+    # the directory actually read nor the substitution, and the refusal three
+    # lines up ("one directory at a time") was enforced and then overwritten by
+    # a third directory nobody named. A silent widening is the same defect
+    # class as a silent pruning. The caller passes the root they want (CI
+    # passes `.` from the repository root); an empty named directory is
+    # NO-DATA for that directory, never a sibling's PASS.
     fails = 0
     print("BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)")
     for name in which:

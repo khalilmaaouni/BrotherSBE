@@ -336,6 +336,35 @@ class TestLintSelfSkipThroughSymlink(unittest.TestCase):
                              "one tree, two verdicts, depending on path spelling: %r" % outputs)
 
 
+class TestOneLineNeutralizesTheControlClass(unittest.TestCase):
+    def test_no_control_or_format_character_survives_into_a_report_line(self):
+        """one_line() used to flatten line-break characters only, and a
+        terminal defines a line by the cursor, not by newlines: ESC [ 1F
+        rewrote the rendered line above and ESC E opened a new one, so a
+        receipt field forged whole verdict lines while the byte stream held
+        one line per gate. The rule is the class: every Cc and Cf code point
+        arrives as a visible escape, so the probe below asserts over members
+        no list in the fix names (backspace, ESC E, a bidi override) as well
+        as the ones the review demonstrated."""
+        spec2 = importlib.util.spec_from_file_location(
+            "sbe_checks_ol", os.path.join(HERE, "sbe_checks.py"))
+        checks = importlib.util.module_from_spec(spec2)
+        spec2.loader.exec_module(checks)
+        import unicodedata
+        probes = ["a\x1b[2K\x1b[1Fforged PASS", "x\x1bEy", "a\x08b",
+                  "rtl‮forged", "nel\x85nel", "del\x7fdel", "bom﻿bom"]
+        for p in probes:
+            out = checks.one_line(p)
+            leaked = [ch for ch in out
+                      if unicodedata.category(ch) in ("Cc", "Cf", "Cs")]
+            self.assertEqual(leaked, [],
+                             "control/format characters survived one_line(%r): %r" % (p, out))
+        # The escape is visible, not a deletion: the reader must be able to
+        # see and question what the artifact tried to do.
+        self.assertIn("\\x1b", checks.one_line("x\x1bEy"))
+        self.assertIn("\\u202e", checks.one_line("rtl‮forged"))
+
+
 class TestStrictMode(unittest.TestCase):
     def test_severity_decides_what_a_strict_run_blocks_on(self):
         """The severity each check declares at write time is what a FAIL does to
