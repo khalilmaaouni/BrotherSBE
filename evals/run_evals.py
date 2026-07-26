@@ -614,6 +614,158 @@ def gd_planted(root):
     return "refused unrun"
 
 
+SCORE_TOOL = os.path.join(HERE, "..", "tools", "sbe_score.py")
+TELEMETRY_TOOL = os.path.join(HERE, "..", "tools", "sbe_telemetry.py")
+
+
+def _score_lines(root, files):
+    """Run the scorer against a throwaway vault holding `files` and return stdout."""
+    for rel, content in files.items():
+        if isinstance(content, list):
+            # A list is JSONL here (one object per line), not a JSON array.
+            content = "".join(json.dumps(row) + "\n" for row in content)
+        write(root, rel, content)
+    out = subprocess.run([sys.executable, SCORE_TOOL],
+                         capture_output=True, text=True,
+                         env=dict(os.environ, BROTHERSBE_VAULT=root,
+                                  BROTHERSBE_REGISTRIES="", SBE_LINT_ROOT=""))
+    return out.stdout
+
+
+@case("migrate-preserves-the-line-it-cannot-parse-and-backs-up-bytes", "guard", "preserved")
+def gd_migrate(root):
+    # The loss guard compared two counts produced by the same lossy reader, so
+    # it could never see the loss: the unparseable line vanished from the
+    # ledger AND from the backup while the tool printed "count ok".
+    led = "99-System/telemetry/outcomes.jsonl"
+    original = ('{"schema":2,"session_id":"s1","ts":"2026-07-27T09:00:00Z"}\n'
+                "{oops half a line\n"
+                '{"schema":1,"session_id":"s2","out_tokens":10}\n')
+    write(root, led, original)
+    out = subprocess.run([sys.executable, TELEMETRY_TOOL, "migrate"],
+                         capture_output=True, text=True,
+                         env=dict(os.environ, BROTHERSBE_VAULT=root))
+    body = open(os.path.join(root, led)).read()
+    if "{oops half a line" not in body:
+        return "the unparseable line was deleted from the ledger"
+    backups = [f for f in os.listdir(os.path.dirname(os.path.join(root, led)))
+               if ".bak-migrate" in f]
+    if len(backups) != 1:
+        return "no backup written"
+    bak = open(os.path.join(root, "99-System/telemetry", backups[0])).read()
+    if bak != original:
+        return "the backup is not a byte copy of the original"
+    if "unparseable line(s) preserved verbatim" not in out.stdout:
+        return "the preserved line is not named: %s" % out.stdout.strip()
+    return "preserved"
+
+
+@case("a-reduction-does-not-delete-the-rows-the-disclosure-counts", "guard", "two named")
+def gd_undated(root):
+    # Two rows with no session_id and unreadable timestamps collapsed into ONE
+    # under the dedupe key "?" before the undated guard could count them, so
+    # the FAIL said "1 session row(s)" about a file holding two.
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = _score_lines(root, {"99-System/telemetry/outcomes.jsonl":
+                              [{"ts": "bogus"}, {"ts": "bogus2"},
+                               {"schema": 2, "session_id": "real1", "ts": now}]})
+    line = next((l for l in out.splitlines() if l.startswith("ledger-coverage")), "")
+    if "2 session row(s) carry no readable timestamp" not in line:
+        return "got: %s" % line[:120]
+    return "two named"
+
+
+@case("one-prediction-in-five-spellings-is-one-prediction", "guard", "one counted")
+def gd_predict(root):
+    ledger = ("# Operator model\n## Prediction ledger\n"
+              "date | prediction | seal | scored on | hit\n"
+              "2026-07-01 | the queue drains | seal-1 | review | yes\n"
+              "2026-07-02 | the queue drains. | seal-2 | review | yes\n"
+              "2026-07-03 | The queue drains | seal-3 | review | yes\n"
+              "2026-07-04 | the queue drains; | seal-4 | review | yes\n"
+              "2026-07-05 | the queue drains, | seal-5 | review | yes\n")
+    out = _score_lines(root, {"50-Reference/operator-model.md": ledger})
+    line = next((l for l in out.splitlines() if l.startswith("prediction-seals")), "")
+    if "1 sealed" not in line or "4 repeated prediction(s) counted once" not in line:
+        return "got: %s" % line[:120]
+    return "one counted"
+
+
+@case("a-sealed-placeholder-is-not-a-prediction", "guard", "not counted")
+def gd_predict2(root):
+    # The vacuity rule reached the seal column and not the prediction: five
+    # sealed TBD rows counted as five predictions.
+    ledger = ("# Operator model\n## Prediction ledger\n"
+              "date | prediction | seal | scored on | hit\n"
+              + "".join("2026-07-0%d | TBD | seal-%d | review | yes\n" % (i, i)
+                        for i in range(1, 6)))
+    out = _score_lines(root, {"50-Reference/operator-model.md": ledger})
+    line = next((l for l in out.splitlines() if l.startswith("prediction-seals")), "")
+    if not line.split()[1:2] == ["NO-DATA"]:
+        return "got: %s" % line[:120]
+    return "not counted"
+
+
+@case("one-rating-in-six-spellings-is-one-rating", "guard", "one counted")
+def gd_ratings(root):
+    rows = [{"score": 5, "task": "t", "note": n}
+            for n in ("good", "good.", "good,", "good;", "GOOD", " good ")]
+    out = _score_lines(root, {"99-System/telemetry/ratings.jsonl": rows})
+    line = next((l for l in out.splitlines() if l.startswith("felt-outcome-ratings")), "")
+    if "1 distinct ratings" not in line:
+        return "got: %s" % line[:120]
+    return "one counted"
+
+
+@case("an-unreadable-review-timestamp-cannot-hide-the-real-reviews", "guard", "named")
+def gd_reviews(root):
+    # max() over raw timestamp strings let {"ts": "whenever"} beat every date
+    # lexically, and the check reported "no review recorded" about a file
+    # holding one from seconds ago.
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = _score_lines(root, {"99-System/telemetry/reviews.jsonl":
+                              [{"ts": now}, {"ts": "whenever"}]})
+    line = next((l for l in out.splitlines() if l.startswith("review-cadence")), "")
+    if "no readable timestamp" not in line or "'whenever'" not in line:
+        return "got: %s" % line[:120]
+    return "named"
+
+
+@case("an-infinite-cache-counter-is-not-a-measurement", "guard", "refused")
+def gd_cacheinf(root):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    write(root, "99-System/telemetry/outcomes.jsonl",
+          '{"schema":2,"session_id":"sess-0001","ts":"%s","cache_read":Infinity,"cache_write":5}\n'
+          % now)
+    out = subprocess.run([sys.executable, SCORE_TOOL],
+                         capture_output=True, text=True,
+                         env=dict(os.environ, BROTHERSBE_VAULT=root,
+                                  BROTHERSBE_REGISTRIES="", SBE_LINT_ROOT=""))
+    line = next((l for l in out.stdout.splitlines() if l.startswith("cache-economy")), "")
+    if not line.split()[1:2] == ["FAIL"] or "not counts" not in line:
+        return "got: %s" % line[:120]
+    return "refused"
+
+
+@case("dedup-refuses-to-rewrite-a-file-it-cannot-fully-read", "guard", "refused")
+def gd_dedup(root):
+    led = "99-System/telemetry/outcomes.jsonl"
+    original = ('{"schema":2,"session_id":"s1","ts":"2026-07-27T09:00:00Z"}\n'
+                "{broken\n")
+    write(root, led, original)
+    out = subprocess.run([sys.executable, TELEMETRY_TOOL, "dedup"],
+                         capture_output=True, text=True,
+                         env=dict(os.environ, BROTHERSBE_VAULT=root))
+    if open(os.path.join(root, led)).read() != original:
+        return "dedup rewrote a file with unparseable lines"
+    if "refusing to rewrite" not in out.stdout:
+        return "the refusal is not named: %s" % out.stdout.strip()[:120]
+    return "refused"
+
+
 @case("verify-install-fails-over-source-in-an-excluded-path", "guard", "named and failed")
 def gd_vinstall(root):
     # The completeness sentence claimed "no file exists on disk that the

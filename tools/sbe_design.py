@@ -103,7 +103,7 @@ def read(root, name):
     try:
         text = open(path, errors="replace").read()
     except OSError:
-        return None
+        return None  # sbe: allow-silent callers ask read_problem first; a file that vanishes between the two reads as the absence it now is
     return text.lstrip("\ufeff")
 
 

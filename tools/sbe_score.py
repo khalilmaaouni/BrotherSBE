@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
-from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
-                        evidence_problem, glob_with_denials, numeric, one_line,
-                        without_comments)
+from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, derivation_fold,
+                        distinct, Pruner, evidence_problem, glob_with_denials, numeric,
+                        one_line, without_comments)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -269,8 +269,13 @@ def check_cache_economy(ctx):
         # A cache counter is a number. Left unchecked, "" and None reached the
         # arithmetic and the check died inside the guard, which is honest but
         # unreadable; a value that is not a count is a broken field and says so.
-        if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (cr, cw)):
-            unusable.append("%s (%r/%r)" % (r.get("session_id", "?")[:8], cr, cw))
+        # The shared numeric(), not a hand isinstance test: json.load accepts
+        # bare Infinity, `cr + cw > 0` is True over one, the ratio is NaN, and
+        # `NaN < floor` is False, so an infinite counter bought "1/1 sessions
+        # >= 90% warm-read". An infinity is not a measurement (sbe_checks).
+        if any(isinstance(v, bool) or not isinstance(v, (int, float))
+               or numeric(v) is None for v in (cr, cw)):
+            unusable.append("%s (%r/%r)" % (str(r.get("session_id", "?"))[:8], cr, cw))
             continue
         if cr + cw > 0:
             measured += 1
@@ -344,7 +349,7 @@ def check_vault_log_per_active_day(ctx):
             log_days.add(datetime.datetime.fromtimestamp(
                 os.path.getmtime(f), datetime.timezone.utc).date().isoformat())
         except OSError:
-            continue
+            continue  # sbe: allow-silent the log was already counted by its filename date; a file whose mtime vanished mid-check contributes no second date
     missing = sorted(d for d in ctx.days if d not in log_days)
     note = ("; %d file(s) in the session folders hold nothing readable and were not counted as "
             "logs (%s)" % (len(blank), ", ".join(sorted(blank)[:4]))) if blank else ""
@@ -546,7 +551,10 @@ def check_felt_outcome_ratings(ctx):
     # in microseconds, cleared "6 distinct ratings". What makes two ratings
     # one rating is the same score of the same task with the same note.
     content = [{k: v for k, v in x.items() if k not in ("ts", "session_id")} for x in rated]
-    unique, dupes = distinct(content)
+    # derivation_fold, the reduction check_adr already uses, because the plain
+    # fold left a trailing period buying a second rating: "good" and "good."
+    # are one note, and six spellings of one rating cleared "6 distinct".
+    unique, dupes = distinct(content, reduce=derivation_fold)
     return ("PASS" if len(unique) >= 6 else "FAIL",
             "%d distinct ratings (target >= 6 for alignment 10)%s"
             % (len(unique), "" if not dupes else
@@ -563,10 +571,20 @@ def check_review_cadence(ctx):
         return "FAIL", ("%d review row(s) are dated in the future (%s): %s"
                         % (len(ahead), ", ".join(repr(x.get("ts")) for x in ahead[:4]),
                            AGE_IS_BROKEN))
-    last = max((x.get("ts", "") for x in ctx.reviews.rows), default=None)
-    a = age_days(last) if last else None
-    if a is None:
+    # Parsed AGES, never max() over raw timestamp strings: any row whose ts
+    # sorted above a date lexically won max(), age_days returned None for it,
+    # and one typo silently deleted every real review in the file in the
+    # direction of "you have no reviews". An unreadable row is DISCLOSED, and
+    # the latest review is the smallest parsed age.
+    undated = [x for x in ctx.reviews.rows if age_days(x.get("ts") or "") is None]
+    if undated:
+        return "FAIL", ("%d review row(s) carry no readable timestamp (%s), so the latest review "
+                        "cannot be identified and cadence cannot be measured over this file"
+                        % (len(undated), ", ".join(repr(x.get("ts")) for x in undated[:4])))
+    ages = [age_days(x.get("ts", "")) for x in ctx.reviews.rows]
+    if not ages:
         return "NO-DATA", "no review recorded in %s" % REVIEWS
+    a = min(ages)
     return ("PASS" if a <= 7 else "FAIL", "last review: %.1fd ago" % a)
 
 
@@ -588,6 +606,12 @@ def check_review_cadence(ctx):
 LINT_PATTERNS = [
     (re.compile(r"except\s*:"), "bare except (catches everything, hides the real error)"),
     (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*pass", re.M), "except-then-pass (swallows the error)"),
+    # The swallow shape that actually destroyed data in this repository:
+    # `except X:` then `continue` or `return None` dropped ledger lines from a
+    # REWRITER, and the two patterns above could not see it. Legal only in a
+    # reader that never rewrites, which is what the inline waiver must say.
+    (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*(?:continue|return\s+None)\b", re.M),
+     "except-then-continue/return-None (drops the record, hides the error)"),
     # Two patterns for one class, because the single pattern that shipped needed a
     # Python `.execute(` on the same line, and `.sql` is the FIRST non-Python
     # extension L11 says this lint scans. The one lint aimed at warehouse work

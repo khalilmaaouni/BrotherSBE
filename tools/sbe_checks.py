@@ -826,12 +826,28 @@ def distinct(items, reduce=None):
     """
     seen, keys = [], set()
     reduce = reduce or fold
+
+    def normalized(x):
+        # The reduction reaches INTO containers, because it did not: dicts were
+        # compared by raw json.dumps while the sibling string call sites folded,
+        # so one rating written six times with six trailing punctuation marks
+        # counted as six distinct ratings. A container of strings is a container
+        # of the sentences they spell, under the same reduction the caller
+        # chose for bare strings.
+        if isinstance(x, str):
+            return reduce(x)
+        if isinstance(x, dict):
+            return {k: normalized(v) for k, v in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [normalized(v) for v in x]
+        return x
+
     for it in items:
         if isinstance(it, str):
             key = reduce(it)
         else:
             try:
-                key = json.dumps(it, sort_keys=True)
+                key = json.dumps(normalized(it), sort_keys=True)
             except (TypeError, ValueError):
                 key = repr(it)
         if key in keys:
