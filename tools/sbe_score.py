@@ -20,7 +20,7 @@ from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSION
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
 from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
-                        evidence_problem)
+                        evidence_problem, numeric)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -458,7 +458,11 @@ def check_prediction_seals(ctx):
 def check_felt_outcome_ratings(ctx):
     if ctx.ratings.errors:
         return ctx.ratings.problem("felt-outcome ratings")
-    rated = [x for x in ctx.ratings.rows if isinstance(x.get("score"), (int, float))]
+    # The shared rule, not isinstance: `isinstance(NaN, float)` and
+    # `isinstance(True, int)` are both True, so a NaN score and a boolean score
+    # each counted as a rating, and six NaNs cleared "6 distinct ratings".
+    # numeric() refuses NaN, infinity and booleans in one place.
+    rated = [x for x in ctx.ratings.rows if numeric(x.get("score")) is not None]
     if not rated:
         return "NO-DATA", "no scored ratings in %s" % RATINGS
     # The shared dedupe rule: six copies of one rating are one rating. See

@@ -30,8 +30,8 @@ import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
-from sbe_checks import (Check, run_guarded, answered, vacuous, domain_vacuous, all_vacuous,
-                        distinct, Pruner, evidence_problem)
+from sbe_checks import (Check, run_guarded, answered, answered_as, derivation_fold, vacuous,
+                        domain_vacuous, all_vacuous, distinct, Pruner, evidence_problem)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -872,10 +872,18 @@ def _table_entities(lines):
         # column: see the note beside _SOR.
         meta = []
         for i, c in enumerate(cells[1:], start=1):
-            if not c:
-                continue
             head = header[i] if i < len(header) else ""
-            if head and _SOR_HEADER.match(head) and not _SOR.search(c):
+            is_sor_column = bool(head and _SOR_HEADER.match(head))
+            if not c:
+                if is_sor_column:
+                    # An empty cell under a system-of-record column is the
+                    # DECLARED absence of one. Dropping it with the other empty
+                    # cells let the word "owner" in a Notes cell answer for it,
+                    # so a table whose ownership column was blank in every row
+                    # passed as "each with a system of record".
+                    meta.append("system of record: ")
+                continue
+            if is_sor_column and not _SOR.search(c):
                 # The column says what this cell is. Restated in the phrase the
                 # value test reads, so one rule reads both authoring forms.
                 meta.append("system of record: %s" % c)
@@ -1009,8 +1017,15 @@ def _stated_value(v):
 
     A thin wrapper over the shared predicate so the call sites here keep reading
     in strings rather than in None.
+
+    Through answered_as with the derivation fold, not answered on the raw text,
+    because this was the reduce-then-test ordering bug alive in one more place:
+    a system of record written as `-- see above` is not blank and is not a
+    single vacuity token, so it survived answered(), while the same project
+    refused the identical string as a derivation. The fold strips comments,
+    punctuation and case FIRST, and the vacuity test reads what is left.
     """
-    return answered(v) or ""
+    return answered_as(v, derivation_fold) or ""
 
 
 def check_data_model(root):

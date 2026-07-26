@@ -114,7 +114,21 @@ EMPTY_VALUES = [("e", "empty-string", ""), ("f", "whitespace", "   "), ("g", "nu
 # covered by construction, because they all resolve through one predicate; these
 # three prove the predicate is actually being CALLED, which is what a scenario
 # can prove and a list cannot.
-VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")]
+VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-"),
+                  # The copula remnant: "is still unknown" is not blank, is not
+                  # a whole-string token, and the one-shot copula stripper left
+                  # "still unknown", which is not in a list that holds
+                  # "unknown". This token proves the vacuity test re-reads its
+                  # own reduction's output to a fixpoint.
+                  ("v", "copula-remnant", "is still unknown")]
+
+# Values that are numbers and still record no measurement. json.load accepts a
+# bare NaN, `NaN <= 0` is False, and a hand-rolled duration check accepted one
+# while its sentence asserted "a nonzero duration": the evidence sentence was
+# false even where the verdict logic was arguably defensible. Swept like the
+# empty values, over every leaf and subtree, but only through JSON-shaped
+# fixtures: NaN has no text form a markdown artifact would carry.
+NOT_MEASUREMENTS = [("m", "nan", float("nan"))]
 
 # Round six, and the first axis about ORDER rather than about content. Every
 # sweep above replaces a value with one that says nothing WHEN READ RAW. These
@@ -136,7 +150,15 @@ REDUCES_TO_NOTHING = [("n", "hash-comment", "#"), ("n", "block-comment", "/* */"
                       ("n", "punctuation", ";")]
 # Applied to the whole fixture at once, for the same reason.
 COMMENT_ONLY = [("n", "sql-comment-with-words", "-- rerun on 2026-07-26 by hand, same query"),
-                ("n", "not-a-measurement", "inf")]
+                ("n", "not-a-measurement", "inf"),
+                # A number where text belongs: `"query": 0` skipped the whole
+                # reduce-then-test fix, because the reduction was applied only
+                # to strings, and two integers bought "a second derivation whose
+                # text differs beyond case, whitespace and comments". Whole
+                # fixture only: 0 is an honest answer for many single leaves (a
+                # zero exit code), so a per-leaf sweep of it would assert
+                # falsehoods.
+                ("n", "number-in-a-text-field", 0)]
 
 # Round five, and the first one that is not about emptiness at all. Every sweep
 # above replaces a value with a value that says NOTHING. This one replaces a
@@ -774,7 +796,8 @@ def hollow_cases(tool, check):
             for tag, vname, value in COMMENT_ONLY:
                 variant("%s::*|%s" % (rel, vname), tag, rel,
                         hollowed(content, value, keep_booleans=True))
-            for tag, vname, value in EMPTY_VALUES + VACUOUS_VALUES + REDUCES_TO_NOTHING:
+            for tag, vname, value in (EMPTY_VALUES + VACUOUS_VALUES + REDUCES_TO_NOTHING
+                                      + NOT_MEASUREMENTS):
                 variant("%s::*|%s" % (rel, vname), tag, rel,
                         hollowed(content, value, keep_booleans=True))
                 for path in container_paths(content):

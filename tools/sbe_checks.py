@@ -337,13 +337,18 @@ def stated(value):
     None, an empty or whitespace-only string, and an empty list, dict or tuple
     all record nothing. False and 0 record something: a zero row count and a
     zero exit code are answers, and a check that treated them as absent would
-    reject honest work.
+    reject honest work. A NaN or an infinity records nothing: json.load accepts
+    bare NaN, `NaN <= 0` is False, and a receipt carrying one cleared a check
+    whose sentence then asserted "a nonzero duration" over a value that is not
+    a number of milliseconds of anything.
 
     This is emptiness only. "TODO" is not empty and records nothing either;
     that is `answered()` below, and a field whose content the verdict sentence
     describes goes through THAT one.
     """
     if value is None:
+        return None
+    if isinstance(value, float) and _not_a_measurement(value):
         return None
     if isinstance(value, str):
         return value.strip() or None
@@ -398,7 +403,16 @@ VACUOUS_VALUES = frozenset((
 # `todo`, `tbd`, `xxx`, `foo` and the punctuation tokens are notes to the author
 # in any context, so they stay refused everywhere.
 DOMAIN_WORDS = frozenset(("none", "pending", "unknown", "unclear", "undecided", "null", "nil"))
-_LEADING_COPULA = re.compile(r"^(?:it\s+is|is|was|are)\s+", re.I)
+# Leading words that carry no answer of their own: copulas, modals and hedges.
+# Stripped to a FIXPOINT inside vacuous(), with the whole test re-run on every
+# remnant, because stripping once and testing once was the R7 order bug one
+# level in: "is still unknown" lost its "is", left "still unknown", and "still
+# unknown" is not in the token list even though "unknown" is, so a two-word
+# remnant escaped a test built for whole strings. Any reduction's OUTPUT goes
+# back through the whole test until nothing changes.
+_LEADING_NOISE = re.compile(
+    r"^(?:it\s+is|is|was|are|be|being|been|will\s+be|would\s+be|should\s+be|shall\s+be|"
+    r"still|yet|currently|now|probably|likely|maybe|perhaps)\b\s*", re.I)
 
 # The yes/no vocabulary, in one place, for the same reason VACUOUS_VALUES is in
 # one place. A fifth round of one defect: the intake asks its five questions as
@@ -489,23 +503,37 @@ def vacuous(value, allow=()):
     question, while "none" as a system of record is the absence of one. A field
     that carves a token out says so at the call site, in one place a reader can
     find, rather than the shared list being quietly weakened for everyone.
+
+    The loop is the fix for the sixth shape of this defect: the copula stripper
+    ran ONCE and its output was compared against a list of whole strings, so
+    "is still unknown" reduced to "still unknown" and escaped a list that holds
+    "unknown", and "should be" (the remnant of "still deciding who the owner
+    should be") escaped everything. Every strip re-enters the whole test until
+    nothing changes, so a remnant is judged by the same rules as the original.
     """
     if not isinstance(value, str):
         return False
-    v = " ".join(value.split()).strip(" \t.;,:!\"'`")
-    v = _LEADING_COPULA.sub("", v).strip().casefold()
-    if v in {a.casefold() for a in allow}:
-        return False
-    if not v:
-        return True
-    # A value with no letter and no digit anywhere in it records nothing, whatever
-    # the punctuation spells. The list carried "-", "--", "?" and "???" one at a
-    # time and a lone "#" walked past all four of them, which is the list-of-
-    # instances failure this project keeps finding one level in. This is the rule
-    # those four entries were reaching for, and it holds for the ones nobody typed.
-    if not any(ch.isalnum() for ch in v):
-        return True
-    return v in VACUOUS_VALUES
+    v = " ".join(value.split()).strip(" \t.;,:!\"'`").casefold()
+    allowed = {a.casefold() for a in allow}
+    while True:
+        if v in allowed:
+            return False
+        if not v:
+            return True
+        # A value with no letter and no digit anywhere in it records nothing,
+        # whatever the punctuation spells. The list carried "-", "--", "?" and
+        # "???" one at a time and a lone "#" walked past all four of them, which
+        # is the list-of-instances failure this project keeps finding one level
+        # in. This is the rule those four entries were reaching for, and it
+        # holds for the ones nobody typed.
+        if not any(ch.isalnum() for ch in v):
+            return True
+        if v in VACUOUS_VALUES:
+            return True
+        stripped = _LEADING_NOISE.sub("", v).strip(" \t.;,:!\"'`")
+        if stripped == v:
+            return False
+        v = stripped
 
 
 def domain_vacuous(value):
@@ -545,11 +573,20 @@ def answered_as(value, reduce, allow=()):
 
     Reduce first. Test second. This is the one function that does it in that
     order, and the call sites that reduce anything go through it.
+
+    A reduction is defined on TEXT, so a field that reduces is a text field, and
+    a value the reduction cannot read is not an answer to it. The old escape:
+    `reduce` was applied only `if isinstance(v, str)`, so `"query": 0` and
+    `"second_derivation": 1` skipped the whole R7 fix and two integers bought
+    "a second derivation whose text differs beyond case, whitespace and
+    comments", a sentence about text over fields holding none.
     """
     v = stated(value)
     if v is None:
         return None
-    reduced = reduce(v) if isinstance(v, str) else v
+    if not isinstance(v, str):
+        return None
+    reduced = reduce(v)
     if stated(reduced) is None:
         return None
     if isinstance(reduced, str) and vacuous(reduced, allow):
