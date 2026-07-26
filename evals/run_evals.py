@@ -3299,6 +3299,87 @@ def dc8(root):
         "the fence under 'verbatim' differs from the shipped workflow"
 
 
+@case("every-fixture-backed-verdict-line-in-the-guides-is-what-the-tool-prints", "docs", "consistent")
+def dc_worked(root):
+    """The numbers inside a quoted verdict line are LIVE where the guide shows
+    the fixture that produced them.
+
+    The doc-quote guard pins a verdict line's shape, its verdict word and its
+    severity, and leaves every NUMBER inside it a free template slot: `1
+    figure(s)` could be edited to `9 figure(s)` in a shipped guide and all
+    three gates stayed green, so a reader comparing their own run to the doc
+    was taught the wrong expectation. This closes that by recomputation, not
+    by a wider template: wherever a guide shows a self-contained JSON receipt
+    immediately above a worked output block, the receipt is written to the
+    filename its shape names, the matching gate is run over it, and the
+    gate's verdict line is compared to the one the guide prints. A digit
+    changed anywhere in such a line now fails here. It replays only the
+    receipt-shaped gates (numbers, migration, ran); the signature-bound
+    approval blocks need a private key no fixture can carry, so those stay
+    pinned by the shape-and-phrasing guard rather than replayed, which is
+    stated rather than left implicit."""
+    import re as _re
+    shape_to = [(("figures",), "numbers-manifest.json", "numbers"),
+                (("forward", "reverse", "row_counts"), "migration-receipt.json", "migration"),
+                (("checks",), "ran-receipt.json", "ran")]
+    guides = ("docs/guides/02-the-gates-in-practice.md",
+              "docs/guides/04-teams-and-evolution.md")
+    wrong, replayed = [], 0
+    for rel in guides:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        lines = open(p, errors="replace").read().splitlines()
+        # Collect fenced blocks with their language tag and body.
+        blocks, i = [], 0
+        while i < len(lines):
+            m = _re.match(r"^```(\w*)\s*$", lines[i])
+            if m:
+                j = i + 1
+                body = []
+                while j < len(lines) and not _re.match(r"^```\s*$", lines[j]):
+                    body.append(lines[j])
+                    j += 1
+                blocks.append((m.group(1), "\n".join(body), i + 1))
+                i = j + 1
+            else:
+                i += 1
+        for bi, (lang, body, lineno) in enumerate(blocks):
+            if lang != "json":
+                continue
+            try:
+                obj = json.loads(body)
+            except ValueError:  # sbe: allow-silent a json fence that does not parse is prose the guide shows on purpose, not a receipt to replay, so it is skipped by design here
+                continue
+            if not isinstance(obj, dict):
+                continue
+            target = next((fname, gate) for keys, fname, gate in shape_to
+                          if any(k in obj for k in keys)) if any(
+                any(k in obj for k in keys) for keys, _f, _g in shape_to) else None
+            if not target:
+                continue
+            fname, gate = target
+            # The nearest following plain (untagged) output block that carries
+            # this gate's verdict line.
+            out_block = next((b for (blang, b, _ln) in blocks[bi + 1:bi + 4]
+                              if blang == "" and _re.search(r"(?m)^\s*%s\s+(PASS|FAIL|NO-DATA)\b"
+                                                            % gate, b)), None)
+            if out_block is None:
+                continue
+            want = next(l.strip() for l in out_block.splitlines()
+                        if _re.match(r"^\s*%s\s+(PASS|FAIL|NO-DATA)\b" % gate, l))
+            with tempfile.TemporaryDirectory() as d:
+                write(d, fname, obj)
+                got = gate_line(d, gate)
+            replayed += 1
+            if " ".join(got.split()) != " ".join(want.split()):
+                wrong.append("%s:%d the %s block prints %r but the tool prints %r"
+                             % (rel, lineno, gate, want[:60], got[:60]))
+    if not replayed:
+        return "this guard replayed no fixture-backed verdict block, so it proved nothing"
+    return "consistent" if not wrong else "; ".join(wrong[:3])
+
+
 @case("guide-05s-output-blocks-are-what-the-tools-print", "docs", "consistent")
 def dc9(root):
     # The guide's opening claim, made mechanical: evals/replay_guide05.py
