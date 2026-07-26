@@ -1176,7 +1176,12 @@ def check_data_model(root):
 DIAGRAM_TYPES = {
     "flowchart": "nodes", "graph": "nodes", "sequenceDiagram": "sequence",
     "erDiagram": "er", "classDiagram": "class", "stateDiagram": "state",
-    "stateDiagram-v2": "state", "mindmap": "nodes",
+    # mindmap used to be read as a flowchart, which is a half-parse: the shaped
+    # root matched and every bare-word child was dropped in silence, so two
+    # undeclared children sat under a verdict saying "all traceable". A mindmap
+    # names a node on every content line, so it gets a parser that reads every
+    # content line.
+    "stateDiagram-v2": "state", "mindmap": "mindmap",
     # C4 has its own statement grammar, `Person(alias, "Label")`, and reading it
     # as a flowchart made the Mermaid KEYWORDS `Person` and `System` into orphan
     # node names, so the canonical Mermaid dialect for the system-context diagram
@@ -1247,19 +1252,32 @@ def _strip_edge_labels(s, skipped):
             skipped.append("%s (an inline edge label, not a node)" % label)
         return " %s " % m.group(1)
     return _INLINE_EDGE_LABEL.sub(sub, s)
+# ONE identifier grammar for every dialect. Seven patterns spelled a node id as
+# `[A-Za-z_]\w*` while the flowchart, C4 and block-beta patterns beside them,
+# and the data model's own entity rule, all accepted hyphens and dots. Hyphens
+# are the dominant naming convention in backend and infrastructure work, so the
+# mismatch failed in both directions at once: `participant feed-poller` was
+# silently dropped (a hyphenated orphan then PASSed as "all traceable", and an
+# honest hyphenated participant was never read), `in-transit -->
+# out-for-delivery` was shredded into the invented orphans `in`, `transit`,
+# `out` and `delivery`, and `class feed-poller` was truncated to a node called
+# `feed`. L4's own worked example (`payment-token`, `pii.profile`) could not be
+# drawn in an erDiagram of itself.
+_IDENT = r"[A-Za-z_][\w.-]*"
 # erDiagram relationship line: ENTITY <cardinality> ENTITY : label
 # Cardinality tokens (||--o{, }o--||, ||--||, }|..|{, ...) are built from the
 # characters | o { } . and dash, and at least one of them is never a dash: a run
 # of plain dashes between two identifiers ending in a colon is a markdown bullet
 # on the line after a heading, which is how `## Components` followed by
-# `- OrderQueue: ...` invented an entity called Components.
-_ER_LINE = re.compile(r"([A-Za-z_]\w*)\s+[|o{}.\-]*[|o{}][|o{}.\-]*\s+([A-Za-z_]\w*)\s*:")
-_ER_BLOCK = re.compile(r"^\s*([A-Za-z_]\w*)\s*\{")
-_SEQ_PARTICIPANT = re.compile(r"^\s*(?:participant|actor)\s+([A-Za-z_]\w*)(?:\s+as\s+(.+?))?\s*$")
-_SEQ_MESSAGE = re.compile(r"^\s*([A-Za-z_]\w*)\s*<?-{1,2}[>x)]{1,2}\s*([A-Za-z_]\w*)\s*:")
-_CLASS_DECL = re.compile(r"^\s*class\s+([A-Za-z_]\w*)")
-_CLASS_REL = re.compile(r"([A-Za-z_]\w*)\s*[<*o|]?[-.]{2,}[>*o|]*\s*([A-Za-z_]\w*)")
-_STATE_EDGE = re.compile(r"(\[\*\]|[A-Za-z_]\w*)\s*-->\s*(\[\*\]|[A-Za-z_]\w*)")
+# `- OrderQueue: ...` invented an entity called Components. The whitespace
+# around the cardinality keeps the identifier's own hyphens and dots out of it.
+_ER_LINE = re.compile(r"(%s)\s+[|o{}.\-]*[|o{}][|o{}.\-]*\s+(%s)\s*:" % (_IDENT, _IDENT))
+_ER_BLOCK = re.compile(r"^\s*(%s)\s*\{" % _IDENT)
+_SEQ_PARTICIPANT = re.compile(r"^\s*(?:participant|actor)\s+(%s)(?:\s+as\s+(.+?))?\s*$" % _IDENT)
+_SEQ_MESSAGE = re.compile(r"^\s*(%s)\s*<?-{1,2}[>x)]{1,2}\s*(%s)\s*:" % (_IDENT, _IDENT))
+_CLASS_DECL = re.compile(r"^\s*class\s+(%s)" % _IDENT)
+_CLASS_REL = re.compile(r"(%s)\s*[<*o|]?[-.]{2,}[>*o|]*\s*(%s)" % (_IDENT, _IDENT))
+_STATE_EDGE = re.compile(r"(\[\*\]|%s)\s*-->\s*(\[\*\]|%s)" % (_IDENT, _IDENT))
 # Diagrams are code, in a fenced block. Reading the whole file meant any prose
 # containing an arrow became a diagram node, so the traceability check reported
 # orphans that were sentences.
@@ -1365,6 +1383,20 @@ def _diagram_nodes(t):
                         if g != "[*]":
                             add(g)
                             states.add(g)
+                continue
+            if kind == "mindmap":
+                if s.startswith("::") or word.startswith("::icon"):
+                    skipped.append("%s (a %s style statement, not a node)" % (word, first))
+                    continue
+                m = _NODE_LABELLED.search(s)
+                if m:
+                    add(m.group(1), _label_text(m.group(2)))
+                elif s.strip("()[]{}"):
+                    # A bare line IS a node in a mindmap. Reading only the
+                    # shaped root and dropping the children was a half-parse:
+                    # the verdict said "all traceable" over children it never
+                    # read.
+                    add(_label_text(s))
                 continue
             if kind == "c4":
                 m = _C4_CALL.match(s)

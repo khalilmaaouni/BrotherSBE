@@ -3529,6 +3529,113 @@ def h5(root):
         write(root, name, body)
 
 
+# ---------------------------------------------------------------------------
+# Hyphenated and dotted node names in every dialect. Seven identifier patterns
+# excluded the dominant backend naming convention, which both hid undeclared
+# services (a hyphenated orphan was dropped, then "all traceable" printed) and
+# rejected honest work (a correct lifecycle failed with four orphans the author
+# never typed). Both directions are pinned, per dialect.
+
+_HYPHEN_MODEL = ("# Data model\n## Entities\n"
+                 "- order-service: system of record: the OMS.\n"
+                 "- payment-gateway: system of record: the ledger.\n"
+                 "## Relationships\n- order-service to payment-gateway: one-to-many.\n")
+
+
+@case("a-hyphenated-participant-is-read-and-traced", "diagrams", "PASS")
+def g1(root):
+    write(root, "05-data-model.md", _HYPHEN_MODEL)
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n  participant order-service\n"
+          "  participant payment-gateway\n  order-service->>payment-gateway: charge\n```\n")
+
+
+@case("a-hyphenated-undeclared-participant-is-an-orphan", "diagrams", "FAIL")
+def g2(root):
+    # The hole: `participant totally-undeclared-service` was read as no node at
+    # all, so a box that exists nowhere passed the gate whose one job is to
+    # catch a diagram drifting from the system it claims to show.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to Customer: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n  participant Customer\n"
+          "  participant totally-undeclared-service\n"
+          "  Customer->>totally-undeclared-service: nothing anywhere declares this\n```\n")
+
+
+@case("a-hyphenated-lifecycle-is-not-shredded-into-fragments", "diagrams", "PASS")
+def g3(root):
+    # The false rejection: `in-transit --> out-for-delivery` used to match as
+    # `transit --> out`, and the author was handed four orphans they never
+    # typed, with no next step but renaming a domain concept.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Shipment: system of record: the WMS.\n"
+          "## Lifecycle\n- created\n- in-transit\n- out-for-delivery\n- delivered\n"
+          "## Relationships\n- Shipment to Shipment: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nstateDiagram-v2\n  [*] --> created\n"
+          "  created --> in-transit\n  in-transit --> out-for-delivery\n"
+          "  out-for-delivery --> delivered\n```\n")
+
+
+@case("l4s-own-worked-example-draws-in-an-erdiagram", "diagrams", "PASS")
+def g4(root):
+    # L4 promises `payment-token` and `pii.profile` are read rather than
+    # silently dropped; an erDiagram of those two names produced "no diagram
+    # node could be read out of them".
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- payment-token: system of record: the vault.\n"
+          "- pii.profile: system of record: the identity service.\n"
+          "## Relationships\n- payment-token to pii.profile: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nerDiagram\n  payment-token ||--o| pii.profile : masks\n```\n")
+
+
+@case("a-hyphenated-class-is-not-truncated-to-a-prefix", "diagrams", "FAIL")
+def g5(root):
+    # classDiagram manufactured a node called `feed` out of `class feed-poller`
+    # and then traced or orphaned a name the author never wrote. The FAIL must
+    # name the full identifier.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to Customer: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nclassDiagram\n  class feed-poller\n```\n")
+
+
+@case("the-truncated-class-fail-names-the-full-identifier", "evidence", "full-name")
+def g6(root):
+    g5(root)
+    line = gate_line(root, "diagrams")
+    if line.split()[1:2] != ["FAIL"]:
+        return line
+    return "full-name" if "feed-poller" in line else line
+
+
+@case("mindmap-children-are-read-not-dropped", "diagrams", "FAIL")
+def g7(root):
+    # Two undeclared children sat under "1 diagram node(s) in mindmap, all
+    # traceable": a half-parse, which L5 says a dialect must not get.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to Customer: one-to-one.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nmindmap\n  root((Customer))\n"
+          "    UndeclaredThingOne\n    UndeclaredThingTwo\n```\n")
+
+
+@case("a-declared-mindmap-still-passes", "diagrams", "PASS")
+def g8(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "- Order: system of record: the OMS.\n"
+          "## Relationships\n- Customer to Order: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nmindmap\n  root((Customer))\n    Order\n```\n")
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
