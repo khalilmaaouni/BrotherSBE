@@ -14,7 +14,13 @@ commands paste cleanly:
 ```bash
 SBE="$HOME/.claude/skills/brothersbe"     # wherever you cloned BrotherSBE
 mkdir -p design/order-intake && cd design/order-intake
+git init -q .
 ```
+
+The `git init` matters: phase 6 binds the approval to a commit trailer, and
+`git add -A` in a directory no repository owns dies with "fatal: not a git
+repository". In your own work the dossier usually lives inside the repository
+the change ships in, and then you skip it.
 
 The dossier lives in that directory: seven markdown files, one intake JSON, and
 the receipts. Nothing else.
@@ -33,7 +39,11 @@ printf 'y\ny\ny\ny\nmany\n' | python3 "$SBE/tools/sbe_intake.py"
 
 ```
 Does this change a data model, an API contract, or a file interface others depend on? (y/n) Does it cross a service, system, or team boundary? (y/n) Is it reversible in under an hour? (y/n) Does it touch money, partner data, personal data, or production state? (y/n) How many downstream consumers break if it is wrong? (none/some/many) tier T3 (artifacts required: 01, 02, 03, 04, 05, 06, 07) written to ./00-intake.json
+To override this tier, edit that file and set BOTH "override" (the tier you are moving to) and "override_reason" (at least 3 words and 12 characters). A tier moved with either field missing FAILs the design check as an edit rather than an override.
 ```
+
+The two closing lines are the override contract, printed on every run so the
+one edit that moves a tier is taught where the tier is written.
 
 Run it without the `printf` and it asks the five questions one at a time. The
 answers here, and why:
@@ -187,6 +197,7 @@ printf '2\nstrong\nlow\nlow\n' | python3 "$SBE/tools/sbe_decide.py" "$SBE/tables
 deploying_teams (Independently deploying teams. Services below four teams usually cost more than they return.): consistency (Strong consistency across a service boundary is expensive and often accidental.): ops_maturity (On-call, tracing, and CI maturity. Without them a distributed estate is undebuggable.): failure_isolation (Does one component failing have to leave the others running?): 
 Recommendation: modular monolith
 Alternatives: monolith, services
+Tie: modular monolith, monolith scored equal top marks; the recommendation is the table's declared order, not a measured difference (scores: modular monolith=4, services=0, event-driven=0, monolith=4)
 Decided by:
   - deploying_teams=2 favours modular monolith, monolith
   - consistency=strong favours monolith, modular monolith
@@ -196,7 +207,10 @@ What would flip this: Cross four independently deploying teams, or need one modu
 ```
 
 Four things come back every time: the recommendation, up to two alternatives, the
-criteria that separated them, and what would flip it. The flip condition belongs to the
+criteria that separated them, and what would flip it. A tied top score is a fifth,
+when it happens: the Tie line above says the winner is the table's declared order
+rather than a measured difference, and prints the raw tally so nobody has to take
+that on faith. The flip condition belongs to the
 RECOMMENDATION, not to the table: one string for the whole table meant a run that
 recommended `services` off nine teams and high failure isolation was handed a flip
 condition naming two conditions that were already true, which can never fire. Answer nothing and the
@@ -213,6 +227,7 @@ printf '2\nstrongly\nlow\nlow\n' | python3 "$SBE/tools/sbe_decide.py" "$SBE/tabl
 deploying_teams (Independently deploying teams. Services below four teams usually cost more than they return.): consistency (Strong consistency across a service boundary is expensive and often accidental.): ops_maturity (On-call, tracing, and CI maturity. Without them a distributed estate is undebuggable.): failure_isolation (Does one component failing have to leave the others running?): 
 Recommendation: modular monolith
 Alternatives: monolith, services
+Tie: modular monolith, monolith scored equal top marks; the recommendation is the table's declared order, not a measured difference (scores: modular monolith=3, services=0, event-driven=0, monolith=3)
 Decided by:
   - deploying_teams=2 favours modular monolith, monolith
   - ops_maturity=low favours monolith, modular monolith
@@ -600,7 +615,7 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
   numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift
   migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded
-  approval  FAIL     approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
+  approval  FAIL     the APPROVAL file declares 'This change writes partner order data and creates the partne', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id)
   ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 exit: 1
@@ -712,6 +727,7 @@ The seven templates in `templates/dossier/` are the same files with the example
 content swapped out. Copy them into `design/<project>/` and run the intake:
 
 ```bash
+cd ../..      # back to the repository root; the worked dossier stays where it is
 mkdir -p design/my-project && cp "$SBE/templates/dossier"/*.md design/my-project/
 python3 "$SBE/tools/sbe_intake.py" design/my-project
 ```
@@ -738,10 +754,12 @@ reversible, no consumers), the intake writes:
 }
 ```
 
-Now run the design check on the copied dossier:
+Now run the design check on the copied dossier by name (from the repository
+root, `.` would also find the worked dossier from the phases above and print
+both, each under its own `dossier:` header):
 
 ```bash
-python3 "$SBE/tools/sbe_design.py" .
+python3 "$SBE/tools/sbe_design.py" design/my-project
 ```
 
 ```
