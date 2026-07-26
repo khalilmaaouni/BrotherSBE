@@ -182,6 +182,20 @@ class TestDigestCap(unittest.TestCase):
         self.assertLess(size, cap,
                         "DIGEST.md is %d bytes but the hook comment promises a %d cap; "
                         "move the growth into LAWS-REFERENCE.md" % (size, cap))
+        # The cap was guarded for the digest FILE only, while the hook appended
+        # nags and hints on top, so a busy vault could push the total past the
+        # cap and the harness truncated the tail, where the compaction hint
+        # (the recovery pointer) printed. The hook now enforces the cap itself
+        # and prints the hint before the digest; both properties are pinned
+        # against the script's text here.
+        self.assertRegex(hook, r"CAP=%d" % cap,
+                         "the hook no longer enforces the cap it names")
+        self.assertIn("head -c", hook, "the hook no longer cuts its own over-cap output")
+        hint_at = hook.find("compact-hint")
+        digest_at = hook.find('cat "$DIR/DIGEST.md"')
+        self.assertTrue(0 < hint_at < digest_at,
+                        "the compaction hint must print before the digest, so harness "
+                        "truncation can only ever cost digest tail")
         # The injected block says which version it came from, and that claim
         # tracks the VERSION file rather than a human's memory at cut time.
         version = io.open(os.path.join(HERE, "..", "VERSION")).read().strip()

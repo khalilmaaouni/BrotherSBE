@@ -21,6 +21,15 @@ quietly. This finds every network call:
 grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
 ```
 
+What to expect from that grep, so the check is usable rather than reassuring:
+around thirty hits and none of them a network call. Every hit is one of three
+benign shapes: `subprocess` running local `git`, the words "socket" or "http"
+inside a refusal message or comment, or a fake credential inside a redaction
+TEST FIXTURE (`tools/test_sbe.py` carries a literal `curl ... Bearer ...`
+string precisely to prove such strings get masked). A hit that actually
+imports `urllib` or `requests`, or opens an `http` URL or a network `socket`,
+is a violation of this document; report it.
+
 Two files inside the vault deserve attention:
 
 - `99-System/telemetry/outcomes.jsonl` holds per-session counts (tokens, tool
