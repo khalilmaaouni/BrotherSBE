@@ -145,7 +145,13 @@ VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")
 # false even where the verdict logic was arguably defensible. Swept like the
 # empty values, over every leaf and subtree, but only through JSON-shaped
 # fixtures: NaN has no text form a markdown artifact would carry.
-NOT_MEASUREMENTS = [("m", "nan", float("nan"))]
+# NaN AND Infinity: json.load accepts both bare, and the axis shipped
+# half-declared, with NaN swept here and Infinity swept nowhere, so a
+# `cache_read: Infinity` bought "1/1 sessions >= 90% warm-read" (the ratio is
+# NaN and `NaN < floor` is False) while the string "inf" was correctly refused
+# one call site over. A value that is a float and not a measurement is one
+# class, and the sweep now carries both members.
+NOT_MEASUREMENTS = [("m", "nan", float("nan")), ("m", "infinity", float("inf"))]
 
 # Round six, and the first axis about ORDER rather than about content. Every
 # sweep above replaces a value with one that says nothing WHEN READ RAW. These
@@ -455,6 +461,8 @@ NOT_A_VERDICT = {
     ("sbe_score.py", "_rel"): "returns a path",
     ("sbe_decide.py", "load_table"): "returns (parsed table, load error), not a verdict",
     ("sbe_telemetry.py", "redact"): "returns (masked text, how many masks), not a verdict",
+    ("sbe_telemetry.py", "read_jsonl_counted"): "returns (parsed rows, unparseable lines), "
+                                                "not a verdict",
     ("sbe_telemetry.py", "prediction_counts"): "returns a count table",
 }
 

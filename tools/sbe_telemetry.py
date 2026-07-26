@@ -57,7 +57,8 @@ fld() everywhere.
 import json, os, sys, glob, re, datetime, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import distinct, evidence_problem, without_comments, answered, fold
+from sbe_checks import (distinct, derivation_fold, evidence_problem, without_comments,
+                        answered, fold)
 
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
@@ -132,7 +133,7 @@ def parse_transcript(path, collect_user_texts=False):
             try:
                 o = json.loads(raw)
             except Exception:
-                continue
+                continue  # sbe: allow-silent aggregate reader over a live transcript; a corrupt line must not lose the rest, and nothing here rewrites the file
             ts = o.get("timestamp")
             if isinstance(ts, str) and len(ts) >= 19:
                 if agg["first_ts"] is None or ts < agg["first_ts"]:
@@ -317,36 +318,55 @@ def cmd_migrate():
     if not os.path.isfile(LEDGER):
         print("migrate: no ledger yet")
         return
-    rows = read_jsonl(LEDGER)
-    n_before = len(rows)
+    # RAW lines, not parsed rows. The before count, the backup and the rewrite
+    # all used to flow through the lossy parser, so an unparseable line was
+    # deleted from the ledger AND from the backup while the loss guard compared
+    # two counts produced by the same reader and printed "count ok". The guard
+    # can only see a loss it measures on the raw file.
+    raw_lines = [l for l in open(LEDGER, errors="replace").read().splitlines()
+                 if l.strip()]
+    n_before = len(raw_lines)
+    # The backup is a BYTE COPY of the original, taken before anything is
+    # parsed, so whatever the rewrite does the original bytes exist.
+    bak = LEDGER + ".bak-migrate" + datetime.date.today().strftime("%Y%m%d")
+    if not os.path.exists(bak):
+        with open(bak, "wb") as f:
+            f.write(open(LEDGER, "rb").read())
     changed = 0
+    preserved = []
     out = []
-    for r in rows:
-        if r.get("schema") != 2:
+    for i, raw in enumerate(raw_lines, 1):
+        try:
+            r = json.loads(raw)
+        except ValueError:
+            # Preserved verbatim, in place, and named below: a line this tool
+            # cannot parse is a line it has no business deleting.
+            preserved.append(i)
+            out.append(raw)
+            continue
+        if isinstance(r, dict) and r.get("schema") != 2:
             r = dict(r)
             if "out_tokens" in r:
                 r["gen_ai.usage.output_tokens"] = r.pop("out_tokens")
             r["schema"] = 2
             # input tokens were never recorded pre-schema-2: stays ABSENT, never invented
             changed += 1
-        out.append(r)
-    # Back up before the rewrite, so the failure message below is honest.
-    bak = LEDGER + ".bak-migrate" + datetime.date.today().strftime("%Y%m%d")
-    if not os.path.exists(bak):
-        with open(bak, "w") as f:
-            for r in rows:
-                f.write(json.dumps(r, separators=(",", ":")) + "\n")
+        out.append(json.dumps(r, separators=(",", ":")) if not isinstance(r, str) else raw)
     tmp = LEDGER + ".tmp"
     with open(tmp, "w") as f:
-        for r in out:
-            f.write(json.dumps(r, separators=(",", ":")) + "\n")
+        for line in out:
+            f.write(line + "\n")
     os.rename(tmp, LEDGER)
-    n_after = len(read_jsonl(LEDGER))
+    n_after = len([l for l in open(LEDGER, errors="replace").read().splitlines() if l.strip()])
+    note = ("" if not preserved else
+            ", %d unparseable line(s) preserved verbatim (line %s; fix or remove them by hand, "
+            "they are in the backup too)" % (len(preserved),
+                                             ", ".join(str(i) for i in preserved[:4])))
     if n_after < n_before:
         print("migrate: LINE COUNT DROPPED %d->%d, restore from backup!" % (n_before, n_after))
     else:
-        print("migrate: %d lines, %d migrated to schema 2, count ok (%d)"
-              % (n_before, changed, n_after))
+        print("migrate: %d lines, %d migrated to schema 2%s, count ok (%d)"
+              % (n_before, changed, note, n_after))
 
 
 def cmd_dedup():
@@ -362,7 +382,16 @@ def cmd_dedup():
                                        sort_keys=True)), "last"),
         (CORRECTIONS, lambda r: (r.get("session_id"), r.get("text")), "first"),
     ):
-        rows = read_jsonl(path)
+        rows, bad = read_jsonl_counted(path)
+        if bad:
+            # A rewrite from parsed rows deletes every line the parser dropped.
+            # This tool will not rewrite a file it cannot fully read: the
+            # broken lines are named instead, and nothing is touched.
+            print("dedup: %s has %d unparseable line(s) (line %s); refusing to rewrite a file "
+                  "this tool cannot fully read. Fix or remove those lines first"
+                  % (os.path.basename(path), len(bad),
+                     ", ".join(str(i) for i, _ in bad[:4])))
+            continue
         if not rows:
             print("dedup: %s empty or missing, skipped" % os.path.basename(path))
             continue
@@ -414,7 +443,7 @@ def outcomes_lines_in_window(min_age_d, max_age_d):
             try:
                 age = (today - datetime.date.fromisoformat(m.group(1))).days
             except ValueError:
-                continue
+                continue  # sbe: allow-silent a malformed date row is not a dated run; this count is a labeled proxy and nothing here rewrites the file
             if min_age_d <= age < max_age_d:
                 n += 1
     return n
@@ -442,27 +471,60 @@ def cmd_speed():
 
 
 def read_jsonl(path):
-    rows = []
+    """Rows only, for aggregate readers that tolerate a corrupt line.
+
+    Callers that REWRITE the file must not use this: a rewrite from the parsed
+    rows deletes every line the parser dropped, silently. Those go through
+    read_jsonl_counted, which hands back the dropped lines by name.
+    """
+    return read_jsonl_counted(path)[0]
+
+
+def read_jsonl_counted(path):
+    """(parsed rows, [(line number, raw line)] this reader could not parse).
+
+    The dropped lines are RETURNED, not swallowed: read_jsonl used to skip
+    them with a bare continue, and cmd_migrate then computed its before and
+    after counts through the same lossy reader, so the loss guard compared
+    two numbers that could never differ, the backup was written without the
+    dropped lines, and the tool printed "count ok" over a ledger it had just
+    shrunk. A hook may tolerate a corrupt line; a rewriter must carry it.
+    """
+    rows, bad = [], []
     if not os.path.isfile(path):
-        return rows
-    for raw in open(path, errors="replace"):
+        return rows, bad
+    for i, raw in enumerate(open(path, errors="replace"), 1):
+        if not raw.strip():
+            continue
         try:
             rows.append(json.loads(raw))
-        except Exception:
-            continue
-    return rows
+        except ValueError:
+            bad.append((i, raw))
+    return rows, bad
 
 
 def real_sessions(rows):
     """One row per real session: drop hook self-tests, dedup by session_id
     (last flush wins). Both the scorecard and the startup nag use this so
-    'sessions' means the same thing in every output."""
+    'sessions' means the same thing in every output.
+
+    A row with NO usable session_id is not deduplicated at all: every such row
+    used to collapse into one bucket keyed "?", so the reduction deleted broken
+    rows BEFORE any check could count them, and a disclosure that said "1
+    session row(s) carry no readable timestamp" was printed over a file
+    holding two. Reduce after the test, or do not reduce what the test needs
+    to see: rows the dedupe key cannot read pass through one for one."""
     by = {}
+    keyless = []
     for r in rows:
         if r.get("end_reason") in TEST_END_REASONS:
             continue
-        by[r.get("session_id", "?")] = r
-    return list(by.values())
+        sid = r.get("session_id")
+        if isinstance(sid, str) and sid.strip():
+            by[sid] = r
+        else:
+            keyless.append(r)
+    return list(by.values()) + keyless
 
 
 def age_days(iso):
@@ -470,7 +532,7 @@ def age_days(iso):
         t = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
         return (datetime.datetime.now(datetime.timezone.utc) - t).total_seconds() / 86400
     except Exception:
-        return None
+        return None  # sbe: allow-silent None IS the disclosure path; every checker turns an unreadable age into a named undated FAIL
 
 
 def cmd_scorecard():
@@ -536,18 +598,31 @@ def prediction_counts():
             break
         if in_ledger and line.strip().startswith("20") and "|" in line:
             parts = [p.strip() for p in line.split("|")]
-            # The seal column goes through the shared answered(), not a third
-            # private two-token list: "TBD" and "- " cleared a hardcoded
-            # ("n/a", "") test and five TBD seals counted as "5 sealed".
-            if len(parts) >= 5 and answered(parts[2]) is not None:
+            # BOTH load-bearing columns go through the shared answered(), not
+            # a third private two-token list: "TBD" and "- " cleared a
+            # hardcoded ("n/a", "") test and five TBD seals counted as "5
+            # sealed"; and then the rule reached the SEAL column and not the
+            # PREDICTION, so five sealed rows whose prediction column said TBD
+            # counted as five predictions. A sealed non-prediction is not a
+            # prediction; the rows are counted below and disclosed.
+            if len(parts) >= 5:
                 rows.append(parts)
     # Deduplicated by the PREDICTION, not by the whole row: the date column made
     # every row unique, so the fold this function's own docstring promises could
     # never fold anything, and one prediction written five times on five dates
     # cleared the "at least 5 sealed" threshold.
-    seen, unique, dupes = set(), [], 0
+    # derivation_fold, not fold: check_adr's dedupe already learned that
+    # "Nightly batch reconciliation" and "nightly batch reconciliation." are
+    # one sentence, and this sibling had the weaker reduction, so one
+    # prediction written five times with five trailing punctuation marks
+    # cleared the "at least 5 sealed" threshold.
+    seen, unique, dupes, empty_prediction = set(), [], 0, 0
     for parts in rows:
-        key = fold(parts[1])
+        if answered(parts[1]) is None or answered(parts[2]) is None:
+            if answered(parts[1]) is None:
+                empty_prediction += 1
+            continue
+        key = derivation_fold(parts[1])
         if key in seen:
             dupes += 1
             continue
@@ -559,8 +634,14 @@ def prediction_counts():
             out["scored"] += 1
             if parts[4].lower().startswith(("yes", "hit")):
                 out["hits"] += 1
+    notes = []
     if dupes:
-        out["note"] = "; %d repeated prediction(s) counted once" % dupes
+        notes.append("%d repeated prediction(s) counted once" % dupes)
+    if empty_prediction:
+        notes.append("%d row(s) whose prediction column records no prediction were not counted"
+                     % empty_prediction)
+    if notes:
+        out["note"] = "; " + "; ".join(notes)
     return out
 
 
@@ -588,8 +669,11 @@ def cmd_review_mark(argv):
 
 def cmd_startup_nags():
     reviews = read_jsonl(REVIEWS)
-    last = max((x.get("ts", "") for x in reviews), default=None)
-    a = age_days(last) if last else None
+    # min over parsed AGES, never max over raw timestamp strings: one row whose
+    # ts sorts above every date lexically used to win max() and erase the nag.
+    ages = [age_days(x.get("ts", "")) for x in reviews]
+    ages = [x for x in ages if x is not None]
+    a = min(ages) if ages else None
     if a is None:
         print("BROTHERSBE NAG: weekly review has NEVER run; run tools/WEEKLY-REVIEW.md this week.")
     elif a > 7:
@@ -613,7 +697,7 @@ def cmd_startup_nags():
         try:
             log_days.add(datetime.date.fromtimestamp(os.path.getmtime(f)).isoformat())
         except OSError:
-            continue
+            continue  # sbe: allow-silent a nag path that never blocks; a file whose mtime vanished contributes no date
     today = datetime.date.today().isoformat()
     active = {r.get("ts", "")[:10] for r in led if 0 < (age_days(r.get("ts", "")) or 99) <= 3}
     missing = sorted(d for d in active if d and d not in log_days and d != today)
@@ -650,7 +734,7 @@ def cmd_stop_warn():
             if datetime.date.fromtimestamp(os.path.getmtime(f)) == today:
                 return
         except OSError:
-            continue
+            continue  # sbe: allow-silent warn-only hook that must stay near-free; a vanished file is simply not today's log
     try:
         os.makedirs(TEL_DIR, exist_ok=True)
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
@@ -886,7 +970,7 @@ def cmd_precompact_brief():
             try:
                 o = json.loads(raw)
             except Exception:
-                continue
+                continue  # sbe: allow-silent aggregate reader over a live transcript; a corrupt line must not lose the rest, and nothing here rewrites the file
             t = o.get("type")
             m = o.get("message") or {}
             if t == "user" and not o.get("isMeta"):
