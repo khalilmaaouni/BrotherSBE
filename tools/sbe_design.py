@@ -272,10 +272,39 @@ def _coherence_problem(root, name, others):
     # about the file: either "has nothing else to be coherent with" over a
     # sibling sitting right there, or "shares no named subject" over documents
     # whose subject matter nothing here extracted.
-    if not mine and any(ch.isalpha() for ch in without_comments(text)):
-        return ("unmeasured", "no subject term could be read out of it (its text is in a script "
-                              "this check cannot segment into words), so coherence was not "
-                              "measured for it")
+    if not mine:
+        body = without_comments(text)
+        # Heading lines are template structure, not the artifact's own prose:
+        # every dossier ships the same `# Purpose` heading, so the one English
+        # word it contributes must not make an otherwise unsegmentable body
+        # read as "segmented fine, all words common". The decision below is
+        # about the body the author wrote.
+        raw = [w for l in body.splitlines() if not l.lstrip().startswith("#")
+               for w in _TERM.findall(l)]
+        if raw:
+            # The extractor DID segment this text into words; every word was
+            # then dropped by the length floor or the common-word list. That
+            # is not a script limit, it is an artifact that names nothing: a
+            # file of nothing but "the system changes the data" used to take
+            # this branch and be excused with a sentence blaming its writing
+            # system, which was false about an ASCII English file, and the
+            # provoked refusal turned the filler FAIL into a PASS. A refusal
+            # path must never upgrade a FAIL, and its sentence must be true
+            # about the file.
+            return ("%s carries no substantive word of its own (every word this check read out "
+                    "of it is a short or common word, e.g. %s); an artifact that names no "
+                    "subject at all is filler, not an artifact"
+                    % (name, ", ".join(sorted(set(w.lower() for w in raw))[:4])))
+        if any(ch.isalpha() for ch in body):
+            # TRUE for everything that reaches here: nothing in the text forms
+            # a run of three or more word characters, which is how a script
+            # this extractor cannot segment presents, and also how a text of
+            # nothing but one- and two-letter fragments presents. The sentence
+            # states the measurement that failed, not a guess about why.
+            return ("unmeasured", "no word this check can compare could be read out of it (nothing "
+                                  "in its text forms a run of three or more word characters, so "
+                                  "the word extractor could not segment it), and coherence was "
+                                  "not measured for it")
     if mine and theirs:
         mine_latin = any(t.isascii() for t in mine)
         mine_other = any(not t.isascii() for t in mine)
@@ -499,11 +528,23 @@ def check_artifacts(root):
                          % (", ".join(empty), ARTIFACT_MIN_WORDS, ARTIFACT_MIN_CHARS))
         parts.extend(unrelated)
         return "FAIL", "tier %s requires %s; %s" % (tier, ", ".join(need), "; ".join(parts))
+    # A refusal must never upgrade to a PASS. The tuple form of unmeasured is a
+    # coherence requirement this check tried to measure and could not (a script
+    # it cannot segment, or siblings in a different script); folding that into
+    # a PASS whose leading clause asserts "naming subject matter the rest of
+    # this dossier also names" asserted the very thing that was not measured,
+    # and an all-stopword artifact could provoke it to hide the filler FAIL.
+    # Everywhere else in this file unmeasured is NO-DATA, so it is here too.
+    refused = [(n, why) for n, why in unmeasured if why]
+    if refused:
+        return "NO-DATA", ("tier %s: every required artifact is present and carrying content, but "
+                           "coherence could not be measured for %s. A requirement this check could "
+                           "not measure is not a satisfied one, so this is NO-DATA and never a "
+                           "pass; the coherence of the named artifact(s) is human review%s"
+                           % (tier, "; ".join("%s (%s)" % (n, why) for n, why in refused), label))
     notes = []
     for n, why in unmeasured:
-        if why:
-            notes.append("%s: %s" % (n, why))
-        else:
+        if not why:
             notes.append("%s, which this dossier has nothing else to be coherent with, so that "
                          "was not checked" % n)
     return "PASS", ("tier %s: every required artifact present, carrying content, and naming subject "
