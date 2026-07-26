@@ -502,7 +502,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of eleven check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 8 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:801, sbe_telemetry.py:286, sbe_telemetry.py:757, sbe_telemetry.py:810, sbe_telemetry.py:955, and 3 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 9 suppressed by an inline `sbe: allow-silent` comment (sbe_gate.py:801, sbe_telemetry.py:286, sbe_telemetry.py:757, sbe_telemetry.py:810, sbe_telemetry.py:955, and 4 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over
@@ -525,8 +525,8 @@ Two mechanisms make that honest rather than lucky:
   same guarantee: the miss surfaces as absent data, never as a false pass. No line numbers
   are quoted here on purpose, because a line number in prose is a claim nothing recomputes
   and this paragraph carried two wrong ones; `grep -n "sbe: allow-silent" tools/*.py` is the
-  current list. The test harness (`test_sbe.py`) marks its two fire-and-forget
-  hook invocations, noting the snapshot ref it creates is asserted immediately below.
+  current list. The test harness (`test_sbe.py`) marks its fire-and-forget
+  hook invocations, noting the snapshot each creates is asserted immediately below.
 
 Nothing is hidden by turning off the check. The lint runs against the tool's own source,
 finds the swallows, and passes only because each one is named. That is the same standard
