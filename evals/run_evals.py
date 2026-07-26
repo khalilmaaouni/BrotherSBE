@@ -3372,6 +3372,87 @@ def x9(root):
             else line or "no-lint-line")
 
 
+# ---------------------------------------------------------------------------
+# Values that are present, well-formed, and still record nothing: a NaN
+# duration, an integer where a derivation's text belongs, prose that denies an
+# owner, an empty ownership column answered by a neighbouring cell.
+
+
+@case("a-nan-duration-is-not-a-measured-run", "ran", "FAIL")
+def v1(root):
+    # `NaN <= 0` is False and json.load accepts bare NaN, so this receipt read
+    # as "each with a zero exit and a nonzero duration": a false evidence
+    # sentence over a value that measures nothing.
+    write(root, "ran-receipt.json",
+          '{"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": NaN}]}')
+
+
+@case("an-infinite-duration-is-not-a-measured-run", "ran", "FAIL")
+def v2(root):
+    write(root, "ran-receipt.json",
+          '{"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": Infinity}]}')
+
+
+@case("an-integer-pair-is-not-a-second-derivation", "numbers", "FAIL")
+def v3(root):
+    # The reduction was applied only to strings, so two integers skipped the
+    # reduce-then-test fix entirely and bought "a second derivation whose text
+    # differs beyond case, whitespace and comments" over fields holding no text.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-1", "query": 0, "second_derivation": 1,
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("prose-that-denies-an-owner-is-not-a-system-of-record", "datamodel", "FAIL")
+def v4(root):
+    # "we have not yet decided who the owner is" left the capture "is", and "the
+    # owner is still unknown" left "is still unknown": remnants a one-shot
+    # copula strip plus a whole-string token list could not refuse, so two
+    # entities that deny their owner in plain English were reported as "2
+    # entities, each with a system of record".
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Customer: we have not yet decided who the owner is\n"
+          "- Refund: the owner is still unknown\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
+
+
+@case("a-real-owner-after-a-copula-still-passes", "datamodel", "PASS")
+def v5(root):
+    # The control: stripping copulas to a fixpoint must not eat a named system.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Customer: The system of record is the CRM.\n"
+          "- Refund: system of record: the ledger.\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
+
+
+@case("an-empty-ownership-column-is-not-answered-by-another-column", "datamodel", "FAIL")
+def v6(root):
+    # The System-of-record column is empty in every row; the Notes column
+    # mentions the word "owner". Empty cells were dropped before the join, so
+    # the phrase test read the Notes cell and the table passed as "each with a
+    # system of record" over a column that declares nothing.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "| Entity | System of record | Notes |\n|---|---|---|\n"
+          "| Customer |  | still deciding who the owner should be |\n"
+          "| Refund |  | still deciding who the owner should be |\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
+
+
+@case("see-above-is-not-a-system-of-record", "datamodel", "FAIL")
+def v7(root):
+    # The reduce-then-test bug in the data model: `-- see above` is not blank
+    # and is not a single vacuity token, so it survived a test that read the
+    # raw text, while the identical string was refused as a derivation.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Customer: owner: -- see above\n"
+          "- Refund: system of record: the ledger.\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

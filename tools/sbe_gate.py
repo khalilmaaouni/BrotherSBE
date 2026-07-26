@@ -582,6 +582,14 @@ def gate_ran(root):
             if isinstance(ms, bool) or not isinstance(ms, (int, float)):
                 problems.append("%s: duration_ms is %r, which is not a measured duration in "
                                 "milliseconds" % (name, ms))
+            elif numeric(ms) is None:
+                # The shared rule, not a hand test: `NaN <= 0` is False and
+                # json.load accepts bare NaN and Infinity, so a receipt carrying
+                # either cleared this gate while its sentence asserted "a
+                # nonzero duration". An infinity is not a measurement and
+                # neither is a not-a-number; sbe_checks.numeric refuses both.
+                problems.append("%s: duration_ms is %r, and an infinity or a not-a-number is not a "
+                                "measured duration" % (name, ms))
             elif ms <= 0:
                 problems.append("%s: zero or negative duration (a check that took no time did not run)" % name)
     if unreadable:
