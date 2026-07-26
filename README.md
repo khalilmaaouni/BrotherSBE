@@ -135,7 +135,7 @@ export BROTHERSBE_VAULT="$HOME/BrotherSBEVault"   # put this in your shell profi
 }
 ```
 
-What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). **PreCompact** snapshots the whole worktree (including untracked files) to a private git ref `refs/brothersbe/autosave` and writes a forward-looking resume brief, so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
+What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). **PreCompact** snapshots the whole worktree (including untracked files) to a private per-worktree git ref under `refs/brothersbe/autosave/` and writes a forward-looking resume brief, so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
 
 **4. Wire the checks into CI.** This is what turns them from advisory into blocking. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 

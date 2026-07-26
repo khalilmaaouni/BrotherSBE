@@ -14,7 +14,10 @@
 # WHAT IT DOES
 #   Takes a snapshot of the ENTIRE working tree, including untracked (new) files,
 #   which are the most-likely-lost work, and stores it as a git commit reachable
-#   only from a private ref: refs/brothersbe/autosave. It never touches your
+#   only from a private ref: refs/brothersbe/autosave/<worktree-id>, where the
+#   id is derived from the worktree's own path. Per worktree on purpose: one
+#   shared ref meant two worktrees of the same repository overwrote each
+#   other's only copy of unlanded work. It never touches your
 #   branch, your index, or your working tree, and it NEVER pushes anywhere. The
 #   snapshot is local git only, so the audited zero-network property still holds.
 #
@@ -36,7 +39,19 @@
 # Vault telemetry dir: same location sbe_telemetry.py uses, for the log + counters.
 VAULT="${BROTHERSBE_VAULT:-$HOME/BrotherSBEVault}"
 TEL_DIR="$VAULT/99-System/telemetry"
-AUTOSAVE_REF="refs/brothersbe/autosave"
+AUTOSAVE_NS="refs/brothersbe/autosave"
+
+# The per-worktree ref for the CURRENT directory's repository. The id is the
+# POSIX cksum CRC of the worktree's absolute top-level path: stable across
+# runs, different per worktree, and computable with nothing beyond POSIX sh.
+# What it is not: cryptographic. It only has to keep two worktrees of one
+# repository from writing over each other's snapshots, not resist an attacker.
+autosave_ref() {
+  top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  [ -n "$top" ] || { printf '%s' "$AUTOSAVE_NS"; return 0; }
+  wid="$(printf '%s' "$top" | cksum 2>/dev/null | awk '{print $1}')"
+  [ -n "$wid" ] && printf '%s/%s' "$AUTOSAVE_NS" "$wid" || printf '%s' "$AUTOSAVE_NS"
+}
 TICK_EVERY="${BROTHERSBE_AUTOSAVE_EVERY:-20}"      # snapshot every N tool calls
 RUNAWAY_AT="${BROTHERSBE_RUNAWAY_AT:-600}"         # warn once past this many calls
 
@@ -47,7 +62,7 @@ log_line() {
     >> "$TEL_DIR/autosave.log" 2>/dev/null || true
 }
 
-# Snapshot the working tree of $1 into refs/brothersbe/autosave. Reason in $2.
+# Snapshot the working tree of $1 into its per-worktree autosave ref. Reason in $2.
 # Returns silently on any problem; the caller always exits 0 regardless.
 snapshot() {
   repo="$1"; reason="$2"
@@ -95,9 +110,10 @@ snapshot() {
   rm -f "$tmpidx"; unset GIT_INDEX_FILE
 
   [ -n "$commit" ] || return 0
-  # Point the private ref at the snapshot. Never touches any branch.
-  git update-ref "$AUTOSAVE_REF" "$commit" 2>/dev/null && \
-    log_line "saved $commit ($reason) in $repo"
+  # Point the private per-worktree ref at the snapshot. Never touches any branch.
+  ref="$(autosave_ref)"
+  git update-ref "$ref" "$commit" 2>/dev/null && \
+    log_line "saved $commit ($reason) at $ref in $repo"
 }
 
 # Read the cwd the hook was invoked for out of its JSON stdin payload. Falls
@@ -135,7 +151,7 @@ case "$1" in
     # Runaway warning, once per session (a very long session is a loop smell).
     if [ "$n" -ge "$RUNAWAY_AT" ] && [ ! -f "$ctr.warned" ]; then
       : > "$ctr.warned" 2>/dev/null
-      printf '{"systemMessage":"BrotherSBE: this session has made %s tool calls, which can signal an unbounded loop. Consider whether a circuit breaker (section 7) should fire. Your work is autosaved at %s."}\n' "$n" "$AUTOSAVE_REF"
+      printf '{"systemMessage":"BrotherSBE: this session has made %s tool calls, which can signal an unbounded loop. Consider whether a circuit breaker (section 7) should fire. Your work is autosaved under %s/ (sbe_autosave.sh recover prints the path)."}\n' "$n" "$AUTOSAVE_NS"
     fi
     ;;
 
@@ -149,9 +165,17 @@ case "$1" in
     # index, or your branch: you copy back what you want, by hand.
     repo="${2:-$PWD}"
     cd "$repo" 2>/dev/null || { echo "sbe_autosave: cannot enter $repo"; exit 0; }
-    sha="$(git rev-parse -q --verify "$AUTOSAVE_REF" 2>/dev/null)"
+    # Resolved for THIS worktree; a sibling worktree's snapshots are its own.
+    ref="$(autosave_ref)"
+    sha="$(git rev-parse -q --verify "$ref" 2>/dev/null)"
     if [ -z "$sha" ]; then
-      echo "sbe_autosave: no autosave found in $repo (ref $AUTOSAVE_REF is empty)."
+      # A snapshot taken before refs were namespaced per worktree lives at the
+      # old shared name; read it rather than orphaning saved work.
+      sha="$(git rev-parse -q --verify "$AUTOSAVE_NS" 2>/dev/null)"
+      [ -n "$sha" ] && ref="$AUTOSAVE_NS"
+    fi
+    if [ -z "$sha" ]; then
+      echo "sbe_autosave: no autosave found in $repo (ref $ref is empty)."
       exit 0
     fi
     # mktemp -d creates the directory at mode 0700 (owner-only). The chmod is

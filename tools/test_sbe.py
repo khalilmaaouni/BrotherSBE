@@ -106,15 +106,20 @@ class TestAutosave(unittest.TestCase):
             self.assertEqual(before, git("status", "--porcelain").stdout)
             self.assertEqual(before_head, git("rev-parse", "HEAD").stdout)
             # ref created and it contains the untracked file
-            ref = git("rev-parse", "-q", "--verify", "refs/brothersbe/autosave")
-            self.assertEqual(ref.returncode, 0, "autosave ref was not created")
-            shown = git("show", "refs/brothersbe/autosave:untracked_new.txt").stdout
+            # The ref is namespaced per worktree; resolve it rather than
+            # hardcoding an id the test would have to re-derive.
+            refs = git("for-each-ref", "--format=%(refname)",
+                       "refs/brothersbe/autosave").stdout.split()
+            self.assertEqual(len(refs), 1, "expected one autosave ref, got %r" % refs)
+            self.assertTrue(refs[0].startswith("refs/brothersbe/autosave/"),
+                            "autosave ref is not namespaced per worktree: %r" % refs[0])
+            shown = git("show", "%s:untracked_new.txt" % refs[0]).stdout
             self.assertIn("WIP-WORK", shown, "autosave did not capture the untracked file")
             # secret-shaped files must NOT enter the snapshot
             io.open(os.path.join(repo, ".env"), "w").write("SECRET=leak")
             subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; the snapshot ref it creates is asserted below
                            text=True, env=env)
-            envobj = git("cat-file", "-e", "refs/brothersbe/autosave:.env")
+            envobj = git("cat-file", "-e", "%s:.env" % refs[0])
             self.assertNotEqual(envobj.returncode, 0, ".env leaked into the autosave snapshot")
 
 

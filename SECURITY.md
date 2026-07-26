@@ -48,7 +48,9 @@ the automatic capture half of the learning loop; everything else keeps working.
 `tools/sbe_autosave.sh` runs on the PreCompact hook (right before Claude Code
 compacts context, which is what happens when you run low on tokens). It snapshots
 your entire working tree, including untracked files, into a private git ref
-`refs/brothersbe/autosave`, using a throwaway index so your real branch, index,
+`refs/brothersbe/autosave/<worktree-id>` (one ref per worktree, so two worktrees
+of one repository cannot overwrite each other's snapshots), using a throwaway
+index so your real branch, index,
 and working tree are never touched. It runs git **locally only and never pushes**,
 so the zero-network property above still holds with autosave enabled. Recover a
 snapshot with:
