@@ -7,7 +7,7 @@ brief that a test would have caught. Each test here guards a claim the project
 makes about itself: secrets are redacted, sensitive files are owner-only, project
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
-import io, os, json, re, stat, sys, tempfile, subprocess, importlib.util
+import glob, io, os, json, re, stat, sys, tempfile, subprocess, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -141,6 +141,28 @@ class TestDigestCap(unittest.TestCase):
         digest_head = io.open(os.path.join(HERE, "..", "DIGEST.md")).readline()
         self.assertIn("version %s" % version, digest_head,
                       "DIGEST.md header does not name the version in VERSION (%s)" % version)
+
+
+class TestAuditableSurface(unittest.TestCase):
+    def test_the_stated_line_count_tracks_the_tree(self):
+        """SECURITY.md states the size of the auditable surface instead of only
+        inviting the reader to measure it, because an invitation with no
+        baseline is not a claim anyone can check. A stated number nothing
+        recomputes goes stale silently; this test recomputes it and fails past
+        15 percent drift, so the claim degrades loudly. It does not judge
+        whether the surface is small, only that the stated figure is true."""
+        body = io.open(os.path.join(HERE, "..", "SECURITY.md")).read()
+        m = re.search(r"([\d,]+) lines measured", body)
+        self.assertTrue(m, "SECURITY.md no longer states the measured line count")
+        said = int(m.group(1).replace(",", ""))
+        live = 0
+        for p in glob.glob(os.path.join(HERE, "*.py")) + glob.glob(os.path.join(HERE, "*.sh")):
+            live += sum(1 for _ in io.open(p, errors="replace"))
+        drift = abs(live - said) / float(said)
+        self.assertLessEqual(drift, 0.15,
+                             "tools/ holds %d lines but SECURITY.md says %d (%.0f%% drift); "
+                             "re-measure with `wc -l tools/*.py tools/*.sh` and update the "
+                             "stated figure" % (live, said, drift * 100))
 
 
 class TestAutosaveRecover(unittest.TestCase):
