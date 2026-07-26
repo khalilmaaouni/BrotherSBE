@@ -587,6 +587,68 @@ def gd_exempt3(root):
     return "capped"
 
 
+@case("a-module-planted-in-a-bytecode-cache-is-refused-not-executed", "guard", "refused unrun")
+def gd_planted(root):
+    # A .py under tools/__pycache__/ was imported and EXECUTED by the module
+    # walk, counted in "N module(s)", and reported zero failures, while the
+    # install verifier's exclusion list kept it invisible on disk. The walk
+    # now refuses anything inside a bytecode cache (the interpreter owns that
+    # directory name), names it as a failure, and never imports it.
+    import shutil
+    for rel in ("tools", "evals"):
+        shutil.copytree(os.path.join(_REPO, rel), os.path.join(root, rel))
+    cache = os.path.join(root, "tools", "__pycache__")
+    os.makedirs(cache, exist_ok=True)
+    marker = os.path.join(root, "PLANTED-RAN")
+    with open(os.path.join(cache, "planted.py"), "w") as f:
+        f.write("open(%r, 'w').write('this code executed')\n" % marker)
+    meta = SourceFileLoader("tndc_planted",
+                            os.path.join(root, "evals", "test_no_data_class.py")).load_module()
+    sources = meta.tool_sources()
+    if os.path.exists(marker):
+        return "the planted module was executed"
+    if any("__pycache__" in s for s in sources):
+        return "the planted module was walked as source"
+    if not any("planted.py" in p for p in meta.PLANTED_SOURCE):
+        return "the planted module was skipped in silence, not named"
+    return "refused unrun"
+
+
+@case("verify-install-fails-over-source-in-an-excluded-path", "guard", "named and failed")
+def gd_vinstall(root):
+    # The completeness sentence claimed "no file exists on disk that the
+    # manifest does not name" over paths the enumeration excluded by name.
+    # The exclusions are now enumerated and counted on every run, and source
+    # code among them is its own failure.
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, "inst/hello.txt", "hi\n")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in ("hello.txt", "scripts/verify-install.sh"):
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    clean = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                            os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                           capture_output=True, text=True)
+    if clean.returncode != 0:
+        return "the control tree failed: %s" % (clean.stdout + clean.stderr)[-200:]
+    if "outside the excluded paths" not in clean.stdout:
+        return "the PASSED sentence still claims completeness with no qualifier"
+    os.makedirs(os.path.join(inst, "tools", "__pycache__"))
+    write(root, "inst/tools/__pycache__/planted.py", "print('invisible')\n")
+    planted = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                              os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                             capture_output=True, text=True)
+    if planted.returncode == 0:
+        return "planted source in an excluded path still passes"
+    if "EXCLUDED-SOURCE" not in planted.stdout or "planted.py" not in planted.stdout:
+        return "the failure does not name the planted file"
+    return "named and failed"
+
+
 T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
               "reversible_under_hour": True, "touches_sensitive": False, "consumers": "some"}
 T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,

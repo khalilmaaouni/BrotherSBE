@@ -131,11 +131,47 @@ while IFS= read -r full; do
     fi
 done < "$WORKDIR/installed_raw"
 
+# The excluded set is ENUMERATED, not silently assumed empty. The completeness
+# sentence below used to claim "no file exists on disk that the manifest does
+# not name" with no qualifier, which was false whenever anything sat inside an
+# excluded path, and one excluded path (*/__pycache__/*) held files the test
+# suite would execute. So: every file the exclusions swallowed on THIS run is
+# counted and the first few are named; a file among them whose extension is
+# executable source is a failure in its own right, because machine state is
+# what the exclusions are for and code is not machine state. .git/ itself is
+# not enumerated (it is git's own object store, holding thousands of objects).
+find "$TARGET" -type f \
+    ! -path "$TARGET/.git/*" \
+    \( -path '*/__pycache__/*' \
+       -o -path "$TARGET/.superpowers/*" \
+       -o -path "$TARGET/docs/superpowers/*" \
+       -o -name '.DS_Store' \
+       -o -name '*.pyc' \
+       -o -name 'STATE.md' \
+       -o -name '~$*' \
+       -o -name '*.docx' \) \
+    > "$WORKDIR/excluded_files"
+
+EXCLUDED=0
+EXCLUDED_SOURCE=0
+while IFS= read -r full; do
+    [ -z "$full" ] && continue
+    rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
+    EXCLUDED=$((EXCLUDED + 1))
+    case "$rel" in
+        *.py|*.sh|*.js|*.rb|*.pl|*.php)
+            echo "EXCLUDED-SOURCE: $rel (source code inside an excluded path; the manifest cannot vouch for it and something on this host may execute it)"
+            EXCLUDED_SOURCE=$((EXCLUDED_SOURCE + 1))
+            ;;
+    esac
+done < "$WORKDIR/excluded_files"
+
 echo ""
 echo "verify-install: checked against $MANIFEST"
 echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest)"
+echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED file(s), $EXCLUDED_SOURCE of them source code."
 
-if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ]; then
+if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \
          "understand why the files above differ from the published manifest." >&2
     if [ "$EXTRA" -gt 0 ]; then
@@ -144,11 +180,20 @@ if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ]; then
              "else in this installation, and the manifest says nothing" \
              "about it because nothing here declared it." >&2
     fi
+    if [ "$EXCLUDED_SOURCE" -gt 0 ]; then
+        echo "verify-install: an EXCLUDED-SOURCE file is the same shape one" \
+             "level deeper: source code sitting in a path this check does not" \
+             "hash, where an earlier version of this script would have said" \
+             "PASSED over it without qualification." >&2
+    fi
     exit 1
 fi
 
 echo "verify-install: PASSED. Every file the manifest names matches on disk,"
-echo "verify-install: and no file exists on disk that the manifest does not name."
+echo "verify-install: and no file exists on disk that the manifest does not name,"
+echo "verify-install: outside the excluded paths enumerated above (their current"
+echo "verify-install: file count is printed on every run, and source code among"
+echo "verify-install: them fails this check)."
 echo "verify-install: this does not prove the manifest itself is authentic;" \
      "it proves your files match whatever manifest you pointed this at. Get" \
      "the manifest from the release you trust (the tag's git history, or a" \

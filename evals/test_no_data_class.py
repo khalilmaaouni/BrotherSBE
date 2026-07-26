@@ -229,7 +229,20 @@ def tool_sources():
         dns[:] = pruner(dp, dns)
         for fn in fns:
             if fn.endswith(".py"):
-                out.append(os.path.relpath(os.path.join(dp, fn), TOOLS_DIR))
+                rel = os.path.relpath(os.path.join(dp, fn), TOOLS_DIR)
+                # A .py inside a __pycache__ directory is not source: the
+                # interpreter OWNS that name (it is where CPython writes
+                # bytecode), so this is the one directory-name rule that is a
+                # language contract rather than a user convention. Importing
+                # one EXECUTED it: a planted module under tools/__pycache__/
+                # ran at suite start, was counted in "N module(s)", and the
+                # install verifier's exclusion list kept it invisible on disk.
+                # It is refused here and named as a failure in main(), never
+                # imported, never counted as coverage.
+                if "__pycache__" in rel.split(os.sep):
+                    PLANTED_SOURCE.append(rel)
+                    continue
+                out.append(rel)
     hidden, uninspected = pruner.hidden(lambda f: f.endswith(".py"))
     if hidden or uninspected:
         # A pruned directory holding Python, or one the inspection budget never
@@ -246,6 +259,9 @@ def tool_sources():
 
 PRUNED_WITH_SOURCE = []
 DENIED_DIRS = []
+# Python files found inside a bytecode-cache directory: refused, never
+# imported, reported as failures by name. See tool_sources().
+PLANTED_SOURCE = []
 # Scenarios a declared exemption matched, printed in the summary line so a
 # waiver cannot hide inside an unchanged scenario total.
 WAIVED = [0]
@@ -1216,6 +1232,12 @@ def main():
         failures.append("%s was pruned from the walk and holds Python source, so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "
                         "the summary line below still counts as if it were not" % path)
+    for path in sorted(set(PLANTED_SOURCE)):
+        failures.append("tools/%s is a .py file inside a bytecode cache directory. Source does not "
+                        "live in __pycache__ (the interpreter owns that name), so this is either a "
+                        "planted file or a misplaced module; it was NOT imported, it is NOT counted "
+                        "in the module total, and this run fails until it is removed or moved where "
+                        "the walk and the install manifest can see it" % path)
     for path in sorted(set(DENIED_DIRS)):
         failures.append("%s could not be entered (permission or I/O error), so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "
