@@ -452,6 +452,9 @@ def boolean_answer(value):
     return None
 
 
+_ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+
+
 def fold(text):
     """A text reduced to what it actually says: no case, no stray whitespace.
 
@@ -459,8 +462,14 @@ def fold(text):
     derivation. `str.strip()` was the whole comparison, so `SELECT SUM(amount)
     FROM orders` and `select  sum(amount)  from orders` were reported as an
     independent second check of each other.
+
+    Zero-width characters are removed first: `str.split()` does not split on
+    U+200B, so one invisible character made a copy-paste of the first query an
+    "independent second derivation". A character a reader cannot see is not a
+    difference a reader can review.
     """
-    return " ".join(str(text).split()).casefold()
+    t = _ZERO_WIDTH.sub("", str(text))
+    return " ".join(t.split()).casefold()
 
 
 _BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
@@ -594,7 +603,7 @@ def answered_as(value, reduce, allow=()):
     return reduced
 
 
-def distinct(items):
+def distinct(items, reduce=None):
     """(the items that are actually different, how many duplicates were folded).
 
     ONE rule for every threshold in this project, here, because `gate_numbers`
@@ -605,13 +614,18 @@ def distinct(items):
     are the same prediction are one prediction.
 
     Strings are compared folded (case and whitespace), because that is what makes
-    two spellings of one sentence one sentence. Everything else is compared by its
-    JSON, and by repr when it has none.
+    two spellings of one sentence one sentence. A caller whose duplicates differ
+    by MORE than case and whitespace passes the stronger reduction it needs:
+    check_adr passes derivation_fold, because "Nightly batch reconciliation" and
+    "nightly batch reconciliation." are one alternative, and counting them as
+    two was a false count bought with a trailing period. Everything else is
+    compared by its JSON, and by repr when it has none.
     """
     seen, keys = [], set()
+    reduce = reduce or fold
     for it in items:
         if isinstance(it, str):
-            key = fold(it)
+            key = reduce(it)
         else:
             try:
                 key = json.dumps(it, sort_keys=True)
@@ -698,6 +712,24 @@ def _not_a_measurement(n):
     return isinstance(n, float) and (math.isinf(n) or math.isnan(n))
 
 
+def unit_of(value):
+    """The unit marker a recorded figure carries: "%", "$" or "".
+
+    numeric() strips both as formatting so "50%" and "$50" each read as the
+    number 50, and a zero-drift comparison then called a rate and a currency
+    amount equal. The number is the value; the unit is what it is a value OF,
+    and two figures recorded in different units did not re-derive each other.
+    """
+    if not isinstance(value, str):
+        return ""
+    t = value.strip()
+    if t.endswith("%"):
+        return "%"
+    if t.startswith("$"):
+        return "$"
+    return ""
+
+
 def count(value):
     """The count this field records, or None if it does not record one.
 
@@ -705,8 +737,12 @@ def count(value):
     figure, which may be a rate, a ratio or a negative delta, and the wrong test
     for a row count: `-1`/`-1` compared equal and produced "1 row-count
     comparison(s) matched", and minus one rows is not a count any table has ever
-    had. Neither is two and a half rows.
+    had. Neither is two and a half rows, and neither is "50%": numeric() strips
+    the percent sign as formatting, which is right for a figure and wrong here,
+    because a percentage is a rate and no table has a rate of rows.
     """
+    if isinstance(value, str) and value.strip().endswith("%"):
+        return None
     n = numeric(value)
     if n is None or n < 0 or n != int(n):
         return None

@@ -766,8 +766,11 @@ def check_adr(root):
     problems = []
     # Deduplicated by the shared rule, because `gate_numbers` learned that a
     # figure listed twice is one figure and this threshold did not: the same
-    # rejected alternative pasted twice cleared "an ADR needs at least 2".
-    alternatives, dupes = distinct(_rejected_alternatives(t))
+    # rejected alternative pasted twice cleared "an ADR needs at least 2". With
+    # the derivation fold, not the plain one, because a trailing period bought
+    # a second alternative: two spellings of one sentence are one sentence
+    # however they are punctuated.
+    alternatives, dupes = distinct(_rejected_alternatives(t), reduce=derivation_fold)
     rejected = len(alternatives)
     if rejected < 2:
         problems.append("only %d distinct rejected alternative(s) found under a "
@@ -1833,16 +1836,25 @@ def main():
     strict = "--strict" in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("-")]
     root = "."
+    roots = []
     which = list(CHECKS)
     for a in argv:
         if a in CHECKS:
             which = [a]
         elif os.path.isdir(a):
+            roots.append(a)
             root = a
         else:
             print("sbe_design: %r is neither a check name (%s) nor a directory."
                   % (a, ", ".join(CHECKS)))
             sys.exit(1)
+    if len(roots) > 1:
+        # The last one used to win in silence: a failing dossier passed first
+        # on the command line was neither checked nor mentioned while --strict
+        # exited 0 on the survivor.
+        print("sbe_design: one directory at a time, got %d (%s)."
+              % (len(roots), ", ".join(roots)))
+        sys.exit(1)
     # SBE_DOSSIER_ROOT is the declaration that this repository keeps dossiers.
     # Declared and empty is a broken configuration, so it FAILS; undeclared and
     # empty is a repository with nothing to check, which is NO-DATA and says so.

@@ -177,6 +177,20 @@ class Ctx:
             if 0 <= (age_days(r.get("ts", "")) if age_days(r.get("ts", "")) is not None else 99) <= 7])
 
     @property
+    def undated(self):
+        """Session rows whose timestamp no age can be computed from.
+
+        `ctx.recent` maps an unreadable timestamp to the sentinel 99, which
+        means "old", so 99 rows with garbage timestamps silently left the
+        7-day window and "1/1 sessions >= 90% warm-read; below floor: none"
+        was printed over a ledger 99 of whose 100 rows nothing had measured.
+        check_correction_latency already knew this ("an age that could not be
+        computed is not an age of zero"); its siblings now read the same rule.
+        """
+        return self._once("undated", lambda: [
+            r for r in self.sessions if age_days(r.get("ts") or "") is None])
+
+    @property
     def future(self):
         """Rows dated after now. An age below zero is not an age; see AGE_IS_BROKEN."""
         return self._once("future", lambda: [
@@ -201,6 +215,11 @@ def check_ledger_coverage(ctx):
     bad = ctx.ledger.problem("session coverage")
     if bad:
         return bad
+    if ctx.undated:
+        return "FAIL", ("%d session row(s) carry no readable timestamp (%s), so their age was "
+                        "never measured and coverage cannot be counted over them"
+                        % (len(ctx.undated),
+                           ", ".join(repr(r.get("ts")) for r in ctx.undated[:4])))
     if ctx.future:
         return "FAIL", ("%d session row(s) are dated in the future (%s): %s"
                         % (len(ctx.future), ", ".join(repr(r.get("ts")) for r in ctx.future[:4]),
@@ -225,6 +244,11 @@ def check_cache_economy(ctx):
     bad = ctx.ledger.problem("cache economy")
     if bad:
         return bad
+    if ctx.undated:
+        return "FAIL", ("%d session row(s) carry no readable timestamp (%s), so they fell out of "
+                        "the 7-day window unmeasured, and a ratio over the rest would read as "
+                        "covering them" % (len(ctx.undated),
+                                           ", ".join(repr(r.get("ts")) for r in ctx.undated[:4])))
     flagged, measured, unusable = [], 0, []
     for r in ctx.recent:
         cr, cw = r.get("cache_read", 0), r.get("cache_write", 0)
@@ -245,9 +269,13 @@ def check_cache_economy(ctx):
                         % (len(unusable), ", ".join(unusable[:4])))
     if not measured:
         return "NO-DATA", "no sessions with cache fields last 7d"
+    unmeasured = len(ctx.recent) - measured
     return ("PASS" if not flagged else "FAIL",
-            "%d/%d sessions >= %.0f%% warm-read; below floor: %s"
-            % (measured - len(flagged), measured, CACHE_RATIO_FLOOR, flagged or "none"))
+            "%d/%d sessions >= %.0f%% warm-read; below floor: %s%s"
+            % (measured - len(flagged), measured, CACHE_RATIO_FLOOR, flagged or "none",
+               "" if not unmeasured else
+               "; %d recent session(s) carry no cache fields and were not measured, so this "
+               "ratio does not cover them" % unmeasured))
 
 
 def check_vault_log_per_active_day(ctx):
@@ -471,13 +499,17 @@ def check_felt_outcome_ratings(ctx):
     rated = [x for x in ctx.ratings.rows if numeric(x.get("score")) is not None]
     if not rated:
         return "NO-DATA", "no scored ratings in %s" % RATINGS
-    # The shared dedupe rule: six copies of one rating are one rating. See
-    # sbe_checks.distinct, and gate_numbers, which learned this first.
-    rated, dupes = distinct(rated)
-    return ("PASS" if len(rated) >= 6 else "FAIL",
+    # The shared dedupe rule, on the rating's CONTENT. The writer stamps a
+    # fresh timestamp on every row, so deduplicating whole rows could never
+    # fold anything: six copies of one 5/5 rating of one task, differing only
+    # in microseconds, cleared "6 distinct ratings". What makes two ratings
+    # one rating is the same score of the same task with the same note.
+    content = [{k: v for k, v in x.items() if k not in ("ts", "session_id")} for x in rated]
+    unique, dupes = distinct(content)
+    return ("PASS" if len(unique) >= 6 else "FAIL",
             "%d distinct ratings (target >= 6 for alignment 10)%s"
-            % (len(rated), "" if not dupes else
-               "; %d identical row(s) counted once" % dupes))
+            % (len(unique), "" if not dupes else
+               "; %d rating(s) identical apart from their timestamps counted once" % dupes))
 
 
 def check_review_cadence(ctx):
@@ -580,14 +612,24 @@ def silent_failure_lints(ctx=None):
     ignoring a mistyped path was how a permanently green lint that had never opened
     a file stayed invisible."""
     root = os.environ.get("SBE_LINT_ROOT")
+    roots = []
     for a in sys.argv[1:]:
         if a.startswith("-"):
             continue
         if os.path.isdir(a):
+            roots.append(a)
             root = a
         else:
             return "FAIL", ("%r is not a directory, so the lint root was never scanned; a mistyped path "
                             "must not read as a clean scan" % a)
+    if len(roots) > 1:
+        # The last one used to win in silence: the first directory was never
+        # scanned and never mentioned, while the sentence named only the
+        # survivor. A mistyped path FAILs loudly two lines up; a second valid
+        # path is refused just as loudly.
+        return "FAIL", ("%d lint roots given (%s) and only one can be scanned per run; the extra "
+                        "one(s) would be silently unexamined, so this run refuses instead"
+                        % (len(roots), ", ".join(roots)))
     if not root:
         return "NO-DATA", ("no lint root: pass a directory or set SBE_LINT_ROOT. Nothing was opened, "
                            "so there is nothing to call clean")
@@ -661,9 +703,24 @@ def silent_failure_lints(ctx=None):
                     # the one gate a .sbe-exempt cannot waive. Read with the
                     # shared answered(), so `# sbe: allow-silent tbd` is refused
                     # here for the same reason "tbd" is refused as a snapshot id.
-                    marked = [l for l in span if EXEMPTION in l]
+                    #
+                    # Only the FIRST and LAST line of the span count. The upsert
+                    # pattern crosses newlines, so its span could enclose an
+                    # unrelated hit, and a reason written about THAT hit waived
+                    # this one too: one marker, two swallows. The natural places
+                    # to write the marker are the line the match starts on and
+                    # the line it ends on, and those are the two that are about
+                    # this match.
+                    edges = span[:1] + (span[-1:] if len(span) > 1 else [])
+                    marked = [l for l in edges if EXEMPTION in l]
                     reason = next((r for r in (answered(l.split(EXEMPTION, 1)[1]) for l in marked)
                                    if r), None)
+                    # A reason is a justification a human can review, so it is
+                    # held to a floor: "x", "ok" and "0" waived hits, and so did
+                    # a reason that was just the marker pasted again.
+                    if reason and (EXEMPTION in reason or len(reason) < 8
+                                   or len(reason.split()) < 2):
+                        reason = None
                     if marked and reason:
                         file_exempt += 1
                         exempt.append("%s:%d" % (os.path.relpath(path, root), first + 1))
@@ -747,10 +804,16 @@ def _rel(p):
 _FENCE_REGISTRY = {"files": {"STATE.md": "# State\n## Fences\n"
                                          "- agent: builder | tier T2 | objective: ship the refund gate\n"},
                    "env": {"BROTHERSBE_REGISTRIES": "%(dir)s/*.md"}}
+# Five DISTINCT predictions. The fixture used to be one prediction across five
+# dates, which certified the dedupe bypass as the worked example of correct
+# evidence: the threshold counts predictions, not rows.
 _PREDICTIONS = ("# Operator model\n## Prediction ledger\n"
                 "date | prediction | seal | scored on | hit\n"
-                + "".join("2026-07-0%d | the queue depth stays under 1k | seal-%d | review | yes\n"
-                          % (i, i) for i in range(1, 6)))
+                "2026-07-01 | the queue depth stays under 1k | seal-1 | review | yes\n"
+                "2026-07-02 | the backlog drains by Friday | seal-2 | review | yes\n"
+                "2026-07-03 | the cache ratio holds above 90 | seal-3 | review | no\n"
+                "2026-07-04 | the retry storm does not recur | seal-4 | review | yes\n"
+                "2026-07-05 | the export lands before 09:00 | seal-5 | review | yes\n")
 
 CHECKS = {
     "ledger-coverage": Check(

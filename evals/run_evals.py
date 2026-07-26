@@ -1144,7 +1144,7 @@ def sc7(root):
 def sc8(root):
     src = os.path.join(root, "src")
     write(root, "src/swallowy.py",
-          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent fixture\n")
+          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent lint fixture, never executed\n")
     return score_check("silent-failure-lints", root, args=(src,))
 
 
@@ -1152,7 +1152,7 @@ def sc8(root):
 def sc9(root):
     src = os.path.join(root, "src")
     write(root, "src/swallowy.py",
-          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent fixture\n")
+          "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent lint fixture, never executed\n")
     write(root, "src/clean.py", "def b():\n    return 1\n")
     return score_check("silent-failure-lints", root, args=(src,))
 
@@ -3676,6 +3676,227 @@ def g8(root):
           "## Relationships\n- Customer to Order: one-to-many.\n")
     write(root, "06-diagrams.md",
           "# Diagrams\n```mermaid\nmindmap\n  root((Customer))\n    Order\n```\n")
+
+
+# ---------------------------------------------------------------------------
+# Shared rules adopted at every call site: the dedupe rule in the two gates that
+# never had it, units on the drift comparison, the reviewability floor on lint
+# exemptions, one marker never waiving two swallows, and ages nobody computed.
+
+
+@case("one-check-written-five-times-is-one-check", "evidence", "counted-once")
+def u1(root):
+    chk = {"name": "reconcile", "exit_code": 0, "duration_ms": 812}
+    write(root, "ran-receipt.json", {"checks": [dict(chk) for _ in range(5)]})
+    line = gate_line(root, "ran")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return ("counted-once" if "1 recorded check(s)" in line and "4 identical" in line else line)
+
+
+@case("one-receipt-copied-into-two-directories-is-one-rehearsal", "evidence", "counted-once")
+def u2(root):
+    receipt = {"forward": {"ran_against_restore": True},
+               "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+               "row_counts": {"before": 100, "after_reverse": 100}}
+    write(root, "a/migration-receipt.json", receipt)
+    write(root, "b/migration-receipt.json", receipt)
+    line = gate_line(root, "migration")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return ("counted-once" if "1 receipt(s)" in line and "1 identical receipt(s)" in line else line)
+
+
+@case("a-rate-and-a-currency-amount-are-not-zero-drift", "numbers", "FAIL")
+def u3(root):
+    # numeric() strips "%" and "$" as formatting, so "50%" and "$50" compared
+    # equal and bought the strongest sentence this gate prints.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "refund rate", "snapshot_id": "snap-1",
+        "query": "SELECT refunds FROM daily", "second_derivation": "SELECT paid FROM ledger",
+        "rerun": {"ran": True, "primary": "50%", "secondary": "$50"}}]})
+
+
+@case("a-percentage-is-not-a-row-count", "migration", "FAIL")
+def u4(root):
+    write(root, "migration-receipt.json", {
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": "50%", "after_reverse": "50%"}})
+
+
+@case("a-zero-width-space-is-not-a-second-derivation", "numbers", "FAIL")
+def u5(root):
+    # str.split() does not split on U+200B, so one invisible character made a
+    # copy-paste of the first query an "independent second derivation".
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-1",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(amount)\u200b FROM orders",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-boolean-snapshot-id-pins-nothing", "numbers", "FAIL")
+def u6(root):
+    # answered() keeps False as an answer on purpose (a zero row count is an
+    # answer), so `"snapshot_id": false` read as a pinned read.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": False,
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("snapshot-reuse-is-disclosed-across-case", "evidence", "disclosed")
+def u7(root):
+    # The reuse disclosure compared raw ids while every other comparison folds,
+    # so ids differing only in case lost the disclosure and the PASS read as two
+    # independent pins.
+    write(root, "numbers-manifest.json", {"figures": [
+        {"label": "gmv", "snapshot_id": "SNAP-1", "query": "SELECT SUM(amount) FROM orders",
+         "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+         "rerun": {"ran": True, "primary": 17570, "secondary": 17570}},
+        {"label": "aov", "snapshot_id": "snap-1", "query": "SELECT AVG(amount) FROM orders",
+         "second_derivation": "SELECT SUM(amount)/COUNT(*) FROM orders",
+         "rerun": {"ran": True, "primary": 88, "secondary": 88}}]})
+    line = gate_line(root, "numbers")
+    if line.split()[1:2] != ["PASS"]:
+        return line
+    return "disclosed" if "share a snapshot id" in line else line
+
+
+@case("a-directory-named-after-a-gate-is-refused-not-eaten", "guard", "refused")
+def u8(root):
+    os.makedirs(os.path.join(root, "numbers"))
+    out = subprocess.run([sys.executable, GATE, "numbers"], capture_output=True, text=True,
+                         cwd=root)
+    return ("refused" if out.returncode == 1 and "both a gate name and a directory" in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:80]))
+
+
+@case("two-gate-roots-are-refused-not-last-wins", "guard", "refused")
+def u9(root):
+    a, b = os.path.join(root, "a"), os.path.join(root, "b")
+    os.makedirs(a), os.makedirs(b)
+    out = subprocess.run([sys.executable, GATE, a, b], capture_output=True, text=True)
+    return ("refused" if out.returncode == 1 and "one directory at a time" in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:80]))
+
+
+@case("two-design-roots-are-refused-not-last-wins", "guard", "refused")
+def u10(root):
+    a, b = os.path.join(root, "a"), os.path.join(root, "b")
+    os.makedirs(a), os.makedirs(b)
+    out = subprocess.run([sys.executable, DESIGN, a, b], capture_output=True, text=True)
+    return ("refused" if out.returncode == 1 and "one directory at a time" in out.stdout
+            else "exit %d: %s" % (out.returncode, out.stdout.strip()[:80]))
+
+
+@case("two-lint-roots-are-refused-not-last-wins", "lints", "FAIL")
+def u11(root):
+    a, b = os.path.join(root, "a"), os.path.join(root, "b")
+    os.makedirs(a), os.makedirs(b)
+    write(root, "a/evil.py", "try:\n    f()\nexcept:\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    write(root, "b/ok.py", "def f():\n    return 1\n")
+    return run_score_lints([a, b])
+
+
+@case("an-exemption-reason-of-x-waives-nothing", "lints", "FAIL")
+def u12(root):
+    write(root, "bad.py", "try:\n    f()\nexcept:  # sbe" + ": allow-silent x\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    return run_score_lints([root])
+
+
+@case("the-marker-pasted-as-its-own-reason-waives-nothing", "lints", "FAIL")
+def u13(root):
+    write(root, "bad.py", "try:\n    f()\nexcept:  # sbe" + ": allow-silent sbe" + ": allow-silent\n    pass\n")  # sbe: allow-silent this is the lint FIXTURE: the swallow is the defect under test, written into a temp file, never executed here
+    return run_score_lints([root])
+
+
+@case("one-marker-does-not-waive-a-second-unrelated-hit", "lints", "FAIL")
+def u14(root):
+    # The upsert pattern crosses newlines, so its span enclosed the except
+    # block, and a reason written about the except waived the upsert too.
+    write(root, "t.py",  # sbe: allow-silent this is the lint FIXTURE: both swallows are the defects under test, written into a temp file, never executed here
+          'UPSERT = """\nINSERT INTO ledger (id, amount) VALUES (%s, %s)\nON CONFLICT (id)\n"""\n'
+          'try:\n    load()\nexcept:  # sbe: allow-silent retry loop above already logs the failure\n'
+          '    pass\nMORE = """\nDO NOTHING\n"""\n')
+    return run_score_lints([root])
+
+
+@case("unreadable-timestamps-never-fall-out-of-the-window", "score", "FAIL")
+def u15(root):
+    # ctx.recent mapped an unreadable timestamp to the sentinel 99, meaning
+    # "old", so rows nothing had measured silently left the 7-day window and
+    # "1/1 sessions >= 90%; below floor: none" printed over 99 unmeasured rows.
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = [json.dumps({"schema": 2, "session_id": "good", "ts": now,
+                        "cache_read": 95, "cache_write": 5})]
+    rows += [json.dumps({"schema": 2, "session_id": "s%d" % i, "ts": "not-a-timestamp",
+                         "cache_read": 1, "cache_write": 99}) for i in range(3)]
+    return score_check("cache-economy", _ledger(root, "\n".join(rows) + "\n"))
+
+
+@case("sessions-without-cache-fields-are-disclosed", "evidence", "disclosed")
+def u16(root):
+    import datetime as _dt
+    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = [json.dumps({"schema": 2, "session_id": "good", "ts": now,
+                        "cache_read": 95, "cache_write": 5}),
+            json.dumps({"schema": 2, "session_id": "bare", "ts": now})]
+    _ledger(root, "\n".join(rows) + "\n")
+    e = dict(os.environ)
+    e.update({"BROTHERSBE_VAULT": root, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""})
+    out = subprocess.run([sys.executable, SCORE], capture_output=True, text=True, env=e)
+    line = next((l for l in out.stdout.splitlines() if l.startswith("cache-economy")), "")
+    return "disclosed" if "carry no cache fields" in line else line or "no-line"
+
+
+@case("five-tbd-seals-are-zero-sealed-predictions", "score", "NO-DATA")
+def u17(root):
+    write(root, "50-Reference/operator-model.md",
+          "# Operator model\n## Prediction ledger\n"
+          "date | prediction | seal | scored on | hit\n"
+          + "".join("2026-07-0%d | the queue depth stays under 1k | TBD | review | yes\n" % i
+                    for i in range(1, 6)))
+    return score_check("prediction-seals", root)
+
+
+@case("one-prediction-on-five-dates-is-one-prediction", "score", "FAIL")
+def u18(root):
+    # The dedupe keyed on the whole row including the date, so it could never
+    # fold the rows its own docstring says it exists to fold.
+    write(root, "50-Reference/operator-model.md",
+          "# Operator model\n## Prediction ledger\n"
+          "date | prediction | seal | scored on | hit\n"
+          + "".join("2026-07-0%d | the queue depth stays under 1k | seal-%d | review | yes\n"
+                    % (i, i) for i in range(1, 6)))
+    return score_check("prediction-seals", root)
+
+
+@case("six-timestamps-of-one-rating-are-one-rating", "score", "FAIL")
+def u19(root):
+    # The writer stamps a fresh timestamp on every row, so the whole-row dedupe
+    # was structurally unreachable: six copies of one 5/5 rating cleared the
+    # "6 distinct ratings" threshold.
+    rows = [json.dumps({"ts": "2026-07-25T10:00:0%d.%06dZ" % (i, i), "score": 5,
+                        "task": "ship the refund gate", "note": "solid"}) for i in range(6)]
+    write(root, "99-System/telemetry/ratings.jsonl", "\n".join(rows) + "\n")
+    return score_check("felt-outcome-ratings", root)
+
+
+@case("a-trailing-period-is-not-a-second-alternative", "adr", "FAIL")
+def u20(root):
+    # distinct() used the weaker of the two reductions, so one alternative
+    # written twice, differing by case and one period, counted as "2 distinct
+    # rejected alternatives".
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nlatency, freshness\n## Rejected alternatives\n"
+          "- Nightly batch reconciliation, it misses the deadline\n"
+          "- nightly batch reconciliation, it misses the deadline.\n"
+          "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
+          "## What would flip this\nSub-second freshness becomes a requirement.\n")
 
 
 def main():
