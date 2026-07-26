@@ -59,7 +59,7 @@ What each does: SessionStart injects the active-laws digest plus mechanical nags
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "358 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "361 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
@@ -107,7 +107,7 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
             } >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Silent-failure lints and code-graded checks block on failure
-        run: python3 tools/sbe_score.py --strict .
+        run: python3 tools/sbe_score.py --strict --strict-soft .
       # The gates above are only worth what their tests are worth. These two ran
       # on nobody's merge path until now, which made them documentation rather
       # than a gate: a fixture no merge runs cannot stop anything.

@@ -175,7 +175,7 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
             } >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Silent-failure lints and code-graded checks block on failure
-        run: python3 tools/sbe_score.py --strict .
+        run: python3 tools/sbe_score.py --strict --strict-soft .
       # The gates above are only worth what their tests are worth. These two ran
       # on nobody's merge path until now, which made them documentation rather
       # than a gate: a fixture no merge runs cannot stop anything.
@@ -215,7 +215,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-358 evals: 358 passed, 0 regressions.
+361 evals: 361 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

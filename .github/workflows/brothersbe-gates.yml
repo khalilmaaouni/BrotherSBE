@@ -71,8 +71,13 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+      # Severity is declared per check and printed on every verdict line: --strict
+      # blocks on gate severity (the lints), and --strict-soft is the visible
+      # opt-in that makes soft-severity (graded) FAILs block too. This workflow
+      # passes both, which is this repository's choice, not a default; drop
+      # --strict-soft to let graded checks fail without stopping a merge.
       - name: Silent-failure lints and code-graded checks block on failure
-        run: python3 tools/sbe_score.py --strict .
+        run: python3 tools/sbe_score.py --strict --strict-soft .
       # The gates above are only worth what their tests are worth. These two ran
       # on nobody's merge path until now, which made them documentation rather
       # than a gate: a fixture no merge runs cannot stop anything.

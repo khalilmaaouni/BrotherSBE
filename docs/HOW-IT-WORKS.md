@@ -316,7 +316,7 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
             } >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Silent-failure lints and code-graded checks block on failure
-        run: python3 tools/sbe_score.py --strict .
+        run: python3 tools/sbe_score.py --strict --strict-soft .
       # The gates above are only worth what their tests are worth. These two ran
       # on nobody's merge path until now, which made them documentation rather
       # than a gate: a fixture no merge runs cannot stop anything.

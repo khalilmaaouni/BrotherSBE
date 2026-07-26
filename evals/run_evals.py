@@ -868,6 +868,45 @@ def w5(root):
     return verdict if "exploded" in ev else "evidence lost the exception"
 
 
+# Severity is declared at write time, or the check does not exist: the split
+# between a blocking check and a graded one used to live in which FILE a check
+# was written into, which no reader could see without tracing the call.
+@case("a-check-without-a-declared-severity-is-refused", "guard", "refused")
+def w5a(root):
+    if _checks is None:
+        return _CHECKS_IMPORT_ERROR
+    try:
+        _checks.Check(lambda _: ("PASS", "x"), reads=("f",), kind="text",
+                      full_fixture={"files": {"f": "worked example\n"}})
+    except ValueError as e:
+        return "refused" if "severity" in str(e) else "refused for the wrong reason: %s" % e
+    return "registered with no severity at all"
+
+
+@case("a-severity-outside-gate-or-soft-is-refused", "guard", "refused")
+def w5b(root):
+    if _checks is None:
+        return _CHECKS_IMPORT_ERROR
+    try:
+        _checks.Check(lambda _: ("PASS", "x"), reads=("f",), kind="text", severity="advisory",
+                      full_fixture={"files": {"f": "worked example\n"}})
+    except ValueError as e:
+        return "refused" if "severity" in str(e) else "refused for the wrong reason: %s" % e
+    return "registered under a severity the exit-code mapping does not define"
+
+
+@case("every-verdict-line-names-its-severity", "gaterun", "printed")
+def w5c(root):
+    # The declaration is only visible if the output carries it: a severity a
+    # reader can see only in the source is the file-location split with a new name.
+    out = subprocess.run([sys.executable, GATE, root], capture_output=True, text=True)
+    lines = [l for l in out.stdout.splitlines() if l.startswith("  ")]
+    if not lines:
+        return "no verdict lines at all"
+    missing = [l for l in lines if "[severity: gate]" not in l and "[severity: soft]" not in l]
+    return "printed" if not missing else "unlabelled: %s" % missing[0][:60]
+
+
 # 16. The empty-manifest fix held only while the empty manifest was the ONLY
 # one: the note naming it was collected and then discarded unless every manifest
 # was empty, so one good deliverable anywhere in the tree restored the old

@@ -822,41 +822,41 @@ _PREDICTIONS = ("# Operator model\n## Prediction ledger\n"
 
 CHECKS = {
     "ledger-coverage": Check(
-        check_ledger_coverage, reads=(LEDGER,), kind="jsonl",
+        check_ledger_coverage, reads=(LEDGER,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s"}]}}),
     "schema-2-uniform": Check(
-        check_schema_uniform, reads=(LEDGER,), kind="jsonl",
+        check_schema_uniform, reads=(LEDGER,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(LEDGER): [{"schema": 2, "session_id": "sess-0001"}]}}),
     "cache-economy": Check(
-        check_cache_economy, reads=(LEDGER,), kind="jsonl",
+        check_cache_economy, reads=(LEDGER,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s",
                                                 "cache_read": 95, "cache_write": 5}]}}),
     "vault-log-per-active-day": Check(
-        check_vault_log_per_active_day, reads=(LEDGER,), kind="jsonl",
+        check_vault_log_per_active_day, reads=(LEDGER,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(LEDGER): [{"session_id": "sess-0001", "ts": "%(now)s"}],
                                 "10-Projects/demo/Sessions/%(today)s-session.md":
                                     "# Session log\nWhat happened today.\n"}}),
-    "fence-hygiene": Check(check_fence_hygiene, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
+    "fence-hygiene": Check(check_fence_hygiene, reads=("BROTHERSBE_REGISTRIES",), kind="tree", severity="soft",
                            empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"},
                            full_fixture=_FENCE_REGISTRY),
     "correction-latency": Check(
-        check_correction_latency, reads=(CORRECTIONS,), kind="jsonl",
+        check_correction_latency, reads=(CORRECTIONS,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(CORRECTIONS): [{"ts": "%(now)s"}]}}),
-    "budget-vs-tier": Check(check_budget_vs_tier, reads=("BROTHERSBE_REGISTRIES",), kind="tree",
+    "budget-vs-tier": Check(check_budget_vs_tier, reads=("BROTHERSBE_REGISTRIES",), kind="tree", severity="soft",
                             empty_fixture={"files": {"STATE.md": ""}, "value": "%(dir)s/*.md"},
                             full_fixture=_FENCE_REGISTRY),
-    "prediction-seals": Check(check_prediction_seals, reads=(OPERATOR_MODEL,), kind="text",
+    "prediction-seals": Check(check_prediction_seals, reads=(OPERATOR_MODEL,), kind="text", severity="soft",
                               full_fixture={"files": {_rel(OPERATOR_MODEL): _PREDICTIONS}}),
     "felt-outcome-ratings": Check(
-        check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl",
+        check_felt_outcome_ratings, reads=(RATINGS,), kind="jsonl", severity="soft",
         # Six DISTINCT rows. The fixture used to be one row repeated six times,
         # which is exactly the defect the shared dedupe rule closed: it certified
         # a threshold by writing the same rating out six times.
         full_fixture={"files": {_rel(RATINGS): [{"score": s} for s in (5, 4, 3, 2, 1, 0)]}}),
     "review-cadence": Check(
-        check_review_cadence, reads=(REVIEWS,), kind="jsonl",
+        check_review_cadence, reads=(REVIEWS,), kind="jsonl", severity="soft",
         full_fixture={"files": {_rel(REVIEWS): [{"ts": "%(now)s"}]}}),
-    "silent-failure-lints": Check(silent_failure_lints, reads=("SBE_LINT_ROOT",), kind="tree",
+    "silent-failure-lints": Check(silent_failure_lints, reads=("SBE_LINT_ROOT",), kind="tree", severity="gate",
                                   empty_fixture={"files": {"notes.txt": "no scannable source here\n"},
                                                  "value": "%(dir)s"},
                                   full_fixture={"files": {"src/ok.py": "def f():\n    return 1\n"},
@@ -883,16 +883,31 @@ def main():
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
     for n, v, e in results:
-        print("%-*s  %-7s  %s" % (width, n, v, e))
+        print("%-*s  %-7s  %s [severity: %s]" % (width, n, v, e, CHECKS[n].severity))
     print("\n%d checks: %d PASS, %d FAIL, %d NO-DATA. LLM judge scores only the residue."
           % (len(results), sum(1 for _, v, _ in results if v == "PASS"), fails,
              sum(1 for _, v, _ in results if v == "NO-DATA")))
     # Two modes, same checks: the local hook stays advisory (exit 0, never blocks a
-    # session), but `--strict` exits nonzero on any FAIL so CI can block a merge.
-    # This is how "advisory" and "enforced" coexist without contradiction.
-    if "--strict" in sys.argv and fails:
-        print("STRICT: %d check(s) failed; exiting nonzero to fail the CI gate." % fails)
+    # session), but strict runs exit nonzero so CI can block a merge. Which FAILs
+    # block is the severity each check declared at write time, printed on its
+    # verdict line: `--strict` blocks on gate severity (here, the lints), and soft
+    # severity blocks only under the opt-in `--strict-soft` (which implies
+    # --strict), so a graded practice check cannot stop a merge unless the
+    # repository asked for exactly that. The shipped workflow passes both flags.
+    gate_fails = sum(1 for n, v, _ in results if v == "FAIL" and CHECKS[n].severity == "gate")
+    soft_fails = fails - gate_fails
+    strict_soft = "--strict-soft" in sys.argv
+    strict = "--strict" in sys.argv or strict_soft
+    if strict and gate_fails:
+        print("STRICT: %d gate-severity check(s) failed; exiting nonzero to fail the CI gate." % gate_fails)
         sys.exit(1)
+    if strict_soft and soft_fails:
+        print("STRICT-SOFT: %d soft-severity check(s) failed; exiting nonzero because "
+              "--strict-soft opts graded checks into blocking." % soft_fails)
+        sys.exit(1)
+    if strict and soft_fails:
+        print("NOTE: %d soft-severity check(s) failed. --strict blocks on gate severity only; "
+              "add --strict-soft to block on these too." % soft_fails)
     sys.exit(0)
 
 
@@ -903,4 +918,4 @@ if __name__ == "__main__":
         # A broken checker must not silently waive the gate. In strict mode a crash
         # blocks, exactly as in sbe_gate.py; advisory mode still never blocks a session.
         print("sbe_score: error %r" % (e,))
-        sys.exit(1 if "--strict" in sys.argv else 0)
+        sys.exit(1 if ("--strict" in sys.argv or "--strict-soft" in sys.argv) else 0)

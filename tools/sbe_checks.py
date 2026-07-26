@@ -264,13 +264,23 @@ VERDICTS = ("PASS", "FAIL", "NO-DATA")
 
 
 class Check:
-    def __init__(self, fn, reads, kind, item_key=None,
+    def __init__(self, fn, reads, kind, severity=None, item_key=None,
                  empty_expect="NO-DATA", empty_note="", empty_fixture=None,
                  full_fixture=None, no_full_fixture="", optional_leaves=None,
                  full_expect="PASS", full_expect_reason=""):
         if kind not in KINDS:
             raise ValueError("unknown evidence kind %r (expected one of %s)"
                              % (kind, ", ".join(KINDS)))
+        if severity not in ("gate", "soft"):
+            # Declared at write time, refused otherwise, exactly as PASS-on-empty
+            # is refused below. The split used to live in which FILE a check was
+            # written into, so a reader could not tell a blocking check from a
+            # graded one without tracing the call.
+            raise ValueError(
+                "a check must declare its severity at write time: 'gate' (a FAIL blocks a "
+                "--strict run) or 'soft' (a FAIL is graded, and blocks only under the opt-in "
+                "--strict-soft), got %r. Severity says only what a FAIL does to the exit "
+                "code; it does not change what the check examines or reports" % (severity,))
         if empty_expect == "PASS":
             raise ValueError(
                 "a check may not declare PASS as its empty-evidence verdict: "
@@ -320,6 +330,7 @@ class Check:
         self.fn = fn
         self.reads = tuple(reads)
         self.kind = kind
+        self.severity = severity
         self.item_key = item_key
         self.empty_expect = empty_expect
         self.empty_note = empty_note

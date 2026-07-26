@@ -1795,23 +1795,23 @@ _FX_DIAGRAMS = ("# Diagrams\n## Context\n"
 # honesty meta-test discovers the checks rather than carrying a hand-written list.
 CHECKS = {
     "artifacts": Check(
-        check_artifacts, reads=(INTAKE,), kind="json",
+        check_artifacts, reads=(INTAKE,), kind="json", severity="gate",
         full_fixture={"files": {
             INTAKE: {"tier": "T1",
                      "answers": {"changes_contract": False, "crosses_boundary": True,
                                  "reversible_under_hour": True, "touches_sensitive": False,
                                  "consumers": "none"}},
             ARTIFACT_FILES["01"]: _FX_PURPOSE}}),
-    "adr": Check(check_adr, reads=(ARTIFACT_FILES["03"],), kind="text", empty_expect="FAIL",
+    "adr": Check(check_adr, reads=(ARTIFACT_FILES["03"],), kind="text", severity="gate", empty_expect="FAIL",
                  empty_note="a dossier that carries an empty 03-adr.md claims a decision record and "
                             "supplies none, which is a broken claim rather than an absence",
                  full_fixture={"files": {ARTIFACT_FILES["03"]: _FX_ADR}}),
-    "datamodel": Check(check_data_model, reads=(ARTIFACT_FILES["05"],), kind="text", empty_expect="FAIL",
+    "datamodel": Check(check_data_model, reads=(ARTIFACT_FILES["05"],), kind="text", severity="gate", empty_expect="FAIL",
                        empty_note="an empty 05-data-model.md declares zero entities while claiming to "
                                   "be the data model, and zero entities each with a system of record "
                                   "is the vacuous PASS this check exists to prevent",
                        full_fixture={"files": {ARTIFACT_FILES["05"]: _FX_DATA_MODEL}}),
-    "diagrams": Check(check_diagrams, reads=(ARTIFACT_FILES["06"], ARTIFACT_FILES["05"]), kind="text",
+    "diagrams": Check(check_diagrams, reads=(ARTIFACT_FILES["06"], ARTIFACT_FILES["05"]), kind="text", severity="gate",
                       empty_expect="FAIL",
                       empty_note="an empty 06-diagrams.md is a diagram artifact with no diagram in it, "
                                  "which is a broken claim rather than an absence: the dossier says it "
@@ -1825,7 +1825,7 @@ CHECKS = {
                               "relationships section leaves every entity it traced against intact, "
                               "and the datamodel check's own sweep is what holds that section to "
                               "its sentence"}),
-    "placeholder": Check(check_placeholder, reads=tuple(ARTIFACT_FILES.values()), kind="text",
+    "placeholder": Check(check_placeholder, reads=tuple(ARTIFACT_FILES.values()), kind="text", severity="gate",
                          empty_expect="FAIL",
                          empty_note="a zero-byte artifact carries no unfilled-template marker, so passing "
                                     "it would be reporting a clean scan of a file with nothing in it",
@@ -2076,7 +2076,7 @@ def main():
             verdict, ev = run_guarded(name, CHECKS[name], target)
             if verdict == "FAIL":
                 fails += 1
-            print("  %-10s %-8s %s" % (name, verdict, ev))
+            print("  %-10s %-8s %s [severity: %s]" % (name, verdict, ev, CHECKS[name].severity))
     if waivers:
         print("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
               "pass; run `--strict --strict-waivers` to make one block a merge." % (waivers, EXEMPT))
