@@ -135,8 +135,9 @@ rows). A migration without a tested reverse is a one-way door.
 
 The change carries an `APPROVAL` file declaring it touches a billing or partner
 path, and the approval is bound to more than a typed name: a signed commit
-trailer (`Approved-by:` on a commit whose signature verifies as G or U here; E
-means this host could not check it, which is NO-DATA and not an approval) or a
+trailer (`Approved-by:` on a commit whose signature verifies as G here; U means
+the key matched no trusted principal and E means this host could not check it,
+and both are NO-DATA rather than an approval) or a
 recorded platform review id (`Reviewed-in:`), which nothing resolves and which
 the gate's evidence line describes as a pointer rather than proof. `sbe_gate.py
 approval` fails a bare typed name: "a name in a text field is not a control."
@@ -195,7 +196,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  316 evals: 316 passed, 0 regressions.
+  323 evals: 323 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

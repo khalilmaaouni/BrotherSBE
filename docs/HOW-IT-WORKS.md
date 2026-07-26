@@ -232,7 +232,7 @@ present.
 |---|---|---|
 | `numbers` | `numbers-manifest.json` | each figure has a `snapshot_id`, a `second_derivation` textually different from `query`, `rerun.ran` true, and `primary` equal to `secondary` |
 | `migration` | `migration-receipt.json` | both legs have `ran_against_restore`, the reverse has a `rehearsal_run_id`, and `row_counts.before` equals `row_counts.after_reverse` |
-| `approval` | `APPROVAL` file plus a HEAD trailer | a signed commit carries `Approved-by:` and this host verified the signature (git `%G?` in `G` or `U`). An unverifiable signature and a `Reviewed-in: <id>` both report NO-DATA, because this host can check neither. A typed name with neither fails |
+| `approval` | `APPROVAL` file plus a HEAD trailer | a signed commit carries `Approved-by:` and this host verified the signature against a trusted key (git `%G?` = `G`, and `G` alone). A valid-but-untrusted signature (`U`), an unverifiable signature (`E`) and a `Reviewed-in: <id>` all report NO-DATA, because this host can vouch for none of them. A typed name with neither fails |
 | `ran` | `ran-receipt.json` | every check has `exit_code` 0 and a nonzero `duration_ms` |
 
 ```bash
