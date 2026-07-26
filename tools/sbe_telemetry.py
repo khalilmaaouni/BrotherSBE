@@ -57,7 +57,7 @@ fld() everywhere.
 import json, os, sys, glob, re, datetime, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import distinct, evidence_problem
+from sbe_checks import distinct, evidence_problem, without_comments
 
 # ---------------------------------------------------------------------------
 # Configuration. The vault is the durable memory folder every ledger lives in.
@@ -526,7 +526,9 @@ def prediction_counts():
         return out
     in_ledger = False
     rows = []
-    for line in open(OPERATOR_MODEL, errors="replace"):
+    # Rendered text: a prediction ledger inside an HTML comment renders as
+    # nothing, and its rows used to count as sealed predictions anyway.
+    for line in without_comments(open(OPERATOR_MODEL, errors="replace").read()).splitlines():
         if line.startswith("## Prediction ledger"):
             in_ledger = True
             continue

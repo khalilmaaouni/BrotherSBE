@@ -624,6 +624,26 @@ def distinct(items):
     return seen, len(items) - len(seen)
 
 
+_HTML_COMMENT = re.compile(r"(?s)<!--.*?-->")
+
+
+def without_comments(text):
+    """The text as it renders: HTML comments removed.
+
+    ONE rule, here, because there were two populations of readers in one file:
+    four functions stripped comments and four did not, so a data model whose
+    whole entity list sat inside `<!-- ... -->` was "the absence of an artifact"
+    to the artifacts check and "2 entities, each with a system of record" to the
+    data-model check, in the same run. A comment is a note to the author; a
+    section that renders as empty is empty to every check that reads meaning
+    out of markdown. The one deliberate exception is the unfilled-template
+    marker, which the templates ship INSIDE a comment, so the placeholder check
+    reads the raw text for the marker and this rendered text for everything
+    else.
+    """
+    return _HTML_COMMENT.sub("", text or "")
+
+
 def all_vacuous(text):
     """True when a body of text is present and every substantive line of it is a placeholder.
 
@@ -633,7 +653,7 @@ def all_vacuous(text):
     placeholder is not blank. Headings and comment lines are scaffolding and are
     not counted either way: this asks whether anything was WRITTEN.
     """
-    body = re.sub(r"(?s)<!--.*?-->", "", text or "")
+    body = without_comments(text)
     lines = [l.strip() for l in body.splitlines()
              if l.strip() and not l.lstrip().startswith("#")]
     return bool(lines) and all(vacuous(l) for l in lines)

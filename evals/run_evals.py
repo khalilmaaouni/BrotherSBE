@@ -3453,6 +3453,82 @@ def v7(root):
           "## Relationships\n- Customer to Refund: one-to-many.\n")
 
 
+# ---------------------------------------------------------------------------
+# HTML comments render as nothing and must count as nothing, everywhere; and a
+# coherence link needs subject matter, not a connective.
+
+
+@case("a-commented-out-entity-list-is-not-a-data-model", "datamodel", "FAIL")
+def h1(root):
+    # Four functions stripped comments and four did not, so this file was "the
+    # absence of an artifact" to the artifacts check and "2 entities, each with
+    # a system of record" to the data-model check, in the same run.
+    write(root, "05-data-model.md",
+          "# Data model\n\n## Entities\n\n"
+          "<!-- the entity list moved to the wiki; keeping the old one here for reference\n"
+          "- Customer: system of record: the CRM.\n"
+          "- Refund: system of record: the ledger service.\n-->\n\n"
+          "## Relationships\n- Customer to Refund: one-to-many, optional.\n")
+
+
+@case("diagram-nodes-do-not-trace-to-commented-out-entities", "diagrams", "NO-DATA")
+def h2(root):
+    # The diagram check reported its nodes traceable to entities that do not
+    # exist in the rendered document.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "<!--\n- Customer: system of record: the CRM.\n"
+          "- Refund: system of record: the ledger service.\n-->\n"
+          "## Relationships\n- Customer to Refund: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nflowchart LR\n  Customer --> Refund\n```\n")
+
+
+@case("a-commented-out-alternative-is-not-an-alternative", "adr", "FAIL")
+def h3(root):
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nlatency, auditability\n"
+          "## Rejected alternatives\n"
+          "<!--\n- Synchronous call: ties checkout to ledger availability.\n"
+          "- Nightly batch: misses the deadline.\n-->\n"
+          "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
+          "## What would flip this\nSub-second settlement becoming a requirement.\n")
+
+
+@case("a-connective-is-not-shared-subject-matter", "artifacts", "FAIL")
+def h4(root):
+    # The docstring's own fixture: bananas, lawnmowers, a tractor fleet and
+    # Mars, tied into one dossier by the word "Therefore" in each artifact.
+    write(root, "00-intake.json", {"tier": "T3", "answers": TIER_ANSWERS["T3"], "override": None})
+    unrelated = dict(_UNRELATED)
+    unrelated["01-purpose.md"] = ("# Purpose\nBananas ripen unevenly in the shed. Therefore we "
+                                  "want a ripening schedule.\n")
+    unrelated["02-process.md"] = ("# Process\nThe lawnmower is pushed across the paddock. "
+                                  "Therefore the grass is shortened.\n")
+    unrelated["04-technology-map.md"] = ("# Technology map\nOur tractor fleet runs on diesel. "
+                                         "Therefore we keep a fuel bowser on site.\n")
+    unrelated["07-verification.md"] = ("# Verification\nWe will verify the Martian regolith "
+                                       "sample by spectroscopy. Therefore a lander is needed.\n")
+    for name, body in unrelated.items():
+        write(root, name, body)
+
+
+@case("a-second-connective-is-not-shared-subject-matter-either", "artifacts", "FAIL")
+def h5(root):
+    # The class, not the instance: any word that connects sentences rather than
+    # naming anything must not tie two artifacts together.
+    write(root, "00-intake.json", {"tier": "T3", "answers": TIER_ANSWERS["T3"], "override": None})
+    unrelated = dict(_UNRELATED)
+    unrelated["01-purpose.md"] = "# Purpose\nBananas ripen unevenly. Additionally, sheds are dark.\n"
+    unrelated["02-process.md"] = "# Process\nMowing happens in spring. Additionally, blades dull.\n"
+    unrelated["04-technology-map.md"] = ("# Technology map\nThe tractor burns diesel. "
+                                         "Additionally, it leaks.\n")
+    unrelated["07-verification.md"] = ("# Verification\nMars is verified by telescope. "
+                                       "Additionally, at night.\n")
+    for name, body in unrelated.items():
+        write(root, name, body)
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
