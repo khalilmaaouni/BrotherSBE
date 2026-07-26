@@ -123,6 +123,48 @@ class TestAutosave(unittest.TestCase):
             self.assertNotEqual(envobj.returncode, 0, ".env leaked into the autosave snapshot")
 
 
+class TestAutosaveExclusions(unittest.TestCase):
+    def test_excluded_tracked_files_ride_at_head_and_modern_keys_stay_out(self):
+        """Two halves of one review finding. The exclusion list stopped at
+        id_rsa/id_dsa, so a fresh id_ed25519 (ssh-keygen's default since
+        OpenSSH 8.5) and an .envrc entered the snapshot as permanent git
+        objects. And the snapshot was built in a fresh temp index, so a
+        TRACKED file matching an exclusion vanished from the snapshot
+        entirely, with its unsaved edit, while the comment said tracked files
+        were unaffected. Now: the index is seeded from HEAD (excluded tracked
+        files ride at their last-committed state), and the modern secret
+        shapes stay out."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as repo:
+            def git(*a):
+                return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True)
+            git("init", "-q")
+            git("config", "user.email", "t@t.t"); git("config", "user.name", "t")
+            io.open(os.path.join(repo, ".env"), "w").write("SECRET=v1")
+            io.open(os.path.join(repo, "app.py"), "w").write("print('hi')\n")
+            git("add", "-A", "-f"); git("commit", "-qm", "init")
+            io.open(os.path.join(repo, ".env"), "w").write("SECRET=v2-unsaved-edit")
+            io.open(os.path.join(repo, "id_ed25519"), "w").write("PRIVATE KEY MATERIAL")
+            io.open(os.path.join(repo, ".envrc"), "w").write("AWS_SECRET=hunter2")
+            io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED")
+            vdir = tempfile.mkdtemp()
+            env = dict(os.environ, BROTHERSBE_VAULT=vdir)
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; the ref content is asserted below
+                           text=True, env=env)
+            ref = git("for-each-ref", "--format=%(refname)",
+                      "refs/brothersbe/autosave").stdout.split()[0]
+            # tracked excluded file: present at its HEAD state, edit not captured
+            shown = git("show", "%s:.env" % ref)
+            self.assertEqual(shown.stdout, "SECRET=v1",
+                             "tracked excluded file dropped or edit captured: %r" % shown.stdout)
+            # modern secret shapes stay out
+            for name in ("id_ed25519", ".envrc"):
+                r = git("cat-file", "-e", "%s:%s" % (ref, name))
+                self.assertNotEqual(r.returncode, 0, "%s leaked into the snapshot" % name)
+            # the actual work is captured
+            self.assertIn("UNLANDED", git("show", "%s:wip.txt" % ref).stdout)
+
+
 class TestDigestCap(unittest.TestCase):
     def test_digest_fits_the_cap_the_hook_comment_names(self):
         """sbe_sessionstart.sh injects DIGEST.md into session context and its
