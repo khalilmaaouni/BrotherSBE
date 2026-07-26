@@ -783,18 +783,25 @@ def _rejected_alternatives(t):
     still has to say why it lost, which is what the reviewability threshold below
     holds, and an empty heading still counts nothing.
     """
-    found = []
+    found = []             # (form, full text): form is item, table, para or heading
     level = None           # heading depth of the open rejected section
     blocks = []            # (title, items, body) for the section and each sub-heading
 
     def close():
         for _title, items, body in blocks:
             if items:
-                found.extend(items)
+                # UNTRUNCATED, here and in every collection branch below. The
+                # collected text is the alternative's IDENTITY: a 60-character
+                # cap at collection meant any option named longer than the cap
+                # could never equal its own chosen phrase, so the CHOSEN bullet
+                # re-entered the rejected count and the two-alternatives floor
+                # was satisfiable by chosen-plus-one again, one adjective past
+                # the shipped fixture. Truncation is for display sites only.
+                found.extend(("item", x) for x in items)
                 continue
             table = _table_alternatives(body)
             if table:
-                found.extend(table)
+                found.extend(("table", x) for x in table)
                 continue
             paragraphs, current = [], []
             for l in body:
@@ -810,12 +817,12 @@ def _rejected_alternatives(t):
             if _title is None:
                 # The section's own body: one alternative per paragraph, which is
                 # how an author who writes prose separates them.
-                found.extend(p[:60] for p in paragraphs)
+                found.extend(("para", p) for p in paragraphs)
             else:
                 # A sub-heading IS one alternative however many paragraphs it
                 # takes to explain. Counting paragraphs here would let one
                 # alternative satisfy the rule that asks for two.
-                found.append(("%s: %s" % (_title, " ".join(paragraphs)))[:60])
+                found.append(("heading", "%s: %s" % (_title, " ".join(paragraphs))))
         del blocks[:]
 
     for line in t.splitlines():
@@ -834,7 +841,7 @@ def _rejected_alternatives(t):
             continue
         item = _LIST_ITEM.match(line)
         if item:
-            blocks[-1][1].append(item.group(1)[:60])
+            blocks[-1][1].append(item.group(1))
         else:
             blocks[-1][2].append(line)
     close()
@@ -866,7 +873,11 @@ def _table_alternatives(body):
         if verdict_col is not None and verdict_col < len(cells) and re.search(
                 r"(?i)\b(chosen|selected|accepted|picked|winner)\b", cells[verdict_col]):
             continue
-        out.append(" | ".join(c for c in cells if c)[:60])
+        # The first cell is the option's NAME and the rest is its reason, so
+        # _alternative_name reads the name cell rather than the whole joined
+        # row; untruncated, because the text is the row's identity.
+        rest = " | ".join(c for c in cells[1:] if c)
+        out.append("%s: %s" % (cells[0], rest) if rest else cells[0])
     return out
 
 
@@ -938,13 +949,46 @@ _CHOSEN_LINE = re.compile(r"(?im)^\s*(?:[-*]\s*)?chosen\s+(?:option|approach|alt
                           r"\s*[:=]\s*(.+?)\s*$")
 
 
+def _unwrap(t):
+    """The document with soft-wrapped prose lines joined back into one line each.
+
+    `_CHOSEN_LINE` ended at `\\s*$`, one PHYSICAL line, so a chosen-option name
+    that wraps at ordinary prose width (66 characters did it) was compared as
+    its first line only, never equalled the full name collected from the
+    options list, and the chosen option re-entered the rejected count. A
+    markdown soft wrap is a rendering artifact, not content: a non-blank line
+    that opens no structure of its own (not a heading, not a list item, not a
+    table row, not a fence marker) continues the line above it, so the scan
+    reads the sentence the author wrote rather than the width they wrapped at.
+    """
+    out = []
+    for line in t.splitlines():
+        s = line.strip()
+        if (out and s and out[-1].strip()
+                and not _HEADING.match(line) and not _LIST_ITEM.match(line)
+                and not s.startswith(("|", "```", "~~~"))
+                and not _HEADING.match(out[-1])
+                and not out[-1].lstrip().startswith(("```", "~~~"))):
+            out[-1] = out[-1].rstrip() + " " + s
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def _chosen_phrases(t):
-    """Every phrase this ADR names as the chosen option, derivation-folded."""
+    """Every phrase this ADR names as the chosen option, RAW.
+
+    Raw, not folded: the caller compares the chosen option against collected
+    alternatives by CONTENT IDENTITY (the full folded text and the folded
+    name), so it needs the phrase itself, and truncating or folding here was
+    half of how chosen-plus-one satisfied the floor again.
+    """
+    t = _unwrap(t)
     out = []
     for m in _CHOSEN_LINE.finditer(t):
         val = re.split(r"(?i),\s*because\b", m.group(1))[0].strip().strip("\"'*`").strip()
         if val:
-            out.append(derivation_fold(val))
+            out.append(val)
     # The heading form: a Decision section spelled `## Chosen option` whose
     # first content line IS the chosen option's name.
     for title, body in _sections(t):
@@ -952,7 +996,7 @@ def _chosen_phrases(t):
             line = next((l.strip() for l in body if l.strip()), "")
             val = re.split(r"(?i),\s*because\b", _plain(line))[0].strip().strip("\"'*`-: ").strip()
             if val:
-                out.append(derivation_fold(val))
+                out.append(val)
     return [p for p in out if p]
 
 
@@ -998,17 +1042,65 @@ def check_adr(root):
     # the derivation fold, not the plain one, because a trailing period bought
     # a second alternative: two spellings of one sentence are one sentence
     # however they are punctuated.
-    alternatives, dupes = distinct(_rejected_alternatives(t), reduce=_alternative_name)
+    # One alternative, one count, however many RENDERINGS it has. Exact
+    # identity first (the untruncated folded name), then a cross-rendering
+    # merge: a comparison-table row restates an option the list or the
+    # sub-headings already name, usually shortened ("Synchronous call" in the
+    # table, the full name in the list), and counting both renderings counted
+    # each real rejection twice. A table row whose name-words are a subset or
+    # superset of a non-table alternative's name-words is the same option
+    # written twice. Cross-form only, on purpose: two bullets of the same
+    # list are two options even when one name extends the other, so honest
+    # neighbouring options are never merged.
+    collected = _rejected_alternatives(t)
+    order, by_name, dupes = [], {}, 0
+    for form, text in collected:
+        key = _alternative_name(text)
+        if key in by_name:
+            by_name[key][1].add(form)
+            dupes += 1
+        else:
+            by_name[key] = (text, {form})
+            order.append(key)
+    merged = []           # (key, text, forms, wordset)
+    for key in order:
+        text, forms = by_name[key]
+        kw = frozenset(key.split())
+        hit = None
+        for i, (mkey, _mtext, mforms, mw) in enumerate(merged):
+            cross = ("table" in forms) != ("table" in mforms)
+            if cross and kw and mw and (kw <= mw or mw <= kw):
+                hit = i
+                break
+        if hit is None:
+            merged.append((key, text, set(forms), kw))
+        else:
+            merged[hit][2].update(forms)
+            dupes += 1
     # The chosen option is the decision, not a rejected alternative, so it is
     # left out of the floor and out of the count, exactly as the comparison
-    # table's chosen row already is. Without this, a faithful MADR (whose
-    # Considered Options section includes the winner by definition) satisfied
-    # "an ADR needs at least 2" with one real rejection plus the decision.
-    chosen = _chosen_phrases(t)
-    chosen_out = [a for a in alternatives if _alternative_name(a) in chosen]
-    alternatives = [a for a in alternatives if _alternative_name(a) not in chosen]
+    # table's chosen row already is. Compared by CONTENT IDENTITY on the
+    # untruncated folded text and folded name (a 60-character collection cap
+    # and a one-line chosen regex each let the chosen option re-enter the
+    # count, so the floor was satisfiable by chosen-plus-one again); a
+    # table-row rendering of the chosen option is excluded by the same
+    # subset rule that merges renderings above.
+    chosen = set()
+    for c in _chosen_phrases(t):
+        for reduced in (_alternative_name(c), derivation_fold(c)):
+            if reduced:
+                chosen.add(reduced)
+    chosen_words = [frozenset(c.split()) for c in chosen]
+    def _is_chosen(key, forms, kw):
+        if key in chosen:
+            return True
+        if "table" not in forms:
+            return False
+        return any(kw and cw and (kw <= cw or cw <= kw) for cw in chosen_words)
+    chosen_out = [m for m in merged if _is_chosen(m[0], m[2], m[3])]
+    alternatives = [m[1] for m in merged if not _is_chosen(m[0], m[2], m[3])]
     chosen_note = ("" if not chosen_out else
-                   "; %d option(s) matching the Decision's chosen option counted as the "
+                   "; %d option(s) naming the Decision's chosen option counted as the "
                    "decision, not as alternatives" % len(chosen_out))
     rejected = len(alternatives)
     if rejected < 2:

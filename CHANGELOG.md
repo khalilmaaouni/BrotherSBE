@@ -45,8 +45,13 @@ can read a promise into.
 - The approval gate certifies two identities as different people only when it
   can READ both as one alphabet; a word that mixes scripts after normalization
   and confusable folding is refused by name, so self-approval no longer depends
-  on a homoglyph table's coverage. Proven by the `c13i10` through `c13i14`
-  identity evals.
+  on a homoglyph table's coverage. Proven by
+  `a-confusable-outside-the-curated-table-is-refused-not-passed`,
+  `a-same-script-lookalike-letter-is-refused-not-passed`,
+  `a-multi-script-forgery-is-refused-whatever-scripts-it-uses`,
+  `a-partially-mapped-single-script-word-is-refused-not-passed` and
+  `a-wholly-single-script-approver-still-passes` (the printed case ids, so the
+  citation greps straight out of the suite's own output).
 - The gate examines the directory it was named and never a silently
   substituted git top level, so an empty named directory is NO-DATA for that
   directory. Proven by
@@ -54,8 +59,10 @@ can read a promise into.
 - Every diagram and entity grammar starts at any letter (Unicode word
   properties), a diagram line the parser cannot read is confessed and refuses
   the "all traceable" verdict, create/destroy participants keep their alias,
-  and `A & B --> C & D` reads every member. Proven by the `uni1` through
-  `uni10` design evals.
+  and `A & B --> C & D` reads every member. Proven by the ten design evals from
+  `a-japanese-data-model-is-a-data-model` through
+  `a-line-the-parser-cannot-read-refuses-all-traceable` (the printed case ids, so the
+  citation greps straight out of the suite's own output).
 - The MADR chosen option is the decision, not a rejected alternative, so the
   two-alternatives floor cannot be satisfied by chosen-plus-one. Proven by
   `a-faithful-madr-with-one-rejection-fails-the-floor` and
