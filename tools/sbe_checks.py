@@ -309,12 +309,29 @@ class Check:
                 "a check whose worked positive example does not reach PASS must say why "
                 "(full_expect_reason). The honesty test asserts the fixture produces exactly this "
                 "verdict, so an unstated ceiling would let a check quietly stop being able to pass")
+        fixture_files = (full_fixture or {}).get("files", {}) if isinstance(full_fixture, dict) else {}
         for path, why in (optional_leaves or {}).items():
             if not why:
                 raise ValueError(
                     "optional_leaves[%r] has no reason. A field exempted from the empty-value "
                     "sweep is a field nobody tests, so the exemption states why the PASS "
                     "sentence does not assert over it" % path)
+            # The key names a leaf or section OF THIS CHECK'S OWN FIXTURE, and
+            # nothing else. The sweep matches exemptions by scenario-id prefix,
+            # and the id space is wider than the fixture: every seeded
+            # scenario's id begins with one word, so a single free-form key
+            # could waive the whole generative mode for a check while the
+            # printed scenario total never moved. A key is
+            # `<fixture file>::<leaf path>` or `<fixture file>##<heading>`;
+            # anything else is an off switch wearing an exemption's clothes.
+            if not any(path.startswith(f + "::") or path.startswith(f + "##")
+                       for f in fixture_files):
+                raise ValueError(
+                    "optional_leaves[%r] is not a valid exemption key: it does not name a leaf "
+                    "('<fixture file>::<leaf path>') or a section ('<fixture file>##<heading>') "
+                    "of this check's own full_fixture (files: %s). A key matched by scenario-id "
+                    "prefix instead of by fixture leaf can waive an entire sweep at once"
+                    % (path, ", ".join(sorted(fixture_files)) or "none"))
         if len(optional_leaves or {}) > 3:
             # The exemption list had no cap and its key space includes scenario
             # ids, so a check that examines nothing could exempt itself from
