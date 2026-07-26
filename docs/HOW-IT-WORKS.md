@@ -10,7 +10,7 @@ Every mechanism named here is a real file in this repository. Where a section na
 a tool, that tool is under `tools/` and is exercised by `evals/run_evals.py`.
 
 ```
-SKILL.md              the law: 17 laws in WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY form
+SKILL.md              the law: 19 laws in WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY form
 PRACTICES.md          the advice, which says it is advice
 DIGEST.md             the law's shadow, injected at session start
 STATE.template.md     the per-project fence registry format

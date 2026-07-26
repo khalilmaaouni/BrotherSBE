@@ -147,6 +147,21 @@ class TestDigestCap(unittest.TestCase):
         self.assertIn("version %s" % version, digest_head,
                       "DIGEST.md header does not name the version in VERSION (%s)" % version)
 
+    def test_the_law_file_stays_under_its_own_named_ceiling(self):
+        """SKILL.md names a byte ceiling for itself in the What-is-not-law
+        section, because the law file is the document most able to grow past
+        the point where anyone reads it. The ceiling is read out of the text,
+        not hardcoded here, so the claim and the assert cannot disagree; a law
+        merges with or displaces an existing one rather than accreting."""
+        body = io.open(os.path.join(HERE, "..", "SKILL.md")).read()
+        m = re.search(r"SKILL\.md\s+stays under ([\d,]+) bytes", body)
+        self.assertTrue(m, "SKILL.md no longer names its own byte ceiling")
+        ceiling = int(m.group(1).replace(",", ""))
+        size = os.path.getsize(os.path.join(HERE, "..", "SKILL.md"))
+        self.assertLess(size, ceiling,
+                        "SKILL.md is %d bytes, past its own %d ceiling; merge or displace "
+                        "a law instead of accreting" % (size, ceiling))
+
 
 class TestAuditableSurface(unittest.TestCase):
     def test_the_stated_line_count_tracks_the_tree(self):
