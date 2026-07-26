@@ -253,6 +253,33 @@ class TestHandoff(unittest.TestCase):
                 self.assertIn("[REDACTED]", body)
 
 
+class TestLintSelfSkipThroughSymlink(unittest.TestCase):
+    def test_a_symlinked_lint_root_is_the_same_tree(self):
+        """The lint excludes its own source by PATH, and abspath does not
+        resolve symlinks, so the same tree reached through a symlinked
+        spelling (macOS /tmp vs /private/tmp, a bind mount) made the tool scan
+        itself: the unwaivable gate FAILed an honest tree, naming four
+        "defects" that were its own regex literals, and the self-skip
+        disclosure vanished. Both spellings must produce the same verdict and
+        both must carry the self-skip disclosure."""
+        with tempfile.TemporaryDirectory() as d:
+            link = os.path.join(d, "linked-tools")
+            os.symlink(HERE, link)
+            outputs = []
+            for root in (HERE, link):
+                r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_score.py")],
+                                   env=dict(os.environ, SBE_LINT_ROOT=root,
+                                            BROTHERSBE_REGISTRIES=""),
+                                   capture_output=True, text=True)
+                line = next((l for l in r.stdout.splitlines()
+                             if l.startswith("silent-failure-lints")), "")
+                self.assertIn("own source was not scanned", line,
+                              "self-skip disclosure missing for root %s: %s" % (root, line))
+                outputs.append(line.split()[1])   # the verdict token
+            self.assertEqual(outputs[0], outputs[1],
+                             "one tree, two verdicts, depending on path spelling: %r" % outputs)
+
+
 class TestStrictMode(unittest.TestCase):
     def test_severity_decides_what_a_strict_run_blocks_on(self):
         """The severity each check declares at write time is what a FAIL does to
