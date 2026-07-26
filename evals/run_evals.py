@@ -1248,9 +1248,38 @@ def gd_migrate(root):
     bak = open(os.path.join(root, "99-System/telemetry", backups[0])).read()
     if bak != original:
         return "the backup is not a byte copy of the original"
-    if "unparseable line(s) preserved verbatim" not in out.stdout:
+    if "could not read as a ledger row preserved verbatim" not in out.stdout:
         return "the preserved line is not named: %s" % out.stdout.strip()
     return "preserved"
+
+
+@case("a-ledger-line-that-parses-and-is-not-a-row-is-named-not-silently-counted",
+      "guard", "named")
+def gd_nonobject_row(root):
+    # `5` parses fine and is no ledger row: the disclosure channel was scoped
+    # to json.loads failures, so migrate printed "1 migrated to schema 2,
+    # count ok (2)", which reads as "the other line was already schema 2",
+    # about an integer; and dedup swallowed an AttributeError and exited 0
+    # with the duplicates still in the file. Unreadable is unreadable however
+    # the line fails to be a row.
+    tel = os.path.join(root, "99-System", "telemetry")
+    os.makedirs(tel)
+    row = ('{"session_id":"s1","ts":"2026-07-01T00:00:00Z","schema":1,"out_tokens":10}\n'
+           '5\n')
+    open(os.path.join(tel, "outcomes.jsonl"), "w").write(row)
+    env = dict(os.environ, BROTHERSBE_VAULT=root)
+    mig = subprocess.run([sys.executable, TELEMETRY_TOOL, "migrate"],
+                         capture_output=True, text=True, env=env, timeout=120)
+    if "could not read as a ledger row" not in mig.stdout:
+        return "migrate did not name the non-object line: %s" % mig.stdout.strip()[:160]
+    open(os.path.join(tel, "outcomes.jsonl"), "w").write(row + row)
+    ded = subprocess.run([sys.executable, TELEMETRY_TOOL, "dedup"],
+                         capture_output=True, text=True, env=env, timeout=120)
+    if "refusing to rewrite" not in ded.stdout:
+        return "dedup did not refuse by name: %s" % (ded.stdout + ded.stderr).strip()[:160]
+    if "swallowed error" in ded.stdout:
+        return "dedup still swallows an exception instead of refusing: %s" % ded.stdout.strip()[:160]
+    return "named"
 
 
 @case("a-reduction-does-not-delete-the-rows-the-disclosure-counts", "guard", "two named")
@@ -1394,6 +1423,86 @@ def gd_vinstall(root):
     return "named and failed"
 
 
+@case("a-second-function-cannot-inherit-a-reviewed-lint-exemption", "guard", "caught")
+def gd_lint_shadow(root):
+    # The exemption key is (file basename, function name), a name the AUTHOR
+    # controls, so a SECOND function of that name in that file inherited an
+    # exemption reviewed for the first: a body that is literally
+    # `return "PASS", "examined nothing at all"`, registered nowhere, was
+    # invisible to the lint whose stated job is catching an unregistered
+    # verdict path. Every allowlist entry now resolves against the functions
+    # it actually names, and a key resolving twice is a failure. Run against a
+    # COPY of tools/, never the shipped tree.
+    import shutil
+    tools = os.path.join(root, "tools")
+    shutil.copytree(os.path.join(_REPO, "tools"), tools,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    src = os.path.join(tools, "sbe_gate.py")
+    body = open(src, errors="replace").read()
+    shadow = ('\n\ndef find(root, name, _shadow=True):\n'
+              '    """A second function named find that returns a real PASS verdict."""\n'
+              '    return "PASS", "examined nothing at all"\n\n')
+    marker = "\ndef gate_numbers(root):"
+    if marker not in body:
+        return "the fixture could not find gate_numbers to inject above"
+    open(src, "w").write(body.replace(marker, shadow + marker, 1))
+    meta = SourceFileLoader("tndc_shadow",
+                            os.path.join(HERE, "test_no_data_class.py")).load_module()
+    meta.TOOLS_DIR = tools
+    flagged = meta.pass_returning_functions()
+    hits = meta.EXEMPTION_HITS.get(("sbe_gate.py", "find"), [])
+    if any(f == "sbe_gate.py" and n == "find" for f, n, _w in flagged):
+        return "caught"      # flagged directly, which is stronger still
+    if len(hits) < 2:
+        return ("the shadowed function neither was flagged nor resolved through the exemption "
+                "(%d hit(s)), so it is invisible to this lint" % len(hits))
+    # The shipped reconciliation: an exemption key that resolves twice is a
+    # named meta-test failure, so the second body cannot inherit the review.
+    reconciled = [k for k, v in meta.EXEMPTION_HITS.items() if len(v) > 1]
+    if ("sbe_gate.py", "find") not in reconciled:
+        return "the double resolution was not recorded, so nothing fails on it"
+    return "caught"
+
+
+@case("a-symlink-inside-an-excluded-path-fails-the-install-check", "guard", "named and failed")
+def gd_vinstall_excluded_symlink(root):
+    # The plant that was invisible to BOTH walks: excluded by path from the
+    # extra-file walk, skipped by `-type f` in the excluded-path walk, so the
+    # run printed "0 file(s), 0 of them source code" and PASSED while the code
+    # it resolves to sits in the install tree. The type-agnostic rule is now
+    # applied to both walks, and a non-regular entry inside an excluded path
+    # is its own named failure: the manifest cannot hash what it resolves to
+    # AND it is not enumerable as machine state, which the exclusions are for.
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, "inst/hello.txt", "hi\n")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in ("hello.txt", "scripts/verify-install.sh"):
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    payload = os.path.join(root, "payload_outside.sh")
+    write(root, "payload_outside.sh", "#!/bin/sh\necho pwned\n")
+    os.makedirs(os.path.join(inst, "tools", "__pycache__"))
+    os.makedirs(os.path.join(inst, ".superpowers"))
+    os.symlink(payload, os.path.join(inst, "tools", "__pycache__", "planted.py"))
+    os.symlink(payload, os.path.join(inst, ".superpowers", "hook.sh"))
+    r = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                        os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                       capture_output=True, text=True, timeout=120)
+    if r.returncode == 0:
+        return "a symlinked plant inside an excluded path still passes"
+    if "EXCLUDED-NON-REGULAR" not in r.stdout or "planted.py" not in r.stdout:
+        return "the failure does not name the symlinked plant"
+    if ".superpowers/hook.sh" not in r.stdout:
+        return "the second excluded path's plant was not named"
+    if "0 of them non-regular" in r.stdout:
+        return "the qualifier sentence still counts the plants as zero"
+    return "named and failed"
+
+
 @case("a-symlinked-planted-module-fails-the-install-check", "guard", "named and failed")
 def gd_vinstall_symlink(root):
     # `find -type f` never returns a symlink, so a planted tools/backdoor.py
@@ -1472,10 +1581,17 @@ def gd_manifest_fresh(root):
         return "checksums.sh did not run: %s" % (gen.stderr or gen.stdout)[-200:]
     committed = open(os.path.join(_REPO, "CHECKSUMS.sha256"), errors="replace").read()
     # The generator omits the manifest file itself; compare the rest verbatim.
-    want = "".join(l + "\n" for l in gen.stdout.splitlines()
-                   if l.strip() and not l.endswith("CHECKSUMS.sha256"))
-    have = "".join(l + "\n" for l in committed.splitlines()
-                   if l.strip() and not l.endswith("CHECKSUMS.sha256"))
+    # EXACT path, not a suffix: `l.endswith("CHECKSUMS.sha256")` dropped any
+    # tracked path ending in those bytes (docs/CHECKSUMS.sha256,
+    # release-CHECKSUMS.sha256) from BOTH sides, so a tracked file the
+    # committed manifest never named still read "matches". The generator
+    # itself excludes its own OUT_FILE by exact match (scripts/checksums.sh);
+    # this re-implementation now does the same, so the blindness has no
+    # spelling left to hide in.
+    def _not_self(l):
+        return l.strip() and l.split("  ", 1)[-1] != "CHECKSUMS.sha256"
+    want = "".join(l + "\n" for l in gen.stdout.splitlines() if _not_self(l))
+    have = "".join(l + "\n" for l in committed.splitlines() if _not_self(l))
     if want == have:
         return "matches"
     wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}

@@ -344,6 +344,13 @@ def cmd_migrate():
             preserved.append(i)
             out.append(raw)
             continue
+        if not isinstance(r, dict):
+            # Parses, is not a row. Same treatment and the same disclosure:
+            # "1 migrated to schema 2, count ok (2)" read as though the other
+            # line was already schema 2 when it was the integer 5.
+            preserved.append(i)
+            out.append(raw)
+            continue
         if isinstance(r, dict) and r.get("schema") != 2:
             r = dict(r)
             if "out_tokens" in r:
@@ -359,9 +366,10 @@ def cmd_migrate():
     os.rename(tmp, LEDGER)
     n_after = len([l for l in open(LEDGER, errors="replace").read().splitlines() if l.strip()])
     note = ("" if not preserved else
-            ", %d unparseable line(s) preserved verbatim (line %s; fix or remove them by hand, "
-            "they are in the backup too)" % (len(preserved),
-                                             ", ".join(str(i) for i in preserved[:4])))
+            ", %d line(s) this tool could not read as a ledger row preserved verbatim (line %s; "
+            "each is either unparseable JSON or valid JSON that is not an object; fix or remove "
+            "them by hand, they are in the backup too)"
+            % (len(preserved), ", ".join(str(i) for i in preserved[:4])))
     if n_after < n_before:
         print("migrate: LINE COUNT DROPPED %d->%d, restore from backup!" % (n_before, n_after))
     else:
@@ -387,8 +395,9 @@ def cmd_dedup():
             # A rewrite from parsed rows deletes every line the parser dropped.
             # This tool will not rewrite a file it cannot fully read: the
             # broken lines are named instead, and nothing is touched.
-            print("dedup: %s has %d unparseable line(s) (line %s); refusing to rewrite a file "
-                  "this tool cannot fully read. Fix or remove those lines first"
+            print("dedup: %s has %d line(s) this tool cannot read as a ledger row (line %s; "
+                  "unparseable JSON, or valid JSON that is not an object); refusing to rewrite a "
+                  "file this tool cannot fully read. Fix or remove those lines first"
                   % (os.path.basename(path), len(bad),
                      ", ".join(str(i) for i, _ in bad[:4])))
             continue
@@ -481,7 +490,7 @@ def read_jsonl(path):
 
 
 def read_jsonl_counted(path):
-    """(parsed rows, [(line number, raw line)] this reader could not parse).
+    """(rows, [(line number, raw line)] this reader could not read AS A ROW).
 
     The dropped lines are RETURNED, not swallowed: read_jsonl used to skip
     them with a bare continue, and cmd_migrate then computed its before and
@@ -489,6 +498,12 @@ def read_jsonl_counted(path):
     two numbers that could never differ, the backup was written without the
     dropped lines, and the tool printed "count ok" over a ledger it had just
     shrunk. A hook may tolerate a corrupt line; a rewriter must carry it.
+
+    "Could not read as a row" is the whole class, not just a parse error: a
+    ledger row is a JSON OBJECT, and a line holding a bare int, string, list
+    or null parses perfectly and is no row at all. Scoping the disclosure to
+    json.loads failures let those lines walk past the sentence that counts
+    them.
     """
     rows, bad = [], []
     if not os.path.isfile(path):
@@ -497,9 +512,23 @@ def read_jsonl_counted(path):
         if not raw.strip():
             continue
         try:
-            rows.append(json.loads(raw))
+            r = json.loads(raw)
         except ValueError:
             bad.append((i, raw))
+            continue
+        if not isinstance(r, dict):
+            # A LINE THAT PARSES IS NOT A ROW. A ledger row is a JSON object,
+            # and `5` or `"a string"` parses fine and answers no .get: the
+            # disclosure channel was scoped to json.loads failures, so a
+            # non-object walked past it and "1 migrated to schema 2, count ok
+            # (2)" read as "the other line was already schema 2" about the
+            # integer 5, while dedup swallowed an AttributeError and exited 0
+            # with the duplicates still in the file. Unreadable is unreadable
+            # whichever way the line fails to be a row, so both go back to the
+            # caller by name, in one channel.
+            bad.append((i, raw))
+            continue
+        rows.append(r)
     return rows, bad
 
 

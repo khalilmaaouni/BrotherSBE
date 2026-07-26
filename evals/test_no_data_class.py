@@ -477,8 +477,13 @@ def _returns_pass(head, pass_names):
 # always one of FAIL or NO-DATA counts as a possible verdict, because proving a
 # negative about an expression is the only way to stop playing whack-a-mole with
 # spellings of "PASS". Everything genuinely not a verdict is named here with the
-# reason, and the list is printed on every run, so the exemption is reviewable
-# rather than a silent gap.
+# reason, and the list IS printed on every run (under "declared exemptions from
+# the verdict-source lint", with the function and line each entry resolved to),
+# so the exemption is reviewable rather than a silent gap. The key is
+# reconciled, not trusted: an entry naming no function fails, and an entry
+# resolving to two functions of that name fails, because the reviewed exemption
+# belongs to one body and a second function of the same name would inherit it
+# unreviewed.
 NOT_A_VERDICT = {
     ("sbe_checks.py", "run_guarded"): "the shared runner; it returns whatever the check it wrapped "
                                       "returned, and every check it can wrap is itself registered",
@@ -507,6 +512,15 @@ NOT_A_VERDICT = {
 }
 
 
+# Where each NOT_A_VERDICT entry resolved on the last walk: {(file, fn): [line]}.
+# The comment beside the allowlist promised the list "is printed on every run,
+# so the exemption is reviewable rather than a silent gap", and nothing printed
+# it: the file referenced the name exactly twice, both in code. It is printed
+# now, with what it exempted this run, exactly as the empty-value sweep's
+# exemptions already are.
+EXEMPTION_HITS = {}
+
+
 def pass_returning_functions(mods=None):
     """Source-level: every function whose 2-tuple return could be the verdict PASS.
 
@@ -523,9 +537,12 @@ def pass_returning_functions(mods=None):
     including anything it cannot read, is a candidate, and the way out is the
     named allowlist above rather than another node type.
 
-    Returns [(file, function, why it was flagged)].
+    Returns [(file, function, why it was flagged)]; every NOT_A_VERDICT entry
+    this walk resolved is recorded in EXEMPTION_HITS for the caller to print
+    and reconcile.
     """
     out = []
+    EXEMPTION_HITS.clear()
     for fn in tool_sources():
         # Guarded for the same reason load_tool_modules guards its import: a
         # module this lint cannot parse (a newer syntax on an older Python, an
@@ -553,6 +570,19 @@ def pass_returning_functions(mods=None):
                 continue
             name = node.name
             if (fn, name) in NOT_A_VERDICT:
+                # Recorded, not merely skipped. The exemption key is (file,
+                # function name), which is a name the author controls: a
+                # SECOND function of the same name in the same file inherited
+                # the exemption reviewed for the first one, so a body that is
+                # literally `return "PASS", "examined nothing at all"` was
+                # invisible to the lint whose whole job is catching an
+                # unregistered verdict path. Every resolution is counted here
+                # and reconciled by the caller: an entry that names no
+                # function is dead and fails, and an entry that resolves more
+                # than once is a shadowed key and fails, so the exemption
+                # binds to the function that was reviewed and not to a
+                # spelling anyone can reuse.
+                EXEMPTION_HITS.setdefault((fn, name), []).append(node.lineno)
                 continue
             returns = []
             for sub in ast.walk(node):
@@ -1314,6 +1344,7 @@ def main():
     failures = list(import_failures) + list(defects)
     checked = ran = 0
     notapplicable, exemptions, unregistered = [], [], []
+    lint_exemptions = []
 
     print("BROTHERSBE HONESTY META-TEST: no check may report PASS over evidence it never examined")
     print("tools under test: %s" % RUN_DIR)
@@ -1344,6 +1375,22 @@ def main():
     # report line: the class behind the directory-name verdict forgery.
     for fn, lineno, why in unflattened_report_prints():
         failures.append("%s:%s %s" % (fn, lineno, why))
+    # The source lint's own allowlist, reconciled against what it exempted.
+    for key, why in sorted(NOT_A_VERDICT.items()):
+        hits = EXEMPTION_HITS.get(key, [])
+        if not hits:
+            failures.append("NOT_A_VERDICT[%r] names no function in that file, so it exempts "
+                            "nothing while reading as a reviewed exemption; remove it or fix "
+                            "the name" % (key,))
+        elif len(hits) > 1:
+            failures.append("NOT_A_VERDICT[%r] resolved to %d functions of that name (lines %s). "
+                            "The exemption was reviewed for ONE body, and a second function of "
+                            "the same name inherits it unreviewed, which is how a "
+                            "`return \"PASS\"` body becomes invisible to this lint; give the "
+                            "shadowing function a distinct name"
+                            % (key, len(hits), ", ".join(str(l) for l in hits)))
+        else:
+            lint_exemptions.append("%s:%s (line %d): %s" % (key[0], key[1], hits[0], why))
     for path in sorted(set(PRUNED_WITH_SOURCE)):
         failures.append("%s was pruned from the walk and holds Python source, so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "
@@ -1501,6 +1548,10 @@ def main():
         print("  %s" % n)
     print("\ndeclared exemptions from the empty-value sweep (each states its reason):")
     for e in exemptions or ["none"]:
+        print("  %s" % e)
+    print("\ndeclared exemptions from the verdict-source lint (each names the function it "
+          "resolved to this run):")
+    for e in lint_exemptions or ["none"]:
         print("  %s" % e)
     if checked < FLOOR_CHECKS:
         failures.append("only %d check(s) discovered, below the floor of %d. Deleting a check "

@@ -7,7 +7,7 @@ brief that a test would have caught. Each test here guards a claim the project
 makes about itself: secrets are redacted, sensitive files are owner-only, project
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
-import glob, io, os, json, re, stat, sys, tempfile, subprocess, importlib.util
+import glob, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -218,6 +218,68 @@ class TestDigestCap(unittest.TestCase):
                         "SKILL.md is %d bytes, past its own %d ceiling; merge or displace "
                         "a law instead of accreting" % (size, ceiling))
 
+
+
+    def test_the_truncation_marker_names_what_was_actually_cut(self):
+        """The marker used to ASSERT which half was cut, and nothing bounded the
+        first half: a large resume brief (written from a transcript, so its size
+        is data-driven) pushed the hint past the cap, and the printed line still
+        said the digest tail was cut and the hint printed in full. Both clauses
+        were false in that run, in the one line whose job is to explain a
+        context loss. This runs the hook for real in both regimes and reads the
+        marker against what actually printed."""
+        hook = os.path.join(HERE, "sbe_sessionstart.sh")
+        cap = int(re.search(r"CAP=(\d+)", io.open(hook).read()).group(1))
+        work = tempfile.mkdtemp()
+        try:
+            # A stand-in install tree: the hook reads DIGEST.md and the tools
+            # beside it, so a copy with a huge brief exercises the real path.
+            shutil.copytree(os.path.join(HERE, ".."), os.path.join(work, "sbe"),
+                            ignore=shutil.ignore_patterns(".git", "__pycache__"))
+            root = os.path.join(work, "sbe")
+            vault = os.path.join(work, "vault")
+            os.makedirs(os.path.join(vault, "99-System", "telemetry"))
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            cwd = os.path.join(work, "proj")
+            os.makedirs(cwd)
+            payload = json.dumps({"source": "compact", "cwd": cwd})
+            hook_path = os.path.join(root, "tools", "sbe_sessionstart.sh")
+            digest_head = io.open(os.path.join(root, "DIGEST.md")).readline().strip()
+
+            def run():
+                r = subprocess.run(["sh", hook_path], input=payload, capture_output=True,
+                                   text=True, env=env, timeout=180)
+                self.assertEqual(r.returncode, 0, "the hook must always exit 0")
+                self.assertLessEqual(len(r.stdout.encode("utf-8")), cap + 400,
+                                     "the hook did not enforce the cap it names")
+                return r.stdout
+
+            # Regime 1: ordinary run, nothing cut, so no marker prints at all.
+            out = run()
+            self.assertNotIn("truncated at the", out,
+                             "an ordinary run must not claim it was truncated")
+
+            # Regime 2: a resume brief far larger than the whole cap. This is
+            # the run where the old marker named the wrong casualty: the digest
+            # does not print AT ALL and the hint itself is cut.
+            spec_t = importlib.util.spec_from_file_location(
+                "sbe_telemetry_cap", os.path.join(root, "tools", "sbe_telemetry.py"))
+            tel = importlib.util.module_from_spec(spec_t)
+            os.environ["BROTHERSBE_VAULT"] = vault
+            spec_t.loader.exec_module(tel)
+            io.open(tel._resume_path(cwd), "w").write("RESUME BRIEF\n" + ("x " * cap * 2) + "\n")
+            out = run()
+            self.assertIn("truncated at the", out, "an over-cap run must say so")
+            printed_digest = digest_head and digest_head in out
+            claims_digest_printed = "The compaction hint and nags printed in full" in out
+            self.assertEqual(bool(claims_digest_printed), bool(printed_digest),
+                             "the truncation marker's claim about which half survived "
+                             "disagrees with the output:\n%s" % out[-500:])
+            self.assertIn("the digest did not print at all", out,
+                          "the marker must name the digest as the whole casualty when the "
+                          "hint alone overflows:\n%s" % out[-500:])
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
 class TestAuditableSurface(unittest.TestCase):
     def test_the_stated_line_count_tracks_the_tree(self):
