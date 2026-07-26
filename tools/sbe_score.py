@@ -698,7 +698,15 @@ def silent_failure_lints(ctx=None):
             # `except: pass`. And the skip is reported, because a completeness
             # sentence over a set the tool truncated in silence is the class this
             # gate exists to catch.
-            if os.path.abspath(path_here) == os.path.abspath(__file__):
+            #
+            # realpath, not abspath: abspath normalizes and does NOT resolve
+            # symlinks, so the same tree reached through a symlinked spelling
+            # (macOS /tmp vs /private/tmp, a symlinked home, a bind mount)
+            # compared unequal, the tool scanned ITSELF, and the unwaivable
+            # gate FAILed an honest tree with four "defects" that were its own
+            # regex literals, while the self-skip disclosure vanished from the
+            # sentence. One path, one identity, however it was spelled.
+            if os.path.realpath(path_here) == os.path.realpath(__file__):
                 self_skipped.append(os.path.relpath(path_here, root))
                 continue
             if not fn.endswith(SCANNABLE):
