@@ -196,7 +196,14 @@ largely slightly fairly quite really truly actually
 # what changed is that the class these words belong to (words that connect
 # sentences rather than naming anything) is named here, so the next one found
 # joins its class instead of being one more instance.
-_TERM = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
+# Any letter starts a term, not only ASCII: the extractor read `[A-Za-z]...`,
+# so an artifact written in Japanese, Cyrillic, Greek or Arabic yielded the
+# EMPTY term set and the coherence sentence then said the dossier "has nothing
+# else to be coherent with" about a sibling sitting right there. \w in Python
+# is Unicode, so hyphenless scripts contribute their character runs as terms;
+# where that still yields nothing, or where two artifacts share no script, the
+# verdict names the limitation instead of asserting an absence.
+_TERM = re.compile(r"[^\W\d_]\w{2,}")
 
 
 def _subject_terms(text):
@@ -257,6 +264,28 @@ def _coherence_problem(root, name, others):
         return None          # nothing to be coherent with; not measurable
     if mine & theirs:
         return ""
+    # The honest limits, named instead of asserted around. An artifact whose
+    # letters yielded no term at all is written in a script this extractor
+    # cannot segment into words; and two term sets with no script in common
+    # (one wholly Latin, the other wholly not) cannot be compared by shared
+    # words at all. Both used to fall through to a sentence that was false
+    # about the file: either "has nothing else to be coherent with" over a
+    # sibling sitting right there, or "shares no named subject" over documents
+    # whose subject matter nothing here extracted.
+    if not mine and any(ch.isalpha() for ch in without_comments(text)):
+        return ("unmeasured", "no subject term could be read out of it (its text is in a script "
+                              "this check cannot segment into words), so coherence was not "
+                              "measured for it")
+    if mine and theirs:
+        mine_latin = any(t.isascii() for t in mine)
+        mine_other = any(not t.isascii() for t in mine)
+        theirs_latin = any(t.isascii() for t in theirs)
+        theirs_other = any(not t.isascii() for t in theirs)
+        if (mine_latin and not mine_other and theirs_other and not theirs_latin) or \
+                (mine_other and not mine_latin and theirs_latin and not theirs_other):
+            return ("unmeasured", "it and its sibling artifact(s) are written in different "
+                                  "scripts, and a shared-word test cannot measure coherence "
+                                  "across scripts, so it was not measured")
     return ("%s shares no named subject with any other artifact in this dossier (nothing it "
             "mentions is an entity, a runtime component or a lifecycle state declared here, and "
             "no substantive word in it appears in any sibling artifact); an artifact about a "
@@ -437,7 +466,7 @@ def check_artifacts(root):
     # _coherence_problem. Only artifacts that are present and non-empty are asked,
     # because "this file is empty" and "this file is about something else" are two
     # different sentences and the first one is already printed above.
-    unrelated, unmeasured = [], []
+    unrelated, unmeasured = [], []   # unmeasured holds (artifact, why or "")
     # Every artifact PRESENT in the dossier, not only the ones this tier requires.
     # Passing `wanted` meant a T1 purpose brief coherent with the 04-technology-map
     # sitting beside it FAILed with the sentence "no substantive word in it appears
@@ -450,7 +479,9 @@ def check_artifacts(root):
             continue
         problem = _coherence_problem(root, n, siblings)
         if problem is None:
-            unmeasured.append(n)
+            unmeasured.append((n, ""))
+        elif isinstance(problem, tuple):
+            unmeasured.append((n, problem[1]))
         elif problem:
             unrelated.append(problem)
     if missing or empty or unrelated or unreadable:
@@ -468,12 +499,17 @@ def check_artifacts(root):
                          % (", ".join(empty), ARTIFACT_MIN_WORDS, ARTIFACT_MIN_CHARS))
         parts.extend(unrelated)
         return "FAIL", "tier %s requires %s; %s" % (tier, ", ".join(need), "; ".join(parts))
+    notes = []
+    for n, why in unmeasured:
+        if why:
+            notes.append("%s: %s" % (n, why))
+        else:
+            notes.append("%s, which this dossier has nothing else to be coherent with, so that "
+                         "was not checked" % n)
     return "PASS", ("tier %s: every required artifact present, carrying content, and naming subject "
                     "matter the rest of this dossier also names%s%s"
                     % (tier,
-                       "" if not unmeasured else
-                       "; except %s, which this dossier has nothing else to be coherent with, so "
-                       "that was not checked" % ", ".join(unmeasured),
+                       "" if not notes else "; except %s" % "; ".join(notes),
                        label))
 
 
@@ -537,6 +573,61 @@ def check_placeholder(root):
 
 
 _HEADING = re.compile(r"^(#+)\s*(.*)$")
+# A setext underline: a line of = (h1) or of two-plus - (h2). GitHub renders
+# `Entities` over `---` as a heading, and every heading reader here read ATX
+# only, so the check told an author "no heading in 05-data-model.md names
+# entities" about a file whose Entities heading was right there, and the
+# printed advice told them to do the thing they had already done. Setext
+# headings are rewritten to ATX before any heading pattern runs; the
+# underline only counts when the line above reads as a paragraph line (not a
+# bullet, table row, heading, fence or blank), so a horizontal rule and a
+# table delimiter stay what they are.
+_SETEXT_UNDERLINE = re.compile(r"^\s{0,3}(=+|-{2,})\s*$")
+
+
+def _setext_to_atx(text):
+    out = []
+    for line in (text or "").splitlines():
+        m = _SETEXT_UNDERLINE.match(line)
+        prev = out[-1] if out else ""
+        ps = prev.strip()
+        if (m and ps and "|" not in ps
+                and not ps.startswith(("#", "-", "*", "+", ">", "```", "~~~"))
+                and not re.match(r"^\d+[.)]\s", ps)):
+            out[-1] = "%s %s" % ("#" if m.group(1).startswith("=") else "##", ps)
+            continue
+        out.append(line)
+    return "\n".join(out) + ("\n" if (text or "").endswith("\n") else "")
+
+
+def _with_leading_pipes(lines):
+    """Table rows normalized to the leading-pipe form the parsers read.
+
+    GitHub-flavored markdown makes leading and trailing pipes OPTIONAL: a
+    header row over a `--- | ---` delimiter renders as a table either way, and
+    every table reader here keyed on a leading "|", so an author who wrote
+    exactly what the FAIL message asked for was refused with a message
+    describing the form they had used. A block is a table when a line carrying
+    a pipe sits over a delimiter row (only `|-: ` and spaces, with dashes);
+    every row of that block gains the pipes the parsers expect. Rows already
+    piped pass through untouched.
+    """
+    out = list(lines)
+    for i in range(len(out) - 1):
+        cur, nxt = out[i].strip(), out[i + 1].strip()
+        if not cur or "|" not in cur or cur.startswith("|"):
+            continue
+        if nxt and not set(nxt) - set("|-: ") and "-" in nxt and "|" in nxt:
+            j = i
+            while j < len(out) and out[j].strip() and "|" in out[j]:
+                row = out[j].strip()
+                if not row.startswith("|"):
+                    row = "| " + row
+                if not row.endswith("|"):
+                    row = row + " |"
+                out[j] = row
+                j += 1
+    return out
 # The four sections an ADR owes, and the words an author actually writes for
 # each. The shipped template uses the first spelling of each, and SKILL.md L3
 # names them, but an ADR written in plain English ("What we weighed", "Roads not
@@ -718,7 +809,7 @@ def _table_alternatives(body):
     one alternative; a row whose verdict-shaped column says the option was
     chosen is the decision, not an alternative, and is left out.
     """
-    rows = [l.strip() for l in body if l.strip().startswith("|")]
+    rows = [l.strip() for l in _with_leading_pipes(body) if l.strip().startswith("|")]
     if len(rows) < 3:
         return []
     header = [c.strip() for c in rows[0].strip("|").split("|")]
@@ -802,8 +893,9 @@ def check_adr(root):
         return "NO-DATA", "no 03-adr.md in this dossier"
     # The rendered text: a decision record whose alternatives or criteria sit
     # inside an HTML comment is a record that renders without them, and four
-    # sibling functions in this file already read it that way.
-    t = without_comments(t)
+    # sibling functions in this file already read it that way. Setext headings
+    # are headings (see _setext_to_atx).
+    t = without_comments(_setext_to_atx(t))
     problems = []
     # Deduplicated by the shared rule, because `gate_numbers` learned that a
     # figure listed twice is one figure and this threshold did not: the same
@@ -935,7 +1027,7 @@ def _table_entities(lines):
     read as the answer to that column.
     """
     out, row, header = {}, 0, []
-    for line in lines:
+    for line in _with_leading_pipes(list(lines)):
         s = line.strip()
         if not s.startswith("|"):
             continue
@@ -1053,7 +1145,7 @@ def _entities(t):
     print a count uses `_entity_bullets`, which says which set it got and refuses
     to count a set it guessed at.
     """
-    t = _plain(without_comments(t))
+    t = _plain(without_comments(_setext_to_atx(t)))
     ents, declared = _entity_bullets(t)
     if declared:
         return ents
@@ -1148,8 +1240,9 @@ def check_data_model(root):
     # The rendered text, for the same reason as check_adr: a commented-out
     # entity list read as "2 entities, each with a system of record" while the
     # artifacts check called the same file the absence of an artifact. Emphasis
-    # is unwrapped so a bolded entity name is still an entity name.
-    t = _plain(without_comments(t))
+    # is unwrapped so a bolded entity name is still an entity name, and a
+    # setext heading is a heading.
+    t = _plain(without_comments(_setext_to_atx(t)))
     problems = []
     ents, declared_by_heading = _entity_bullets(t)
     # What this check had to guess at, said in the verdict rather than folded into
@@ -1216,7 +1309,7 @@ def check_data_model(root):
     # Folded for the same reason the entity bullets are: a relationship wrapped
     # at 80 columns kept its name on the first line and its cardinality on the
     # second, and FAILed as "has no cardinality" against a line that carried one.
-    for line in _joined_bullets(rel_body or []):
+    for line in _joined_bullets(_with_leading_pipes(rel_body or [])):
         s = line.strip()
         if re.match(r"\s*[-*]\s+", line) or re.match(r"^\d+[.)]\s+", s):
             rels.append(s)
@@ -1303,10 +1396,10 @@ _C4_REL = {"Rel", "BiRel", "Rel_U", "Rel_D", "Rel_L", "Rel_R", "Rel_Up", "Rel_Do
            "Rel_Left", "Rel_Right", "Rel_Back", "RelIndex"}
 _C4_GROUPING = {"Boundary", "Enterprise_Boundary", "System_Boundary", "Container_Boundary",
                 "Node_Boundary", "Deployment_Node"}
-_C4_CALL = re.compile(r"^\s*([A-Za-z_]\w*)\s*\(\s*([A-Za-z_][\w.-]*)\s*(?:,\s*\"([^\"]*)\")?")
+_C4_CALL = re.compile(r"^\s*([A-Za-z_]\w*)\s*\(\s*([A-Za-z_](?:[\w.]|-(?=[\w.]))*)\s*(?:,\s*\"([^\"]*)\")?")
 _BLOCK_STATEMENTS = {"columns", "space", "block", "end", "style", "classDef", "class",
                      "click", "direction", "down", "up", "%%"}
-_BLOCK_TOKEN = re.compile(r"(?<![\w.\-\[\"])([A-Za-z_][\w.-]*)(?::\d+)?(?![\w.\-\[\"(])")
+_BLOCK_TOKEN = re.compile(r"(?<![\w.\-\[\"])([A-Za-z_](?:[\w.]|-(?=[\w.]))*)(?::\d+)?(?![\w.\-\[\"(])")
 DIRECTIONS = {"LR", "RL", "TB", "TD", "BT"}
 # Statement keywords that begin a line without naming a node. A token skipped for
 # being one of these is REPORTED, never dropped: a diagram whose four nodes were
@@ -1324,9 +1417,13 @@ _SHAPE = (r"\[\[[^\]\n]*\]\]|\[\([^)\n]*\)\]|\[/[^\]\n]*/\]|\[[^\]\n]*\]|"
 # A node id carrying a label: the label is what a human reads, and it is what a
 # data model calls the thing. Capturing only the id made `R[Refund] --> RL[RefundLine]`,
 # the single most common Mermaid idiom there is, fail as two orphans named R and RL.
-_NODE_LABELLED = re.compile(r"([A-Za-z_][\w.-]*)\s*(%s)" % _SHAPE)
-_NODE_SOURCE = re.compile(r"([A-Za-z_][\w.-]*)\s*(?:--|==|-\.|~~)")
-_NODE_DEST = re.compile(r"(?:--+>|--+|==+>|-\.-*>|~~+)\s*(?:\|[^|]*\|\s*)?([A-Za-z_][\w.-]*)")
+# The same no-trailing-hyphen identifier as _IDENT below, spelled out here
+# because these three are defined before it: a flowchart `A--->B` minted a
+# phantom `A-` through the same greedy class the sequence dialect had.
+_FLOW_IDENT = r"[A-Za-z_](?:[\w.]|-(?=[\w.]))*"
+_NODE_LABELLED = re.compile(r"(%s)\s*(%s)" % (_FLOW_IDENT, _SHAPE))
+_NODE_SOURCE = re.compile(r"(%s)\s*(?:--|==|-\.|~~)" % _FLOW_IDENT)
+_NODE_DEST = re.compile(r"(?:--+>|--+|==+>|-\.-*>|~~+)\s*(?:\|[^|]*\|\s*)?(%s)" % _FLOW_IDENT)
 # `A -- places --> B`: the words of an inline edge label are not nodes.
 _INLINE_EDGE_LABEL = re.compile(r"--\s*[^-|>\n]+?\s*(--+>|--+)")
 
@@ -1359,7 +1456,15 @@ def _strip_edge_labels(s, skipped):
 # `out` and `delivery`, and `class feed-poller` was truncated to a node called
 # `feed`. L4's own worked example (`payment-token`, `pii.profile`) could not be
 # drawn in an erDiagram of itself.
-_IDENT = r"[A-Za-z_][\w.-]*"
+#
+# And then the cure ate the arrows. `[\w.-]*` is greedy and allows a TRAILING
+# hyphen, so in `Beta-->>Alpha:` the identifier consumed `Beta-`, the arrow
+# still matched on the remaining `->>`, and a phantom node named `Beta-` was
+# minted and reported as an orphan: every two-dash arrow in every dialect
+# rejected the most ordinary reply idiom in Mermaid. A hyphen may only sit
+# BETWEEN word characters, never at the end, so the identifier grammar and the
+# arrow grammar are disjoint by construction in all dialects at once.
+_IDENT = r"[A-Za-z_](?:[\w.]|-(?=[\w.]))*"
 # erDiagram relationship line: ENTITY <cardinality> ENTITY : label
 # Cardinality tokens (||--o{, }o--||, ||--||, }|..|{, ...) are built from the
 # characters | o { } . and dash, and at least one of them is never a dash: a run
@@ -1370,7 +1475,12 @@ _IDENT = r"[A-Za-z_][\w.-]*"
 _ER_LINE = re.compile(r"(%s)\s+[|o{}.\-]*[|o{}][|o{}.\-]*\s+(%s)\s*:" % (_IDENT, _IDENT))
 _ER_BLOCK = re.compile(r"^\s*(%s)\s*\{" % _IDENT)
 _SEQ_PARTICIPANT = re.compile(r"^\s*(?:participant|actor)\s+(%s)(?:\s+as\s+(.+?))?\s*$" % _IDENT)
-_SEQ_MESSAGE = re.compile(r"^\s*(%s)\s*<?-{1,2}[>x)]{1,2}\s*(%s)\s*:" % (_IDENT, _IDENT))
+# Every arrow form the sequence dialect ships: solid/dashed (- / --), head
+# (>, >>, x, ), and the +/- activation suffix. The suffix was unmatched, so
+# `B-->>-A: resp`, the canonical deactivation reply in the official docs,
+# parsed as no message at all, and an undeclared service sitting in one passed
+# "all traceable".
+_SEQ_MESSAGE = re.compile(r"^\s*(%s)\s*<?-{1,2}[>x)]{1,2}[+-]?\s*(%s)\s*:" % (_IDENT, _IDENT))
 _CLASS_DECL = re.compile(r"^\s*class\s+(%s)" % _IDENT)
 _CLASS_REL = re.compile(r"(%s)\s*[<*o|]?[-.]{2,}[>*o|]*\s*(%s)" % (_IDENT, _IDENT))
 _STATE_EDGE = re.compile(r"(\[\*\]|%s)\s*-->\s*(\[\*\]|%s)" % (_IDENT, _IDENT))
@@ -1571,9 +1681,9 @@ def _declared_components(root):
     out = {}
     tech = read(root, ARTIFACT_FILES["04"])
     if tech is not None:
-        tech = _plain(without_comments(tech))
+        tech = _plain(without_comments(_setext_to_atx(tech)))
         in_table = 0
-        for line in tech.splitlines():
+        for line in _with_leading_pipes(tech.splitlines()):
             s = line.strip()
             if not s.startswith("|"):
                 in_table = 0
@@ -1592,7 +1702,7 @@ def _declared_components(root):
         text = read(root, artifact)
         if text is None:
             continue
-        text = _plain(without_comments(text))
+        text = _plain(without_comments(_setext_to_atx(text)))
         in_components = False
         for line in text.splitlines():
             h = _HEADING.match(line)
@@ -1630,7 +1740,7 @@ def _declared_states(root):
         text = read(root, artifact)
         if text is None:
             continue
-        text = without_comments(text)
+        text = without_comments(_setext_to_atx(text))
         in_states = False
         for line in _joined_bullets(text.splitlines()):
             h = _HEADING.match(line)

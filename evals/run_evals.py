@@ -616,6 +616,105 @@ def gd_planted(root):
 
 SCORE_TOOL = os.path.join(HERE, "..", "tools", "sbe_score.py")
 TELEMETRY_TOOL = os.path.join(HERE, "..", "tools", "sbe_telemetry.py")
+_design_mod = SourceFileLoader("sbe_design_eval",
+                               os.path.join(HERE, "..", "tools", "sbe_design.py")).load_module()
+
+# Every arrow form the Mermaid dialects ship, one fixture each: the identifier
+# grammar was greedy through a trailing hyphen, so every two-dash arrow minted
+# a phantom `Name-` node (the dashed reply `-->>`, the default idiom in every
+# tutorial, FAILed honest work), and the unmatched activation suffix made
+# `B-->>-A:` parse as no message at all (an undeclared service in one passed
+# "all traceable").
+ARROW_FORMS = {
+    "solid ->": "Alpha->Beta: x", "solid ->>": "Alpha->>Beta: x",
+    "dashed -->": "Alpha-->Beta: x", "dashed reply -->>": "Beta-->>Alpha: x",
+    "activation ->>+": "Alpha->>+Beta: x", "deactivation -->>-": "Beta-->>-Alpha: x",
+    "async -)": "Alpha-)Beta: x", "async dashed --)": "Alpha--)Beta: x",
+    "cross -x": "Alpha-xBeta: x", "cross dashed --x": "Alpha--xBeta: x",
+}
+
+
+@case("every-sequence-arrow-form-reads-both-ends-and-mints-no-phantom", "evidence", "all clean")
+def ev_arrows(root):
+    for label, line in sorted(ARROW_FORMS.items()):
+        body = ("x\n```mermaid\nsequenceDiagram\n  participant Alpha\n  participant Beta\n"
+                "  %s\n```\n" % line)
+        nodes, _kinds, _skipped, _states = _design_mod._diagram_nodes(body)
+        if sorted(nodes) != ["Alpha", "Beta"]:
+            return "%s -> %s" % (label, sorted(nodes))
+    for label, block in (
+            ("flowchart open ---", "flowchart LR\n  Alpha---Beta"),
+            ("flowchart -->", "flowchart LR\n  Alpha-->Beta"),
+            ("state -->", "stateDiagram-v2\n  Alpha --> Beta"),
+            ("class --|>", "classDiagram\n  Alpha --|> Beta"),
+            ("er ||--o{", "erDiagram\n  Alpha ||--o{ Beta : has")):
+        nodes, _kinds, _skipped, _states = _design_mod._diagram_nodes(
+            "x\n```mermaid\n%s\n```\n" % block)
+        if sorted(nodes) != ["Alpha", "Beta"]:
+            return "%s -> %s" % (label, sorted(nodes))
+    return "all clean"
+
+
+@case("the-default-dashed-reply-arrow-is-not-an-orphan", "diagrams", "PASS")
+def ar1(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Producer: system of record: the queue.\n"
+          "- Worker: system of record: the scheduler.\n"
+          "## Relationships\n- Producer to Worker: one-to-many.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Delivery\n```mermaid\nsequenceDiagram\n"
+          "  participant Producer\n  participant Worker\n"
+          "  Producer->>Worker: deliver\n  Worker-->>Producer: 2xx or error\n```\n")
+
+
+@case("a-ghost-service-in-a-deactivation-reply-is-caught", "diagrams", "FAIL")
+def ar2(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n- Customer: system of record: the CRM.\n"
+          "## Relationships\n- Customer to Customer: one-to-one, self.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n```mermaid\nsequenceDiagram\n"
+          "  Customer->>+Customer: self check\n"
+          "  Customer-->>-totally-undeclared-service: reply lands on a ghost\n```\n")
+
+
+@case("a-gfm-table-without-leading-pipes-is-a-table", "datamodel", "PASS")
+def gfm1(root):
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "Entity | Meaning | System of record\n--- | --- | ---\n"
+          "Customer | the buyer | the CRM\nOrder | a confirmed purchase | the order service\n"
+          "\n## Relationships\n- Customer to Order: one-to-many.\n")
+
+
+@case("a-setext-heading-is-a-heading", "datamodel", "PASS")
+def setext1(root):
+    write(root, "05-data-model.md",
+          "Data model\n==========\n\nEntities\n--------\n"
+          "- Customer: system of record: the CRM.\n- Order: system of record: the OMS.\n"
+          "\nRelationships\n-------------\n- Customer to Order: one-to-many.\n")
+
+
+@case("a-non-latin-sibling-is-a-named-script-limit-not-an-absence", "designrun", "disclosed")
+def i6run(root):
+    write(root, "00-intake.json",
+          {"tier": "T1", "answers": {"changes_contract": False, "crosses_boundary": True,
+                                     "reversible_under_hour": True, "touches_sensitive": False,
+                                     "consumers": "none"}})
+    write(root, "01-purpose.md",
+          "# Purpose\nProblem: refunds settle late.\nUsers: support desk.\n"
+          "Success: refunds reach a terminal state daily.\n")
+    write(root, "02-process.md",
+          "# Process\n返金の処理は毎日実行される。サポートデスクが結果を確認する。\n"
+          "返金が失敗した場合は台帳に記録される。\n")
+    out = subprocess.run([sys.executable, DESIGN, "artifacts", root],
+                         capture_output=True, text=True)
+    line = next((l for l in out.stdout.splitlines() if l.strip().startswith("artifacts")), "")
+    if "nothing else to be coherent with" in line:
+        return "still claims the sibling does not exist"
+    if "different" not in line or "script" not in line:
+        return "got: %s" % line.strip()[:140]
+    return "disclosed"
 
 
 def _score_lines(root, files):
