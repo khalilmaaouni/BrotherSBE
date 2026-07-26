@@ -73,7 +73,7 @@ defects: the scenarios and the expected verdicts are data held here, the code
 under test is whatever --tools points at. A test that can only be run against the
 fixed code proves nothing about what it caught.
 """
-import ast, copy, datetime, json, os, subprocess, sys, tempfile
+import ast, copy, datetime, json, os, random, subprocess, sys, tempfile
 from importlib.machinery import SourceFileLoader
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -87,6 +87,13 @@ RUN_DIR = TOOLS_DIR
 if "--tools" in sys.argv:
     RUN_DIR = os.path.abspath(sys.argv[sys.argv.index("--tools") + 1])
 QUIET = "--quiet" in sys.argv
+# Seeded generative mode: each `--seed N` adds one random composition sweep on
+# top of the fixed one (see seeded_cases). No seeds means no random scenarios,
+# so the default run and its printed counts are byte-stable.
+SEEDS = []
+for _i, _a in enumerate(sys.argv):
+    if _a == "--seed" and _i + 1 < len(sys.argv):
+        SEEDS.append(int(sys.argv[_i + 1]))
 
 from sbe_checks import Check, Pruner  # noqa: E402
 
@@ -925,6 +932,80 @@ def hollow_cases(tool, check):
     return out
 
 
+def seeded_cases(tool, check, seeds, per_seed=8):
+    """A seeded random composition of the hollowing operations above.
+
+    The fixed sweep is nine mutations per fixture, so it finds only the
+    emptiness shapes somebody already imagined. This mode composes those SAME
+    operations (no new emptiness values are invented here) at random depths and
+    in random combinations of one to three per scenario, over the check's own
+    declared worked example, and asserts the same invariant: never PASS. It is
+    a generator over evidence shapes, not a state machine over command
+    sequences, because these tools are pure checkers over trees. Every scenario
+    id carries its seed, so a finding reproduces with the same --seed N.
+    Mutations that would land on a declared optional leaf are skipped, because
+    a PASS there is the exemption working, not the invariant breaking; and a
+    composition that reproduces the fixture unchanged is not a scenario."""
+    fx = check.full_fixture
+    if fx is None or check.full_expect != "PASS" or not seeds:
+        return []
+    files, env = fx["files"], fx.get("env", {})
+    # The pools mirror the fixed sweep's own scoping exactly: COMMENT_ONLY
+    # tokens carry real words and say nothing only after a tool REDUCES them,
+    # so the fixed sweep applies them to whole fixtures and never to a single
+    # leaf (a lone id field holding words is odd, not empty). The first seeded
+    # run violated that scoping and manufactured a false finding; the pools
+    # below are the fix, not a softening of the invariant.
+    leaf_values = EMPTY_VALUES + VACUOUS_VALUES + REDUCES_TO_NOTHING + NOT_MEASUREMENTS
+    whole_values = leaf_values + COMMENT_ONLY
+    text_values = [v for v in (EMPTY_VALUES + VACUOUS_VALUES) if v[2] is not None]
+    out = []
+    for seed in seeds:
+        rng = random.Random(seed)
+        for n in range(per_seed):
+            merged = dict(files)
+            ops = []
+            for _ in range(rng.randint(1, 3)):
+                rel = rng.choice(sorted(merged))
+                content = merged[rel]
+                if isinstance(content, (dict, list)):
+                    space = ([("whole", None)]
+                             + [("subtree", p) for p in container_paths(content) if p]
+                             + [("leaf", p) for p in leaf_paths(content)])
+                    kind, path = space[rng.randrange(len(space))]
+                    pool = whole_values if kind == "whole" else leaf_values
+                    tag, vname, value = pool[rng.randrange(len(pool))]
+                    if kind == "leaf":
+                        if "%s::%s" % (rel, render(path)) in check.optional_leaves:
+                            continue
+                        merged[rel] = replace_at(content, path, value)
+                        ops.append("%s:%s=%s" % (rel, render(path), vname))
+                    elif kind == "subtree":
+                        merged[rel] = replace_at(
+                            content, path,
+                            hollowed(at(content, path), value, keep_booleans=True))
+                        ops.append("%s:%s/*=%s" % (rel, render(path), vname))
+                    else:
+                        merged[rel] = hollowed(content, value, keep_booleans=True)
+                        ops.append("%s:*=%s" % (rel, vname))
+                else:
+                    sections = [t for t, _b in heading_sections(content)
+                                if "%s##%s" % (rel, t) not in check.optional_leaves]
+                    if sections and rng.random() < 0.5:
+                        title = sections[rng.randrange(len(sections))]
+                        merged[rel] = drop_section(content, title)
+                        ops.append("%s:drop##%s" % (rel, title))
+                    else:
+                        _tag, vname, value = text_values[rng.randrange(len(text_values))]
+                        merged[rel] = "%s\n" % value
+                        ops.append("%s:body=%s" % (rel, vname))
+            if not ops or merged == dict(files):
+                continue
+            out.append(Scenario("seeded|s=%d#%d|%s" % (seed, n, ";".join(ops))[:200],
+                                "z", merged, env=env))
+    return out
+
+
 # The ACCESS axis. Seven rounds of scenarios probed what the evidence SAYS: this
 # is the first set that probes whether the tool could OPEN it. The suite held
 # zero occurrences of chmod, symlink or mkfifo in 4200 lines of test code, so no
@@ -1113,7 +1194,8 @@ def main():
             for path, why in sorted(check.optional_leaves.items()):
                 exemptions.append("%s %s [%s]: %s" % (fn, name, path, why))
             scenarios = (legacy_cases(tool, check) + hollow_cases(tool, check)
-                         + access_cases(tool, check))
+                         + access_cases(tool, check)
+                         + seeded_cases(tool, check, SEEDS))
             invoked_count = 0
             saw_full = False
             used_exemptions = set()
