@@ -13,6 +13,12 @@ the mechanism behind the claim that the gates are proven, not asserted: they are
 tested against the exact defect classes the operating record produced. Every
 fixture is generalized and carries no private data.
 
+The resulting calibration is published rather than implied:
+[INVARIANTS.md](../INVARIANTS.md) records one representative defect reinjection
+per shipped check, the eval case that caught it, the date and the command. That
+record re-runs with every suite run, so it can go stale only by the suite going
+red; it does not claim coverage of inputs no fixture plants.
+
 ## The honesty meta-test
 
 `test_no_data_class.py` is not a list of cases. It discovers every check
