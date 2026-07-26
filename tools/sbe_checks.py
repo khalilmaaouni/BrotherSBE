@@ -51,7 +51,7 @@ a mechanical scenario sweep, and the sweep prints its own coverage so the claim
 is checkable rather than asserted.
 """
 
-import errno, json, math, os, re, stat
+import errno, json, math, os, re, stat, unicodedata
 
 KINDS = ("json", "jsonl", "text", "tree", "git")
 
@@ -467,7 +467,10 @@ def boolean_answer(value):
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        v = " ".join(value.split()).strip(" \t.;,:!\"'`").casefold()
+        # plain_text first: "n" plus one zero-width joiner was neither yes nor
+        # no, so the intake tier rule refused a real answer over a character no
+        # reader can see. Same normalization as fold() and vacuous(), one place.
+        v = " ".join(plain_text(value).split()).strip(" \t.;,:!\"'`").casefold()
         if v in AFFIRMATIVE:
             return True
         if v in NEGATIVE:
@@ -475,7 +478,40 @@ def boolean_answer(value):
     return None
 
 
-_ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+# The invisible class, closed as a CLASS rather than as a list of code points.
+# fold() shipped a five-code-point zero-width list after one invisible character
+# made a copy-paste read as an independent second derivation, and the next
+# probe appended a SOFT HYPHEN instead: same defect, sixth code point, and the
+# list also protected exactly one of the several functions that compare or
+# test text. The membership rule is now Unicode's own: every format-class
+# character (category Cf covers soft hyphens, zero-widths, directional marks,
+# invisible operators and the BOM) plus the visually-empty combining marks
+# that are not Cf (variation selectors, the combining grapheme joiner, the
+# Mongolian selectors). NFKC runs first, so a compatibility spelling that
+# RENDERS as ASCII (a fullwidth TODO) is read as what a reader sees.
+_INVISIBLE_MARKS = frozenset(
+    "\u034f"                                            # combining grapheme joiner
+    + "".join(chr(c) for c in range(0x180B, 0x180E))    # Mongolian variation selectors
+    + "".join(chr(c) for c in range(0xFE00, 0xFE10)))   # variation selectors
+
+
+def _is_invisible(ch):
+    return (ch in _INVISIBLE_MARKS or unicodedata.category(ch) == "Cf"
+            or 0xE0100 <= ord(ch) <= 0xE01EF)           # variation selectors supplement
+
+
+def plain_text(text):
+    """The text as it renders: compatibility forms folded, invisible characters gone.
+
+    ONE normalization, used by fold(), vacuous() and boolean_answer(), because
+    the last round of this defect was caused by there being one strip in one
+    function: a placeholder wearing a zero-width space was "an answer" to the
+    vacuity test while the fold two functions up would have erased it. A
+    character a reader cannot see is not content a reader can review, wherever
+    the text is about to be compared, tested or counted.
+    """
+    t = unicodedata.normalize("NFKC", str(text))
+    return "".join(ch for ch in t if not _is_invisible(ch))
 
 
 def fold(text):
@@ -486,13 +522,58 @@ def fold(text):
     FROM orders` and `select  sum(amount)  from orders` were reported as an
     independent second check of each other.
 
-    Zero-width characters are removed first: `str.split()` does not split on
-    U+200B, so one invisible character made a copy-paste of the first query an
-    "independent second derivation". A character a reader cannot see is not a
+    Invisible characters are removed first (plain_text above): `str.split()`
+    does not split on U+200B, so one invisible character made a copy-paste of
+    the first query an "independent second derivation", and a soft hyphen did
+    the same one round later. A character a reader cannot see is not a
     difference a reader can review.
     """
-    t = _ZERO_WIDTH.sub("", str(text))
-    return " ".join(t.split()).casefold()
+    return " ".join(plain_text(text).split()).casefold()
+
+
+# The homoglyph table: code points that render as an ASCII letter without being
+# one. NFKD-plus-strip-marks handles the accent family; these are the distinct
+# letters (mostly Cyrillic and Greek) that survive every Unicode normalization
+# while being indistinguishable from ASCII on screen. Curated rather than
+# exhaustive on purpose: the full Unicode confusables table is thousands of
+# rows, and this holds the letter-for-letter lookalikes an identity is actually
+# forged with. Extend it here; every identity comparison reads through it. The
+# direction of error is deliberate: mapping one Cyrillic letter too many makes
+# a rare honest name collide and FAIL a money-gate comparison, which costs a
+# clarifying commit, while a missing row costs the control.
+_CONFUSABLES = {
+    # Cyrillic
+    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c",
+    "\u0443": "y", "\u0445": "x", "\u0456": "i", "\u0455": "s", "\u0458": "j",
+    "\u04bb": "h", "\u051b": "q", "\u051d": "w", "\u0501": "d", "\u043a": "k",
+    "\u043c": "m", "\u043d": "h", "\u0442": "t", "\u0432": "b", "\u0433": "r",
+    "\u043f": "n", "\u0438": "u", "\u0475": "v", "\u0461": "w", "\u0454": "e",
+    # Greek
+    "\u03b1": "a", "\u03bf": "o", "\u03bd": "v", "\u03b9": "i", "\u03ba": "k",
+    "\u03c1": "p", "\u03c4": "t", "\u03c5": "u", "\u03c7": "x", "\u03b5": "e",
+    "\u03b7": "n", "\u03bc": "m", "\u03c9": "w", "\u03c3": "s", "\u03b2": "b",
+    # Latin letters that survive NFKD with no combining mark to strip
+    "\u0131": "i", "\u0142": "l", "\u00f8": "o", "\u0111": "d", "\u0127": "h",
+}
+
+
+def skeleton(text):
+    """A string reduced to what a reader SEES: the anti-forgery identity form.
+
+    fold() removes what is invisible; this also removes what is misleadingly
+    visible. An identity comparison that reads code points reads them the way a
+    parser enjoys them, and a forged identity is typed the way a person reads
+    it: one Cyrillic letter inside an ASCII name renders identically and
+    compares differently, so the self-approval guard on the money gate accepted
+    the commit's own author as a second person. Accents are decomposed and
+    dropped (NFKD, then every combining mark), then the confusable table maps
+    the surviving lookalikes onto the ASCII they render as. For prose and
+    derivations fold() remains the right reduction; for anything compared AS AN
+    IDENTITY, this is.
+    """
+    t = unicodedata.normalize("NFKD", fold(text))
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
+    return "".join(_CONFUSABLES.get(ch, ch) for ch in t)
 
 
 _BLOCK_COMMENT = re.compile(r"(?s)/\*.*?\*/")
@@ -545,7 +626,13 @@ def vacuous(value, allow=()):
     """
     if not isinstance(value, str):
         return False
-    v = " ".join(value.split()).strip(" \t.;,:!\"'`").casefold()
+    # plain_text first, the same normalization fold() applies, because this
+    # function had its own weaker one: a placeholder wearing one zero-width
+    # space, one soft hyphen, or a fullwidth spelling was "an answer" here
+    # while fold() two functions up would have erased the disguise. The
+    # invisible-character defence existed in this file and was not the shared
+    # rule; now it is.
+    v = " ".join(plain_text(value).split()).strip(" \t.;,:!\"'`").casefold()
     allowed = {a.casefold() for a in allow}
     while True:
         if v in allowed:
@@ -715,20 +802,42 @@ def numeric(value):
     # A leading currency symbol and thousands separators are formatting, not
     # meaning. Only the ASCII "$" is stripped: this repository is ASCII by rule,
     # and a receipt written in another currency records the number either way.
-    text = value.strip().replace(",", "").replace("_", "").lstrip("$").rstrip("%")
+    #
+    # The separators are VALIDATED before they are stripped. Stripping every
+    # comma anywhere read "1,2,3" as 123 and "17,5,70" as 17570, so a mistyped
+    # row count silently became the number it was supposed to be compared
+    # against; and float() accepts non-ASCII digits, so a numeral in another
+    # script read as a measurement in a repository that is ASCII by rule. A
+    # separator is formatting only when it sits where formatting sits: groups
+    # of three. Anything else is not a number this tool can claim it read, and
+    # None is the answer every caller turns into a named FAIL that quotes the
+    # value. The shape rule also refuses "inf" and "nan" spelled as words,
+    # which the after-parse test below used to be the only guard against.
+    text = value.strip().lstrip("$").rstrip("%").strip()
+    if not text.isascii():
+        return None
+    m = _NUMBER_GROUPED.match(text)
+    if m:
+        text = text.replace(m.group(1), "")
+    elif not _NUMBER_PLAIN.match(text):
+        return None
     try:
         n = float(text)
     except ValueError:
         # Not swallowed: None is the answer, and every caller turns it into a
         # named FAIL that quotes the value it could not read as a number.
         return None
-    # Tested AFTER the parse, which is the order this file gets wrong everywhere
-    # it is not looked at: `float()` accepts "inf", "Infinity", "1e400" and "nan"
-    # and json.loads accepts bare Infinity and NaN, so `{"primary": "inf",
-    # "secondary": "inf"}` compared equal and bought "re-run to zero drift", and
-    # `inf`/`inf` row counts bought "1 row-count comparison(s) matched". An
-    # infinity is not a measurement and neither is a not-a-number.
+    # Tested AFTER the parse as well: "1e400" is a well-shaped spelling whose
+    # VALUE is an infinity, and an infinity is not a measurement, and neither
+    # is a not-a-number. json.loads also accepts bare Infinity and NaN, which
+    # arrive here as floats and are refused above.
     return None if _not_a_measurement(n) else n
+
+
+# The written shapes a number may take: plain (with an optional exponent), or
+# separator-grouped in threes with ONE consistent separator character.
+_NUMBER_GROUPED = re.compile(r"^[+-]?\d{1,3}(?:([,_])\d{3})(?:\1\d{3})*(?:\.\d+)?$")
+_NUMBER_PLAIN = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
 
 def _not_a_measurement(n):

@@ -78,7 +78,8 @@ import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
-                        derivation_fold, distinct, fold, unit_of, Pruner, evidence_problem)
+                        derivation_fold, distinct, fold, skeleton, unit_of, Pruner,
+                        evidence_problem)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -237,16 +238,25 @@ def _identity_parts(text):
     a stray period stop mattering; a parenthesized suffix is annotation, not
     identity; and a single-letter word is an initial, matched against any word
     sharing its first letter by _names_overlap.
+
+    Everything reads through sbe_checks.skeleton(), not fold(), and that is
+    the sixth and seventh forgery closed: one soft hyphen inside the name or
+    the domain renders as nothing and made the canonical mailbox stop
+    matching, and one Cyrillic letter renders as its ASCII twin and made the
+    author a "different person". An identity is compared as a reader sees it,
+    invisible characters removed and homoglyphs mapped to the letter they
+    render as, so an Approved-by value that is not confusably distinct from
+    the author reads as the author.
     """
     emails, names = set(), []
     for m in _EMAIL.finditer(text or ""):
-        e = fold(m.group(0)).strip(" .,;:'\"<>")
+        e = skeleton(m.group(0)).strip(" .,;:'\"<>")
         local, _, domain = e.partition("@")
         emails.add(local.split("+")[0] + "@" + domain)
     rest = re.sub(r"<[^>]*>", " ", text or "")
     rest = _EMAIL.sub(" ", rest)
     rest = re.sub(r"\([^)]*\)", " ", rest)
-    words = frozenset(w.strip(".,;:'\"!?") for w in fold(rest).split()) - frozenset(("",))
+    words = frozenset(w.strip(".,;:'\"!?") for w in skeleton(rest).split()) - frozenset(("",))
     if words:
         names.append(words)
     return emails, names

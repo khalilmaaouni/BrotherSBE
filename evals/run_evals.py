@@ -436,6 +436,64 @@ def c13h3(root):
     return _approval_with_sig(root, "N")
 
 
+@case("a-soft-hyphen-does-not-make-a-second-person", "sig", "FAIL")
+def c13i8(root):
+    # U+00AD renders as nothing in git, GitHub and every ordinary terminal, so
+    # this approver line READS as the author's own name and mailbox. The word
+    # comparison and the plus-address canonicalization were both defeated by
+    # two invisible bytes; identities now compare on their rendered skeleton.
+    return _approval_with_sig(root, "G",
+                              approver="Da\u00adna Author <dana+ops@exampl\u00ade.com>")
+
+
+@case("a-homoglyph-does-not-make-a-second-person", "sig", "FAIL")
+def c13i9(root):
+    # Cyrillic U+0430 for ASCII "a": no invisible character at all, renders
+    # identically, compares differently on code points. The skeleton maps the
+    # lookalike onto the letter it renders as, so this reads as the author.
+    return _approval_with_sig(root, "G", approver="D\u0430n\u0430 Author")
+
+
+@case("an-invisible-character-is-not-an-answer-and-not-a-derivation", "numbers", "FAIL")
+def c14inv(root):
+    # snapshot_id is TODO plus a zero-width space; the second derivation is the
+    # primary query plus one soft hyphen, rendering identically to it. Both
+    # cleared the gate while its sentence asserted a pinned, independently
+    # re-derived figure.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "TODO\u200b",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(amount) FROM orders\u00ad",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("a-malformed-digit-grouping-is-not-a-number", "evidence", "refused")
+def ev_num1(root):
+    # "1,2,3" is not a number in any locale and read as 123; "17,5,70" read as
+    # 17570, the worked example's own GMV, so a mistyped row count became the
+    # figure it was supposed to be compared against; and float() accepts
+    # non-ASCII digits in a repository that is ASCII by rule.
+    got = [_checks.numeric(v) for v in ("1,2,3", "17,5,70", "\u0661\u0662\u0663")]
+    return "refused" if got == [None, None, None] else "read %r" % (got,)
+
+
+@case("honest-groupings-and-plain-numbers-still-read", "evidence", "ok")
+def ev_num2(root):
+    # The control: hardening the shape rule must not reject the spreadsheet
+    # export the docstring defends.
+    ok = (_checks.numeric("17,570") == 17570 and _checks.numeric("17570") == 17570
+          and _checks.numeric("$1,234.56") == 1234.56 and _checks.numeric("50%") == 50
+          and _checks.numeric("-3.5") == -3.5)
+    return "ok" if ok else "regressed"
+
+
+@case("an-invisible-or-fullwidth-placeholder-records-no-answer", "evidence", "refused")
+def ev_inv1(root):
+    vals = ["TODO\u200b", "T\u00adODO", "\uff34\uff2f\uff24\uff2f", "unknown\u200d"]
+    got = [_checks.answered(v) for v in vals]
+    return "refused" if got == [None] * len(vals) else "read %r" % (got,)
+
+
 T2_ANSWERS = {"changes_contract": True, "crosses_boundary": False,
               "reversible_under_hour": True, "touches_sensitive": False, "consumers": "some"}
 T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,
