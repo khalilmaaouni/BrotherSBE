@@ -79,17 +79,34 @@ snapshot() {
   tmpidx="$(mktemp 2>/dev/null)" || return 0
   rm -f "$tmpidx"
   GIT_INDEX_FILE="$tmpidx"; export GIT_INDEX_FILE
+  parent="$(git rev-parse --verify -q HEAD 2>/dev/null)"
+  # Seed the temp index from HEAD first. Without this the snapshot held ONLY
+  # what `git add` staged, so a TRACKED file matching an exclusion below was
+  # absent from the snapshot entirely, along with any unsaved edit to it: the
+  # tool whose purpose is "never lose work" dropped tracked work, and the old
+  # comment claimed the opposite ("already-tracked files are unaffected").
+  # With the seed, an excluded tracked file rides at its last-committed state.
+  # What is still NOT captured, stated plainly: an unsaved edit to an excluded
+  # file (the edit may be the secret, so it stays out by design), and any file
+  # matching the exclusions that was never committed.
+  [ -n "$parent" ] && git read-tree HEAD 2>/dev/null
   # Stage everything EXCEPT secret-shaped files. A solo operator has no teammate to
   # catch a stray .env or private key before it becomes a git object; these path
   # patterns are excluded from the snapshot so credentials never enter the autosave
-  # ref. Already-tracked files are unaffected (that is a pre-existing repo choice).
+  # ref. The list names the MODERN key and rc formats too: id_ed25519 has been
+  # ssh-keygen's default since OpenSSH 8.5, and a list that stopped at id_rsa
+  # captured a fresh private key while this comment promised it would not.
   git add -A -- '.' \
     ':(exclude,glob)**/.env' ':(exclude).env' ':(exclude,glob)**/.env.*' \
+    ':(exclude,glob)**/.envrc' ':(exclude).envrc' \
+    ':(exclude,glob)**/.netrc' ':(exclude).netrc' \
+    ':(exclude,glob)**/.npmrc' ':(exclude).npmrc' \
     ':(exclude,glob)**/*.pem' ':(exclude,glob)**/*.key' ':(exclude,glob)**/*.p12' \
-    ':(exclude,glob)**/*.keystore' ':(exclude,glob)**/id_rsa' ':(exclude,glob)**/id_dsa' \
+    ':(exclude,glob)**/*.keystore' ':(exclude,glob)**/*.jks' ':(exclude,glob)**/*.ppk' \
+    ':(exclude,glob)**/id_rsa' ':(exclude,glob)**/id_dsa' \
+    ':(exclude,glob)**/id_ecdsa' ':(exclude,glob)**/id_ed25519' \
     ':(exclude,glob)**/*.pfx' 2>/dev/null
   tree="$(git write-tree 2>/dev/null)"
-  parent="$(git rev-parse --verify -q HEAD 2>/dev/null)"
 
   # Skip if nothing changed since HEAD (avoid a pile of identical snapshots).
   if [ -n "$parent" ]; then
