@@ -696,6 +696,62 @@ _CONFUSABLES = {
 }
 
 
+# The rendered base letter of a Latin-family code point, read out of Unicode's
+# own character NAME rather than out of any table. The curated table above is a
+# convenience mapping, not the control: the Latin small-capital block (U+1D00
+# and neighbours) has no decomposition and no table row and renders as ASCII,
+# so any comparison whose safety rested on table coverage was reopened by the
+# next uncatalogued block. Unicode names carry the rendered base for the whole
+# family ("LATIN LETTER SMALL CAPITAL A", "LATIN SMALL LETTER SCRIPT G"), so a
+# rule over the character database covers the blocks nobody has typed yet.
+_LATIN_BASE = re.compile(r"\bLETTER\b(?:\s+\w+)*\s([A-Z])$")
+
+
+def _latin_family(ch):
+    """True for a letter Unicode names as LATIN. ASCII letters are Latin too."""
+    try:
+        fam = unicodedata.name(ch).split()[0]
+    except ValueError:
+        fam = ""   # an unnamed code point belongs to no family this rule reads
+    return fam == "LATIN"
+
+
+def _latin_fold(ch):
+    """The ASCII letter a Latin-family code point renders as, by RULE, or None.
+
+    A Latin letter whose name carries no single trailing base letter (LATIN
+    SMALL LETTER ALPHA) folds to nothing, and the readability rules refuse the
+    word it sits in rather than certifying anything over it. Folding one
+    letter too many (TURNED E reads as E) errs toward collision, which FAILs a
+    money-gate comparison and costs a clarifying commit; a letter folded one
+    too few used to cost the control.
+    """
+    if ch.isascii() or not ch.isalpha():
+        return None
+    try:
+        name = unicodedata.name(ch)
+    except ValueError:
+        name = ""   # unnamed: nothing to fold, and the residue rule refuses it
+    if not name.startswith("LATIN"):
+        return None
+    m = _LATIN_BASE.search(name)
+    return m.group(1).lower() if m else None
+
+
+def _latin_residue(text):
+    """The Latin-family letters in a folded text that are still not ASCII.
+
+    After every reduction skeleton() owns, a letter that is LATIN by Unicode's
+    naming and still not ASCII is a letter that renders as this project's own
+    alphabet while comparing as something else, and no comparison or vacuity
+    test built on the fold can vouch for it. Certification must not depend on
+    a table's coverage, so what the fold cannot canonicalize is refused by
+    the callers, never passed.
+    """
+    return sorted({ch for ch in text
+                   if ch.isalpha() and not ch.isascii() and _latin_family(ch)})
+
+
 def _letter_families(word):
     """The Unicode script family of every letter in a word, by RULE not table.
 
@@ -738,9 +794,15 @@ def unreadable_identity_words(text):
          no comparison built on the fold may certify difference over it;
       2. a word whose letters span more than one script family is not a word
          in any script, which is the shape identities are forged in and not
-         the shape they are honestly written in.
+         the shape they are honestly written in;
+      3. a word wholly in the LATIN family that the fold still cannot reduce
+         to ASCII is unreadable even though it mixes nothing: Latin is the
+         family this comparison's own alphabet belongs to, so its unreduced
+         letters (the small-capital block, the letters with no Unicode base
+         name) render as the alphabet being compared against while comparing
+         as something else.
 
-    Wholly one-script words in any script pass through: a fully Japanese name
+    Wholly one-script words in any NON-Latin script pass through: a fully Japanese name
     is readable and comparable. Returns [(word, why)]; an empty list means
     every word reads as one alphabet. Callers on a certifying path REFUSE
     (FAIL) when this is non-empty, with the sentence naming the word, because
@@ -755,6 +817,22 @@ def unreadable_identity_words(text):
             out.append((word, "mixes ASCII letters with %s, which no normalization or "
                               "confusable fold this host has maps to ASCII"
                               % ", ".join("%r (U+%04X)" % (c, ord(c)) for c in other[:4])))
+            continue
+        # Rule 3, and the one that ends the table for good: a word may be
+        # WHOLLY non-ASCII (so rule 1 sees no mixture) and wholly Latin (so
+        # rule 2 sees one family) and still be unreadable, because Latin is
+        # the family this comparison's own alphabet belongs to, and a Latin
+        # letter the fold could not reduce renders as that alphabet while
+        # comparing as something else. The Latin small-capital block defeated
+        # both mixture rules exactly this way. A wholly one-script word in a
+        # NON-Latin family still reads (a fully Japanese name is comparable);
+        # a Latin word the fold cannot canonicalize is not.
+        residue = _latin_residue(sk)
+        if residue:
+            out.append((word, "is written with Latin-family letters (%s) that render as this "
+                              "comparison's own alphabet while no normalization, Unicode name "
+                              "fold or confusable fold this host has reduces them to ASCII"
+                              % ", ".join("%r (U+%04X)" % (c, ord(c)) for c in residue[:4])))
             continue
         fams = _letter_families(word)
         if len(fams) > 1:
@@ -779,7 +857,12 @@ def skeleton(text):
     """
     t = unicodedata.normalize("NFKD", fold(text))
     t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
-    return "".join(_CONFUSABLES.get(ch, ch) for ch in t)
+    # The table first (it holds the cross-script lookalikes), then the Latin
+    # name fold (the RULE that covers the Latin blocks no table row names, so
+    # a small-capital spelling of a name or a placeholder reads as the word it
+    # renders as). What neither reduces is left in place, and the callers that
+    # certify anything refuse it via _latin_residue rather than passing it.
+    return "".join(_CONFUSABLES.get(ch) or _latin_fold(ch) or ch for ch in t)
 
 
 # Every kind of line break, including the Unicode separators a terminal renders
@@ -955,6 +1038,17 @@ def vacuous(value, allow=()):
                     stripped = r
                     break
         if stripped == v:
+            # The fixpoint backstop for the same class rule 3 closes on
+            # identities: a value still carrying Latin-family letters the fold
+            # could not reduce to ASCII renders to a reader as this project's
+            # own alphabet while no test here can read it (the small-capital
+            # TODO was the sixth disguise of one placeholder, and the block
+            # has neither a decomposition nor a table row). A value the test
+            # cannot read as words is not certified as an answer; the
+            # direction of error is refusal, which FAILs a gate with the
+            # value quoted, never a PASS over a field no reader can check.
+            if _latin_residue(v):
+                return True
             return False
         v = stripped
 

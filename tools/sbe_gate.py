@@ -568,26 +568,22 @@ def gate_approval(root):
     if not approvals and not trailer:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
                            "money or partner path that is correct%s" % pruned)
-    # The trailer's VALUE is a field like any other, so it goes through the same
-    # answered() every receipt field does. It did not: `Approved-by: TODO` and
-    # `Approved-by: ???` cleared the strongest sentence this project prints,
-    # because answered() was applied to the weaker Reviewed-in path four lines
-    # down and never to this one.
-    if trailer and answered(trailer.group(1)) is None:
-        return "FAIL", ("the Approved-by trailer records %r, which names no identity; a "
-                        "placeholder where an approver belongs is a broken claim, not an "
-                        "approval" % trailer.group(1).strip())
     # An identity this comparison cannot READ is an identity it must not
-    # certify. The self-approval guard's PASS asserts the approver is a
-    # DIFFERENT person from the author, and that certification used to rest on
-    # a curated homoglyph table: one code point outside the table (a Coptic o,
-    # a Latin small capital A) rendered as the author's own name and compared
-    # as a second person, restoring the self-approval PASS on the money gate.
-    # The rule replaces the table's coverage as the load-bearing part: a word
-    # that mixes alphabets after normalization and confusable folding is
-    # refused BY NAME, on either side of the comparison, because the direction
-    # of error here is toward refusal with an honest sentence, never toward
-    # assurance. An honest identity written wholly in one script still reads.
+    # certify, and the refusal runs FIRST so its sentence is the honest one: a
+    # name carrying an unreadable letter used to fall to the placeholder test
+    # below and be called "names no identity", which is false about a name
+    # that plausibly names someone this tool merely cannot read. The
+    # self-approval guard's PASS asserts the approver is a DIFFERENT person
+    # from the author, and that certification used to rest on a curated
+    # homoglyph table: one code point outside the table (a Coptic o, a Latin
+    # small capital A) rendered as the author's own name and compared as a
+    # second person, restoring the self-approval PASS on the money gate. The
+    # rules replace the table's coverage as the load-bearing part: a word
+    # that mixes alphabets after normalization and folding, or that keeps
+    # Latin-family letters no fold this host has reduces to ASCII, is refused
+    # BY NAME, on either side of the comparison, because the direction of
+    # error here is toward refusal with an honest sentence, never toward
+    # assurance. An honest identity wholly in one non-Latin script still reads.
     if trailer:
         unreadable = unreadable_identity_words(trailer.group(1))
         for who in authors:
@@ -602,6 +598,15 @@ def gate_approval(root):
                             "rather than passed (%d unreadable word(s) in all). Record the "
                             "identity in one script, or use a Reviewed-in id"
                             % (w, why, len(unreadable)))
+    # The trailer's VALUE is a field like any other, so it goes through the same
+    # answered() every receipt field does. It did not: `Approved-by: TODO` and
+    # `Approved-by: ???` cleared the strongest sentence this project prints,
+    # because answered() was applied to the weaker Reviewed-in path four lines
+    # down and never to this one.
+    if trailer and answered(trailer.group(1)) is None:
+        return "FAIL", ("the Approved-by trailer records %r, which names no identity; a "
+                        "placeholder where an approver belongs is a broken claim, not an "
+                        "approval" % trailer.group(1).strip())
     # Self-approval is not approval, and the gate did not look. One person, one
     # key: they authored the commit, signed the commit and wrote their own name
     # into the Approved-by trailer, and this gate printed "signed commit carries

@@ -138,6 +138,18 @@ VACUOUS_VALUES = [("v", "todo", "TODO"), ("v", "n-a", "n/a"), ("v", "dash", "-")
                   ("v", "todo-zero-width", "TODO\u200b"),
                   ("v", "todo-soft-hyphen", "T\u00adODO"),
                   ("v", "todo-fullwidth", "\uff34\uff2f\uff24\uff2f"),
+                  # The small-capital spelling: U+1D1B U+1D0F U+1D05 U+1D0F
+                  # renders as TODO and has neither a Unicode decomposition nor
+                  # a confusable-table row, so it survived every reduction the
+                  # vacuity test ran: the sixth disguise of one placeholder,
+                  # and the unlisted class member the round-10 law asks each
+                  # scenario list to probe. The Unicode-name fold (a rule over
+                  # the character database, not a table) reads it as TODO; a
+                  # Latin value no fold reduces at all is refused by the
+                  # residue rule the same way. TBD in the same block proves the
+                  # member nobody listed also folds through the rule.
+                  ("v", "todo-small-caps", "\u1d1b\u1d0f\u1d05\u1d0f"),
+                  ("v", "tbd-small-caps", "\u1d1b\u0299\u1d05"),
                   # The shape-wearing placeholder: `[TBD]` is none of the
                   # tokens and cleared the money gate with its strongest
                   # sentence. The vacuity test now folds SHAPES (wrapping,
