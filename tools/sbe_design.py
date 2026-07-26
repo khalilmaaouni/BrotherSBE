@@ -31,8 +31,8 @@ import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import (Check, run_guarded, answered, answered_as, derivation_fold, vacuous,
-                        domain_vacuous, all_vacuous, distinct, Pruner, evidence_problem,
-                        without_comments)
+                        domain_vacuous, all_vacuous, distinct, one_line, Pruner,
+                        evidence_problem, without_comments)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -2007,19 +2007,19 @@ def main():
         # dossier from last year blocking every unrelated merge forever is a gate
         # that gets switched off instead.
         waivers += len(waived)
-        print("  %-10s %-8s %s" % (">> dossier", "WAIVED",
+        print("  %-10s %-8s %s" % (">> dossier", "WAIVED", one_line(
               "%s: %s waives %s here (of %d design checks), stated reason: %s. Nothing opened a file "
               "for %s in that directory, so this is a waiver and not a verdict about the work"
               % (os.path.relpath(d, root), EXEMPT, ", ".join(sorted(waived)), len(CHECKS),
                  " ".join(why.split())[:200],
-                 "those checks" if len(waived) < len(CHECKS) else "any check")))
+                 "those checks" if len(waived) < len(CHECKS) else "any check"))))
     for d, problem in refused:
         fails += 1
-        print("  %-10s %-8s %s" % ("dossier", "FAIL",
+        print("  %-10s %-8s %s" % ("dossier", "FAIL", one_line(
               "%s carries a %s that does not exempt anything: %s. An exemption waives all %d design "
               "checks for a dossier, which is more than a tier override waives, so it states a "
               "reviewable reason or it does not exempt; this dossier is checked below"
-              % (os.path.relpath(d, root), EXEMPT, problem, len(CHECKS))))
+              % (os.path.relpath(d, root), EXEMPT, problem, len(CHECKS)))))
     if not targets:
         if exempt:
             # Saying "no dossier found under X" underneath a waiver naming one is
@@ -2076,7 +2076,10 @@ def main():
             verdict, ev = run_guarded(name, CHECKS[name], target)
             if verdict == "FAIL":
                 fails += 1
-            print("  %-10s %-8s %s [severity: %s]" % (name, verdict, ev, CHECKS[name].severity))
+            # one_line: evidence quotes artifact content, and an artifact
+            # carrying a newline must not write its own report lines.
+            print("  %-10s %-8s %s [severity: %s]"
+                  % (name, verdict, one_line(ev), CHECKS[name].severity))
     if waivers:
         print("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
               "pass; run `--strict --strict-waivers` to make one block a merge." % (waivers, EXEMPT))

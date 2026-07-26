@@ -20,7 +20,7 @@ from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSION
                           OPERATOR_MODEL, age_days, fld, OUT_KEYS, prediction_counts,
                           real_sessions)
 from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, distinct, Pruner,
-                        evidence_problem, numeric, without_comments)
+                        evidence_problem, numeric, one_line, without_comments)
 
 # Fence registries: the STATE.md files whose fence lines the hygiene checks
 # read. Point BROTHERSBE_REGISTRIES at your own projects as colon-separated
@@ -883,7 +883,9 @@ def main():
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
     for n, v, e in results:
-        print("%-*s  %-7s  %s [severity: %s]" % (width, n, v, e, CHECKS[n].severity))
+        # one_line: evidence quotes ledger fields and file names, and a value
+        # carrying a newline must not get to write its own report lines.
+        print("%-*s  %-7s  %s [severity: %s]" % (width, n, v, one_line(e), CHECKS[n].severity))
     print("\n%d checks: %d PASS, %d FAIL, %d NO-DATA. LLM judge scores only the residue."
           % (len(results), sum(1 for _, v, _ in results if v == "PASS"), fails,
              sum(1 for _, v, _ in results if v == "NO-DATA")))

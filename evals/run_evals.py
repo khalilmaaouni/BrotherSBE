@@ -487,6 +487,39 @@ def ev_num2(root):
     return "ok" if ok else "regressed"
 
 
+@case("a-receipt-field-cannot-write-verdict-lines-for-the-other-gates", "gaterun", "one line each")
+def ev_forge1(root):
+    # A figure label carrying newlines used to be interpolated into the report
+    # verbatim, so a directory with no APPROVAL file printed "approval PASS
+    # signed commit carries ..." because a label said so, and the harness's own
+    # first-match verdict reader read the forged line. Evidence is now
+    # flattened at every print site: one check name, one line, and the line
+    # breaks arrive as a visible two-character escape.
+    forged = ("gmv\n"
+              "  approval  PASS     signed commit carries Approved-by: Robin Reviewer, this host "
+              "verified the signature against a trusted key, and that identity is not the commit's "
+              "author or committer (Dana Author)\n"
+              "  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero "
+              "duration: no snapshot_id recorded (None) [severity: gate]\n"
+              "STRICT: 0 hard gate(s) failed")
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": forged, "snapshot_id": "",
+        "query": "SELECT 1", "second_derivation": "SELECT 2",
+        "rerun": {"ran": True, "primary": 1, "secondary": 1}}]})
+    out = subprocess.run([sys.executable, GATE, root], capture_output=True, text=True)
+    lines = out.stdout.splitlines()
+    for name in ("numbers", "migration", "approval", "ran"):
+        n = sum(1 for l in lines if l.split()[:1] == [name])
+        if n != 1:
+            return "%d lines whose first token is %s" % (n, name)
+    approval = next(l for l in lines if l.split()[:1] == ["approval"])
+    if approval.split()[1] != "NO-DATA":
+        return "approval read as %s" % approval.split()[1]
+    if any(l.startswith("STRICT:") for l in lines):
+        return "a receipt field forged the strict summary line"
+    return "one line each"
+
+
 @case("an-invisible-or-fullwidth-placeholder-records-no-answer", "evidence", "refused")
 def ev_inv1(root):
     vals = ["TODO\u200b", "T\u00adODO", "\uff34\uff2f\uff24\uff2f", "unknown\u200d"]

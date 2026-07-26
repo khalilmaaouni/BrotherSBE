@@ -78,8 +78,8 @@ import json, os, sys, re, subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
-                        derivation_fold, distinct, fold, skeleton, unit_of, Pruner,
-                        evidence_problem)
+                        derivation_fold, distinct, fold, one_line, skeleton, unit_of,
+                        Pruner, evidence_problem)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -819,7 +819,11 @@ def main():
         verdict, ev = run_guarded(name, GATES[name], root)
         if verdict == "FAIL":
             fails += 1
-        print("  %-9s %-8s %s [severity: %s]" % (name, verdict, ev, GATES[name].severity))
+        # one_line: several evidence strings interpolate receipt-authored values,
+        # and a label containing newlines used to write verdict lines for the
+        # OTHER gates into this report, which the report's own parsers then read.
+        # The artifact under inspection writes nothing outside its own line.
+        print("  %-9s %-8s %s [severity: %s]" % (name, verdict, one_line(ev), GATES[name].severity))
     if strict and fails:
         print("STRICT: %d hard gate(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)
