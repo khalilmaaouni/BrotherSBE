@@ -31,3 +31,41 @@ can read a promise into.
   `scripts/checksums.sh` and `scripts/verify-install.sh` (both directions,
   planted extra files fail), and the cut runbook in `docs/RELEASE.md`. Proven
   by the verify-install eval in `evals/run_evals.py`.
+- Evidence rendering neutralizes the whole control-character class (categories
+  Cc and Cf, plus stray surrogates), not only line breaks, so a receipt field
+  cannot forge verdict lines by moving the terminal cursor. Proven by
+  `a-receipt-field-cannot-move-the-cursor-in-the-rendered-report` in
+  `evals/run_evals.py` and TestOneLineNeutralizesTheControlClass in
+  `tools/test_sbe.py`.
+- Placeholder detection folds SHAPES (bracketing, a trailing owner, dotted
+  initialisms, combining marks and confusables) to a fixpoint, so `[TBD]`,
+  `<TODO>`, `TODO(dana)` and `t.b.d.` record no answer, and a container where a
+  snapshot id belongs pins nothing. Proven by `a-dressed-up-placeholder-...`,
+  `a-bracketed-placeholder-is-not-a-pin` and `a-container-snapshot-id-pins-nothing`.
+- The approval gate certifies two identities as different people only when it
+  can READ both as one alphabet; a word that mixes scripts after normalization
+  and confusable folding is refused by name, so self-approval no longer depends
+  on a homoglyph table's coverage. Proven by the `c13i10` through `c13i14`
+  identity evals.
+- The gate examines the directory it was named and never a silently
+  substituted git top level, so an empty named directory is NO-DATA for that
+  directory. Proven by
+  `the-gate-examines-the-directory-it-was-named-not-the-git-toplevel`.
+- Every diagram and entity grammar starts at any letter (Unicode word
+  properties), a diagram line the parser cannot read is confessed and refuses
+  the "all traceable" verdict, create/destroy participants keep their alias,
+  and `A & B --> C & D` reads every member. Proven by the `uni1` through
+  `uni10` design evals.
+- The MADR chosen option is the decision, not a rejected alternative, so the
+  two-alternatives floor cannot be satisfied by chosen-plus-one. Proven by
+  `a-faithful-madr-with-one-rejection-fails-the-floor` and
+  `a-madr-with-two-real-rejections-passes-with-an-honest-count`.
+- An exemption key resolves against the fixture leaf or heading it names, the
+  access and legacy axes are non-exemptible by construction, and a waiver that
+  excuses no PASS is a meta-test failure. Proven by the `gd_exempt*` guards and
+  the dead-waiver guard in `evals/run_evals.py`.
+- `verify-install.sh` enumerates every directory entry regardless of type, so a
+  symlinked planted module is named rather than invisible, and an eval gates
+  `CHECKSUMS.sha256` against the tracked tree so a stale manifest is a red
+  suite. Proven by `a-symlinked-planted-module-fails-the-install-check` and
+  `the-tracked-manifest-matches-the-tree-it-ships-with`.

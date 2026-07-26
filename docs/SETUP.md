@@ -63,7 +63,7 @@ cd ~/.claude/skills/brothersbe
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "416 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "424 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
@@ -118,7 +118,9 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
-        run: python3 evals/test_no_data_class.py
+        run: |
+          python3 evals/test_no_data_class.py
+          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
       - name: Tool tests (redaction, permissions, identity, autosave)
         run: python3 tools/test_sbe.py
 ```

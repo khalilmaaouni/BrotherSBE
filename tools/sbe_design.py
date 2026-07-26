@@ -2132,18 +2132,19 @@ CHECKS = {
                               "relationships section leaves every entity it traced against intact, "
                               "and the datamodel check's own sweep is what holds that section to "
                               "its sentence"}),
+    # No optional_leaves here any more, and the removal is the fix, not a
+    # loosening: the exemption this check declared ("01-purpose.md##Purpose")
+    # shielded nothing, because the check itself FAILs a hollowed purpose
+    # artifact (the fixture's only section IS the body, so emptying it trips
+    # the blank-artifact rule), and its stated reason described a tolerance
+    # the check does not have. A waiver whose scenarios never need it is a
+    # pre-approved mark waiting for a regression to hide under, and the
+    # meta-test now fails any exemption in that state by name.
     "placeholder": Check(check_placeholder, reads=tuple(ARTIFACT_FILES.values()), kind="text", severity="gate",
                          empty_expect="FAIL",
                          empty_note="a zero-byte artifact carries no unfilled-template marker, so passing "
                                     "it would be reporting a clean scan of a file with nothing in it",
-                         full_fixture={"files": {ARTIFACT_FILES["01"]: _FX_PURPOSE}},
-                         optional_leaves={
-                             "01-purpose.md##Purpose":
-                                 "this check's sentence claims only that no artifact still carries the "
-                                 "unfilled-template marker, and that claim stays true and fully examined "
-                                 "when a section body is emptied. Whether an artifact of headings with "
-                                 "nothing under them satisfies its tier is the artifacts check's "
-                                 "sentence, and the same sweep holds it to it there"}),
+                         full_fixture={"files": {ARTIFACT_FILES["01"]: _FX_PURPOSE}}),
 }
 
 
