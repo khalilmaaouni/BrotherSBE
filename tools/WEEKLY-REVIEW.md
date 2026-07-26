@@ -17,6 +17,10 @@
    sample 2 claims from the week's session logs and verify them against raw
    evidence (fence line vs git history, gate line vs xcresult); a fabricated claim
    voids the week's scores like a floor fail.
+   FALSIFICATION REQUIREMENT (L19): in the sampled logs, read each review or
+   refuter verdict for the falsification it actually EXECUTED (re-ran the
+   command, reproduced the defect, re-derived the number); a verdict carrying
+   reasoning alone is NO-DATA, not a finding, and is scored as one.
 5. Filter telemetry/corrections.jsonl candidates: real corrections become laws with
    a because: clause (operator's underlying reason); false positives get deleted.
    Confirm or retire provisional laws against execution evidence (Voyager gating:
