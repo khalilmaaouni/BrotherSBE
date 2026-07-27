@@ -102,7 +102,7 @@ curated benchmark against under 2 percent on a realistic one
 - **HARD (ran, class 4):** build plus the nearest test suite runs AFTER the last
   edit, command and output pasted, CI recomputes. A fix is accepted only against a
   test that failed before it and passes after. The receipt that satisfies the ran
-  gate is a `ran-receipt.json` in the worktree:
+  gate is a `ran-receipt.json` under the directory you hand the gate:
 
   ```json
   {"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": 812}]}
@@ -393,7 +393,7 @@ separately, so the control survives a bad prompt.
   NO-DATA, a signature it could not check is NO-DATA, and so is a
   `Reviewed-in:` id, which nothing resolves. It FAILs an `Approved-by:`
   name on an unsigned commit, because a name in a text field is not a control
-  (`typed-name-approval-caught` in the evals). An `APPROVAL` file in the worktree
+  (`typed-name-approval-caught` in the evals). An `APPROVAL` file beside the change
   declares that the change touches a money or partner path; with no APPROVAL file
   and no trailer the verdict is NO-DATA, not FAIL (`no-approval-needed-is-nodata`).
 - Remote state is ground truth; a plan built on stale state is discarded, not

@@ -60,7 +60,7 @@ rely on anything else here.
 
 The four gates and the exact receipt each one reads:
 
-| gate | receipt file (found anywhere in the worktree) | what a PASS proves |
+| gate | receipt file (found under the directory you name) | what a PASS proves |
 | --- | --- | --- |
 | `numbers` | `numbers-manifest.json` | a decision figure is pinned, re-derived by a second query differing beyond formatting and comments, zero drift |
 | `migration` | `migration-receipt.json` | forward and reverse both ran against a restore, and recorded row counts match (no row counts recorded is NO-DATA) |
@@ -232,8 +232,8 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
 ```
 
 Now the change is done in the sense the gate means: its check executed and left
-proof. Commit the receipt alongside the change so the gate can find it in the
-worktree. Had your reconciliation exited nonzero, the gate would report
+proof. Commit the receipt alongside the change, under the directory you hand the
+gate. Had your reconciliation exited nonzero, the gate would report
 `reconcile: check exited nonzero (1)` and block; had you recorded `duration_ms: 0`,
 it would report the check did not run. Either way, "green" that you did not earn
 does not pass.

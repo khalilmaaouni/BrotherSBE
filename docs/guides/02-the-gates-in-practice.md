@@ -258,7 +258,7 @@ file and the HEAD commit trailers.
 
 ### What the gate reads (from `gate_approval`)
 
-- An `APPROVAL` file anywhere in the tree, whose presence declares that this change
+- An `APPROVAL` file under the directory you name, whose presence declares that this change
   touches a money or partner path.
 - The HEAD commit body, for an `Approved-by:` trailer and a `Reviewed-in:` trailer.
 - The commit signature state via `git log -1 --format=%B%n---%n%G?`, where `%G?`
