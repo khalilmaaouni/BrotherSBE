@@ -12,6 +12,47 @@ The first named version. Before this line the only name for an install was a
 commit hash, which `tools/sbe_telemetry.py check-update` compares but no human
 can read a promise into.
 
+- The approval identity proof examines something before it certifies. A
+  bracketed or parenthesized approver is read as the reader reads it rather
+  than parsed to an empty set, a character whose glyph carries no ink
+  separates or disappears but never welds two names into one, a comparison
+  with no emails and no names on either side certifies nothing, a proven
+  email difference is itself the proof, two names of one script compare by
+  code point, and the approver who amends and signs is the approver (the
+  signature's matched principal is the ground). Proven by the `c15i` approval
+  cases in `evals/run_evals.py`; the measured refusal remainder per script is
+  disclosed in `docs/KNOWN-LIMITS.md`.
+- Ledger rewrites measure the live file before the rename, never after their
+  own output: the bytes are read once under the writer lock, anything appended
+  since is carried into the replacement verbatim, and a file that shrinks or
+  keeps growing is never renamed over. Dedup rewrites through the same
+  primitive with a per-run backup name, the lock sidecar can fail without
+  dropping the row it exists to protect, short writes complete, and a
+  line-delimited record stays one line. Proven by
+  TestTelemetryWriterSerialization in `tools/test_sbe.py`.
+- The autosave tick treats its counter as untrusted input and its lock as
+  leakable: a counter that cannot be written is a named skip with a log line
+  (never a silent off), non-numeric and empty counters are named resets, the
+  lock is released by a trap on every exit path, and a stale lock is broken
+  only when it predates the whole wait, with the presumption named in the log.
+  Proven by TestAutosaveCoversTheWorktree in `tools/test_sbe.py`.
+- An ADR's rejected count states only what the document establishes: the
+  winner is identified per option rather than per document, a Decision
+  sentence that names one listed option in ordinary English identifies it
+  without quotation marks, a chosen marker that resolves to no listed option
+  establishes nothing about the others, and "Flip condition" (this project's
+  own name for the section in four shipped pages) is an accepted heading.
+  Proven by `an-unquoted-decision-sentence-naming-one-listed-option-is-the-winner`,
+  `a-chosen-marker-resolving-to-no-listed-option-establishes-nothing` and
+  `the-projects-own-name-for-the-flip-section-is-accepted`.
+- The doc-honesty guard classifies a sentence instead of remembering a
+  phrasing: the scanned set is every markdown page the manifest ships (ten
+  top-level pages, SECURITY.md among them, were never opened before), and a
+  claim that the receipt lookup is wider than the directory the caller named
+  is recognized by its meaning, with a denial of that same mechanism read as
+  the denial it is. A run that derives no page reports that, rather than
+  reporting the pages consistent. Proven by
+  `a-phrasing-of-the-removed-re-root-nobody-has-written-yet-is-caught`.
 - Autosave recovery checks the snapshot out into a NEW detached worktree and
   never writes into the live working tree; the in-place restore path is gone,
   not warned about. Proven by TestAutosaveRecover in `tools/test_sbe.py`.
@@ -107,7 +148,7 @@ can read a promise into.
   predicates read the MECHANISM (comment-stripped source for the removed
   re-root; the raw marker text for the waiver marker, which is itself
   comment-shaped) and never prose, and one dead claim family is a failure by
-  itself. Proven by `no-shipped-doc-describes-tool-behavior-the-tools-no-longer-have`.
+  itself. Proven by `no-shipped-doc-widens-the-receipt-lookup-past-what-the-gate-does`.
 - Autosave snapshots cover the worktree the ref names (never the hook's cwd
   subtree), the skip-and-save decisions are logged, the tick counter and
   runaway warning serialize on a lock so the printed count is the measured
