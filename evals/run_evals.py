@@ -3821,6 +3821,53 @@ def dc_behavior(root):
     return "consistent" if not wrong else "; ".join(wrong[:5])
 
 
+@case("guide-01s-drift-demonstration-replays-from-its-own-steps", "docs", "consistent")
+def dc_g01_drift(root):
+    """The two-step replay the single-receipt replayer could not model.
+
+    Guide 01's DRIFT demonstration is the product of TWO steps (write the
+    manifest, then edit it), and the round-11 edit step evaluated its write
+    handle before its read, truncating the manifest to zero bytes: the
+    reader got a JSONDecodeError FAIL where the guide quotes the DRIFT FAIL,
+    and the closure that shipped it was verification by reasoning
+    ("portable by construction"), never a run. This eval RUNS the guide's
+    own fenced steps, verbatim as extracted, and compares what the gate
+    prints against the DRIFT line the guide quotes, so the doc's steps and
+    the doc's quotes cannot drift apart again.
+    """
+    import re
+    guide = open(os.path.join(_REPO, "docs/guides/01-quickstart.md"), errors="replace").read()
+    m = re.search(r"cat > numbers-manifest\.json <<'EOF'\n(.*?)\nEOF\n", guide, re.S)
+    if not m:
+        return "guide 01 no longer writes its manifest via the heredoc this replay extracts"
+    e = re.search(r"python3 - <<'EDIT'\n(.*?)\nEDIT\n", guide, re.S)
+    if not e:
+        return "guide 01 no longer edits the manifest via the python heredoc this replay extracts"
+    q = re.search(r"^  numbers   FAIL     (gmv: DRIFT.*?)(?:\s*\[severity: gate\])?$",
+                  guide, re.M)
+    if not q:
+        return "guide 01 no longer quotes a DRIFT FAIL line"
+    write(root, "numbers-manifest.json", m.group(1))
+    before = os.path.getsize(os.path.join(root, "numbers-manifest.json"))
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        exec(compile(e.group(1), "<guide-01-edit-step>", "exec"), {})
+    except Exception as ex:
+        return "guide 01's edit step raised %r when executed" % (ex,)
+    finally:
+        os.chdir(old_cwd)
+    after = os.path.getsize(os.path.join(root, "numbers-manifest.json"))
+    if after == 0:
+        return ("guide 01's edit step truncated the manifest to zero bytes (was %d); the "
+                "reader gets an unparseable-receipt FAIL where the guide quotes DRIFT" % before)
+    verdict, evidence = _gate.gate_numbers(root)
+    if verdict != "FAIL" or evidence != q.group(1):
+        return ("guide 01 quotes %r but running its own steps produces %s %r"
+                % (q.group(1), verdict, evidence))
+    return "consistent"
+
+
 @case("guide-01s-verbatim-workflow-fence-is-the-shipped-workflow", "docs", "consistent")
 def dc8(root):
     # The one doc that promises the FULL file "verbatim" handed out a copy

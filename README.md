@@ -49,6 +49,8 @@ python3 tools/sbe_decide.py tables/architecture.json shape   # asks for each cri
 
 `sbe_decide.py` reads its criteria interactively, so pipe the answers when you run it from a script, a CI job or an agent, where a prompt nobody answers is a hang: `printf '5\neventual\nhigh\nhigh\n' | python3 tools/sbe_decide.py tables/architecture.json shape`.
 
+When you are done with the demo dossier, remove it: `rm -rf design/my-project`. The paths above are relative to this clone, so the demo files land INSIDE the installation, and `scripts/verify-install.sh` will (correctly) report any file you created here as EXTRA until you delete it. Real dossiers belong in your own project's repository, not in this clone.
+
 Architecture shape is scored against named criteria in [`tables/architecture.json`](tables/architecture.json): independently deploying teams, consistency requirement, operational maturity, failure isolation. Every run returns a recommendation, up to two alternatives, the criteria that separated them, and what would flip the decision. A run where no criterion contributed returns NO-DATA with the recommendation suppressed, because a recommendation backed by zero evidence is a guess with a table around it.
 
 ## The last mile: four hard gates
@@ -242,7 +244,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-459 evals: 459 passed, 0 regressions.
+460 evals: 460 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

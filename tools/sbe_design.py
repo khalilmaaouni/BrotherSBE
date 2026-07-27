@@ -441,8 +441,14 @@ def check_artifacts(root):
         # sbe_intake.py writes this field, so something has to read it. A file
         # that declares an override to one tier and records another is not a
         # dossier anyone can audit.
-        return "FAIL", ("00-intake.json declares override %r but records tier %r; the override field and "
-                        "the tier field disagree, so neither can be trusted" % (declared, tier))
+        # The completing edit is NAMED: a reader who followed the old printed
+        # instruction (set override and a reason) landed exactly here, and
+        # the sentence told them two fields disagreed without saying which
+        # one to change. An honest mistake gets the fix, not an accusation.
+        return "FAIL", ("00-intake.json declares override %r but records tier %r; an override moves "
+                        "the tier field itself, so complete the edit by setting \"tier\" to %r as "
+                        "well, or clear \"override\" to keep tier %r. Two disagreeing tier fields "
+                        "cannot be audited" % (declared, tier, declared, tier))
     if tier != computed:
         # A stored tier that differs from the computed one IS an override, and
         # L15 says an override sets BOTH fields. Only the reason was enforced, so

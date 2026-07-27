@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-459 evals: 459 passed, 0 regressions.
+460 evals: 460 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -151,7 +151,8 @@ cd ~/sbe-demo
 python3 - <<'EDIT'
 import io
 p = "numbers-manifest.json"
-io.open(p, "w").write(io.open(p).read().replace('"secondary": 17570', '"secondary": 17998'))
+s = io.open(p).read()
+io.open(p, "w").write(s.replace('"secondary": 17570', '"secondary": 17998'))
 EDIT
 python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo
 ```
