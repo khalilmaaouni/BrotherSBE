@@ -253,6 +253,72 @@ class TestAutosaveCoversTheWorktree(unittest.TestCase):
             self.assertEqual("GOOD", git("show", "%s@{1}:good.txt" % ref).stdout,
                              "the superseded snapshot is unreachable: no reflog kept it")
 
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "needs enforced file modes")
+    def test_a_tick_on_unwritable_storage_exits_clean_and_silent(self):
+        """The script's own header says every path exits 0, always.
+
+        A wait stamp was written with `: > "$f" 2>/dev/null`. `:` is a POSIX
+        SPECIAL BUILTIN, so a redirection error there is FATAL to the shell:
+        on a telemetry directory that is unwritable or cannot be created, the
+        tick died at that statement, before the lock, before the counter and
+        before any log line, printing a raw shell diagnostic and exiting 1.
+        Twelve consecutive ticks gave twelve exit 1s, zero log lines and zero
+        snapshots, out of the tool whose whole job is that a crash never
+        costs work.
+
+        Both reachable shapes are driven, and the assertion is on the promise
+        rather than on the statement that broke it: exit 0, nothing on stderr,
+        and a writable vault still counting and still snapshotting.
+        """
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        if not os.path.exists(sh):
+            self.skipTest("sbe_autosave.sh not present")
+        with tempfile.TemporaryDirectory() as repo:
+            self._repo(repo)
+            vault = tempfile.mkdtemp()
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            parent = tempfile.mkdtemp()
+            os.chmod(tel, 0o555)
+            os.chmod(parent, 0o555)
+            try:
+                shapes = {"unwritable telemetry directory": vault,
+                          "vault that cannot be created": os.path.join(parent, "vault")}
+                for why, v in shapes.items():
+                    env = dict(os.environ, BROTHERSBE_VAULT=v, BROTHERSBE_AUTOSAVE="1")
+                    for _ in range(3):
+                        out = subprocess.run(["sh", sh, "tick", "sessA"],
+                                             input=json.dumps({"cwd": repo}), text=True,
+                                             capture_output=True, env=env, timeout=120)
+                        self.assertEqual(0, out.returncode,
+                                         "a tick on an %s exited %d; the header promises every "
+                                         "path exits 0" % (why, out.returncode))
+                        self.assertEqual("", out.stderr.strip(),
+                                         "a tick on an %s printed a raw diagnostic: %r"
+                                         % (why, out.stderr[:160]))
+            finally:
+                os.chmod(tel, 0o755)
+                os.chmod(parent, 0o755)
+            # The control, so this is not a script that has learned to do
+            # nothing: a writable vault still counts and still snapshots.
+            good = tempfile.mkdtemp()
+            io.open(os.path.join(repo, "unlanded.txt"), "w").write("WIP-WORK")
+            env = dict(os.environ, BROTHERSBE_VAULT=good, BROTHERSBE_AUTOSAVE="1",
+                       BROTHERSBE_AUTOSAVE_EVERY="2")
+            for _ in range(2):
+                subprocess.run(["sh", sh, "tick", "sessB"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; the counter and the ref are asserted below
+                               text=True, capture_output=True, env=env, timeout=120)
+            gtel = os.path.join(good, "99-System", "telemetry")
+            ctr = [f for f in os.listdir(gtel) if f.startswith(".autosave-tick")
+                   and not f.endswith((".lock", ".warned"))]
+            self.assertEqual(["2"], [io.open(os.path.join(gtel, c)).read() for c in ctr],
+                             "a writable vault stopped counting")
+            refs = subprocess.run(["git", "-C", repo, "for-each-ref",
+                                   "refs/brothersbe/autosave"],
+                                  capture_output=True, text=True).stdout.split("\n")
+            self.assertTrue([r for r in refs if r.strip()],
+                            "a writable vault took no snapshot at the throttle point")
+
     def test_recover_after_a_rename_names_the_sibling_snapshots(self):
         """The ref id derives from the worktree path, so a moved project
         changes the id and recover looked in a ref that never existed,

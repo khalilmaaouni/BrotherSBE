@@ -13,7 +13,7 @@ and two more like it: the project's headline law inverted inside the project's o
 scorer, in its default state. A corpus with no rows supports no verdict about
 compliance, so those checks now say NO-DATA and name the file they found nothing in.
 """
-import json, os, sys, glob, datetime, re
+import collections, json, os, sys, glob, datetime, re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_telemetry import (VAULT, LEDGER, RATINGS, REVIEWS, CORRECTIONS, SESSIONS_GLOB,
@@ -702,6 +702,7 @@ def silent_failure_lints(ctx=None):
         return "FAIL", "SBE_LINT_ROOT=%s is not a directory, so nothing was scanned" % root
     hits, exempt, self_skipped, empties, unopened = [], [], [], [], []
     scanned, with_matches, all_exempt, empty_files = 0, 0, 0, 0
+    unread_kinds = collections.Counter()
     pruner = Pruner()
     # onerror: a chmod 000 directory under the lint root used to vanish from the
     # walk, from the count, and from the sentence, so one chmod was a silent
@@ -734,7 +735,27 @@ def silent_failure_lints(ctx=None):
             # symlinks, hardlinks, bind mounts and every spelling nobody has
             # typed yet in one call. A path that vanishes between the walk and
             # this stat is a named problem, never a silent skip.
+            # The one truncation this function performed in SILENCE. It
+            # discloses the self-skip, the unreadable file, the pruned
+            # directory and the empty file, and then a bare `continue` here
+            # removed every file whose name did not end in one of seven
+            # extensions, reaching no list and no sentence: fourteen files,
+            # thirteen carrying a real catchable hit, printed "1 file(s)
+            # scanned, clean". A Kotlin, Rust, Java, C#, Scala or PHP estate
+            # passed this gate by existing, and `.sh` being outside the tuple
+            # meant the two shell tools this project ships had never been read
+            # by its own unwaivable lint.
+            #
+            # The enumeration itself is unavoidable: the patterns are written
+            # for the languages they name, and pretending to lint a language
+            # no pattern reads would be a worse sentence than declaring the
+            # gap. So the rule this project already holds for unavoidable
+            # enumerations applies instead: everything outside it FAILS
+            # LOUDLY rather than passing silently. What is not opened is
+            # counted, named by kind, and carried into every verdict below,
+            # and the word "clean" is withdrawn when the count is not zero.
             if not fn.endswith(SCANNABLE):
+                unread_kinds[os.path.splitext(fn)[1].lower() or "(no extension)"] += 1
                 continue
             try:
                 is_self = os.path.samefile(path_here, __file__)
@@ -822,6 +843,16 @@ def silent_failure_lints(ctx=None):
     # directory and a self-skipped file are both files a "clean" sentence would
     # otherwise be claiming over.
     note = pruner.note(lambda f: f.endswith(SCANNABLE))
+    unread_total = sum(unread_kinds.values())
+    if unread_total:
+        # Named by KIND and by count, so a reader can see whether the gap is a
+        # language this lint has no pattern for or their whole estate.
+        kinds = ["%s %d" % (ext, n) for ext, n in
+                 sorted(unread_kinds.items(), key=lambda kv: (-kv[1], kv[0]))]
+        note += ("; %d file(s) under %s were not opened because this lint has no pattern that "
+                 "reads their kind (%s); its patterns are written for %s, so this verdict covers "
+                 "those kinds and says nothing about the rest"
+                 % (unread_total, root, _first_named(kinds, ", "), " ".join(SCANNABLE)))
     if self_skipped:
         note += ("; this tool's own source was not scanned (%s), because it declares these "
                  "patterns as strings and would match itself"
@@ -871,6 +902,17 @@ def silent_failure_lints(ctx=None):
                         "`%s` comment (%s), %d file(s) holding no match at all%s"
                         % (scanned, root, len(exempt), EXEMPTION, _first_named(exempt, ", "),
                            scanned - with_matches, note))
+    # "clean" is the word the reader carries away and it reads as a claim about
+    # the TREE. It is withdrawn the moment this run removed a file from
+    # consideration: what it found is still worth a PASS, because it did open
+    # source and that source held nothing, but the sentence says which files
+    # that verdict is about. A language this lint has no pattern for is a gap
+    # in coverage, not evidence of a defect, so this is not a FAIL; failing
+    # every polyglot estate would switch the gate off, which is how a gate
+    # stops protecting anything.
+    if unread_total:
+        return "PASS", ("%d file(s) scanned under %s and clean in what was opened, which is not "
+                        "the same as a clean tree%s" % (scanned, root, note))
     return "PASS", "%d file(s) scanned under %s, clean%s" % (scanned, root, note)
 
 

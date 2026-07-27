@@ -69,9 +69,50 @@ RUNAWAY_AT="${BROTHERSBE_RUNAWAY_AT:-600}"         # warn once past this many ca
 
 log_line() {
   # Best-effort append to a local log. Never fail the hook if the disk is full.
+  #
+  # The stderr redirection is ordered BEFORE the append, not after it. Written
+  # the other way round, the shell processes redirections left to right, so
+  # the failing append emitted the shell's own diagnostic to a stderr that was
+  # not yet silenced: on an unwritable vault this printed a raw permission
+  # error on every single tool call, out of the one primitive the whole file
+  # relies on to be quiet. Same ordering defect as the one that made the tick
+  # fatal, in the function that was supposed to be the safe way to do it.
   mkdir -p "$TEL_DIR" 2>/dev/null || return 0
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
-    >> "$TEL_DIR/autosave.log" 2>/dev/null || true
+    2>/dev/null >> "$TEL_DIR/autosave.log" || true
+}
+
+touch_file() {
+  # Create or truncate $1, best effort, NEVER fatal, and never noisy.
+  #
+  # This exists because `: > "$f" 2>/dev/null` was written twice. `:` is a
+  # POSIX SPECIAL BUILTIN, and a redirection error on a special builtin is
+  # fatal to the shell, so on an unwritable telemetry directory the tick died
+  # at that statement: before the lock, before the counter, before any
+  # log_line, with no snapshot, no log sentence anywhere, and exit 1 out of a
+  # script whose own header promises that every path exits 0. Twelve
+  # consecutive ticks produced twelve exit 1s and zero log lines. The
+  # `2>/dev/null` was written AFTER the failing redirection as well, so the
+  # shell's own diagnostic printed too.
+  #
+  # `printf` is a REGULAR builtin, where a redirection error sets a status
+  # instead of killing the shell, and the stderr redirection is ordered FIRST
+  # so it is already in place when the failing one is processed. The rule, and
+  # it is the file's existing rule stated for the whole class: every touch of
+  # the telemetry directory goes through a primitive that returns a status,
+  # like log_line above, because this hook may never be the reason work stops.
+  printf '' 2>/dev/null > "$1" || return 1
+}
+
+writable_telemetry() {
+  # Whether this run can write its own telemetry directory, established ONCE.
+  # A hook that cannot write there cannot keep the counter that throttles
+  # continuous autosave, and the honest thing is to say so and stand down
+  # rather than to discover it mid-statement.
+  mkdir -p "$TEL_DIR" 2>/dev/null || return 1
+  touch_file "$TEL_DIR/.writable.$$" || return 1
+  rm -f "$TEL_DIR/.writable.$$" 2>/dev/null
+  return 0
 }
 
 # Snapshot the working tree of $1 into its per-worktree autosave ref. Reason in $2.
@@ -193,7 +234,16 @@ case "$1" in
     repo="$(hook_cwd)"
     sid="${2:-session}"
     ctr="$TEL_DIR/.autosave-tick-$(printf '%s' "$sid" | tr -c 'A-Za-z0-9_-' '_')"
-    mkdir -p "$TEL_DIR" 2>/dev/null
+    # Established once, at the top, before anything touches the directory: an
+    # unwritable or uncreatable telemetry directory used to be discovered by a
+    # statement that killed the shell. The counter cannot be kept without it,
+    # and a snapshot decision made from a number nothing measured is the
+    # sentence this project refuses everywhere else, so the tick stands down
+    # and says why, on the same log_line path every other skip uses.
+    if ! writable_telemetry; then
+      log_line "tick skipped for $sid: the telemetry directory $TEL_DIR cannot be created or written, so the tick counter cannot be kept and no snapshot decision is made from a number nothing measured. Continuous autosave is OFF for this session until that directory is writable"
+      exit 0
+    fi
     # SERIALIZED read-modify-write. Parallel tool calls are ordinary and a
     # runaway loop (the exact condition the counter exists to detect) fires
     # hooks concurrently, so the unlocked increment lost updates: the
@@ -209,7 +259,7 @@ case "$1" in
     # rather than writing a number nothing measured.
     lock="$ctr.lock"
     stamp="$ctr.waitstamp.$$"
-    : > "$stamp" 2>/dev/null
+    touch_file "$stamp"
     tries=0
     until mkdir "$lock" 2>/dev/null; do
       tries=$((tries + 1))
@@ -271,7 +321,7 @@ case "$1" in
     # the threshold together cannot both print the warning.
     warn=0
     if [ "$n" -ge "$RUNAWAY_AT" ] && [ ! -f "$ctr.warned" ]; then
-      : > "$ctr.warned" 2>/dev/null
+      touch_file "$ctr.warned"
       warn=1
     fi
     rmdir "$lock" 2>/dev/null

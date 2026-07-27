@@ -5956,6 +5956,51 @@ def x2(root):
         os.chmod(os.path.join(root, "locked"), 0o755)
 
 
+@case("a-file-kind-the-lint-cannot-read-is-declared-not-dropped-in-silence", "evidence", "declared")
+def x_scope(root):
+    # Fourteen files, thirteen of them carrying a real catchable hit, and the
+    # unwaivable gate printed "1 file(s) scanned, clean": every file whose name
+    # did not end in one of seven extensions left through a bare `continue`
+    # that reached no list and no sentence. It is the one truncation this
+    # function performed silently while disclosing four others, so a Kotlin,
+    # Rust, Java, C# or Scala estate passed the gate by existing. Self
+    # referentially, `.sh` is outside the tuple, so the shell tools shipped
+    # here had never been read by their own lint.
+    #
+    # The extension list is genuinely unavoidable (the patterns are written for
+    # the languages they name), so the rule that applies is the project's other
+    # one: what falls outside an unavoidable enumeration fails LOUDLY. The
+    # count, the kinds and the withdrawal of the word "clean" are what this
+    # asserts, not a longer list of extensions.
+    # Spelled in two pieces so this fixture does not fire the lint against the
+    # eval suite's own source, which is itself scanned by the tracked-tree run.
+    sql = "INSERT INTO refunds (id, amount) VALUES (1, 2) ON CON" + \
+          "FLICT (id) DO NOTHING;\n"
+    write(root, "ok.py", "def f():\n    return 1\n")
+    for ext in ("kt", "java", "rs", "tsx", "jsx", "php", "pgsql", "ddl",
+                "sh", "c", "cpp", "cs", "scala"):
+        write(root, "repo.%s" % ext, sql)
+    line = score_lint_line([root])
+    problems = []
+    if "13 file(s)" not in line or "not opened" not in line:
+        problems.append("the 13 unopened files are not counted in the sentence")
+    if "no pattern that reads their kind" not in line or ".c 1" not in line:
+        problems.append("the kinds that were skipped are not named")
+    if "8 more not named" not in line:
+        problems.append("the kinds it did not name are not counted either")
+    if "clean in what was opened" not in line:
+        problems.append("the word clean was not withdrawn")
+    # The control: the same tree with nothing removed from consideration keeps
+    # the plain sentence, so this is a disclosure rule and not a new refusal.
+    for ext in ("kt", "java", "rs", "tsx", "jsx", "php", "pgsql", "ddl",
+                "sh", "c", "cpp", "cs", "scala"):
+        os.remove(os.path.join(root, "repo.%s" % ext))
+    plain = score_lint_line([root])
+    if "clean" not in plain or "not opened" in plain:
+        problems.append("a tree with nothing skipped did not report plainly clean: %r" % plain[:90])
+    return "declared" if not problems else "; ".join(problems)
+
+
 @case("a-symlinked-source-directory-is-disclosed-not-silent", "evidence", "disclosed")
 def x3(root):
     # os.walk does not follow directory symlinks, so a symlinked tree holding a
