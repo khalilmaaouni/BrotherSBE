@@ -309,7 +309,9 @@ The deploy coupling is the leading indicator: when the data team is blocked on a
 intake deploy more than twice in a quarter, re-run the table.
 ````
 
-The check on this file counts the rejected alternatives and looks for the five
+The check on this file counts the decidably rejected alternatives (each marked
+in its own text or heading, or listed beside an identified chosen option) and
+looks for the five
 required sections. Drop the flip condition and it fails, because an ADR with no
 flip condition is a tombstone: nobody knows when to reopen it.
 
@@ -485,7 +487,7 @@ python3 "$SBE/tools/sbe_design.py" .
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md [severity: gate]
-  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content [severity: gate]
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality [severity: gate]
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction) [severity: gate]
   placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker [severity: gate]
@@ -522,7 +524,7 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  PASS     tier T3: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names [severity: gate]
-  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content [severity: gate]
   datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality [severity: gate]
   diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction) [severity: gate]
   placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker [severity: gate]
@@ -767,7 +769,7 @@ python3 "$SBE/tools/sbe_design.py" design/my-project
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for [severity: gate]
-  adr        PASS     2 distinct rejected alternatives, each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content [severity: gate]
   datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality [severity: gate]
   diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states; 2 of the component trace(s) resolve to bullets declared in this artifact itself, so for those the declaration and the diagram are one file; a row in 04-technology-map.md is the cross-artifact form; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction) [severity: gate]
   placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design [severity: gate]

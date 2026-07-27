@@ -641,6 +641,53 @@ def _setext_to_atx(text):
     return "\n".join(out) + ("\n" if (text or "").endswith("\n") else "")
 
 
+_BOLD_LEAD = re.compile(r"^\s*(?:\*\*|__)\s*([^*_].*?)\s*(?::\s*)?(?:\*\*|__)\s*:?\s*(.*)$")
+_COLON_LEAD = re.compile(r"^\s*([^\s#>|`*+\d-][^:|`]{0,58}?)\s*:\s*(.*)$")
+_FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def _lead_lines_to_atx(text, is_lead, inline_ok=True):
+    """Bold and colon-terminated section leads read as the headings they are.
+
+    A hurried honest author writes `Criteria:` or `**Criteria**` where the
+    template writes `## Criteria`. Every section reader here read markdown
+    headings only, so an artifact carrying every element the law asks for was
+    told "no Criteria section" about a line beginning with exactly that word,
+    and the teaching clause ("accepted as anything containing: options")
+    was satisfied, as written, by the very line the check refused. The markup
+    is not the section; the declared lead is. A line converts when its lead
+    text matches the accepted heading vocabulary of the artifact being read
+    (the caller's is_lead, the same vocabulary the FAIL sentences print), so
+    `#`, bold, and a colon are three spellings of one declaration.
+
+    inline_ok=False converts only whole-line leads (`Entities:` alone), never
+    a lead with content after the colon, because the data-model artifact owns
+    line forms this must not eat (`status: draft | placed | shipped` is a
+    declared-states LINE, not a Status section). Fenced code is never
+    touched: a Mermaid `Note over api: text` is diagram source, not a lead.
+    """
+    out = []
+    fence = None
+    for line in (text or "").splitlines():
+        f = _FENCE.match(line)
+        if f:
+            fence = None if fence else f.group(1)
+            out.append(line)
+            continue
+        if fence:
+            out.append(line)
+            continue
+        m = _BOLD_LEAD.match(line) or _COLON_LEAD.match(line)
+        if (m and len(m.group(1).split()) <= 6 and is_lead(m.group(1))
+                and (inline_ok or not m.group(2).strip())):
+            out.append("## " + m.group(1).strip())
+            if m.group(2).strip():
+                out.append(m.group(2).strip())
+            continue
+        out.append(line)
+    return "\n".join(out) + ("\n" if (text or "").endswith("\n") else "")
+
+
 def _with_leading_pipes(lines):
     """Table rows normalized to the leading-pipe form the parsers read.
 
@@ -748,6 +795,21 @@ REJECTED_HEADING_WORDS = (
 _REJECTED_HEADING = re.compile(
     r"(?i)(?:%s)" % "|".join(r"\b%s\b" % w.replace(" ", r"\s+").replace("'", "'?")
                              for w in REJECTED_HEADING_WORDS))
+# The ADR's accepted section vocabulary, as a lead predicate for
+# _lead_lines_to_atx: a line opening with any accepted section spelling or
+# any rejected-alternatives heading word is a section lead however it is
+# marked up. Anchored at the lead's start so a prose sentence that merely
+# mentions a section word ("The decision we made was late:") stays prose.
+_ADR_LEAD_WORDS = re.compile(
+    r"(?i)^(?:%s)" % "|".join(_heading_alternatives(w)
+                              for w in _SECTION_WORDS.values()))
+
+
+def _is_adr_lead(text):
+    t = text.strip()
+    return bool(_ADR_LEAD_WORDS.match(t) or _REJECTED_HEADING.match(t))
+
+
 _BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 # A numbered list is a list. `1.` and `2)` were not read as alternatives at all,
 # while forty lines away the same file already accepts `^\d+[.)]\s+` as a
@@ -766,8 +828,28 @@ ALTERNATIVE_FORMS = ("a bullet list (- or *)", "a numbered list (1. or 2))",
                      "alternative)")
 
 
+# The verdict an alternative can carry ABOUT ITSELF, in its own text: one
+# vocabulary for "this option lost" and one for "this option won", the same
+# chosen vocabulary the comparison-table rule reads in a verdict cell. Read in
+# EVERY authoring form (list item, table row, sub-heading body, paragraph),
+# because the chosen-marker rule used to exist for table rows only, and a list
+# bullet ending "Chosen." was counted as a rejected alternative whenever the
+# Decision paraphrased instead of quoting: the rule was adopted at the call
+# site where the bug was found and not at its siblings, which is this
+# project's own named anti-pattern.
+_ITEM_REJECTED = re.compile(
+    r"(?i)\b(?:%s)\b" % "|".join(w.replace(" ", r"\s+").replace("'", "'?")
+                                 for w in ("rejected", "ruled out", "not chosen",
+                                           "not taken", "discarded", "dropped",
+                                           "declined", "did not pick",
+                                           "did not choose", "didn't pick",
+                                           "didn't choose", "passed over")))
+_CHOSEN_WORD = re.compile(r"(?i)\b(?:chosen|selected|accepted|picked|winner)\b")
+
+
 def _rejected_alternatives(t):
-    """Count rejected ALTERNATIVES, not headings that contain the word.
+    """Collect the listed ALTERNATIVES; deciding which are rejections is the
+    caller's job, because only some carry a verdict of their own.
 
     Counting `^#+\\s*rejected` headings got both halves wrong: an ADR listing two
     real alternatives as bullets under one "Rejected alternatives" heading failed,
@@ -783,12 +865,21 @@ def _rejected_alternatives(t):
     still has to say why it lost, which is what the reviewability threshold below
     holds, and an empty heading still counts nothing.
     """
-    found = []             # (form, full text): form is item, table, para or heading
+    found = []             # (form, full text, under_verdict_heading)
+    table_chosen = [0]     # comparison-table rows whose verdict cell said chosen
     level = None           # heading depth of the open rejected section
+    section_rejected = [False]   # the OPEN section's heading carries a rejection verdict
     blocks = []            # (title, items, body) for the section and each sub-heading
 
     def close():
         for _title, items, body in blocks:
+            # A heading that itself states the verdict ("Rejected
+            # alternatives", "Roads not taken", "Ruled out") marks everything
+            # under it as explicitly rejected; a neutral heading ("Options
+            # considered", "Trade-offs") declares a section and no verdict,
+            # and its items are decided item by item at the call site.
+            under = bool(section_rejected[0]
+                         or (_title and _ITEM_REJECTED.search(_title)))
             if items:
                 # UNTRUNCATED, here and in every collection branch below. The
                 # collected text is the alternative's IDENTITY: a 60-character
@@ -797,11 +888,12 @@ def _rejected_alternatives(t):
                 # re-entered the rejected count and the two-alternatives floor
                 # was satisfiable by chosen-plus-one again, one adjective past
                 # the shipped fixture. Truncation is for display sites only.
-                found.extend(("item", x) for x in items)
+                found.extend(("item", x, under) for x in items)
                 continue
-            table = _table_alternatives(body)
+            table, chosen_rows = _table_alternatives(body)
+            table_chosen[0] += chosen_rows
             if table:
-                found.extend(("table", x) for x in table)
+                found.extend(("table", x, under) for x in table)
                 continue
             paragraphs, current = [], []
             for l in body:
@@ -817,12 +909,12 @@ def _rejected_alternatives(t):
             if _title is None:
                 # The section's own body: one alternative per paragraph, which is
                 # how an author who writes prose separates them.
-                found.extend(("para", p) for p in paragraphs)
+                found.extend(("para", p, under) for p in paragraphs)
             else:
                 # A sub-heading IS one alternative however many paragraphs it
                 # takes to explain. Counting paragraphs here would let one
                 # alternative satisfy the rule that asks for two.
-                found.append(("heading", "%s: %s" % (_title, " ".join(paragraphs))))
+                found.append(("heading", "%s: %s" % (_title, " ".join(paragraphs)), under))
         del blocks[:]
 
     for line in t.splitlines():
@@ -834,6 +926,7 @@ def _rejected_alternatives(t):
                 continue
             close()
             level = depth if _REJECTED_HEADING.search(title) else None
+            section_rejected[0] = bool(level is not None and _ITEM_REJECTED.search(title))
             if level is not None:
                 blocks.append((None, [], []))
             continue
@@ -845,7 +938,7 @@ def _rejected_alternatives(t):
         else:
             blocks[-1][2].append(line)
     close()
-    return found
+    return found, table_chosen[0]
 
 
 def _table_alternatives(body):
@@ -859,26 +952,31 @@ def _table_alternatives(body):
     """
     rows = [l.strip() for l in _with_leading_pipes(body) if l.strip().startswith("|")]
     if len(rows) < 3:
-        return []
+        return [], 0
     header = [c.strip() for c in rows[0].strip("|").split("|")]
     verdict_col = next((i for i, h in enumerate(header)
                         if re.search(r"(?i)verdict|decision|status|outcome|chosen", h)), None)
     out = []
+    chosen_rows = 0
     for r in rows[2:]:
         if not set(r) - set("|-: "):
             continue
         cells = [c.strip() for c in r.strip("|").split("|")]
         if not cells or not cells[0]:
             continue
-        if verdict_col is not None and verdict_col < len(cells) and re.search(
-                r"(?i)\b(chosen|selected|accepted|picked|winner)\b", cells[verdict_col]):
+        if (verdict_col is not None and verdict_col < len(cells)
+                and _CHOSEN_WORD.search(cells[verdict_col])):
+            # Counted, not merely skipped: a chosen row identifies the
+            # decision among the listed options, which is what lets the
+            # caller read the OTHER rows as considered-and-not-chosen.
+            chosen_rows += 1
             continue
         # The first cell is the option's NAME and the rest is its reason, so
         # _alternative_name reads the name cell rather than the whole joined
         # row; untruncated, because the text is the row's identity.
         rest = " | ".join(c for c in cells[1:] if c)
         out.append("%s: %s" % (cells[0], rest) if rest else cells[0])
-    return out
+    return out, chosen_rows
 
 
 def _sections(t):
@@ -928,7 +1026,8 @@ def _required_section(t, label, problems):
     if body is None:
         body = _section_body(t, _SECTION_PATTERNS[label])
     if body is None:
-        problems.append("no %s section (this heading is accepted as any of: %s)"
+        problems.append("no %s section (a #-heading, a bold line, or a colon-terminated lead; "
+                        "its text is accepted as any of: %s)"
                         % (label, ", ".join(_SECTION_WORDS[label])))
     elif not [l for l in body if l.strip()]:
         problems.append("the %s heading is present with nothing under it, so it names nothing; a "
@@ -1034,7 +1133,7 @@ def check_adr(root):
     # inside an HTML comment is a record that renders without them, and four
     # sibling functions in this file already read it that way. Setext headings
     # are headings (see _setext_to_atx).
-    t = without_comments(_setext_to_atx(t))
+    t = _lead_lines_to_atx(without_comments(_setext_to_atx(t)), _is_adr_lead)
     problems = []
     # Deduplicated by the shared rule, because `gate_numbers` learned that a
     # figure listed twice is one figure and this threshold did not: the same
@@ -1052,30 +1151,32 @@ def check_adr(root):
     # written twice. Cross-form only, on purpose: two bullets of the same
     # list are two options even when one name extends the other, so honest
     # neighbouring options are never merged.
-    collected = _rejected_alternatives(t)
+    collected, table_chosen = _rejected_alternatives(t)
     order, by_name, dupes = [], {}, 0
-    for form, text in collected:
+    for form, text, under_rej in collected:
         key = _alternative_name(text)
         if key in by_name:
             by_name[key][1].add(form)
+            by_name[key][2] = by_name[key][2] or under_rej
             dupes += 1
         else:
-            by_name[key] = (text, {form})
+            by_name[key] = [text, {form}, under_rej]
             order.append(key)
-    merged = []           # (key, text, forms, wordset)
+    merged = []           # [key, text, forms, wordset, under_verdict_heading]
     for key in order:
-        text, forms = by_name[key]
+        text, forms, under_rej = by_name[key]
         kw = frozenset(key.split())
         hit = None
-        for i, (mkey, _mtext, mforms, mw) in enumerate(merged):
+        for i, (mkey, _mtext, mforms, mw, _mu) in enumerate(merged):
             cross = ("table" in forms) != ("table" in mforms)
             if cross and kw and mw and (kw <= mw or mw <= kw):
                 hit = i
                 break
         if hit is None:
-            merged.append((key, text, set(forms), kw))
+            merged.append([key, text, set(forms), kw, under_rej])
         else:
             merged[hit][2].update(forms)
+            merged[hit][4] = merged[hit][4] or under_rej
             dupes += 1
     # The chosen option is the decision, not a rejected alternative, so it is
     # left out of the floor and out of the count, exactly as the comparison
@@ -1098,17 +1199,62 @@ def check_adr(root):
             return False
         return any(kw and cw and (kw <= cw or cw <= kw) for cw in chosen_words)
     chosen_out = [m for m in merged if _is_chosen(m[0], m[2], m[3])]
-    alternatives = [m[1] for m in merged if not _is_chosen(m[0], m[2], m[3])]
-    chosen_note = ("" if not chosen_out else
-                   "; %d option(s) naming the Decision's chosen option counted as the "
-                   "decision, not as alternatives" % len(chosen_out))
+    rest = [m for m in merged if not _is_chosen(m[0], m[2], m[3])]
+    # THE LAW APPLIED TO THIS CHECK'S OWN COUNT: it may not assert what it did
+    # not establish. Free-form markdown does not say which listed option won
+    # and which lost, so an option counts as a REJECTION only when its status
+    # is decided: its own text carries a rejection verdict (in any authoring
+    # form), or the decision has been identified among the listed options (a
+    # chosen marker in an option's own text, a chosen table row, or an option
+    # naming the Decision's quoted choice), in which case the remaining
+    # options are what the section's own heading declares them: considered
+    # and not chosen. When no option carries a verdict and the Decision
+    # paraphrases instead of quoting, the winner may be ANY of them, and the
+    # honest verdict is NO-DATA naming that ambiguity, never a count. Three
+    # rounds patched the chosen-exclusion one form at a time (a truncation
+    # cap, a one-line regex, a table-only marker rule) and each patch left a
+    # sibling form open; the rule is now about what is established, not
+    # about which form a marker sits in.
+    def _verdict_of(m):
+        # An item's own text wins over its heading: a bullet marking itself
+        # chosen under a "Rejected alternatives" heading is the decision.
+        if _ITEM_REJECTED.search(m[1]):
+            return "rejected"
+        if _CHOSEN_WORD.search(m[1]):
+            return "chosen"
+        return "rejected" if m[4] else ""
+    marked_rejected = [m for m in rest if _verdict_of(m) == "rejected"]
+    marked_chosen = [m for m in rest if _verdict_of(m) == "chosen"]
+    unmarked = [m for m in rest if not _verdict_of(m)]
+    winner_identified = bool(chosen_out or marked_chosen or table_chosen)
+    if winner_identified:
+        decided, undecided = marked_rejected + unmarked, []
+    else:
+        decided, undecided = marked_rejected, unmarked
+    alternatives = [m[1] for m in decided]
+    excluded = len(chosen_out) + len(marked_chosen) + table_chosen
+    chosen_note = ("" if not excluded else
+                   "; %d option(s) identified as the decision (a chosen marker of their own, a "
+                   "chosen table row, or the Decision's named choice) counted as the decision, "
+                   "not as alternatives" % excluded)
     rejected = len(alternatives)
-    if rejected < 2:
+    undecided_note = ""
+    if rejected < 2 and undecided:
+        undecided_note = ("%d option(s) are listed under a rejected-alternatives heading, but "
+                          "only %d carry a rejection verdict of their own, and neither any "
+                          "option's own text nor the Decision section names which listed option "
+                          "won, so this check cannot tell a chosen option from a rejected one "
+                          "and does not assert a count it cannot defend. Mark each rejection in "
+                          "its own text (Rejected: ..., ruled out, not chosen), or name the "
+                          "chosen option in the Decision (Chosen option: \"...\"), and this "
+                          "becomes a verdict" % (len(rest), rejected))
+    elif rejected < 2:
         problems.append("only %d distinct rejected alternative(s) found under a "
                         "rejected-alternatives heading%s%s; an ADR needs at least 2, each with at "
                         "least one line saying why it lost (an empty heading is not an "
                         "alternative, and the chosen option is the decision, not an alternative). "
-                        "The heading is accepted as anything containing any of: %s. "
+                        "The heading (a #-heading, a bold line, or a colon-terminated lead) is "
+                        "accepted as anything containing any of: %s. "
                         "Accepted forms under it: %s"
                         % (rejected,
                            "" if not dupes else " (%d duplicate line(s) counted once)" % dupes,
@@ -1142,20 +1288,30 @@ def check_adr(root):
         problems.append("the 'What would flip this' heading is present with nothing under it, so "
                         "the ADR names no condition that would reverse the decision")
     if problems:
-        return "FAIL", "; ".join(problems)
+        return "FAIL", "; ".join(problems + ([undecided_note] if undecided_note else []))
+    if undecided_note:
+        # The floor is the only open question and the artifact does not let
+        # this check answer it: NO-DATA, which neither blocks the honest
+        # hurried author nor lends the floor a count nothing established.
+        return "NO-DATA", undecided_note
     # What this sentence may claim is what the threshold measured. It used to read
     # "rejected with a stated reason" over `- Synchronous ledger call` and
     # `- Nightly batch reconciliation`, two bullets that name two options and give
     # no reason at all: both clear two words and eight characters, and no rule
     # here can tell a reason from a longer name. So the count says what was
     # measured and names the part that is human review.
-    return ("PASS", "%d distinct rejected alternatives, each carrying at least %d words and %d "
-                    "characters of its own text (that the text says why the option lost, rather "
-                    "than restating its name, is human review)%s%s, and criteria, "
-                    "decision, consequences and flip condition each carry content"
+    undecided_left = ("" if not undecided else
+                      "; %d listed option(s) carry no verdict of their own and were not counted"
+                      % len(undecided))
+    return ("PASS", "%d distinct rejected alternatives (each explicitly rejected in its own "
+                    "text, or listed beside an identified chosen option), each carrying at "
+                    "least %d words and %d characters of its own text (that the text says why "
+                    "the option lost, rather than restating its name, is human review)%s%s%s, "
+                    "and criteria, decision, consequences and flip condition each carry content"
                     % (rejected, ALTERNATIVE_MIN_WORDS, ALTERNATIVE_MIN_CHARS,
                        "" if not dupes else
-                       " (%d duplicate line(s) counted once)" % dupes, chosen_note))
+                       " (%d duplicate line(s) counted once)" % dupes, chosen_note,
+                       undecided_left))
 
 
 # An entity name may carry a hyphen or a dot. `[A-Za-z_][\w ]*?` could match
@@ -1174,6 +1330,21 @@ def check_adr(root):
 # in Unicode terms, a property, not a range somebody typed.
 _ENTITY_BULLET = re.compile(r"^\s*[-*]\s*([^\W\d][\w .\-]*?)\s*(?::(.*))?$")
 _ENTITY_HEADING = re.compile(r"(?i)entit")
+# The data-model and states section vocabulary as a lead predicate, whole-line
+# leads only (see _lead_lines_to_atx inline_ok): `Entities:` and
+# `Relationships:` declare their sections as surely as `##` does.
+_DM_LEAD_WORDS = re.compile(r"(?i)^(?:entit\w*|relationships?|states|status(?:es)?|lifecycle)\b")
+
+
+def _is_dm_lead(text):
+    return bool(_DM_LEAD_WORDS.match(text.strip()))
+
+
+_COMPONENT_LEAD_WORDS = re.compile(r"(?i)^components?\b")
+
+
+def _is_component_lead(text):
+    return bool(_COMPONENT_LEAD_WORDS.match(text.strip()))
 # Markdown emphasis is presentation, not identity. `- **Order**: ...` and a
 # table cell `| **Order** |` were invisible to patterns anchored on a letter,
 # and the FAIL message then described the exact form the author had used.
@@ -1354,7 +1525,8 @@ def _entities(t):
     print a count uses `_entity_bullets`, which says which set it got and refuses
     to count a set it guessed at.
     """
-    t = _plain(without_comments(_setext_to_atx(t)))
+    t = _lead_lines_to_atx(_plain(without_comments(_setext_to_atx(t))),
+                           _is_dm_lead, inline_ok=False)
     ents, declared = _entity_bullets(t)
     if declared:
         return ents
@@ -1451,14 +1623,16 @@ def check_data_model(root):
     # artifacts check called the same file the absence of an artifact. Emphasis
     # is unwrapped so a bolded entity name is still an entity name, and a
     # setext heading is a heading.
-    t = _plain(without_comments(_setext_to_atx(t)))
+    t = _lead_lines_to_atx(_plain(without_comments(_setext_to_atx(t))),
+                           _is_dm_lead, inline_ok=False)
     problems = []
     ents, declared_by_heading = _entity_bullets(t)
     # What this check had to guess at, said in the verdict rather than folded into
     # a count. See _entity_bullets: a Notes list read as an entity set is the same
     # defect as a PASS over an empty manifest, one function deeper.
     read_note = ("" if declared_by_heading else
-                 "; no heading in %s names entities, so the set above was read from the bullet(s) "
+                 "; no heading in %s names entities (a #-heading, a bold line, or an "
+                 "`Entities:` lead), so the set above was read from the bullet(s) "
                  "here that name a system that owns them (%s), and a bullet naming none was left as "
                  "the prose it is. Put them under a heading whose name contains \"entit\" to have "
                  "this check read them as the entity set"
@@ -1469,7 +1643,8 @@ def check_data_model(root):
             "table whose first column is the entity name, under a heading that names "
             "entities, above the Relationships heading"
             if declared_by_heading else
-            "no entity found: no heading in %s names entities (a heading whose name contains "
+            "no entity found: no heading in %s names entities (a #-heading, a bold line, or an "
+            "`Entities:` lead whose name contains "
             "\"entit\"), and no bullet above the Relationships heading names the system that owns "
             "it, so nothing here was read as an entity and a list of notes was left as notes. List "
             "each entity as a bullet, or as a row of a markdown table whose first column is the "
@@ -1549,8 +1724,8 @@ def check_data_model(root):
                            "each carrying one, and %d relationship line(s) read; but no heading in %s "
                            "names entities, so this check cannot say that set is the entity set rather "
                            "than a prose list, and it does not assert an entity count over one. Put "
-                           "them under a heading whose name contains \"entit\" and this check reads "
-                           "them as the entity set"
+                           "them under a heading whose name contains \"entit\" (a #-heading, a bold "
+                           "line, or an `Entities:` lead) and this check reads them as the entity set"
                            % (len(ents), ", ".join(sorted(ents)), len(rels), ARTIFACT_FILES["05"]))
     if not rels:
         return "NO-DATA", ("%d entities, each with a system of record, but no relationship line was "
@@ -2020,7 +2195,8 @@ def _declared_components(root):
         text = read(root, artifact)
         if text is None:
             continue
-        text = _plain(without_comments(_setext_to_atx(text)))
+        text = _lead_lines_to_atx(_plain(without_comments(_setext_to_atx(text))),
+                                  _is_component_lead, inline_ok=False)
         in_components = False
         for line in text.splitlines():
             h = _HEADING.match(line)
@@ -2058,7 +2234,8 @@ def _declared_states(root):
         text = read(root, artifact)
         if text is None:
             continue
-        text = without_comments(_setext_to_atx(text))
+        text = _lead_lines_to_atx(without_comments(_setext_to_atx(text)),
+                                  _is_dm_lead, inline_ok=False)
         in_states = False
         for line in _joined_bullets(text.splitlines()):
             h = _HEADING.match(line)

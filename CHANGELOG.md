@@ -75,10 +75,22 @@ can read a promise into.
   `a-japanese-data-model-is-a-data-model` through
   `a-line-the-parser-cannot-read-refuses-all-traceable` (the printed case ids, so the
   citation greps straight out of the suite's own output).
-- The MADR chosen option is the decision, not a rejected alternative, so the
-  two-alternatives floor cannot be satisfied by chosen-plus-one. Proven by
-  `a-faithful-madr-with-one-rejection-fails-the-floor` and
-  `a-madr-with-two-real-rejections-passes-with-an-honest-count`.
+- The two-alternatives floor counts only rejections that are ESTABLISHED: an
+  option whose own text or governing heading carries a rejection verdict, or,
+  once the decision is identified among the listed options (a chosen marker
+  in any authoring form, a chosen table row, or the Decision's quoted
+  choice), the remaining listed options. When no option carries a verdict
+  and the Decision paraphrases instead of quoting, the winner may be any of
+  them, and the verdict is NO-DATA naming the ambiguity rather than a count
+  the check cannot defend; a bullet marking itself chosen is the decision in
+  every form, not only in a table. Colon-terminated and bold section leads
+  (`Criteria:`, `**Criteria**`, `Entities:`) are read as the headings they
+  declare, in the ADR and the data model both. Proven by
+  `a-faithful-madr-with-one-rejection-fails-the-floor`,
+  `a-madr-with-two-real-rejections-passes-with-an-honest-count`,
+  `an-in-bullet-chosen-marker-cannot-inflate-the-rejected-count`,
+  `unmarked-options-with-an-unnamed-winner-are-nodata-not-a-count` and
+  `a-colon-led-hurried-adr-is-read-as-its-sections`.
 - An exemption key resolves against the fixture leaf or heading it names, the
   access and legacy axes are non-exemptible by construction, and a waiver that
   excuses no PASS is a meta-test failure. Proven by the `gd_exempt*` guards and

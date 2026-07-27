@@ -504,6 +504,10 @@ NOT_A_VERDICT = {
                                                  "unreadable characters kept, not a verdict",
     ("sbe_design.py", "_entity_bullets"): "returns (the entity set, whether a heading declared it), "
                                           "not a verdict",
+    ("sbe_design.py", "_rejected_alternatives"): "returns (collected alternatives, chosen table "
+                                                 "rows), not a verdict",
+    ("sbe_design.py", "_table_alternatives"): "returns (table-row alternatives, chosen row "
+                                              "count), not a verdict",
     ("sbe_design.py", "_coherence_problem"): "returns a problem string, or an (unmeasured, why) "
                                              "pair naming a script limit; never a verdict",
     ("sbe_intake.py", "read_answers"): "returns (answers read, answers refused), not a verdict",

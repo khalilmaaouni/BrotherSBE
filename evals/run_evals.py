@@ -4274,8 +4274,16 @@ def r6l(root):
 
 # --- the honest forms an engineer writes -----------------------------------
 
-_ADR_BODY = ("- Synchronous call to the ledger: ties checkout latency to ledger availability.\n"
-             "- Nightly batch reconciliation: misses the one business day requirement.\n")
+# Both bullets carry their own rejection verdict, because the floor counts
+# only what is established: under a NEUTRAL heading (Options considered,
+# Alternatives, Trade-offs) an unmarked bullet might be the chosen option
+# written without a marker, so it is not counted as a rejection. These
+# fixtures probe the HEADING vocabulary, so their items are marked and the
+# heading stays the only variable.
+_ADR_BODY = ("- Synchronous call to the ledger: rejected because it ties checkout latency "
+             "to ledger availability.\n"
+             "- Nightly batch reconciliation: rejected because it misses the one business "
+             "day requirement.\n")
 
 
 def _adr(root, rejected_heading, criteria="## Criteria\nsettlement latency, operational load\n",
@@ -5888,13 +5896,104 @@ def f4(root):
           "## What would flip this\nSub-second settlement becoming a requirement.\n")
 
 
+@case("an-in-bullet-chosen-marker-cannot-inflate-the-rejected-count", "adr", "FAIL")
+def f4b(root):
+    # A bullet that marks ITSELF chosen ("... Chosen.") beside one real
+    # rejection, with a Decision that paraphrases instead of quoting. The
+    # chosen-marker rule existed for table rows only, so this bullet counted
+    # as a second rejection and the floor printed "2 distinct rejected
+    # alternatives" over an artifact rejecting exactly one. The marker is now
+    # read in every authoring form: the count is 1 and the floor fails.
+    write(root, "03-adr.md",
+          "# Retire the legacy email queue\n"
+          "## Criteria\nCost of the bridge, risk to in-flight jobs.\n"
+          "## Options considered\n"
+          "- Big-bang cutover: rejected, in-flight jobs would be lost at the switch.\n"
+          "- Drain and shut down with a bridge worker. Chosen.\n"
+          "## Decision\nWe drain and shut down. The bridge worker runs until the old "
+          "queue is empty.\n"
+          "## Consequences\nTwo systems for one sprint.\n"
+          "## What would flip this\nA drain longer than a sprint.\n")
+
+
+@case("unmarked-options-with-an-unnamed-winner-are-nodata-not-a-count", "adr", "NO-DATA")
+def f4c(root):
+    # No option carries a verdict of its own and the Decision paraphrases,
+    # so the winner may be ANY of the listed options: free-form markdown
+    # does not let this check tell a chosen option from a rejected one here,
+    # and a count it cannot defend is not asserted. NO-DATA naming the
+    # ambiguity, with the completing edit taught in the sentence.
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nCost, risk, speed.\n"
+          "## Options considered\n"
+          "- Big-bang cutover, which loses in-flight jobs at the switch.\n"
+          "- Drain and shut down with a bridge worker running until empty.\n"
+          "## Decision\nWe drain and shut down. The bridge worker runs until the old "
+          "queue is empty.\n"
+          "## Consequences\nTwo systems for one sprint.\n"
+          "## What would flip this\nA drain longer than a sprint.\n")
+
+
+@case("a-colon-led-hurried-adr-is-read-as-its-sections", "adr", "PASS")
+def f4d(root):
+    # The whole ADR written the way a hurried honest engineer writes it:
+    # every section a colon-terminated lead, no markdown heading anywhere.
+    # Every semantic element the law asks for is present, and the section
+    # readers used to see no section at all and fail this at gate severity
+    # with "no Criteria section" over a line beginning with exactly that
+    # word.
+    write(root, "03-adr.md",
+          "# Move GET /orders/:id to integer cents\n\n"
+          "Criteria: no consumer breakage, exact arithmetic, one release.\n\n"
+          "Options considered:\n"
+          "- Keep floats and round at render. Rejected: rounding drift already produced "
+          "a support ticket.\n"
+          "- Version the endpoint as /v2/orders. Rejected: two contracts to maintain "
+          "for one field.\n"
+          "- Additive change: integer cents plus ISO currency code. Chosen.\n\n"
+          "Decision: additive change, integer cents, ISO currency code, old field "
+          "deprecated one release later.\n\n"
+          "Consequences: consumers migrate at their own pace; the payload carries both "
+          "fields for a release.\n\n"
+          "What would flip this: a consumer that cannot parse the new fields before "
+          "the deprecation date.\n")
+
+
+@case("a-bold-section-lead-is-a-section", "adr", "PASS")
+def f4e(root):
+    # The bold form of the same class: `**Criteria**` declares the section
+    # as surely as `## Criteria`.
+    write(root, "03-adr.md",
+          "# ADR\n\n**Criteria**\nlatency, auditability\n\n"
+          "**Rejected alternatives**\n"
+          "- Synchronous ledger call: ties checkout to ledger uptime.\n"
+          "- Nightly batch: misses the deadline.\n\n"
+          "**Decision**\nPublish to a queue.\n\n**Consequences**\nOne more moving part.\n\n"
+          "**What would flip this**\nSub-second settlement becoming a requirement.\n")
+
+
+@case("a-colon-led-entities-section-is-the-entity-set", "datamodel", "PASS")
+def f4f(root):
+    # `Entities:` and `Relationships:` as whole-line leads declare their
+    # sections; the check used to read them as no heading at all and refuse
+    # to assert an entity count over an honest model.
+    write(root, "05-data-model.md",
+          "# Data model\n\n"
+          "Entities:\n"
+          "- Order: system of record is the orders Postgres database (orders_db).\n"
+          "- OrderLine: system of record is the orders Postgres database (orders_db).\n\n"
+          "Relationships:\n"
+          "- An Order has many OrderLines, and every OrderLine belongs to exactly "
+          "one Order.\n")
+
+
 @case("a-trade-offs-considered-heading-is-an-alternatives-heading", "adr", "PASS")
 def f5(root):
     write(root, "03-adr.md",
           "# ADR\n## Criteria\nlatency, auditability\n"
           "## Trade-offs considered\n"
-          "- Synchronous ledger call: ties checkout to ledger uptime.\n"
-          "- Nightly batch: misses the deadline.\n"
+          "- Synchronous ledger call: rejected, ties checkout to ledger uptime.\n"
+          "- Nightly batch: rejected, misses the deadline.\n"
           "## Decision\nPublish to a queue.\n## Consequences\nOne more moving part.\n"
           "## What would flip this\nSub-second settlement becoming a requirement.\n")
 
