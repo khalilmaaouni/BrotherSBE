@@ -5972,6 +5972,29 @@ def f4e(root):
           "**What would flip this**\nSub-second settlement becoming a requirement.\n")
 
 
+@case("a-system-of-record-named-in-the-data-model-traces-a-diagram-node", "diagrams", "PASS")
+def f4g(root):
+    # The data model declares orders_db twice over as each entity's system of
+    # record, and the diagrams check used to print "appear nowhere else in
+    # the dossier" about exactly that node: a lead clause asserting a
+    # whole-dossier absence over a search that read entity bullets and
+    # component declarations only. The owning system an entity names is a
+    # declaration a reader can find, so the node traces, and the FAIL lead
+    # clause now names what was examined instead of the whole dossier.
+    write(root, "05-data-model.md",
+          "# Data model\n## Entities\n"
+          "- Order: system of record is the orders Postgres database (orders_db).\n"
+          "- OrderLine: system of record is the orders Postgres database (orders_db).\n"
+          "## Relationships\n"
+          "- An Order has many OrderLines, and every OrderLine belongs to exactly "
+          "one Order.\n")
+    write(root, "06-diagrams.md",
+          "# Diagrams\n## Read path\n"
+          "```mermaid\nsequenceDiagram\n"
+          "  Order->>orders_db: SELECT\n"
+          "  orders_db-->>Order: row\n```\n")
+
+
 @case("a-colon-led-entities-section-is-the-entity-set", "datamodel", "PASS")
 def f4f(root):
     # `Entities:` and `Relationships:` as whole-line leads declare their

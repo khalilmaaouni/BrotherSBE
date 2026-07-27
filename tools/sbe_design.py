@@ -2260,6 +2260,38 @@ def _declared_states(root):
     return out
 
 
+def _system_of_record_names(t):
+    """Names the data model declares as an entity's system of record.
+
+    A dossier that writes "system of record is the orders Postgres database
+    (orders_db)" has DECLARED orders_db, twice over, and the diagrams check
+    used to print "appear nowhere else in the dossier" about exactly that
+    node: a lead clause asserting a whole-dossier absence over a search that
+    read entity bullets and component declarations only. The owning system an
+    entity names is a declaration a reader can find, so a diagram node
+    matching a word of it traces. Placeholder words are not names here, as
+    everywhere.
+    """
+    out = {}
+    if t is None:
+        return out
+    tt = _lead_lines_to_atx(_plain(without_comments(_setext_to_atx(t))),
+                            _is_dm_lead, inline_ok=False)
+    ents, _declared = _entity_bullets(tt)
+    for name, meta in ents.items():
+        m = _SOR.search(meta or "")
+        val = m.group(1) if m else ""
+        if not _stated_value(val):
+            mb = _SOR_BEFORE.search(meta or "")
+            val = mb.group(1) if mb else ""
+        for token in re.findall(r"[\w.-]+", val or ""):
+            n = _norm(token)
+            if n and not domain_vacuous(token):
+                out.setdefault(n, "%s: system of record of %s"
+                               % (ARTIFACT_FILES["05"], name))
+    return out
+
+
 def check_diagrams(root):
     problem = read_problem(root, ARTIFACT_FILES["06"])
     if problem:
@@ -2300,7 +2332,9 @@ def check_diagrams(root):
     entities = {_norm(n): n for n in _entities(model)} if model is not None else {}
     components = _declared_components(root)
     declared_states = _declared_states(root)
-    known = dict(components)
+    sor_names = _system_of_record_names(model)
+    known = dict(sor_names)
+    known.update(components)
     known.update(entities)
     known.update(declared_states)
     if not known:
@@ -2335,8 +2369,9 @@ def check_diagrams(root):
                             " Of these, %s name(s) nothing: a node called TBD or XXX is a note to "
                             "the author, and declaring it as a state or a component would not make "
                             "it one." % ", ".join(placeholders[:4]))
-        return "FAIL", ("diagram element(s) appear nowhere else in the dossier: %s.%s Every node must be an "
-                        "entity in %s or a declared component (a row in %s, or a bullet under a Components "
+        return "FAIL", ("diagram element(s) trace to no declared entity, component, state or system "
+                        "of record this check read: %s.%s Every node must be an "
+                        "entity in %s, a system of record an entity there names, or a declared component (a row in %s, or a bullet under a Components "
                         "heading in %s or %s), matched on the node id or on its label. A state diagram's states "
                         "trace to states declared as bullets under a States, Status or Lifecycle heading, "
                         "or to a `status: draft | placed | shipped` line in %s%s"
@@ -2374,13 +2409,17 @@ def check_diagrams(root):
                  "itself, so for those the declaration and the diagram are one file; a row in %s "
                  "is the cross-artifact form" % (len(self_declared), ARTIFACT_FILES["04"]))
     return "PASS", ("%d diagram node(s) in %s, all traceable: %d to entities in %s, %d to declared "
-                    "components, %d to declared lifecycle states%s%s"
+                    "components, %d to declared lifecycle states, %d to a system of record an "
+                    "entity names%s%s"
                     % (len(nodes), ", ".join(sorted(set(kinds))),
                        sum(1 for h in hits if h in entities),
                        ARTIFACT_FILES["05"],
                        len(comp_hits),
                        sum(1 for h in hits if h in declared_states and h not in entities
-                           and h not in components), self_note, note))
+                           and h not in components),
+                       sum(1 for h in hits if h in sor_names and h not in entities
+                           and h not in components and h not in declared_states),
+                       self_note, note))
 
 
 # Worked dossier fragments that SHOULD pass. The honesty meta-test hollows these:
