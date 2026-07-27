@@ -225,9 +225,9 @@ read an empty stdin in CI it prints nothing and waits.
 
 ## 5. `tools/sbe_gate.py`: the four hard gates
 
-One subcommand per silent-failure class. Each walks the git worktree for its
-receipt file, then checks the receipt is internally consistent rather than merely
-present.
+One subcommand per silent-failure class. Each walks the directory it was named
+(the default is the current directory) for its receipt file, then checks the
+receipt is internally consistent rather than merely present.
 
 | Gate | Receipt | Passes only when |
 |---|---|---|

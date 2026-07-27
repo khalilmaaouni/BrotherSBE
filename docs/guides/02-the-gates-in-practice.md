@@ -30,8 +30,8 @@ python3 tools/sbe_gate.py <class> <dir> --strict   # enforcing: exits nonzero on
 ```
 
 `<class>` is one of `numbers`, `migration`, `approval`, `ran`. Omit it to run all
-four. `<dir>` defaults to the current git worktree; the gate resolves it to the git
-toplevel and walks the tree for receipt files, skipping `.git`. Advisory mode tells
+four. `<dir>` defaults to `.`, the current directory, and the gate walks exactly
+that directory for receipt files, skipping `.git`. Advisory mode tells
 a session. `--strict` on the CI path stops a merge. The checks are identical; only
 the exit code differs.
 
@@ -517,15 +517,15 @@ Two mechanisms make that honest rather than lucky:
   literals, so a naive scan would match itself. It excludes `os.path.basename(__file__)`
   for exactly that reason, and the exclusion is documented in the function.
 - **Every genuine swallow carries a marker.** The boundary handlers that must not crash a
-  session are exempted in the open. In `sbe_gate.py` the marker sits on the git-worktree
-  fallback, where a directory that is not a git worktree leaves the root as given and every
-  gate below still runs and still prints; in `sbe_checks.py` it sits on the per-check guard,
-  where the exception becomes the FAIL evidence rather than vanishing; five handlers in
-  `sbe_telemetry.py` mark the non-blocking hook boundaries, each with a reason ending in the
-  same guarantee: the miss surfaces as absent data, never as a false pass. No line numbers
-  are quoted here on purpose, because a line number in prose is a claim nothing recomputes
-  and this paragraph carried two wrong ones; `grep -n "sbe: allow-silent" tools/*.py` is the
-  current list. The test harness (`test_sbe.py`) marks its fire-and-forget
+  session are exempted in the open. In `sbe_checks.py` the marker sits on the per-check
+  guard, where the exception becomes the FAIL evidence rather than vanishing; the handlers
+  in `sbe_telemetry.py` mark the non-blocking hook boundaries, each with a reason ending in
+  the same guarantee: the miss surfaces as absent data, never as a false pass. Neither line
+  numbers nor counts are quoted here on purpose, because a number in prose is a claim
+  nothing recomputes and this paragraph carried three wrong ones (two line numbers, a
+  handler count, and a marker in `sbe_gate.py` that the file has never held since);
+  `grep -n "sbe: allow-silent" tools/*.py` is the current list, and the recomputed verdict
+  line above is the count. The test harness (`test_sbe.py`) marks its fire-and-forget
   hook invocations, noting the snapshot each creates is asserted immediately below.
 
 Nothing is hidden by turning off the check. The lint runs against the tool's own source,
