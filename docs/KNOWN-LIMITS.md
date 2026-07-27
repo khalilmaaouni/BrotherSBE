@@ -63,6 +63,30 @@ it. The checks fed by it are named on their own digest lines. Full text:
 No tool applies it. A session that fails to label unverified output is not
 caught by a check. Full text: `SKILL.md` L7 and L16, `DIGEST.md`.
 
+## The doc-honesty guard reads proximity, not grammar
+
+The guard that checks shipped prose against what the tools do now reads a
+document the way a reader does, joining hard-wrapped lines into the block they
+form, so a false sentence no longer escapes by wrapping. What it still cannot
+do is decide which word a negator governs: a sentence carrying "no", "not" or
+"never" within 24 characters before a claim is read as denying it, so an
+assertion that happens to carry one ("there is no doubt the gate walks up to
+the repository root") reads as honest. Requiring the negator to sit
+immediately before the claim was tried and reverted, because it flags the
+honest denials this project actually writes, where the negator is the clause's
+subject. Full text: `evals/run_evals.py` (_SCOPE_DENIAL, _reader_blocks).
+
+## Published figures are derived only where a page says so
+
+A block marked `derived-by: <script>` is re-run by an eval on every suite
+execution and the page fails when it disagrees with the script. That is the
+whole mechanism, and its boundary is the marker: a number typed into ordinary
+prose with no marker is checked by nothing here, exactly as it was before. The
+eval-count guards and the lint-count guards cover their own numbers
+separately. Full text: `evals/run_evals.py`
+(every-derived-figure-in-a-shipped-doc-recomputes),
+`scripts/derive_refusal_table.py`.
+
 ## The hollowing sweep is not a proof
 
 The meta-test hollows each check's own declared worked example, prints its

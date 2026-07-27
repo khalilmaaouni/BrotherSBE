@@ -4103,8 +4103,38 @@ _REROOT_WIDENS = (
 # "if the receipt is not in the directory you name, the gate walks up to the
 # repository root", the "not" belongs to a different clause, and a loose
 # lookback would have excused the very sentence this guard exists to catch.
+#
+# Its stated boundary, and it is a boundary rather than an oversight: 24
+# non-punctuation characters is PROXIMITY, not negation, so an assertion that
+# happens to carry a negator inside that window ("there is no doubt the gate
+# walks up to the repository root") reads as a denial. Requiring the negator to
+# be the last word before the claim was tried and reverted: it flags the honest
+# denials this repository actually ships, where the negator is the clause's
+# SUBJECT ("Nothing re-roots to a git worktree top"), and a guard that flags the
+# correction of the sentence it polices teaches people to stop writing the
+# correction. Deciding which noun a negator governs is parsing English, which
+# this guard does not do. docs/KNOWN-LIMITS.md carries the limit.
 _SCOPE_DENIAL = (r"(?i)\b(?:not|never|no|nothing|neither|rather\s+than"
                  r"|instead\s+of|without)\b[^,;.]{0,24}$")
+
+
+def _asserted_span(pattern, line):
+    """The span of `line` that ASSERTS `pattern`, or None if every hit is denied.
+
+    One reading of a sentence, for every pattern this guard carries. The
+    remembered literal phrasings ran through a bare `re.search` while the
+    derived classifier ran through the denial check, so the honest denial of a
+    shipped sentence ("a receipt is found under the directory you name, not
+    anywhere in the worktree") was read as the false claim by one path and as
+    honest by the other. A guard that flags the correction of the very
+    sentence it polices teaches people to stop writing the correction.
+    """
+    import re as _re
+    for m in _re.finditer(pattern, line):
+        if _re.search(_SCOPE_DENIAL, line[:m.start()]):
+            continue
+        return m.group(0)
+    return None
 
 
 def _widening_claim(line):
@@ -4114,12 +4144,64 @@ def _widening_claim(line):
     clause that carries it, so the guard reads a sentence the way its reader
     does rather than by keyword presence.
     """
+    return _asserted_span(_REROOT_WIDENS, line)
+
+
+# Where one block of prose ends for a READER: a blank line, the start of another
+# block-level element (a heading, a list item, a quote, a table row, a rule), or
+# a fence, inside which every line stands alone because a code block's line
+# breaks are its content.
+_MD_BLOCK_START = r"(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||={3,}\s*$|-{3,}\s*$)"
+_MD_FENCE = r"(?:```|~~~)"
+
+
+def _reader_blocks(text):
+    """[(first line number, the text as a reader receives it)] for one page.
+
+    A guard must read a document the way its reader reads it. This one matched
+    ONE PHYSICAL LINE at a time, and every page this repository ships is hard
+    wrapped (docs/KNOWN-LIMITS.md has no line over 100 characters), so a false
+    sentence evaded it by pressing Return: the verb landed on one line and the
+    place on the next, neither line matched, and the guard's positive verdict
+    "consistent", which is a claim about every shipped page, was bought by a
+    line break. A sentence of the length this guard exists to catch cannot fit
+    on one line of most of the corpus it scans, so line-at-a-time was absence
+    used as proof, produced by a text the scanner never assembled.
+
+    The rule: the unit is the block a reader reads, not the line an editor
+    produced. Lines are joined until the block ends and their whitespace is
+    collapsed, so a wrapped sentence is matched as the one sentence it is. The
+    classifier's own spans stay bounded by `[^.;]` so a match still cannot
+    reach across a sentence boundary; what changes is only that a sentence is
+    no longer cut in half before it is read. The block's FIRST line number
+    comes back with it, so the evidence a reader is handed still points at a
+    place in the file.
+    """
     import re as _re
-    for m in _re.finditer(_REROOT_WIDENS, line):
-        if _re.search(_SCOPE_DENIAL, line[:m.start()]):
+    blocks, buf, start, in_fence = [], [], 1, False
+
+    def flush():
+        if buf:
+            blocks.append((start, " ".join(" ".join(buf).split())))
+            del buf[:]
+    for n, line in enumerate(text.splitlines(), 1):
+        fence = _re.match(r"\s*%s" % _MD_FENCE, line)
+        if in_fence or fence:
+            flush()
+            blocks.append((n, line.strip()))
+            if fence:
+                in_fence = not in_fence
             continue
-        return m.group(0)
-    return None
+        if not line.strip():
+            flush()
+            continue
+        if _re.match(r"\s*%s" % _MD_BLOCK_START, line):
+            flush()
+        if not buf:
+            start = n
+        buf.append(line)
+    flush()
+    return blocks
 
 
 def _shipped_markdown():
@@ -4259,10 +4341,13 @@ def dc_behavior(root):
     wrong = []
     for rel in docs:
         p = os.path.join(_REPO, rel)
-        for n, line in enumerate(open(p, errors="replace").read().splitlines(), 1):
+        # _reader_blocks, not splitlines(): a sentence wrapped across two lines
+        # is one sentence to its reader and was invisible to this guard, which
+        # then reported every shipped page "consistent". See _reader_blocks.
+        for n, line in _reader_blocks(open(p, errors="replace").read()):
             for _name, _live, pattern, derived, why in families:
-                hit = _re.search(pattern, line)
-                span = hit.group(0) if hit else (derived(line) if derived else None)
+                span = (_asserted_span(pattern, line)
+                        or (derived(line) if derived else None))
                 if span:
                     wrong.append("%s:%d describes behavior the tools do not have: %r (%s)"
                                  % (rel, n, span[:60], why))
@@ -4324,6 +4409,62 @@ def dc_behavior_derived(root):
     elif "no shipped markdown page could be derived" not in empty_verdict:
         problems.append("the empty-document verdict named something else: %r" % empty_verdict[:80])
     return "consistent" if not problems else "; ".join(problems[:4])
+
+
+@case("a-false-doc-sentence-cannot-escape-by-wrapping-onto-a-second-line", "docs", "caught")
+def dc_wrapped(root):
+    """Pressing Return does not make a false sentence true.
+
+    `dc_behavior` read ONE PHYSICAL LINE at a time, and every page this
+    repository ships is hard wrapped, so the sentence the guard exists to
+    catch could not fit on one line of most of the corpus it scans. The verb
+    landed on one line and the place on the next, neither line matched, and
+    the guard printed "consistent", a claim about every shipped page, bought
+    by a line break. That is absence used as proof over a text the scanner
+    never assembled, inside the guard built during the wave that made absence
+    is never proof the law.
+
+    Driven through `dc_behavior` itself over a planted page rather than
+    through the classifier alone, because the defect was never in the
+    classifier: `_widening_claim` matched the sentence perfectly. It was in
+    the UNIT of text handed to it, which only the caller decides.
+    """
+    write(root, "tools/sbe_gate.py", "def gate_approval(root):\n    return 'NO-DATA', 'stub'\n")
+    # Wrapped exactly the way the shipped pages are wrapped, and the control
+    # wrapped the same way: the honest denial must survive being joined.
+    write(root, "docs/planted.md",
+          "# How the gate finds a receipt\n\n"
+          "If the receipt is not in the directory you name, the gate walks\n"
+          "up to the repository root and looks there too, so you can put it\n"
+          "anywhere under\nthe repository and it will still be discovered.\n")
+    write(root, "docs/honest.md",
+          "# How the gate finds a receipt\n\n"
+          "The gate examines exactly the directory it was named. A receipt\n"
+          "is found under the directory you name, not anywhere in the\n"
+          "worktree, and nothing re-roots to a git worktree top.\n")
+    write(root, "CHECKSUMS.sha256", "0  docs/planted.md\n0  docs/honest.md\n")
+    global _REPO
+    kept = _REPO
+    try:
+        _REPO = root
+        verdict = dc_behavior(root)
+        # The same page unwrapped onto one line, as the control that the guard
+        # was catching something before and is not merely catching more now.
+        write(root, "docs/planted.md",
+              "# How the gate finds a receipt\n\n"
+              "If the receipt is not in the directory you name, the gate walks "
+              "up to the repository root and looks there too.\n")
+        one_line = dc_behavior(root)
+    finally:
+        _REPO = kept
+    problems = []
+    if "planted.md" not in verdict:
+        problems.append("the wrapped sentence was not caught: %r" % verdict[:120])
+    if "honest.md" in verdict:
+        problems.append("the honest wrapped page was flagged: %r" % verdict[:120])
+    if "planted.md" not in one_line:
+        problems.append("the one-line control was not caught: %r" % one_line[:120])
+    return "caught" if not problems else "; ".join(problems)
 
 
 # A figure printed in a shipped document is a CLAIM, and this project refuses
