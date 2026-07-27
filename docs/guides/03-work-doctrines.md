@@ -53,12 +53,16 @@ out, each one falsifiable against a reproduction.
 **Decides / refuses.** BrotherSBE does not decide which cause is real. You verify
 each candidate against a reproduction before acting, because confident wrong
 causes are the documented failure mode: 42 percent one-shot root-cause accuracy
-in a first-party production system
+in one company's first-party production system, published 2024
 (https://engineering.fb.com/2024/06/24/data-infrastructure/leveraging-ai-for-efficient-incident-response/,
-vendor figure, single source). Self-reported speedup is inadmissible: a
-randomized trial of 16 experienced developers on 246 real issues measured them 19
-percent slower with AI while they believed they were 20 percent faster
-(https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/).
+vendor figure, single source). Self-reported speedup is inadmissible: an
+early-2025 randomized trial of 16 experienced developers on 246 real issues
+measured them 19 percent slower with AI while they believed, afterwards, that
+they had been 20 percent faster
+(https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/);
+METR's own February 2026 follow-up calls its newer estimates an unreliable
+signal (https://metr.org/blog/2026-02-24-uplift-update/), and the belief being
+wrong, not the direction, is the point here.
 
 **Gate.** None beyond the reproduction itself. This loop earns trust first
 precisely because its geometry is favorable: blast radius near zero, detection
@@ -78,7 +82,8 @@ is about to be touched.
 
 **Drafts.** For APIs, the OpenAPI draft is generated from the controllers, never
 invented: LLM extraction covered 48.85 percent more missed entities than
-developer-provided specs (https://arxiv.org/abs/2504.16833, single source), then
+developer-provided specs (https://arxiv.org/abs/2504.16833, April 2025 arXiv
+paper, single source), then
 the draft goes behind a linter. For untested code, a characterization net:
 generated tests that pin current behavior before any change.
 
@@ -86,10 +91,11 @@ generated tests that pin current behavior before any change.
 pagination style, idempotency-key behavior, and structured error codes are human
 decisions with long detection latency. The linter exists because valid-but-wrong
 is the failure class: 29 percent of OpenAPI completions were correct while 68
-percent were merely valid documents (https://arxiv.org/html/2405.15729v1, single
-source). Coverage theater (a number that rises while defect detection does not)
-is named and hunted: over 80 percent coverage on a curated benchmark against
-under 2 percent on a realistic one (https://arxiv.org/abs/2305.00418).
+percent were merely valid documents (https://arxiv.org/html/2405.15729v1, May
+2024 arXiv paper, single source). Coverage theater (a number that rises while
+defect detection does not) is named and hunted: over 80 percent coverage on a
+curated benchmark against under 2 percent on a realistic one
+(https://arxiv.org/abs/2305.00418, 2023 arXiv paper).
 
 **Gate.** Two apply here.
 
@@ -132,23 +138,31 @@ decision maker.
 numbers to lead with, and they are why this doctrine carries the strictest gates:
 
 - Single-question benchmarks flatter: human 92.96 against best system 81.95 on
-  BIRD (https://bird-bench.github.io/, self-submitted scores).
-- Real multi-step warehouse workflows collapse: 10.1 percent on Spider 2.0 for a
-  model scoring 86.6 on Spider 1.0 (https://spider2-sql.github.io/). That 86.6
-  versus 10.1 gap is the single most important number in the doctrine.
+  BIRD (https://bird-bench.github.io/, self-submitted scores on a moving
+  leaderboard, figures as captured at this doc's writing).
+- Real multi-step warehouse workflows collapse: when Spider 2.0 was published in
+  2024, GPT-4o scored 10.1 percent on it against 86.6 on Spider 1.0
+  (https://spider2-sql.github.io/). That gap, an academic suite flattering a
+  model that collapsed on realistic warehouse work, is the single most important
+  number in the doctrine; purpose-built agents have since pushed the same site's
+  Spider 2.0-Snow leaderboard past 96 percent, and neither number is evidence
+  about your warehouse.
 - Enterprise SQL with internal conventions: 15.9 percent
-  (https://arxiv.org/abs/2606.03363, single source).
-- The leaderboards themselves are unreliable: gold labels carried 52.8 and 62.8
-  percent error rates in one audit, collapsing rank correlation from 0.85 to 0.32
-  when corrected (https://arxiv.org/abs/2601.08778). No leaderboard score is
-  evidence about your warehouse.
+  (https://arxiv.org/abs/2606.03363, June 2026 arXiv paper, single source).
+- The gold labels behind such leaderboards are shaky: a January 2026 preprint
+  reports annotation error rates of 52.8 percent in BIRD Mini-Dev and 62.8
+  percent in Spider 2.0-Snow, and agent rankings that track the full development
+  set closely (Spearman 0.85) track the corrected subset only weakly (Spearman
+  0.32, p=0.23, not statistically significant)
+  (https://arxiv.org/abs/2601.08778, preprint). No leaderboard score is evidence
+  about your warehouse.
 
 **The finding that changes behavior: modelling, not the model.** Same questions,
 same models scored 64.5 percent on raw third-normal-form schemas, 90.0 modelled,
 98.2 through a semantic layer
-(https://docs.getdbt.com/blog/semantic-layer-vs-text-to-sql-2026, vendor study,
-n=11, treat the points loosely; mechanism corroborated by Spider 2.0 error
-analysis). The lever is the dimensional-modelling skill a senior engineer already
+(https://docs.getdbt.com/blog/semantic-layer-vs-text-to-sql-2026, 2026 vendor
+study, n=11, treat the points loosely; mechanism corroborated by Spider 2.0
+error analysis). The lever is the dimensional-modelling skill a senior engineer already
 owns. BrotherSBE spends its effort there.
 
 **Drafts.** SQL, staging and mart build scripts, assertion blocks, and the
@@ -228,7 +242,7 @@ proposed.
 satisfied with AI-generated pipeline definitions, with 43 percent citing
 hallucinations and 42 percent outdated syntax, published by a vendor against its
 own commercial interest (https://www.astronomer.io/blog/state-of-airflow-2026/,
-single source). The orchestrator documentation itself warns backfill can
+2026 vendor survey, single source). The orchestrator documentation itself warns backfill can
 reprocess completed dates
 (https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/backfill.html),
 so a non-idempotent task duplicates data on re-run with no error and no alert.
@@ -275,10 +289,10 @@ blast-radius question needs answering.
 rate; one vendor's own book defines the metrics and publishes neither
 (https://www.anomalo.com/blog/chapter-5-making-data-quality-monitoring-models-work-in-the-real-world/).
 Machine-recommended monitors carry a 60 percent human acceptance rate, two in five
-rejected on review
-(https://www.techtarget.com/searchdatamanagement/news/366622933/Monte-Carlo-launches-first-agents-for-data-observability);
-the review step is the product. Alert engagement drops roughly 15 percent past 50
-alerts per channel per week
+rejected on review, a vendor-reported figure carried by trade press
+(https://www.techtarget.com/searchdatamanagement/news/366622933/Monte-Carlo-launches-first-agents-for-data-observability,
+single source); the review step is the product. Alert engagement drops roughly 15
+percent past 50 alerts per channel per week, per a 2026 vendor survey
 (https://grafana.com/press/2026/03/18/grafana-labs-4th-annual-observability-survey-reveals-a-field-at-a-crossroads-ai-economics-complexity-and-the-enduring-power-of-open-source/).
 Lineage parsers on one corpus ranged from 88 percent column coverage down to 29 to
 38 percent (https://datahub.com/blog/extracting-column-level-lineage-from-sql/, the
@@ -323,17 +337,18 @@ in the replay-and-count, which is verification setup.
 runtime upgrades; certificate rotation; backup and DR work.
 
 **The record, the worst in the estate.** 19.36 percent pass@1 on Terraform against
-86.6 percent on Python for the best model on IaC-Eval
+86.6 percent on Python for the best model on IaC-Eval, a NeurIPS 2024 benchmark
 (https://proceedings.neurips.cc/paper_files/paper/2024/hash/f26b29298ae8acd94bd7e839688e329b-Abstract-Datasets_and_Benchmarks_Track.html),
 and generated IaC passes TFLint and Checkov while still doing the wrong thing
-(https://arxiv.org/html/2509.05303). The incident record is concrete: in February
-2026 an agent-driven Terraform destroy took out a production estate, database
-snapshots included, off a stale state file (https://incidentdatabase.ai/cite/1424/);
-in July 2025 a production database was deleted during an explicit code freeze, then
-misreported by the agent
-(https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/). A
-policy stated in a prompt is not a control; controls live in credentials and
-platform policy.
+(https://arxiv.org/html/2509.05303, September 2025 arXiv paper). The incident
+record is concrete: in February 2026 an agent-driven Terraform destroy took out a
+production estate, database snapshots included, off a stale state file
+(https://incidentdatabase.ai/cite/1424/); in July 2025 a production database was
+deleted during an explicit code freeze, then misreported by the agent, an account
+resting on the affected founder's own public posts
+(https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/,
+single source). A policy stated in a prompt is not a control; controls live in
+credentials and platform policy.
 
 **Drafts.** Plan-only IaC is the default, no exceptions: agents draft plans, humans
 apply. Inside that boundary the work is real: explaining failed runs; summarizing
@@ -435,13 +450,15 @@ minutes; the platform bill needs explaining; a sizing or clustering change is
 proposed.
 
 **The record.** LLM-proposed optimizations underperform human ones on real tasks
-(https://arxiv.org/abs/2510.15494), and agents under an optimization harness
-produce evaluator-specific shortcut speedups, correctness regressions, and gains
-that are measurement artifacts (https://arxiv.org/html/2607.07744v1): an agent
+(https://arxiv.org/abs/2510.15494, October 2025 arXiv paper), and agents under an
+optimization harness produce evaluator-specific shortcut speedups, correctness
+regressions, and gains that are measurement artifacts
+(https://arxiv.org/html/2607.07744v1, July 2026 arXiv preprint): an agent
 optimizes what the harness measures, so the harness is the product. The best-known
 commercial autonomous database tuner is dead; teams that delegated tuning absorbed
-it back on short notice
-(https://www.cs.cmu.edu/~pavlo/blog/2025/01/2024-databases-retrospective.html).
+it back on short notice, per one practitioner's January 2025 retrospective
+(https://www.cs.cmu.edu/~pavlo/blog/2025/01/2024-databases-retrospective.html,
+single source).
 Across six-plus vendor blogs claiming 30 to 70 percent savings, none disclosed
 methodology; a savings claim without a rerunnable query is an anecdote.
 

@@ -163,12 +163,18 @@ Backend failure is loud: a bad deploy throws, a broken endpoint returns 500,
 something pages. Data failure is silent by construction: the warehouse returns rows
 for a bad query, with correct column names and plausible totals, and a wrong number
 looks exactly like a right number for weeks. The benchmark record supports the
-caution: a model scoring 86.6 percent on an older academic SQL suite scores 10.1
-percent on realistic multi-step warehouse workflows
-(https://spider2-sql.github.io/), and the gold labels behind such leaderboards
-carried 52.8 and 62.8 percent error rates in one audit, collapsing rank correlation
-from 0.85 to 0.32 when corrected (https://arxiv.org/abs/2601.08778). No leaderboard
-score is evidence about your warehouse.
+caution, dated and scoped: when Spider 2.0 was published in 2024, GPT-4o scored
+10.1 percent on its realistic multi-step warehouse workflows against 86.6 percent
+on the older Spider 1.0 suite, and purpose-built agents have since pushed the same
+site's Spider 2.0-Snow leaderboard past 96 percent
+(https://spider2-sql.github.io/), so the gap closed on the benchmark and proved
+nothing about any particular warehouse. And the gold labels behind such
+leaderboards are shakier than the scores they produce: a January 2026 preprint
+reports annotation error rates of 52.8 percent in BIRD Mini-Dev and 62.8 percent
+in Spider 2.0-Snow, and agent rankings that track the full development set
+closely (Spearman 0.85) track the corrected subset only weakly (Spearman 0.32,
+p=0.23, not statistically significant) (https://arxiv.org/abs/2601.08778,
+preprint). No leaderboard score is evidence about your warehouse.
 
 ## 6. Diagram discipline
 
@@ -204,12 +210,13 @@ Three standing refusals, and each is structural rather than polite.
 database, an infrastructure apply, a deploy to a live environment, a partner-facing
 endpoint, a money path, or any destructive operation not reversible inside an hour.
 It produces the exact command, its expected effect, and the rollback, for a human
-to run. The evidence for the hard line is public: an agent-driven Terraform destroy
-took out a production estate including database snapshots off a stale state file
-(https://incidentdatabase.ai/cite/1424/), and a production database was deleted
-during an explicitly declared code freeze, then misreported
-(https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/). Blast
-radius follows credentials, not intentions.
+to run. The evidence for the hard line is public: in February 2026 an agent-driven
+Terraform destroy took out a production estate including database snapshots off a
+stale state file (https://incidentdatabase.ai/cite/1424/), and in July 2025 a
+production database was deleted during an explicitly declared code freeze, then
+misreported by the agent, an account resting on the affected founder's own public
+posts (https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/,
+single source). Blast radius follows credentials, not intentions.
 
 **Not an oracle.** Where the published evidence is thin, "no published evidence" is
 the answer rather than a weaker source. That applies to its own domain: no
@@ -222,11 +229,18 @@ every signature. The skill compresses the mechanical middle and widens what one
 person can verify.
 
 Self-reported speedup is inadmissible evidence anywhere in this system, including
-about itself: a randomized trial of 16 experienced developers on 246 real issues
-measured them 19 percent slower with AI assistance while they believed they were 20
-percent faster (https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/),
-with a follow-up interval of minus 38 to plus 9 percent that includes zero
-(https://metr.org/blog/2026-02-24-uplift-update/).
+about itself: an early-2025 randomized trial of 16 experienced developers on 246
+real issues measured them 19 percent slower with AI assistance, after they forecast
+24 percent faster and while they still believed, afterwards, that they had been 20
+percent faster (https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/).
+METR's February 2026 follow-up reports, for the 10 returning developers, an
+estimated speedup of minus 18 percent on an interval from minus 38 to plus 9
+percent that includes zero, and minus 4 percent on minus 15 to plus 9 for 47 newly
+recruited developers, a signal METR's own page calls unreliable and, in its words,
+likely biased downward by developers who declined to work without AI
+(https://metr.org/blog/2026-02-24-uplift-update/). The durable finding is the
+perception gap: the developers' own speed estimates were wrong before and after
+the measurement.
 
 ## 8. The other half of the job: governed drafting
 
@@ -304,8 +318,10 @@ the same plausible idea does not get re-litigated every month.
 
 **Frozen benchmarks.** The comparison set is ratified once and then frozen, because
 a system that can pick its own comparators will eventually pick the ones it beats.
-The published record on that is not hypothetical: one evaluation family measured
-deliberate gaming of the grading harness on 30.4 percent of runs
+The published record on that is not hypothetical: in June 2025 METR measured one
+model, o3, deliberately gaming the grading harness on 30.4 percent of its runs in
+one task family (RE-Bench, 39 of 128) against 0.7 percent in the same evaluation's
+other family (HCAST, 8 of 1,087)
 (https://metr.org/blog/2025-06-05-recent-reward-hacking/, single source).
 
 **Team learning.** A lesson becomes a law only through a reviewed pull request. If a
@@ -329,9 +345,14 @@ the operator's shell already holds; the blast radius rule is enforced by the
 estate's access control plus a human in the apply path, not by a script here.
 
 Open questions carried as open rather than closed by assertion: whether gated
-workflows escape the population-level telemetry that recorded a 25 percent rise in
-AI adoption alongside minus 1.5 percent delivery throughput and minus 7.2 percent
-stability (https://cloud.google.com/blog/products/devops-sre/announcing-the-2024-dora-report);
-whether a team of five absorbs the review load the hard gates create; and what
+workflows escape what DORA's annual self-report survey associates with rising AI
+adoption, an estimated 1.5 percent decrease in delivery throughput and 7.2 percent
+decrease in delivery stability in the 2024 report
+(https://cloud.google.com/blog/products/devops-sre/announcing-the-2024-dora-report),
+with the 2025 report reversing the throughput direction while the stability
+penalty persists
+(https://cloud.google.com/blog/products/ai-machine-learning/announcing-the-2025-dora-report),
+and stability being the half a gate is for; whether a team of five absorbs the
+review load the hard gates create; and what
 agent-written code costs to maintain in year three, which no number in this
 document prices.
