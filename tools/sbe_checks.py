@@ -707,15 +707,6 @@ _CONFUSABLES = {
 _LATIN_BASE = re.compile(r"\bLETTER\b(?:\s+\w+)*\s([A-Z])$")
 
 
-def _latin_family(ch):
-    """True for a letter Unicode names as LATIN. ASCII letters are Latin too."""
-    try:
-        fam = unicodedata.name(ch).split()[0]
-    except ValueError:
-        fam = ""   # an unnamed code point belongs to no family this rule reads
-    return fam == "LATIN"
-
-
 def _latin_fold(ch):
     """The ASCII letter a Latin-family code point renders as, by RULE, or None.
 
@@ -738,18 +729,133 @@ def _latin_fold(ch):
     return m.group(1).lower() if m else None
 
 
-def _latin_residue(text):
-    """The Latin-family letters in a folded text that are still not ASCII.
+# The explicit directional formatting characters: the controls that REORDER a
+# rendered line (embeddings, overrides, isolates). Stripping them for a
+# comparison while preserving them in the value was the forgery this closes:
+# U+202E makes `rohtuA anaD` RENDER as `Dana Author` in git log and in every
+# bidi-honoring view, while the stripped comparison read the logical order and
+# certified a difference no reader can see. Stripping a reordering control
+# hides that a reordering happened; it does not undo it. So a value carrying
+# one cannot be certified as ANY identity, and the callers refuse it by name.
+# U+200E and U+200F (the non-reordering marks) are deliberately absent: they
+# nudge neutral characters and reorder nothing on their own, and the
+# invisible-character comparison already erases them.
+_BIDI_REORDERING = frozenset("\u202a\u202b\u202c\u202d\u202e"
+                             "\u2066\u2067\u2068\u2069")
 
-    After every reduction skeleton() owns, a letter that is LATIN by Unicode's
-    naming and still not ASCII is a letter that renders as this project's own
-    alphabet while comparing as something else, and no comparison or vacuity
-    test built on the fold can vouch for it. Certification must not depend on
-    a table's coverage, so what the fold cannot canonicalize is refused by
-    the callers, never passed.
+
+def bidi_reordering_controls(text):
+    """The reordering bidi controls in a RAW value, for refusal by name.
+
+    Runs on the raw text, never on plain_text(): plain_text strips the Cf
+    class, which is exactly the stripping that hid the forgery.
     """
-    return sorted({ch for ch in text
-                   if ch.isalpha() and not ch.isascii() and _latin_family(ch)})
+    return sorted({ch for ch in str(text or "") if ch in _BIDI_REORDERING})
+
+
+# What one character can be PROVEN to render as, for the substitution logic
+# below. Certification of "these two identities are different people" is a
+# NEGATIVE, and a negative may only be asserted when the difference is proven:
+# proven means the difference cannot be explained by one-for-one look-alike
+# substitution. Each character lands in one of four kinds:
+#
+#   hard    an ASCII character: renders as itself, so an unequal hard pair is
+#           a visible difference a reader can see.
+#   soft    a non-ASCII character some fold this host has maps to ASCII (an
+#           accent that decomposes, a curated confusable row, a Latin-name
+#           base). The fold vouches for what it renders AS, so equal readings
+#           support sameness; but an unequal soft reading never PROVES
+#           difference on a certifying path, because every table this project
+#           has shipped was incomplete by its own history, and a certificate
+#           must not rest on a table's coverage.
+#   wide    an East Asian wide or fullwidth letterform (Unicode EAW W or F),
+#           or a right-to-left letter (bidi class R or AL): provably not a
+#           look-alike of any ASCII letter, because it occupies two columns
+#           or reverses the line's direction, which no ASCII letterform does.
+#           Compared by code point identity.
+#   opaque  everything else: a letter no fold this host can read (Lisu,
+#           Cherokee, Coptic, ae, eth, thorn, oe, and every block nobody has
+#           typed yet). It COULD be a look-alike of anything one column wide,
+#           so it proves nothing in either direction. This is the kind that
+#           used to walk through the money gate: uncatalogued was treated as
+#           readable, and a Lisu spelling of the author's name certified as a
+#           second person. Uncatalogued now proves nothing, which is the
+#           honest verdict.
+def _char_reading(ch):
+    if ch.isascii():
+        return ("hard", ch)
+    if (unicodedata.east_asian_width(ch) in ("W", "F")
+            or unicodedata.bidirectional(ch) in ("R", "AL")):
+        return ("wide", ch)
+    base = "".join(c for c in unicodedata.normalize("NFKD", ch)
+                   if unicodedata.category(c) != "Mn")
+    if len(base) == 1 and base.isascii():
+        return ("soft", base)
+    r = _CONFUSABLES.get(ch) or _latin_fold(ch)
+    if r:
+        return ("soft", r)
+    return ("opaque", ch)
+
+
+def _pair_could_render_same(a, b, trust_fold):
+    ka, ra = a
+    kb, rb = b
+    if ka == "wide" or kb == "wide":
+        return ra == rb          # a wide or RTL letterform is nobody's look-alike
+    if ka == "opaque" or kb == "opaque":
+        return True              # an unreadable letter could render as anything narrow
+    if trust_fold or (ka == "hard" and kb == "hard"):
+        return ra == rb
+    return True                  # a soft mismatch is the fold's claim, not proof
+
+
+def could_render_same(a, b, trust_fold=False):
+    """True when `a` could render as `b` under one-for-one look-alike substitution.
+
+    False is a PROOF of difference: the two strings differ in structure
+    (length) or at a position where both characters' renderings are decided,
+    so no substitution can map one onto the other. Certifying callers use
+    False to earn a PASS; True means the difference is not established, which
+    on a certifying path is NO-DATA naming the ambiguity, never PASS.
+
+    trust_fold: with False (the certifying default), a soft reading (a
+    curated confusable row, a Unicode-name base) supports sameness but never
+    proves difference, so no certificate rests on a table's coverage. With
+    True, soft readings compare as what the fold says they render as; the
+    vacuity backstop uses this, where the cost of trusting the fold is one
+    refused placeholder-shaped value rather than a forged certificate.
+    """
+    aa = [_char_reading(ch) for ch in a]
+    bb = [_char_reading(ch) for ch in b]
+    return len(aa) == len(bb) and all(_pair_could_render_same(x, y, trust_fold)
+                                      for x, y in zip(aa, bb))
+
+
+def _word_could_match(a, b):
+    # A single-letter word is an initial: it collides with any word whose
+    # first letter it could render as, mirroring _names_overlap's expansion.
+    if (len(a) == 1) != (len(b) == 1) and a and b:
+        return _pair_could_render_same(_char_reading(a[0]), _char_reading(b[0]), False)
+    return could_render_same(a, b)
+
+
+def name_sets_could_collide(words_a, words_b):
+    """True when one name's words could all render as the other's, so the two
+    identities are substitution-compatible and their difference is unproven.
+
+    Mirrors the containment shape of the sameness comparison (equal sets,
+    subsets, initials), because those are the forms one person writes their
+    own name in: if every word of one side could render as some word of the
+    other side, a look-alike substitution explains the whole difference.
+    """
+    a = [w for w in words_a if w]
+    b = [w for w in words_b if w]
+    if not a or not b:
+        return False
+
+    def contain(inner, outer):
+        return all(any(_word_could_match(w, v) for v in outer) for w in inner)
+    return contain(a, b) or contain(b, a)
 
 
 def _letter_families(word):
@@ -778,62 +884,30 @@ def _letter_families(word):
 
 
 def unreadable_identity_words(text):
-    """The words of an identity this project cannot honestly compare, and why.
+    """The words of an identity written in a disguise shape, and why.
 
-    The self-approval guard certifies that two identities are DIFFERENT
-    people, and that certification used to rest on a curated confusable table:
-    one code point outside the table (a Coptic o, a Latin small capital)
-    rendered as the author's name and compared as a second person, restoring
-    the self-approval PASS on the money gate. A list cannot close that class,
-    so the rule is about what the comparison can READ, not about which
-    lookalikes somebody has catalogued:
+    One refusal is left here, and it is an AFFIRMATIVE one: a word whose
+    letters span more than one script family is not a word in any script. It
+    is the shape identities are forged in (one Cyrillic letter inside an
+    ASCII name renders as the author while comparing as a second person) and
+    not a shape any honest name takes, so a certifying caller refuses it with
+    the word and its scripts named.
 
-      1. a word that, after normalization and confusable folding (skeleton),
-         still mixes ASCII letters with non-ASCII letters is a word whose
-         non-ASCII residue is exactly what the fold could not vouch for, so
-         no comparison built on the fold may certify difference over it;
-      2. a word whose letters span more than one script family is not a word
-         in any script, which is the shape identities are forged in and not
-         the shape they are honestly written in;
-      3. a word wholly in the LATIN family that the fold still cannot reduce
-         to ASCII is unreadable even though it mixes nothing: Latin is the
-         family this comparison's own alphabet belongs to, so its unreduced
-         letters (the small-capital block, the letters with no Unicode base
-         name) render as the alphabet being compared against while comparing
-         as something else.
+    What this deliberately no longer refuses: a word wholly in ONE family
+    that merely carries letters no fold this host can read. Two earlier
+    rounds refused those wholesale, and the refusal rejected ordinary Danish,
+    Icelandic and French names (Bæk, Þóra, sœur) on the money gate, teaching
+    people to spell their own names wrong to clear a control. Whether an
+    unreadable-but-honest word can be CERTIFIED as different from one
+    specific other identity is a pairwise question, not a property of the
+    word: could_render_same and name_sets_could_collide answer it at the
+    comparison site, where an unprovable difference is NO-DATA naming the
+    ambiguity, never PASS and never a refusal of the name itself.
 
-    Wholly one-script words in any NON-Latin script pass through: a fully Japanese name
-    is readable and comparable. Returns [(word, why)]; an empty list means
-    every word reads as one alphabet. Callers on a certifying path REFUSE
-    (FAIL) when this is non-empty, with the sentence naming the word, because
-    the direction of error on a money gate is toward refusal, never assurance.
+    Returns [(word, why)]; an empty list means no word is disguise-shaped.
     """
     out = []
     for word in plain_text(str(text or "")).split():
-        sk = skeleton(word)
-        ascii_letters = any(ch.isalpha() and ch.isascii() for ch in sk)
-        other = sorted({ch for ch in sk if ch.isalpha() and not ch.isascii()})
-        if ascii_letters and other:
-            out.append((word, "mixes ASCII letters with %s, which no normalization or "
-                              "confusable fold this host has maps to ASCII"
-                              % ", ".join("%r (U+%04X)" % (c, ord(c)) for c in other[:4])))
-            continue
-        # Rule 3, and the one that ends the table for good: a word may be
-        # WHOLLY non-ASCII (so rule 1 sees no mixture) and wholly Latin (so
-        # rule 2 sees one family) and still be unreadable, because Latin is
-        # the family this comparison's own alphabet belongs to, and a Latin
-        # letter the fold could not reduce renders as that alphabet while
-        # comparing as something else. The Latin small-capital block defeated
-        # both mixture rules exactly this way. A wholly one-script word in a
-        # NON-Latin family still reads (a fully Japanese name is comparable);
-        # a Latin word the fold cannot canonicalize is not.
-        residue = _latin_residue(sk)
-        if residue:
-            out.append((word, "is written with Latin-family letters (%s) that render as this "
-                              "comparison's own alphabet while no normalization, Unicode name "
-                              "fold or confusable fold this host has reduces them to ASCII"
-                              % ", ".join("%r (U+%04X)" % (c, ord(c)) for c in residue[:4])))
-            continue
         fams = _letter_families(word)
         if len(fams) > 1:
             out.append((word, "mixes letters from more than one script (%s)"
@@ -860,8 +934,9 @@ def skeleton(text):
     # The table first (it holds the cross-script lookalikes), then the Latin
     # name fold (the RULE that covers the Latin blocks no table row names, so
     # a small-capital spelling of a name or a placeholder reads as the word it
-    # renders as). What neither reduces is left in place, and the callers that
-    # certify anything refuse it via _latin_residue rather than passing it.
+    # renders as). What neither reduces is left in place: a certifying caller
+    # treats an unreduced letter as proof of NOTHING, in either direction
+    # (could_render_same), so no PASS and no refusal ever rests on it alone.
     return "".join(_CONFUSABLES.get(ch) or _latin_fold(ch) or ch for ch in t)
 
 
@@ -1056,16 +1131,19 @@ def vacuous(value, allow=()):
                     stripped = r
                     break
         if stripped == v:
-            # The fixpoint backstop for the same class rule 3 closes on
-            # identities: a value still carrying Latin-family letters the fold
-            # could not reduce to ASCII renders to a reader as this project's
-            # own alphabet while no test here can read it (the small-capital
-            # TODO was the sixth disguise of one placeholder, and the block
-            # has neither a decomposition nor a table row). A value the test
-            # cannot read as words is not certified as an answer; the
-            # direction of error is refusal, which FAILs a gate with the
-            # value quoted, never a PASS over a field no reader can check.
-            if _latin_residue(v):
+            # The fixpoint backstop: a value the fold cannot fully read is
+            # refused as an answer exactly when it could RENDER as one of the
+            # placeholder tokens under one-for-one look-alike substitution (a
+            # Lisu or small-capital spelling of TODO reads as TODO to every
+            # reviewer while comparing as nothing). The earlier shape of this
+            # backstop refused ANY value carrying an unfoldable Latin letter,
+            # which read ordinary Danish, Icelandic and French words (Kjær,
+            # Þórður, sœur) as recording nothing; those are proven different
+            # from every placeholder by their readable letters and stay
+            # answers. Direction of error unchanged: a value that COULD read
+            # as a placeholder is refused with the value quoted, never
+            # certified as an answer no reader can check.
+            if any(could_render_same(v, t, trust_fold=True) for t in VACUOUS_VALUES):
                 return True
             return False
         v = stripped
