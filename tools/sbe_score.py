@@ -888,6 +888,13 @@ def silent_failure_lints(ctx=None):
 CITATION_INVENTORY = os.path.join("docs", "CITATIONS.md")
 CITATION_FIELDS = ("claim", "population", "date", "limit")
 _URL_RX = re.compile(r"https?://[^\s<>\"')\]]+")
+# Markdown wraps a URL in delimiters that are not part of it: a backtick from
+# inline code, a comma from prose, an asterisk or underscore from emphasis. Left
+# attached, `https://example.com/x` and https://example.com/x read as two
+# different URLs, so one of them looks uninventoried and the honest repair looks
+# like adding a second entry for the same page, which the duplicate rule then
+# rejects. Trimming here keeps the scan set the set of pages a reader can visit.
+_URL_TRAILING = ".,;:`*_~"
 _HTML_COMMENT_RX = re.compile(r"<!--.*?-->", re.S)
 _FIELD_RX = re.compile(r"-\s*(claim|population|date|limit)\s*:\s*(.*)$")
 
@@ -899,7 +906,7 @@ def _doc_urls(text):
     nothing: a URL a reader cannot see is not a citation, and an inventory whose
     entries sit inside a comment declares nothing.
     """
-    return [m.group(0).rstrip(".,;:")
+    return [m.group(0).rstrip(_URL_TRAILING)
             for m in _URL_RX.finditer(_HTML_COMMENT_RX.sub("", text))]
 
 
@@ -935,8 +942,15 @@ def check_citation_inventory(ctx=None):
     is never read, and no network connection is ever opened.
     """
     root = os.environ.get("SBE_CITATION_ROOT")
+    self_note = ""
     if root is None:
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Named, because a run over a user's repository printed this check's
+        # verdict about a DIFFERENT tree (the installed skill's own) with
+        # nothing on the line saying so, and a reader composing the report
+        # read it as a claim about the directory they passed.
+        self_note = (" (the installed skill's own tree, this check's default; set "
+                     "SBE_CITATION_ROOT to point it at another root)")
     if not root:
         return "NO-DATA", ("no citation root named: SBE_CITATION_ROOT is empty, so no document "
                            "was opened and no URL set exists to cover")
@@ -945,19 +959,42 @@ def check_citation_inventory(ctx=None):
                         "mistyped root must not read as a covered citation set" % root)
     inv_path = os.path.join(root, CITATION_INVENTORY)
     inv_norm = os.path.normcase(os.path.normpath(inv_path))
+    # The scanned set is DERIVED, never curated: the old set was two names
+    # plus one directory (README.md, SKILL.md, docs/*.md), and SECURITY.md,
+    # CHANGELOG.md, PUBLISH-CHECKLIST.md and seven other shipped documents
+    # were never opened, so a citation planted in a shipped top-level page
+    # passed while the honest inventory entry for it was called stale. When
+    # the root ships a checksums manifest, the manifest IS the shipped-file
+    # list and its markdown entries are the set; otherwise every .md under
+    # the root is walked (hidden directories skipped), so the set can only
+    # widen with the tree, never lag a hand-maintained tuple.
     docs, unopened = [], []
-    for rel in ("README.md", "SKILL.md"):
-        p = os.path.join(root, rel)
-        problem = evidence_problem(p)
-        if problem:
-            unopened.append("%s (%s)" % (rel, problem))
-        elif os.path.lexists(p):
-            docs.append(p)
     pruner = Pruner()
-    docs_dir = os.path.join(root, "docs")
-    if os.path.isdir(docs_dir):
-        for dp, dns, fns in os.walk(docs_dir, onerror=pruner.onerror):
-            dns[:] = pruner(dp, dns)
+    manifest = os.path.join(root, "CHECKSUMS.sha256")
+    manifest_rels = []
+    if os.path.isfile(manifest) and not evidence_problem(manifest):
+        try:
+            for line in open(manifest, errors="replace"):
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[1].strip().endswith(".md"):
+                    manifest_rels.append(parts[1].strip())
+        except OSError:
+            manifest_rels = []
+    if manifest_rels:
+        scan_scope = "every markdown file in the CHECKSUMS.sha256 manifest"
+        for rel in sorted(manifest_rels):
+            p = os.path.join(root, rel)
+            problem = evidence_problem(p)
+            if problem:
+                unopened.append("%s (%s)" % (rel, problem))
+            elif os.path.lexists(p):
+                docs.append(p)
+            else:
+                unopened.append("%s (in the manifest but absent)" % rel)
+    else:
+        scan_scope = "every markdown file under the root"
+        for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
+            dns[:] = [d for d in pruner(dp, dns) if not d.startswith(".")]
             for fn in sorted(fns):
                 if fn.endswith(".md"):
                     docs.append(os.path.join(dp, fn))
@@ -1004,8 +1041,9 @@ def check_citation_inventory(ctx=None):
                         "call the citation set covered; %d document(s) were scanned%s%s"
                         % (len(refused), root, _first_named(refused, "; "), scanned, note, offline))
     if not scanned:
-        return "NO-DATA", ("no shipped document (README.md, SKILL.md, docs/*.md) under %s, so no "
-                           "URL set exists to cover%s%s" % (root, note, offline))
+        return "NO-DATA", ("no markdown document under %s%s (scanned: %s), so no "
+                           "URL set exists to cover%s%s" % (root, self_note, scan_scope,
+                                                            note, offline))
     if entry_problems:
         return "FAIL", ("%s holds %d duplicate entr(y/ies) (%s); a URL with two scope entries "
                         "lets a reader pick the one they prefer%s%s"
@@ -1036,16 +1074,23 @@ def check_citation_inventory(ctx=None):
                            note, offline))
     stale = sorted(u for u in entries if u not in found)
     if stale:
-        return "FAIL", ("%d entr(y/ies) in %s name a URL no shipped document cites (%s); a stale "
-                        "entry is scope nobody reads, and it hides the next uncovered URL behind "
-                        "a growing list%s%s"
-                        % (len(stale), CITATION_INVENTORY, _first_named(stale, "; "), note, offline))
+        # "Stale" is scoped to what was SCANNED, in those words: the old
+        # sentence said "no shipped document cites" over a scan that opened
+        # eleven of twenty-one shipped documents, so it punished the honest
+        # entry for a citation sitting in a document outside the tuple.
+        return "FAIL", ("%d entr(y/ies) in %s name a URL no document this check scanned cites "
+                        "(%s; scanned %d document(s): %s); a stale entry is scope nobody reads, "
+                        "and it hides the next uncovered URL behind a growing list%s%s"
+                        % (len(stale), CITATION_INVENTORY, _first_named(stale, "; "),
+                           scanned, scan_scope, note, offline))
     if not found:
         return "NO-DATA", ("%d document(s) scanned under %s and none cites an external URL, so "
                            "there is nothing to cover%s%s" % (scanned, root, note, offline))
-    return "PASS", ("%d external URL(s) across %d document(s) scanned under %s, each with an "
-                    "inventory entry in %s answering claim, population, date and limit%s%s"
-                    % (len(found), scanned, root, CITATION_INVENTORY, note, offline))
+    return "PASS", ("%d external URL(s) across %d document(s) scanned under %s%s (%s), each "
+                    "with an inventory entry in %s answering claim, population, date and "
+                    "limit%s%s"
+                    % (len(found), scanned, root, self_note, scan_scope,
+                       CITATION_INVENTORY, note, offline))
 
 
 def _rel(p):
@@ -1148,9 +1193,17 @@ def main():
                                 "context could not be built examined nothing, and is reported here "
                                 "as a failure rather than disappearing"
                                 % (type(e).__name__, e))
+    # Gate-severity checks print FIRST. The documented one-liner ("scan for
+    # silent swallows") used to open with ten NO-DATA lines about vault
+    # telemetry paths unrelated to the tree being linted, with the line the
+    # reader came for eleventh; a hurried engineer stops reading, and
+    # composition is part of a report's honesty. Registry order is kept
+    # within each severity group.
+    ordered = ([n for n in CHECKS if CHECKS[n].severity == "gate"]
+               + [n for n in CHECKS if CHECKS[n].severity != "gate"])
     results = [(name,) + (("FAIL", ctx_error) if ctx is None
                           else run_guarded(name, CHECKS[name], ctx))
-               for name in CHECKS]
+               for name in ordered]
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
     for n, v, e in results:

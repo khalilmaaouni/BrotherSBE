@@ -741,8 +741,14 @@ _SECTION_WORDS = {
                  "The call"),
     "Consequences": ("Consequences", "What this costs", "Costs", "Costs and benefits",
                      "Implications", "What we give up", "Impact", "So what"),
+    # "Flip condition" is this project's OWN name for the section (README's
+    # dossier table, DIGEST, LAWS-REFERENCE and HOW-IT-WORKS all print it),
+    # and the vocabulary refused it: an honest reader who wrote the phrase
+    # the docs taught them was FAILed on spelling. The project's own term
+    # belongs in the accepted set by construction.
     "What would flip this": ("What would flip this", "What would change our mind",
                              "What would reverse this", "When we would revisit this",
+                             "Flip condition", "Flip conditions",
                              "Revisit", "Reconsider", "Reversal"),
 }
 
@@ -1198,6 +1204,27 @@ def check_adr(root):
             if reduced:
                 chosen.add(reduced)
     chosen_words = [frozenset(c.split()) for c in chosen]
+    # The Decision's unquoted sentence counts too: a Decision reading "We take
+    # the token bucket at the ingress (Envoy local rate limit)" names the
+    # winner letter for letter, and the old rule (a quoted choice or a chosen
+    # marker only) printed "the Decision section does not name which listed
+    # option won" over a file a reader refutes by opening it, which is a false
+    # evidence sentence, the same severity as a wrong verdict. A listed
+    # option whose FULL folded name appears inside the Decision's own text is
+    # the named choice, and only when exactly ONE listed option appears
+    # there: a Decision that discusses several options by name has not told
+    # this check which of them won. (A Decision that names only the LOSER
+    # by full name is misread by this rule and is accepted as a limit; the
+    # ordinary decision sentence names what was chosen.)
+    decision_body = _section_body(t, _SECTION_ANCHORED["Decision"])
+    if decision_body is None:
+        decision_body = _section_body(t, _SECTION_PATTERNS["Decision"])
+    if decision_body:
+        dtext = derivation_fold(" ".join(l.strip() for l in decision_body if l.strip()))
+        named = [m[0] for m in merged if m[0] and m[0] in dtext]
+        if len(named) == 1:
+            chosen.add(named[0])
+            chosen_words.append(frozenset(named[0].split()))
     def _is_chosen(key, forms, kw):
         if key in chosen:
             return True
@@ -1232,7 +1259,17 @@ def check_adr(root):
     marked_rejected = [m for m in rest if _verdict_of(m) == "rejected"]
     marked_chosen = [m for m in rest if _verdict_of(m) == "chosen"]
     unmarked = [m for m in rest if not _verdict_of(m)]
-    winner_identified = bool(chosen_out or marked_chosen or table_chosen)
+    # Identification of the winner is per-option, not per-document: an
+    # unmarked option may be reclassified as rejected only when the winner is
+    # known to be a DIFFERENT listed option (a listed option matched the
+    # Decision's choice, or marked itself chosen). A chosen TABLE row that
+    # merges with no listed option (the winner called "Kafka" in the table
+    # and "Message broker" in the list is ordinary writing) identifies a
+    # winner that may BE one of the unmarked options under another name, so
+    # it establishes nothing about them, and the old document-level boolean
+    # consumed it as though it did: the floor was satisfied by counting the
+    # decision itself as one of its own rejected alternatives.
+    winner_identified = bool(chosen_out or marked_chosen)
     if winner_identified:
         decided, undecided = marked_rejected + unmarked, []
     else:
@@ -1246,14 +1283,30 @@ def check_adr(root):
     rejected = len(alternatives)
     undecided_note = ""
     if rejected < 2 and undecided:
-        undecided_note = ("%d option(s) are listed under a rejected-alternatives heading, but "
-                          "only %d carry a rejection verdict of their own, and neither any "
-                          "option's own text nor the Decision section names which listed option "
-                          "won, so this check cannot tell a chosen option from a rejected one "
-                          "and does not assert a count it cannot defend. Mark each rejection in "
-                          "its own text (Rejected: ..., ruled out, not chosen), or name the "
-                          "chosen option in the Decision (Chosen option: \"...\"), and this "
-                          "becomes a verdict" % (len(rest), rejected))
+        # The sentence claims what was TESTED, never a wider absence: the old
+        # wording ("neither ... the Decision section names which listed
+        # option won") was false over a Decision that named the winner
+        # verbatim but unquoted, and false evidence is the defect class this
+        # project exists to refuse.
+        if table_chosen or chosen:
+            undecided_note = ("%d option(s) are listed under a rejected-alternatives heading, but "
+                              "only %d carry a rejection verdict of their own, and the chosen "
+                              "option this ADR names matches no listed option by name, so this "
+                              "check cannot tell which listed option won and does not assert a "
+                              "count it cannot defend. Name the chosen option as it appears in "
+                              "the options list, or mark each rejection in its own text "
+                              "(Rejected: ..., ruled out, not chosen), and this becomes a "
+                              "verdict" % (len(rest), rejected))
+        else:
+            undecided_note = ("%d option(s) are listed under a rejected-alternatives heading, but "
+                              "only %d carry a rejection verdict of their own, and no chosen "
+                              "marker, no quoted choice, and no listed option's full name "
+                              "appears in the Decision section, so this check cannot tell a "
+                              "chosen option from a rejected one and does not assert a count it "
+                              "cannot defend. Mark each rejection in its own text (Rejected: "
+                              "..., ruled out, not chosen), or name the chosen option in the "
+                              "Decision (its listed name, or Chosen option: \"...\"), and this "
+                              "becomes a verdict" % (len(rest), rejected))
     elif rejected < 2:
         problems.append("only %d distinct rejected alternative(s) found under a "
                         "rejected-alternatives heading%s%s; an ADR needs at least 2, each with at "
