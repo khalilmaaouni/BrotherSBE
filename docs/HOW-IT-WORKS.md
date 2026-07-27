@@ -55,7 +55,7 @@ Five completeness rules are mechanical. Four are stated as laws L2 to L5 in
    and names the missing file: without a tier nothing can say which artifacts are
    owed, and reporting an absence there made deleting one file the cheapest way
    through the gate.
-2. **adr.** At least two rejected alternatives, plus Criteria, Decision,
+2. **adr.** At least two decidably rejected alternatives, plus Criteria, Decision,
    Consequences, and a "What would flip this" section. All five, or it fails.
 3. **datamodel.** Every entity names a system of record with a value; every
    relationship carries a cardinality as a standalone token, in any accepted
