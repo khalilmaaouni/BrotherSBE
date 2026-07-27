@@ -6168,6 +6168,75 @@ def f4c(root):
           "## What would flip this\nA drain longer than a sprint.\n")
 
 
+@case("an-unquoted-decision-sentence-naming-one-listed-option-is-the-winner", "adr", "PASS")
+def f4c2(root):
+    # The honest hurried shape: no verdict markers anywhere, and a Decision
+    # written as a natural sentence that embeds exactly one listed option's
+    # name letter for letter. The old rule saw only quoted choices and
+    # markers, and its NO-DATA sentence claimed "the Decision section does
+    # not name which listed option won" over a file a reader refutes by
+    # opening it. One listed name in the Decision resolves the winner; the
+    # other options are what the heading declares them.
+    write(root, "03-adr.md",
+          "# ADR: rate limiting the export endpoint\n"
+          "## Criteria\nDatastore out of the hot path; limits change without a deploy.\n"
+          "## Options considered\n"
+          "- Token bucket middleware in reporting-api itself.\n"
+          "- Token bucket at the ingress (Envoy local rate limit).\n"
+          "- Queue the export and drip-feed it.\n"
+          "## Decision\nWe take the token bucket at the ingress (Envoy local rate limit): "
+          "it keeps the datastore out of the hot path and the limits are a config reload, "
+          "not a deploy.\n"
+          "## Consequences\nEnvoy config becomes load-bearing.\n"
+          "## Flip condition\nGlobal limits across pods.\n")
+
+
+@case("a-chosen-marker-resolving-to-no-listed-option-establishes-nothing", "adr", "NO-DATA")
+def f4c3(root):
+    # 12a-I4's shape: the winner is called "Kafka" in the comparison table
+    # and "Message broker" in the options list, which is ordinary writing,
+    # not an attack. The chosen table row identifies a winner that may BE
+    # the unmarked list option under another name, so it must not reclassify
+    # that option as rejected: the old document-level boolean counted the
+    # decision itself as one of its own rejected alternatives and printed
+    # "2 distinct rejected alternatives" over an ADR with one rejection.
+    write(root, "03-adr.md",
+          "# ADR: order event distribution\n"
+          "## Criteria\nDecouple producers from consumers; replay must be possible.\n"
+          "## Options considered\n"
+          "- Synchronous call into each consumer service: rejected, couples deploys and "
+          "drops events on consumer downtime.\n"
+          "- Message broker between producers and consumers.\n"
+          "## Alternatives compared\n"
+          "| Option | Throughput | Verdict |\n"
+          "| --- | --- | --- |\n"
+          "| Kafka | high | chosen |\n"
+          "| Synchronous call | low | rejected |\n"
+          "## Decision\nWe adopt Kafka for distribution.\n"
+          "## Consequences\nWe now operate a broker.\n"
+          "## What would flip this\nA managed queue with replay at equal cost.\n")
+
+
+@case("the-projects-own-name-for-the-flip-section-is-accepted", "adr", "PASS")
+def f4c4(root):
+    # "Flip condition" is the two-word name this project's own docs print in
+    # four places for exactly this section, and the vocabulary refused it: a
+    # reader who wrote the heading the README taught them was FAILed on
+    # spelling. Pinned with a marker-free body that also exercises the
+    # decision-sentence winner rule above.
+    write(root, "03-adr.md",
+          "# ADR\n## Criteria\nCost, risk.\n"
+          "## Options considered\n"
+          "- Nightly batch reconciliation of the ledger.\n"
+          "- Streaming reconciliation on every write.\n"
+          "- Manual weekly spot checks by the finance team.\n"
+          "## Decision\nWe run the nightly batch reconciliation of the ledger; the "
+          "streaming option costs a consumer we do not want to operate, and manual "
+          "checks do not scale.\n"
+          "## Consequences\nDrift is visible for up to a day.\n"
+          "## Flip condition\nAn SLA tighter than a day on ledger drift.\n")
+
+
 @case("a-colon-led-hurried-adr-is-read-as-its-sections", "adr", "PASS")
 def f4d(root):
     # The whole ADR written the way a hurried honest engineer writes it:

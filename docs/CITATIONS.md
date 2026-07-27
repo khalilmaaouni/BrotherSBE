@@ -115,10 +115,10 @@ captured.
 - limit: self-reference to a sibling project, carries no evidence weight
 
 ## https://github.com/khalilmaaouni/BrotherSBE
-- claim: this repository's own clone location
-- population: a repository link, not a measurement
-- date: current repository
-- limit: self-reference, carries no evidence weight
+- claim: this repository's own clone location, which the publish checklist expects to return HTTP 200 once published
+- population: one URL, a repository link rather than a measurement; the checklist checks availability with its own curl command
+- date: current repository, recorded July 2026
+- limit: self-reference carrying no evidence weight, and an availability target rather than a factual claim; the checklist re-checks it at publish time and this inventory does not
 
 ## https://github.com/oasdiff/oasdiff
 - claim: a breaking-change differ that can be wired into CI
