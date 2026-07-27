@@ -345,15 +345,23 @@ except OSError as e:
     _CHECKS_IMPORT_ERROR = "sbe_checks.py is not in this tree (%s)" % e
 
 
-def _approval_with_sig(root, sig, approver="Someone", authors=("Dana Author", "dana@example.com")):
+def _approval_with_sig(root, sig, approver="Someone", authors=("Dana Author", "dana@example.com"),
+                       signer="", committers=None):
     """The approval verdict for a signature state, with the approver named.
 
     `authors` is what git says wrote the commit. It is a separate identity from
     the approver by default, because self-approval is its own FAIL now and these
-    fixtures are about the SIGNATURE STATE, one variable at a time.
+    fixtures are about the SIGNATURE STATE, one variable at a time. The default
+    meta records the same person as author and committer (the common one-writer
+    commit) with no signer principal, matching an ordinary signed commit where
+    the author signed; `committers` and `signer` exist for the co-sign shapes,
+    where the approver amended and the signature's principal decides.
     """
     original = _gate.git_trailers
-    _gate.git_trailers = lambda r: ("change\n\nApproved-by: %s" % approver, sig, list(authors))
+    committers = list(authors) if committers is None else list(committers)
+    who = list(authors) + [c for c in committers if c not in authors]
+    meta = {"author": list(authors), "committer": committers, "signer": signer}
+    _gate.git_trailers = lambda r: ("change\n\nApproved-by: %s" % approver, sig, who, meta)
     try:
         return _gate.gate_approval(root)[0]
     finally:
@@ -597,6 +605,150 @@ def c13i23(root):
     # Eth and thorn in both words, and the difference is still proven by the
     # readable letters around them.
     return _approval_with_sig(root, "G", approver="Þórður Guðmundsson")
+
+
+@case("an-identity-written-wholly-in-parentheses-is-still-the-author", "sig", "FAIL")
+def c15i1(root):
+    # `(Dana Author)` parsed to an EMPTY word list (a parenthesized span was
+    # annotation, deleted), and the certifying comparison consumed the empty
+    # comparison's "no collision" as PROOF of difference: one pair of
+    # parentheses bought the self-approval control on the money gate. The
+    # founding rule, applied to the comparison itself: a comparison must
+    # first establish that it examined something. Bracket content is read as
+    # the name when nothing exists outside it.
+    return _approval_with_sig(root, "G", approver="(Dana Author)")
+
+
+@case("an-identity-in-angle-brackets-with-no-mailbox-is-a-name", "sig", "FAIL")
+def c15i2(root):
+    # `<Dana Author>` is not an email (no @), so deleting it as a mailbox
+    # span emptied the comparison the same way the parentheses did.
+    return _approval_with_sig(root, "G", approver="<Dana Author>")
+
+
+@case("a-name-hidden-in-an-annotation-still-compares-as-a-name", "sig", "FAIL")
+def c15i3(root):
+    # `(Dana Author), staff engineer`: words exist outside the brackets, so
+    # the bracketed span reads as annotation, but the all-words reading is
+    # kept as a second candidate, and the author's name inside it is still
+    # the author.
+    return _approval_with_sig(root, "G", approver="(Dana Author), staff engineer")
+
+
+@case("a-blank-rendering-joiner-does-not-weld-a-second-person", "sig", "FAIL")
+def c15i4(root):
+    # U+2800 BRAILLE PATTERN BLANK renders as a blank between the words and
+    # is not Python whitespace, so `Dana⠀Author` split as ONE long word,
+    # structurally different from every author word, and structure was
+    # consumed as proof of difference. A character whose glyph is a blank
+    # reads as the space a reader sees.
+    return _approval_with_sig(root, "G", approver="Dana⠀Author")
+
+
+@case("an-invisible-weld-does-not-weld-a-second-person", "sig", "FAIL")
+def c15i5(root):
+    # The sibling weld: a zero-width space is DELETED by the invisible-class
+    # rule, so `Dana(ZWSP)Author` became the single word `danaauthor`, again
+    # structurally different from both author words. The spaceless
+    # renderings are compared too, so a welded spelling of the author is the
+    # author.
+    return _approval_with_sig(root, "G", approver="Dana​Author")
+
+
+@case("an-empty-author-side-cannot-prove-difference", "sig", "NO-DATA")
+def c15i6(root):
+    # The governing rule as a scenario: empty one side of the certifying
+    # comparison and the verdict must never improve. A commit recording no
+    # readable author or committer identity gives the comparison nothing to
+    # examine, and a comparison that examined nothing proves nothing.
+    return _approval_with_sig(root, "G", approver="Robin Reviewer <robin@example.com>",
+                              authors=())
+
+
+@case("an-email-only-approver-against-a-nameless-author-is-not-proven", "sig", "NO-DATA")
+def c15i7(root):
+    # One side records only an email, the other only a name: no comparison
+    # examined anything, so nothing is proven in either direction.
+    return _approval_with_sig(root, "G", approver="<robin@example.com>",
+                              authors=("Dana Author",))
+
+
+@case("a-proven-different-email-is-proof-of-difference", "sig", "PASS")
+def c15i8(root):
+    # The remedy the NO-DATA sentence advertises, demonstrated working: an
+    # approver whose name this host cannot certify (Devanagari, opaque to
+    # every fold) records an email address that differs from the author's at
+    # readable positions, and the email difference is accepted as proof.
+    # Before this rule a proven-different email fell through to the name
+    # test and changed nothing, so the printed remedy was false.
+    return _approval_with_sig(root, "G", approver="राहुल शर्मा <rahul@corp.com>")
+
+
+@case("a-confusable-email-is-the-authors-own-mailbox", "sig", "FAIL")
+def c15i9(root):
+    # The email path must not reopen the look-alike hole the name path
+    # closed: a Cyrillic `а` in the local part renders as the author's own
+    # mailbox. The skeleton fold reads it AS the author's mailbox, so this
+    # is the self-approval FAIL, not a certificate.
+    return _approval_with_sig(root, "G", approver="Robin <dаna@example.com>")
+
+
+@case("an-unreadable-letter-in-an-email-is-refused-not-certified", "sig", "FAIL")
+def c15i9b(root):
+    # A Lisu letter in the local part renders as the author's `D` while no
+    # fold reads it. The mixed-script refusal catches it first (an email
+    # word carrying Lisu beside Latin is a disguise shape), so the verdict
+    # is the affirmative FAIL; the email-collide NO-DATA inside the
+    # certifying path stays as layered defense behind this refusal, and the
+    # point pinned here is the direction: never PASS.
+    return _approval_with_sig(root, "G", approver="Robin <ꓓana@example.com>")
+
+
+@case("two-names-of-one-opaque-script-compare-by-code-point", "sig", "PASS")
+def c15i10(root):
+    # An all-Devanagari team, both identities name-only: every letter is
+    # opaque to the fold, but two different letters of ONE script are
+    # visibly different glyphs, not look-alikes of each other, on the
+    # precedent CJK set. 80 percent of ordinary Amharic pairs and 53 percent
+    # of Hindi pairs were refused under the blanket opaque rule, and the
+    # only escapes were transliterating or deleting the name.
+    return _approval_with_sig(root, "G", approver="राहुल शर्मा",
+                              authors=("अनिल कुमार", "anil@corp.com"))
+
+
+@case("a-lisu-spelling-of-the-author-still-cannot-certify", "sig", "NO-DATA")
+def c15i11(root):
+    # The forgery axis the same-script rule must NOT reopen: a Lisu spelling
+    # of the ASCII author is opaque-versus-hard, cross-script, and stays
+    # unproven.
+    return _approval_with_sig(root, "G", approver="ꓓꓮꓠꓮ ꓮꓴꓔꓧꓳꓣ")
+
+
+@case("an-approver-who-amends-and-signs-is-the-approver-not-a-second-author", "sig", "PASS")
+def c15i12(root):
+    # The co-sign shape: under SSH signing an approver signs by amending,
+    # which makes them the committer, and that is git's ONLY spelling of
+    # "the reviewer signed". The old guard lumped committer in with author
+    # and FAILed the strongest honest approval git can express, while the
+    # FAIL's remedy ("have the approver sign") pointed back into itself. The
+    # carve-out is bound to a key: it opens only when the signature's
+    # matched principal is the approver's own email.
+    return _approval_with_sig(root, "G", approver="Robin Reviewer <robin@example.com>",
+                              authors=("Dana Author", "dana@example.com"),
+                              committers=("Robin Reviewer", "robin@example.com"),
+                              signer="robin@example.com")
+
+
+@case("a-spoofed-committer-name-signed-with-the-authors-key-stays-refused", "sig", "FAIL")
+def c15i13(root):
+    # The attack the carve-out must not admit: the author amends with
+    # GIT_COMMITTER_NAME spoofed to the approver and signs with their OWN
+    # key. The signature's principal is the author, not the approver, so
+    # the committer match proves nothing and the verdict stays FAIL.
+    return _approval_with_sig(root, "G", approver="Robin Reviewer <robin@example.com>",
+                              authors=("Dana Author", "dana@example.com"),
+                              committers=("Robin Reviewer", "robin@example.com"),
+                              signer="dana@example.com")
 
 
 @case("a-lisu-spelling-of-tbd-is-not-a-snapshot-pin", "numbers", "FAIL")
