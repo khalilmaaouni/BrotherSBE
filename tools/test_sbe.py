@@ -232,11 +232,10 @@ class TestDigestCap(unittest.TestCase):
         cap = int(re.search(r"CAP=(\d+)", io.open(hook).read()).group(1))
         work = tempfile.mkdtemp()
         try:
-            # A stand-in install tree: the hook reads DIGEST.md and the tools
-            # beside it, so a copy with a huge brief exercises the real path.
-            shutil.copytree(os.path.join(HERE, ".."), os.path.join(work, "sbe"),
-                            ignore=shutil.ignore_patterns(".git", "__pycache__"))
-            root = os.path.join(work, "sbe")
+            # The REAL hook and the real DIGEST.md (the hook derives its own
+            # directory), pointed at a temp vault: read-only against this tree,
+            # and the brief that overflows is written into the temp vault.
+            root = os.path.abspath(os.path.join(HERE, ".."))
             vault = os.path.join(work, "vault")
             os.makedirs(os.path.join(vault, "99-System", "telemetry"))
             env = dict(os.environ, BROTHERSBE_VAULT=vault)

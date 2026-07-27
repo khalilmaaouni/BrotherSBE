@@ -3551,6 +3551,58 @@ def dc7(root):
     return "consistent" if not wrong else "; ".join(wrong[:6])
 
 
+@case("no-shipped-doc-describes-tool-behavior-the-tools-no-longer-have", "docs", "consistent")
+def dc_behavior(root):
+    """The doc-quote guard for BEHAVIOR CLAIMS, not for numbers or verdict lines.
+
+    A behavior change landed at the code site (fix 10 removed the silent
+    `git rev-parse --show-toplevel` re-root) and six doc sentences kept
+    teaching the removed behavior, in the direction where a receipt the docs
+    promise is found silently is not, so a FAIL degrades to a NO-DATA that
+    does not block. The fixture-backed line guard recomputes verdict LINES
+    and the count guards recompute NUMBERS; prose describing what a tool does
+    was gated by nothing.
+
+    The rule this encodes: a doc sentence that asserts a mechanism must name
+    one that exists in the source. Each pair below is (a phrase a doc would
+    only contain if it were describing the old behavior, why it is wrong),
+    and the guard fails on any shipped doc still carrying one. A phrase is
+    retired from this list only when the behavior it describes comes back.
+    """
+    import re as _re
+    gate_src = open(os.path.join(_REPO, "tools", "sbe_gate.py"), errors="replace").read()
+    claims = []
+    # Each entry is (regex over doc text, predicate over the source that must
+    # hold for the sentence to be true, why the sentence would be false).
+    if "--show-toplevel" not in gate_src:
+        claims.append((r"(?i)resolves? (?:its root|it) to the git (?:worktree top|toplevel)"
+                       r"|resolves? its root to your git worktree top"
+                       r"|resolve it to the git worktree top"
+                       r"|defaults? to the current git worktree"
+                       r"|walks the git worktree"
+                       r"|inspects the current\s+git worktree",
+                       "the gate examines exactly the directory it was named; nothing "
+                       "re-roots to a git worktree top (no --show-toplevel in sbe_gate.py)"))
+    if "sbe: allow-silent" not in gate_src:
+        claims.append((r"(?i)in `?sbe_gate\.py`? the marker sits|git-worktree fallback",
+                       "sbe_gate.py carries no `sbe: allow-silent` marker and no git-worktree "
+                       "fallback"))
+    wrong = []
+    for rel in SHIPPED_DOCS:
+        p = os.path.join(_REPO, rel)
+        if not os.path.isfile(p):
+            continue
+        for n, line in enumerate(open(p, errors="replace").read().splitlines(), 1):
+            for pattern, why in claims:
+                if _re.search(pattern, line):
+                    wrong.append("%s:%d describes behavior the tools do not have (%s)"
+                                 % (rel, n, why))
+    if not claims:
+        return ("this guard checked nothing: every behavior it knows how to falsify is "
+                "present in the source again, so the claims must be re-derived")
+    return "consistent" if not wrong else "; ".join(wrong[:5])
+
+
 @case("guide-01s-verbatim-workflow-fence-is-the-shipped-workflow", "docs", "consistent")
 def dc8(root):
     # The one doc that promises the FULL file "verbatim" handed out a copy

@@ -51,7 +51,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-436 evals: 436 passed, 0 regressions.
+437 evals: 437 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -67,14 +67,18 @@ The four gates and the exact receipt each one reads:
 | `approval` | `APPROVAL` file or an `Approved-by:` commit trailer | a money or partner change carries a human approval bound to a verified signature, or a review id the gate does not resolve |
 | `ran` | `ran-receipt.json` | a SQL or pipeline check actually executed (nonzero duration, zero exit) |
 
-The gate resolves its root to your git worktree top and walks the tree for these
-filenames, skipping version-control, dependency and virtualenv directories by
-directory name (matching `.git` as a substring of the path had also hidden
-`.github/` from all four gates). The skip list is one shared set,
-`sbe_checks.SKIP_DIRS`, plus two structural tells: a directory carrying a
-`pyvenv.cfg` is a virtualenv whatever it was named, and `site-packages` is
-installed code. Put a receipt at the repo root, or beside the model or
-migration it belongs to; both are found.
+The gate walks exactly the directory you name (the default is `.`, the
+current directory) and never a silently substituted git worktree top, so the
+verdict is about the tree you pointed it at. It skips version-control,
+dependency and virtualenv directories by directory name (matching `.git` as a
+substring of the path had also hidden `.github/` from all four gates). The
+skip list is one shared set, `sbe_checks.SKIP_DIRS`, plus two structural
+tells: a directory carrying a `pyvenv.cfg` is a virtualenv whatever it was
+named, and `site-packages` is installed code. Put a receipt anywhere inside
+the directory you name: at the repo root when you run the gate at the repo
+root, or beside the model or migration it belongs to. A receipt OUTSIDE that
+directory is not found, and the gate reports NO-DATA for it, which does not
+block, so name the directory that holds the receipts you mean to check.
 
 ---
 
@@ -406,7 +410,7 @@ Why the two settings matter:
   blocks on the silent-failure lints and the code-graded checks. This is not
   optional: the silent-failure lints are the fifth non-waivable gate on the merge
   path, refused rather than waived, same as the four in `sbe_gate.py`. Both tools
-  take the root as a trailing `.` argument and resolve it to the git worktree top.
+  take the root as a trailing `.` argument and examine exactly that directory.
 
 Turn on branch protection for the `gates` job and the four failure classes stop
 being things a reviewer has to remember. They become a merge that does not happen

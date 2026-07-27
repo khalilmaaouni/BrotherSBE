@@ -66,7 +66,7 @@ A companion linter in [`tools/sbe_score.py`](tools/sbe_score.py) catches the cod
 
 ### What a gate actually reads
 
-Each gate walks the git worktree for a receipt file and checks it is internally consistent, not merely present (the operating record proves pasted receipts get invented).
+Each gate walks the directory it was named (the default is the current directory, never a silently substituted git worktree top) for a receipt file and checks it is internally consistent, not merely present (the operating record proves pasted receipts get invented).
 
 **numbers** looks for `numbers-manifest.json`. A figure passes only with a `snapshot_id`, a `second_derivation` textually different from `query`, `rerun.ran` true, and matching `primary`/`secondary`:
 
@@ -88,7 +88,7 @@ Each gate walks the git worktree for a receipt file and checks it is internally 
  "row_counts": {"before": 100, "after_reverse": 100}}
 ```
 
-**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) or an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer PASSes only when this host verified the commit signature (`git log` `%G?` in `G` or `U`); an unsigned typed name FAILs, and a `Reviewed-in:` id reports NO-DATA because nothing resolves it.
+**approval** looks for an `APPROVAL` file (declaring the change touches a money or partner path) or an `Approved-by:` trailer or `Reviewed-in:` id on HEAD. The trailer PASSes only when this host verified the commit signature against a key it TRUSTS (`git log` `%G?` = `G`, and `G` alone; `U` is a valid signature whose key matched no trusted principal, which is exactly what a self-generated SSH key produces, so it reports NO-DATA); an unsigned typed name FAILs, and a `Reviewed-in:` id reports NO-DATA because nothing resolves it.
 
 **ran** looks for `ran-receipt.json`:
 
@@ -242,7 +242,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-436 evals: 436 passed, 0 regressions.
+437 evals: 437 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

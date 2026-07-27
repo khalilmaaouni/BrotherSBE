@@ -20,7 +20,8 @@ Two rules sit under every doctrine below, so they are stated once here:
   instruction (SKILL.md L16).
 
 Every gate command in this doc is real. `tools/sbe_gate.py` inspects the current
-git worktree (or a directory you pass) for the receipt that proves a check RAN,
+directory (or a directory you pass, and exactly that one) for the receipt that
+proves a check RAN,
 and prints PASS, FAIL, or NO-DATA per class. Run it advisory in a session; run it
 `--strict` in CI, where it exits nonzero and stops the merge. NO-DATA is never a
 pass.
@@ -492,7 +493,10 @@ five code patterns that hide an error so a wrong result passes for a right one:
 
 These are gate severity by ratified decision. A genuine, reviewed exemption carries
 a visible marker on the line, so the exemption is auditable in the diff. One of the
-twelve real exemptions in this repository, quoted from `tools/sbe_telemetry.py:772`:
+real exemptions in this repository, quoted verbatim from `tools/sbe_telemetry.py` (find
+every one, with its current line, by running `grep -n "sbe: allow-silent" tools/*.py`; a
+line number or a count written into prose is a claim nothing recomputes, and both of the
+ones this paragraph used to carry had rotted):
 
 ```python
         except OSError:  # sbe: allow-silent boundary handler in a non-blocking hook; the miss surfaces as absent data, never as a false pass
