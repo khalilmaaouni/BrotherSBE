@@ -285,6 +285,23 @@ def _canonical_email(raw, reduce):
     return local.split("+")[0] + "@" + domain
 
 
+def _is_script_neutral_modifier(ch):
+    """A modifier letter belonging to no script (U+02BC and its neighbours).
+
+    Category Lm makes these letters to Unicode; to a reader they are the
+    apostrophes, primes and raised marks that decorate a name. The ones that
+    DO belong to a script carry that script in their Unicode name and are not
+    matched here, so a Japanese prolonged sound mark stays a letter of the
+    word it sits in.
+    """
+    if unicodedata.category(ch) != "Lm":
+        return False
+    try:
+        return unicodedata.name(ch).split()[0] == "MODIFIER"
+    except ValueError:
+        return False
+
+
 def _name_words(text):
     """The identity-carrying words of an already-reduced string, split by CLASS.
 
@@ -316,6 +333,22 @@ def _name_words(text):
     words, word = [], []
     for ch in text:
         kind = unicodedata.category(ch)[0]
+        if _is_script_neutral_modifier(ch):
+            # The apostrophe of `OʼBrien` written as Unicode recommends it
+            # (U+02BC, category Lm) is DECORATION, exactly like the ASCII
+            # apostrophe two lines down, and a reader sees the same two words
+            # either way. Kept inside the word it welded `oʼbrien` into one
+            # word while `O'Brien` split into two, so the two spellings of one
+            # person had no comparable part and the certifying comparison read
+            # that as proof they were different people. A modifier letter that
+            # belongs to no script belongs to no word; one that belongs to a
+            # script (the Japanese prolonged sound mark) is a letter of it and
+            # stays, which is why this is a rule over the character database
+            # and not a row for one apostrophe.
+            if word:
+                words.append("".join(word))
+                word = []
+            continue
         if kind in ("L", "M", "N"):
             word.append(ch)
         elif kind in ("P", "S", "Z") or ch.isspace():

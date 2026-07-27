@@ -839,6 +839,86 @@ def c16p12(root):
                               authors=("**Dana Author**", "dana@example.com"))
 
 
+def _approval_reason(root, **kw):
+    """The approval verdict AND its sentence, for cases where two different
+    FAILs mean opposite things: refusing a person's name is not the same event
+    as recognising them as the commit's own author."""
+    original = _gate.git_trailers
+    approver = kw.get("approver", "Someone")
+    authors = list(kw.get("authors", ("Dana Author", "dana@example.com")))
+    meta = {"author": authors, "committer": authors, "signer": ""}
+    _gate.git_trailers = lambda r: ("change\n\nApproved-by: %s" % approver, "G", authors, meta)
+    try:
+        return _gate.gate_approval(root)
+    finally:
+        _gate.git_trailers = original
+
+
+@case("a-case-folded-dotted-capital-is-read-as-the-author-not-as-a-second-person",
+      "sig", "self-approval")
+def c16p12b(root):
+    # `casefold("İ")` is `i` plus U+0307 COMBINING DOT ABOVE, which NFKC
+    # cannot recompose, so `Irmak Yilmaz` and `İrmak Yilmaz` are five and six
+    # characters and the certifying comparison decided it on LENGTH alone,
+    # calling one Turkish person two people.
+    #
+    # STATED HONESTLY, because it is the difference between a closed defect
+    # and a hardening: the gate did not ship that verdict. The self-approval
+    # test runs first and reduces through skeleton(), which drops marks, so
+    # both spellings were already one identity there and the commit already
+    # FAILED. What was wrong was that the two paths disagreed, and a
+    # certifying comparison that decides by counting characters a reader does
+    # not see is one refactor away from being the path that answers. This
+    # pins the verdict and the reason for it.
+    verdict, why = _approval_reason(root, approver="Irmak Yilmaz",
+                                    authors=("İrmak Yilmaz", "irmak@example.com"))
+    if verdict != "FAIL":
+        return "%s: %s" % (verdict, why[:100])
+    return "self-approval" if "identity that wrote the commit" in why else why[:110]
+
+
+@case("an-apostrophe-unicode-recommends-does-not-refuse-an-honest-name",
+      "sig", "self-approval")
+def c16p12c(root):
+    # The direction nobody probes: an honest person who cannot get a verdict.
+    # U+02BC MODIFIER LETTER APOSTROPHE is category Lm, so it counted as a
+    # script of its own and `OʼBrien` was a word that "mixes letters from more
+    # than one script (LATIN, MODIFIER)". The money gate FAILED an honest
+    # approver BY NAME, over the apostrophe Unicode recommends for names and
+    # this platform types by default. A control that rejects a person's own
+    # spelling of their own name teaches them to misspell it, which is how a
+    # gate gets worked around instead of used.
+    #
+    # Both FAILs are FAIL, which is why this reads the sentence: the wrong one
+    # says the name is unreadable, the right one says these two spellings are
+    # the same person, which is exactly what they are here.
+    verdict, why = _approval_reason(root, approver="OʼBrien Sean",
+                                    authors=("O'Brien Sean", "sean@example.com"))
+    if "mixes letters from more than one script" in why:
+        return "an honest name was refused as a forgery shape"
+    if verdict != "FAIL":
+        return "%s: %s" % (verdict, why[:100])
+    return "self-approval" if "identity that wrote the commit" in why else why[:110]
+
+
+@case("an-honest-modifier-apostrophe-approver-is-not-refused-by-name", "sig", "PASS")
+def c16p12e(root):
+    # The same character on an approver who really is a second person: the
+    # rule above must not have bought its result by refusing to look. This
+    # PASSes, which is a certificate, so it is the strongest control here.
+    return _approval_with_sig(root, "G", approver="OʼBrien Sean",
+                              authors=("Dana Author", "dana@example.com"))
+
+
+@case("two-different-people-still-certify-after-the-mark-and-modifier-rules", "sig", "PASS")
+def c16p12d(root):
+    # The control for both cases above: the rules that stopped two false
+    # verdicts must not have stopped the true one. Two unrelated names, one
+    # of them carrying the very characters those rules are about.
+    return _approval_with_sig(root, "G", approver="İrmak Yılmaz",
+                              authors=("Robin Reviewer", "robin@example.com"))
+
+
 @case("an-unassigned-code-point-cannot-prove-two-people", "sig", "NO-DATA")
 def c16p13(root):
     # The rule one layer deeper than the class split, and the reason this
