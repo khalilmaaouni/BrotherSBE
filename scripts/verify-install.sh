@@ -118,6 +118,12 @@ MANIFEST_REL=$(printf '%s\n' "$MANIFEST_ABS" | sed "s|^$TARGET/||")
 # every non-regular entry (symlink, FIFO, socket) inside the install tree is
 # named loudly here, never skipped. `-type f -o -type l -o ...` enumerates
 # them all; the type of each is decided per entry below.
+# The walk's own failures are CAPTURED, not fatal. Under `set -e` a directory
+# find cannot enter made find exit nonzero and killed the script with no
+# verdict block printed at all: the exit status was still nonzero, so nothing
+# passed silently, but the reader got a bare "Permission denied" and no
+# statement of what was and was not checked. A check that could not look says
+# so, in its own sentence, and still prints everything it did establish.
 find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -path "$TARGET/.git/*" \
     ! -path '*/__pycache__/*' \
@@ -128,7 +134,16 @@ find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -name 'STATE.md' \
     ! -name '~$*' \
     ! -name '*.docx' \
-    > "$WORKDIR/installed_raw"
+    > "$WORKDIR/installed_raw" 2> "$WORKDIR/walk_errors" || true
+
+DENIED=0
+if [ -s "$WORKDIR/walk_errors" ]; then
+    DENIED=$(wc -l < "$WORKDIR/walk_errors" | tr -d ' ')
+    while IFS= read -r err; do
+        [ -z "$err" ] && continue
+        echo "UNWALKABLE: $err (this check could not enumerate that location, so no verdict below covers what is inside it)"
+    done < "$WORKDIR/walk_errors"
+fi
 
 EXTRA=0
 NONREGULAR=0
@@ -181,7 +196,7 @@ find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
        -o -name 'STATE.md' \
        -o -name '~$*' \
        -o -name '*.docx' \) \
-    > "$WORKDIR/excluded_files"
+    > "$WORKDIR/excluded_files" 2>/dev/null || true
 
 EXCLUDED=0
 EXCLUDED_SOURCE=0
@@ -206,9 +221,12 @@ done < "$WORKDIR/excluded_files"
 echo ""
 echo "verify-install: checked against $MANIFEST"
 echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest), $NONREGULAR non-regular (a symlink or pipe the manifest cannot hash)"
+if [ "$DENIED" -gt 0 ]; then
+    echo "verify-install: $DENIED location(s) could not be enumerated (named UNWALKABLE above), so no sentence here covers what is inside them."
+fi
 echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
 
-if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$EXCLUDED_NONREGULAR" -gt 0 ] || [ "$NONREGULAR" -gt 0 ]; then
+if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$EXCLUDED_NONREGULAR" -gt 0 ] || [ "$NONREGULAR" -gt 0 ] || [ "$DENIED" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \
          "understand why the files above differ from the published manifest." >&2
     if [ "$EXTRA" -gt 0 ]; then
@@ -244,6 +262,10 @@ echo "verify-install: and no file exists on disk that the manifest does not name
 echo "verify-install: outside the excluded paths enumerated above (their current"
 echo "verify-install: file count is printed on every run, and source code among"
 echo "verify-install: them fails this check)."
+echo "verify-install: a manifest records CONTENT, not file mode: a data file" \
+     "that arrived with the execute bit set still matches its hash here, so" \
+     "this says the bytes are the published bytes and says nothing about" \
+     "permissions."
 echo "verify-install: this does not prove the manifest itself is authentic;" \
      "it proves your files match whatever manifest you pointed this at. Get" \
      "the manifest from the release you trust (the tag's git history, or a" \

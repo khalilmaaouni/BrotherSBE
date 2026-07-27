@@ -148,7 +148,11 @@ Change `secondary` to the number the second query actually returned:
 
 ```bash
 cd ~/sbe-demo
-sed -i '' 's/"secondary": 17570/"secondary": 17998/' numbers-manifest.json
+python3 - <<'EDIT'
+import io
+p = "numbers-manifest.json"
+io.open(p, "w").write(io.open(p).read().replace('"secondary": 17570', '"secondary": 17998'))
+EDIT
 python3 "$SBE/tools/sbe_gate.py" numbers ~/sbe-demo
 ```
 
