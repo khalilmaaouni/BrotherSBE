@@ -46,8 +46,9 @@ can read a promise into.
   `a-chosen-marker-resolving-to-no-listed-option-establishes-nothing` and
   `the-projects-own-name-for-the-flip-section-is-accepted`.
 - The doc-honesty guard classifies a sentence instead of remembering a
-  phrasing: the scanned set is every markdown page the manifest ships (ten
-  top-level pages, SECURITY.md among them, were never opened before), and a
+  phrasing: the scanned set is every markdown page the manifest ships (42
+  pages, where a curated tuple of 18 was read before, so SECURITY.md,
+  CHANGELOG.md and the shipped templates were never opened), and a
   claim that the receipt lookup is wider than the directory the caller named
   is recognized by its meaning, with a denial of that same mechanism read as
   the denial it is. A run that derives no page reports that, rather than
