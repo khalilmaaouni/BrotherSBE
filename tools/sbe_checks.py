@@ -873,6 +873,84 @@ def could_render_same(a, b, trust_fold=False):
                                       for x, y in zip(aa, bb))
 
 
+def _glyph_class(ch):
+    """What KIND of thing a character is, which Unicode decides for every code
+    point including the ones this host cannot read as any letter.
+
+    `_char_reading` answers "which letter does this render as" and gives up
+    ("opaque") on most of the world's scripts. That give-up was being read as
+    "could be anything", which is a different and much larger claim: Unicode
+    still states, for a letter no fold here can name, that it IS a letter, and
+    a letter does not render as a space or as a question mark. This is the
+    knowledge the opaque verdict was throwing away, and throwing it away is
+    how a Georgian name came to "render as" a placeholder carrying a space the
+    name does not have.
+    """
+    cat = unicodedata.category(ch)
+    if cat[0] in ("L", "M"):
+        return "letter"
+    if cat[0] == "N":
+        return "digit"
+    if cat[0] == "Z" or ch.isspace():
+        return "space"
+    return "punctuation"
+
+
+def could_read_as(value, target):
+    """True when a reviewer could READ `value` as `target`.
+
+    The ACCUSATION direction, and it is not the same question as
+    could_render_same. There, False is the finding: the two identities are
+    PROVEN different. Here, True is the finding: this value IS the placeholder
+    `target`, written in letters this host cannot read. A positive claim about
+    what a text says needs positive evidence for every character of it, and
+    the evidence standard therefore differs by direction of claim, exactly as
+    it already does for soft readings inside `_pair_could_render_same`.
+
+    The defect this closes, measured at 8 of 220 real names across two
+    disjoint corpora: the backstop asked could_render_same(trust_fold=True),
+    whose opaque branches answer True for any character it cannot read, so
+    once no fold could read the script the comparison had nothing left but
+    LENGTH, and a genuine name reduced to 9, 11 or 13 characters was
+    "recognizable" as `not known`, `not decided` or `to be decided`.
+    `answered("<a real Hindi name>")` returned None on that arithmetic alone.
+
+    Three requirements, each of them what "one-for-one look-alike
+    substitution" already meant and none of them a longer list of tokens:
+
+      same kind      a letter is read as a letter, a space as a space
+                     (_glyph_class). Unicode decides this for every code point,
+                     so it is knowledge the opaque verdict never lacked.
+      a function     one character has ONE rendering, so the same character
+                     may not be read as two different letters of the target.
+      one-for-one    distinct characters render as distinct letters. This is
+                     the word "one-for-one" doing its job: three different
+                     Devanagari letters cannot all be the `n` of `not known`,
+                     while a forged `TODO` spelled in Lisu uses one letter per
+                     letter and is still caught.
+
+    Direction of error, stated: a value whose content this host genuinely
+    cannot distinguish from a placeholder is treated as an ANSWER rather than
+    accused. The cost is a placeholder spelled so that every requirement above
+    holds by coincidence; the cost of the other direction was calling real
+    people's names notes-to-self, which is a false accusation the person
+    cannot appeal and which this project published as a measurement.
+    """
+    if len(value) != len(target):
+        return False
+    reads, spells = {}, {}
+    for ca, cb in zip(value, target):
+        if _glyph_class(ca) != _glyph_class(cb):
+            return False
+        if not _pair_could_render_same(_char_reading(ca), _char_reading(cb), True):
+            return False
+        if reads.setdefault(ca, cb) != cb:
+            return False
+        if spells.setdefault(cb, ca) != ca:
+            return False
+    return True
+
+
 def _word_could_match(a, b):
     # A single-letter word is an initial: it collides with any word whose
     # first letter it could render as, mirroring _names_overlap's expansion.
@@ -1185,7 +1263,17 @@ def vacuous(value, allow=()):
             # answers. Direction of error unchanged: a value that COULD read
             # as a placeholder is refused with the value quoted, never
             # certified as an answer no reader can check.
-            if any(could_render_same(v, t, trust_fold=True) for t in VACUOUS_VALUES):
+            #
+            # `could_read_as`, not could_render_same, and the difference is
+            # the whole of round 15's first finding: this call makes a
+            # POSITIVE claim about content ("this value is the placeholder
+            # TODO"), and could_render_same answers the certifying question,
+            # whose True means only "no proof of difference". Asking it here
+            # turned "I cannot read this script" into "this reads as a
+            # placeholder", and once the fold read nothing the only surviving
+            # evidence was character count, so real names of the wrong LENGTH
+            # were accused.
+            if any(could_read_as(v, t) for t in VACUOUS_VALUES):
                 return True
             return False
         v = stripped

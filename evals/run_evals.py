@@ -1023,6 +1023,55 @@ def ev_shape1(root):
     return "refused" if all(k is not None for k in kept) else "refused honest %r" % (kept,)
 
 
+@case("a-real-name-in-any-script-records-an-answer", "evidence", "read as names")
+def ev_realnames(root):
+    """Real people's names are not notes to self, in any script.
+
+    The defect, measured at 6 of the 240 names in the shipped corpus below:
+    the vacuity backstop asked could_render_same(trust_fold=True), whose
+    opaque branches answer True for every character no fold here can read, so
+    once the fold read nothing the comparison had only LENGTH left and a
+    genuine name reducing to 9, 11 or 13 characters "was" `not known`, `not
+    decided` or `to be decided`. `answered()` returned None for a real Hindi
+    name and a real Georgian one, and 29 call sites ask `answered()` before
+    quoting a field, so the accusation reached every one of them.
+
+    This drives the SHARED predicates rather than the 29 sites, because the
+    sites all reach the defect through them and a per-site test would prove
+    only that today's sites are remembered. The corpus is the one the
+    published refusal table is derived from, so the eval and the page measure
+    the same names.
+    """
+    sys.path.insert(0, os.path.join(_REPO, "scripts"))
+    try:
+        import derive_refusal_table as _derive
+    except Exception as e:                       # noqa: BLE001 (reported, not raised)
+        return "the shipped name corpus could not be imported (%s), so no name was read" % e
+    names = [(s, n) for s, pools in _derive.POOLS.items() for pool in pools for n in pool]
+    if len(names) < 200:
+        return ("the corpus holds %d name(s), too few to measure a rate this defect "
+                "showed at 6 in 240" % len(names))
+    refused = []
+    for script, name in names:
+        # Every shared entry point a call site can reach the backstop through.
+        if (_checks.answered(name) is None
+                or _checks.vacuous(name)
+                or _checks.domain_vacuous(name)
+                or _checks.answered_as(name, lambda v: v) is None):
+            refused.append("%s %s" % (script, name))
+    if refused:
+        return "%d of %d real name(s) called placeholders: %s" % (
+            len(refused), len(names), ", ".join(refused[:6]))
+    # The control, in the same case, because a backstop that accuses nobody is
+    # not a fix: the disguises it exists for must still be refused, including
+    # the non-Latin one (a Lisu spelling of TODO renders as TODO to a reader).
+    missed = [v for v in ("ꓔꓳꓓꓳ", "ᴛᴏᴅᴏ",
+                          "TODO", "[TBD]", "t.b.d.", "ＴＯＤＯ",
+                          "to be decided", "#")
+              if _checks.answered(v) is not None]
+    return "read as names" if not missed else "disguised placeholders read as answers: %r" % missed
+
+
 @case("a-bracketed-placeholder-is-not-a-pin", "numbers", "FAIL")
 def ev_shape2(root):
     write(root, "numbers-manifest.json", {"figures": [{
@@ -4275,6 +4324,103 @@ def dc_behavior_derived(root):
     elif "no shipped markdown page could be derived" not in empty_verdict:
         problems.append("the empty-document verdict named something else: %r" % empty_verdict[:80])
     return "consistent" if not problems else "; ".join(problems[:4])
+
+
+# A figure printed in a shipped document is a CLAIM, and this project refuses
+# to report what it did not examine. Its own pages were exempt from that rule:
+# the refusal-remainder section carried numbers typed once by hand, over pools
+# it never published, and went on printing them after the code underneath
+# moved. Nothing was lying on purpose; nothing could have noticed.
+#
+# The mechanism, and it is general rather than one number: a page may carry a
+# block marked `derived-by: <script>`, and the marked block must equal what
+# that script prints TODAY. The eval below re-runs every such script over every
+# shipped page. Its boundary, stated because an unstated boundary is the same
+# defect one level out: this enforces MARKED blocks. A number typed into prose
+# with no marker is still just a number, and docs/KNOWN-LIMITS.md says so.
+_DERIVED_MARKER = r"derived-by:\s*([A-Za-z0-9_./-]+\.py)"
+
+
+def _derived_blocks(text):
+    """[(script path, the block the page publishes)] for one page.
+
+    A marker whose block is missing or unterminated comes back with None for
+    the block, so a page that carries the marker and no readable block is a
+    failure rather than a page with nothing to compare.
+    """
+    import re as _re
+    lines = text.splitlines()
+    out = []
+    for n, line in enumerate(lines):
+        m = _re.search(_DERIVED_MARKER, line)
+        if not m:
+            continue
+        rest = lines[n + 1:]
+        while rest and not rest[0].strip():
+            rest.pop(0)
+        if not rest or not rest[0].startswith("```"):
+            out.append((m.group(1), None))
+            continue
+        body, closed = [], False
+        for l in rest[1:]:
+            if l.startswith("```"):
+                closed = True
+                break
+            body.append(l)
+        out.append((m.group(1), "\n".join(body) if closed else None))
+    return out
+
+
+@case("every-derived-figure-in-a-shipped-doc-recomputes", "docs", "derived")
+def dc_derived(root):
+    """Every published measurement re-derives from the script it names.
+
+    Absence is never proof, applied to this guard's own input twice: a run
+    that found no marked block anywhere reports that it found none rather than
+    reporting the figures derived, and a script that cannot be run is reported
+    as unrunnable rather than skipped.
+    """
+    docs = _shipped_markdown()
+    if not docs:
+        return ("no shipped markdown page could be derived, so no published figure was "
+                "recomputed and none can be called derived")
+    problems, checked = [], 0
+    for rel in docs:
+        try:
+            text = open(os.path.join(_REPO, rel), errors="replace").read()
+        except OSError as e:
+            problems.append("%s could not be read (%s)" % (rel, e.strerror or e))
+            continue
+        for script, published in _derived_blocks(text):
+            checked += 1
+            path = os.path.join(_REPO, script)
+            if not os.path.isfile(path):
+                problems.append("%s names %s, which does not exist, so its figures are "
+                                "derived from nothing" % (rel, script))
+                continue
+            if published is None:
+                problems.append("%s marks a block derived by %s and carries no closed block "
+                                "after the marker" % (rel, script))
+                continue
+            try:
+                # Python-side timeout: `timeout` is not a command on every host.
+                out = subprocess.run([sys.executable, path], capture_output=True,
+                                     text=True, timeout=600)
+            except (OSError, subprocess.SubprocessError) as e:
+                problems.append("%s could not be run (%s), so %s was not recomputed"
+                                % (script, e, rel))
+                continue
+            if out.returncode != 0:
+                problems.append("%s exited %d, so %s was not recomputed"
+                                % (script, out.returncode, rel))
+                continue
+            if out.stdout.rstrip("\n") != published.rstrip("\n"):
+                problems.append("%s disagrees with a fresh run of %s (regenerate the block)"
+                                % (rel, script))
+    if not checked:
+        return ("no shipped page carries a `derived-by:` block, so the mechanism that ties "
+                "published figures to a runnable derivation is checking nothing")
+    return "derived" if not problems else "; ".join(problems[:4])
 
 
 @case("guide-01s-drift-demonstration-replays-from-its-own-steps", "docs", "consistent")
