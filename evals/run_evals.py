@@ -3886,7 +3886,89 @@ def dc7(root):
     return "consistent" if not wrong else "; ".join(wrong[:6])
 
 
-@case("no-shipped-doc-describes-tool-behavior-the-tools-no-longer-have", "docs", "consistent")
+# The doc side of the behavior guard, DERIVED. The guard shipped as one regex
+# alternation of the nine literal phrasings previous rounds happened to find,
+# under a name that claims every doc sentence about tool behavior, and two
+# ordinary sentences of the removed re-root walked straight through it: "the
+# gate walks up to the repository root and looks there too" and "a
+# ran-receipt.json placed anywhere under the repository will be discovered by
+# the gate". Absence of a listed phrasing is not evidence of an honest page,
+# and a positive verdict may not rest on it. What is falsifiable about the
+# removed mechanism is its MEANING: the search scope is wider than the
+# directory the caller named. That is what these patterns describe, in the
+# shapes English gives it (an upward walk, an "anywhere under", a parent
+# directory, the worktree top by name), so a phrasing nobody has written yet
+# is classified on arrival rather than after a reviewer finds it.
+_SCOPE_PLACE = r"(?:git\s+)?(?:repositor\w+|repo|worktree|project\s+root|toplevel|top\s+level)"
+_REROOT_WIDENS = (
+    r"(?i)\b(?:walk|walks|walking|climb|climbs|ascend|ascends|search|searches|searching"
+    r"|look|looks|looking|move|moves|go|goes)\b[^.;]{0,40}?\bup(?:ward|wards)?\b"
+    r"[^.;]{0,40}?\b%s"
+    r"|\banywhere\s+(?:else\s+)?(?:under|in|within|beneath|below|inside)\s+(?:the\s+|your\s+|a\s+)?"
+    r"(?:%s|tree)"
+    r"|\b(?:in|under|from|to)\s+(?:the\s+|its\s+|a\s+|any\s+)?parent\s+director\w+"
+    r"|\b%s\s+top\b|--show-toplevel" % (_SCOPE_PLACE, _SCOPE_PLACE, _SCOPE_PLACE))
+# A sentence that DENIES the mechanism does not assert it, and the honest
+# narrow sentence ("a receipt is found under the directory you name, not
+# anywhere in the worktree") must not be read as the false one. The negator
+# has to sit in the same clause, immediately before the widening phrase: in
+# "if the receipt is not in the directory you name, the gate walks up to the
+# repository root", the "not" belongs to a different clause, and a loose
+# lookback would have excused the very sentence this guard exists to catch.
+_SCOPE_DENIAL = (r"(?i)\b(?:not|never|no|nothing|neither|rather\s+than"
+                 r"|instead\s+of|without)\b[^,;.]{0,24}$")
+
+
+def _widening_claim(line):
+    """The span of `line` claiming a search scope wider than the named directory.
+
+    Returns the matched text, or None. Every match is read for a denial in the
+    clause that carries it, so the guard reads a sentence the way its reader
+    does rather than by keyword presence.
+    """
+    import re as _re
+    for m in _re.finditer(_REROOT_WIDENS, line):
+        if _re.search(_SCOPE_DENIAL, line[:m.start()]):
+            continue
+        return m.group(0)
+    return None
+
+
+def _shipped_markdown():
+    """Every markdown page a reader receives, derived rather than curated.
+
+    Template: the citation scan set in `tools/sbe_score.py`, which had this same
+    defect (two names plus one directory, so SECURITY.md and nine other shipped
+    pages were never opened) and now derives its set from the checksums manifest.
+    The manifest is preferred because it is the shipped file list and it works in
+    a source tarball with no git; `git ls-files` is the fallback; the curated
+    tuple is unioned in so the set can only widen, never lag. An empty result is
+    returned as empty and reported by the caller: a guard that opened nothing has
+    proven nothing about the pages it was supposed to read.
+    """
+    rels = []
+    manifest = os.path.join(_REPO, "CHECKSUMS.sha256")
+    if os.path.isfile(manifest):
+        try:
+            for line in open(manifest, errors="replace"):
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[1].strip().endswith(".md"):
+                    rels.append(parts[1].strip())
+        except OSError:
+            rels = []
+    if not rels:
+        try:
+            out = subprocess.run(["git", "-C", _REPO, "ls-files", "-z", "--", "*.md"],
+                                 capture_output=True, text=True)
+            if out.returncode == 0:
+                rels = [p for p in out.stdout.split("\0") if p]
+        except OSError:
+            rels = []
+    return sorted({r for r in list(rels) + list(SHIPPED_DOCS)
+                   if os.path.isfile(os.path.join(_REPO, r))})
+
+
+@case("no-shipped-doc-widens-the-receipt-lookup-past-what-the-gate-does", "docs", "consistent")
 def dc_behavior(root):
     """The doc-quote guard for BEHAVIOR CLAIMS, not for numbers or verdict lines.
 
@@ -3932,6 +4014,13 @@ def dc_behavior(root):
     # liveness is judged where each mechanism LIVES: the re-root was an
     # invocation, so its family reads comment-stripped code; the allow-silent
     # marker is itself comment-shaped, so its family reads the raw text.
+    # (family, live, literal pattern, derived classifier, why the sentence would
+    # be false). The re-root family carries both: the literal phrasings are the
+    # sentences this repository actually shipped once and are kept as a floor,
+    # and the classifier is what catches a phrasing nobody has written yet. The
+    # marker family is literal by nature (its mechanism IS a fixed string in the
+    # source), so there is nothing there to derive, and the case name below now
+    # claims only the lookup these two families can falsify.
     families = [
         ("worktree-reroot",
          "--show-toplevel" not in gate_code,
@@ -3944,6 +4033,7 @@ def dc_behavior(root):
          r"|found anywhere in the (?:git )?worktree"
          r"|find it (?:anywhere )?in the (?:git )?worktree"
          r"|anywhere in the worktree",
+         _widening_claim,
          "the gate examines exactly the directory it was named; nothing "
          "re-roots to a git worktree top (no --show-toplevel invocation in "
          "sbe_gate.py), so a receipt is found under the directory you name, "
@@ -3951,26 +4041,70 @@ def dc_behavior(root):
         ("allow-silent-marker",
          "sbe: allow-silent" not in gate_src,
          r"(?i)in `?sbe_gate\.py`? the marker sits|git-worktree fallback",
+         None,
          "sbe_gate.py carries no `sbe: allow-silent` marker and no git-worktree "
          "fallback"),
     ]
-    dead = [name for name, live, _, _ in families if not live]
+    dead = [name for name, live, _, _, _ in families if not live]
     if dead:
         return ("family %s of %d checked nothing: the mechanism it knows how to falsify "
                 "is present in the source again, so its claims must be re-derived; a "
                 "family that checks nothing is a failure by itself, not coverage"
                 % (", ".join(dead), len(families)))
+    docs = _shipped_markdown()
+    if not docs:
+        # Absence is never proof: no manifest, no git and no curated path that
+        # opens a file means no page was read, and "consistent" would be a
+        # verdict about documents nothing examined.
+        return ("no shipped markdown page could be derived (no CHECKSUMS.sha256 entries, no "
+                "git ls-files, no curated path that opens): a guard that read no document "
+                "cannot report the documents consistent")
     wrong = []
-    for rel in SHIPPED_DOCS:
+    for rel in docs:
         p = os.path.join(_REPO, rel)
-        if not os.path.isfile(p):
-            continue
         for n, line in enumerate(open(p, errors="replace").read().splitlines(), 1):
-            for _name, _live, pattern, why in families:
-                if _re.search(pattern, line):
-                    wrong.append("%s:%d describes behavior the tools do not have (%s)"
-                                 % (rel, n, why))
+            for _name, _live, pattern, derived, why in families:
+                hit = _re.search(pattern, line)
+                span = hit.group(0) if hit else (derived(line) if derived else None)
+                if span:
+                    wrong.append("%s:%d describes behavior the tools do not have: %r (%s)"
+                                 % (rel, n, span[:60], why))
+                    break
     return "consistent" if not wrong else "; ".join(wrong[:5])
+
+
+@case("a-phrasing-of-the-removed-re-root-nobody-has-written-yet-is-caught", "docs", "consistent")
+def dc_behavior_derived(root):
+    """The doc-honesty guard classifies a sentence, not a remembered phrasing.
+
+    Both CAUGHT sentences below are the ones a reviewer wrote into a copy of the
+    clone and watched pass while the guard printed "consistent": they describe
+    exactly the re-root fix 10 removed, in the words a person uses when they are
+    not copying an earlier draft. The CLEAR sentences are the honest ones that
+    must never be flagged: the narrow behavior stated plainly, the same behavior
+    stated as a denial, and a paragraph that merely happens to carry the words.
+    Pinned here rather than in a fixture tree because what is under test is the
+    reading of a sentence, and a scenario that plants text in a doc would prove
+    only that this one text is remembered.
+    """
+    caught = [
+        "If the receipt is not in the directory you name, the gate walks up to the "
+        "repository root and looks there too.",
+        "A ran-receipt.json placed anywhere under the repository will be discovered by the gate.",
+        "The gate searches upward through the git worktree until it finds a receipt.",
+        "If no receipt is here, the gate looks in the parent directory.",
+        "The receipt may live anywhere in the tree; the gate will find it.",
+    ]
+    clear = [
+        "The gate examines exactly the directory it was named.",
+        "A receipt is found under the directory you name, not anywhere in the worktree.",
+        "The gate never walks up to the repository root.",
+        "Nothing re-roots to a git worktree top.",
+        "A run that opened no file reports NO-DATA naming why, and nothing anywhere counts skips.",
+    ]
+    problems = ["missed: %r" % s[:70] for s in caught if not _widening_claim(s)]
+    problems += ["falsely flagged: %r" % s[:70] for s in clear if _widening_claim(s)]
+    return "consistent" if not problems else "; ".join(problems[:4])
 
 
 @case("guide-01s-drift-demonstration-replays-from-its-own-steps", "docs", "consistent")
