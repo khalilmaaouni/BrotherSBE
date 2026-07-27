@@ -254,11 +254,15 @@ rather than waves work through.
 
 ## 6. `tools/sbe_score.py`: the code-graded checks
 
-The weekly review's mechanical half. Eleven checks, each printing PASS, FAIL, or
+The weekly review's mechanical half. Twelve checks, each printing PASS, FAIL, or
 NO-DATA with its evidence inline, so the model judges only the residue:
 `ledger-coverage`, `schema-2-uniform`, `cache-economy`, `vault-log-per-active-day`,
 `fence-hygiene`, `correction-latency`, `budget-vs-tier`, `prediction-seals`,
-`felt-outcome-ratings`, `review-cadence`, and `silent-failure-lints`.
+`felt-outcome-ratings`, `review-cadence`, `silent-failure-lints`, and
+`citation-inventory`, which fails a strict run when an external URL cited in
+README.md, SKILL.md or docs/ has no entry in docs/CITATIONS.md answering its
+claim, population, date and limit. It verifies structure and coverage offline,
+never live page content, and its verdict sentence says so.
 
 The last one is the linter for the patterns that swallow an error so a wrong result
 passes for a right one. The patterns are bare `except`, except-then-`pass`, a

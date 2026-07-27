@@ -312,7 +312,7 @@ WAIVED = [0]
 # Raised when checks are added, never lowered: the count of discovered checks
 # may only grow, and a shrink is a failure this file reports itself rather than
 # leaving to a doc guard elsewhere.
-FLOOR_CHECKS = 20
+FLOOR_CHECKS = 21
 # The exemption budget, counted in SCENARIOS and not in keys, because one key
 # waives every scenario sharing its sid prefix: the three-key cap in the Check
 # constructor was satisfied while a single JSON-leaf key waived that leaf's
@@ -901,7 +901,8 @@ class ScoreTool:
         write_file(os.path.join(d, relpath), content)
 
     def invoke(self, d, name, extra_env):
-        env = {"BROTHERSBE_VAULT": d, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""}
+        env = {"BROTHERSBE_VAULT": d, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": "",
+               "SBE_CITATION_ROOT": ""}
         env.update(extra_env)
         return run(self.script, [], env)
 

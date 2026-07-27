@@ -874,6 +874,180 @@ def silent_failure_lints(ctx=None):
     return "PASS", "%d file(s) scanned under %s, clean%s" % (scanned, root, note)
 
 
+# The citation inventory: every external URL cited in the shipped documentation
+# (README.md, SKILL.md, docs/) must have an entry in docs/CITATIONS.md carrying
+# four answered fields: the claim, the population it measured, its date or
+# version, and its limit. Why this exists: this repository's own design document
+# once deployed a 2024 benchmark score in the present tense over a page whose
+# live leaderboard had long moved past it, and quoted a follow-up interval while
+# omitting the point estimate it surrounded. A citation whose scope lives only
+# in its author's head rots silently, which is this project's headline failure
+# class applied to its own prose. The check is offline BY DESIGN: it proves
+# coverage and that the scope fields are answered, it can never prove a page
+# still says what the entry recorded, and its own sentences state that limit.
+CITATION_INVENTORY = os.path.join("docs", "CITATIONS.md")
+CITATION_FIELDS = ("claim", "population", "date", "limit")
+_URL_RX = re.compile(r"https?://[^\s<>\"')\]]+")
+_HTML_COMMENT_RX = re.compile(r"<!--.*?-->", re.S)
+_FIELD_RX = re.compile(r"-\s*(claim|population|date|limit)\s*:\s*(.*)$")
+
+
+def _doc_urls(text):
+    """Every external URL in this markdown body, comments stripped, punctuation trimmed.
+
+    Comments are stripped first because a commented-out paragraph renders as
+    nothing: a URL a reader cannot see is not a citation, and an inventory whose
+    entries sit inside a comment declares nothing.
+    """
+    return [m.group(0).rstrip(".,;:")
+            for m in _URL_RX.finditer(_HTML_COMMENT_RX.sub("", text))]
+
+
+def _parse_citations(text):
+    """{"entries": {url: {field: value}}, "problems": [str]} from the inventory body.
+
+    An entry is a `## <url>` heading followed by `- field: value` bullets. A
+    duplicate heading for the same URL is a broken record, not a merge: two
+    entries reading differently would let a reader pick the scope they prefer.
+    """
+    entries, problems, current = {}, [], None
+    for i, line in enumerate(_HTML_COMMENT_RX.sub("", text).splitlines(), 1):
+        if line.startswith("## "):
+            url = line[3:].strip().rstrip(".,;:")
+            if url in entries:
+                problems.append("line %d declares a second entry for %s" % (i, url))
+            current = entries.setdefault(url, {})
+            continue
+        m = _FIELD_RX.match(line.strip())
+        if m and current is not None:
+            current[m.group(1)] = m.group(2)
+    return {"entries": entries, "problems": problems}
+
+
+def check_citation_inventory(ctx=None):
+    """Every cited external URL carries its scope, returning (verdict, evidence).
+
+    Reads SBE_CITATION_ROOT; unset, it defaults to this repository's own root,
+    so a bare run covers the shipped docs with no configuration. Set empty, it
+    reports NO-DATA: no root was named, so no URL set exists to cover. The
+    stated limit rides on the verdict sentence because it is the whole honesty
+    of this check: structure and coverage are proven offline, live page content
+    is never read, and no network connection is ever opened.
+    """
+    root = os.environ.get("SBE_CITATION_ROOT")
+    if root is None:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not root:
+        return "NO-DATA", ("no citation root named: SBE_CITATION_ROOT is empty, so no document "
+                           "was opened and no URL set exists to cover")
+    if not os.path.isdir(root):
+        return "FAIL", ("SBE_CITATION_ROOT=%s is not a directory, so no document was scanned; a "
+                        "mistyped root must not read as a covered citation set" % root)
+    inv_path = os.path.join(root, CITATION_INVENTORY)
+    inv_norm = os.path.normcase(os.path.normpath(inv_path))
+    docs, unopened = [], []
+    for rel in ("README.md", "SKILL.md"):
+        p = os.path.join(root, rel)
+        problem = evidence_problem(p)
+        if problem:
+            unopened.append("%s (%s)" % (rel, problem))
+        elif os.path.lexists(p):
+            docs.append(p)
+    pruner = Pruner()
+    docs_dir = os.path.join(root, "docs")
+    if os.path.isdir(docs_dir):
+        for dp, dns, fns in os.walk(docs_dir, onerror=pruner.onerror):
+            dns[:] = pruner(dp, dns)
+            for fn in sorted(fns):
+                if fn.endswith(".md"):
+                    docs.append(os.path.join(dp, fn))
+    scanned, found = 0, {}
+    for p in docs:
+        if os.path.normcase(os.path.normpath(p)) == inv_norm:
+            continue
+        problem = evidence_problem(p)
+        if problem:
+            unopened.append("%s (%s)" % (os.path.relpath(p, root), problem))
+            continue
+        try:
+            body = open(p, errors="replace").read()
+        except OSError as e:
+            unopened.append("%s (%s)" % (os.path.relpath(p, root), type(e).__name__))
+            continue
+        scanned += 1
+        for url in _doc_urls(body):
+            found.setdefault(url, []).append(os.path.relpath(p, root))
+    inv_problem = evidence_problem(inv_path)
+    inv_exists = os.path.lexists(inv_path)
+    entries, entry_problems = {}, []
+    if inv_exists and not inv_problem:
+        try:
+            parsed = _parse_citations(open(inv_path, errors="replace").read())
+            entries, entry_problems = parsed["entries"], parsed["problems"]
+        except OSError as e:
+            inv_problem = "cannot be read (%s)" % type(e).__name__
+    # A URL mentioned in the inventory's own prose is a citation too: it must
+    # either be an entry heading or be covered by one, or it hides from the scan.
+    if entries:
+        for url in _doc_urls(open(inv_path, errors="replace").read()):
+            if url not in entries:
+                found.setdefault(url, []).append(CITATION_INVENTORY)
+    note = pruner.note(lambda f: f.endswith(".md"))
+    offline = ("; scope structure and coverage only, never live page content: this check opens "
+               "no network connection")
+    if unopened or pruner.denied or inv_problem:
+        refused = sorted(set(unopened)) + sorted(set(pruner.denied))
+        if inv_problem:
+            refused.append("%s (%s)" % (CITATION_INVENTORY, inv_problem))
+        return "FAIL", ("%d path(s) under %s exist and could not be read (%s); a document this "
+                        "check cannot open can cite a URL this verdict would miss, so it cannot "
+                        "call the citation set covered; %d document(s) were scanned%s%s"
+                        % (len(refused), root, _first_named(refused, "; "), scanned, note, offline))
+    if not scanned:
+        return "NO-DATA", ("no shipped document (README.md, SKILL.md, docs/*.md) under %s, so no "
+                           "URL set exists to cover%s%s" % (root, note, offline))
+    if entry_problems:
+        return "FAIL", ("%s holds %d duplicate entr(y/ies) (%s); a URL with two scope entries "
+                        "lets a reader pick the one they prefer%s%s"
+                        % (CITATION_INVENTORY, len(entry_problems),
+                           _first_named(sorted(entry_problems), "; "), note, offline))
+    uncovered = sorted(u for u in found if u not in entries)
+    if uncovered and not inv_exists:
+        return "FAIL", ("%d external URL(s) across %d document(s) under %s and no inventory at "
+                        "%s; every cited URL needs an entry answering claim, population, date "
+                        "and limit: %s%s%s"
+                        % (len(found), scanned, root, CITATION_INVENTORY,
+                           _first_named(uncovered, "; "), note, offline))
+    if uncovered:
+        return "FAIL", ("%d of %d external URL(s) have no entry in %s: %s; a citation without "
+                        "its population, date and limit is a claim wearing a reference's "
+                        "clothes%s%s"
+                        % (len(uncovered), len(found), CITATION_INVENTORY,
+                           _first_named(uncovered, "; "), note, offline))
+    unanswered = []
+    for url in sorted(entries):
+        gaps = [f for f in CITATION_FIELDS if answered(entries[url].get(f)) is None]
+        if gaps:
+            unanswered.append("%s (no answered %s)" % (url, ", ".join(gaps)))
+    if unanswered:
+        return "FAIL", ("%d entr(y/ies) in %s carry unanswered scope field(s): %s; a scope field "
+                        "holding a placeholder scopes nothing%s%s"
+                        % (len(unanswered), CITATION_INVENTORY, _first_named(unanswered, "; "),
+                           note, offline))
+    stale = sorted(u for u in entries if u not in found)
+    if stale:
+        return "FAIL", ("%d entr(y/ies) in %s name a URL no shipped document cites (%s); a stale "
+                        "entry is scope nobody reads, and it hides the next uncovered URL behind "
+                        "a growing list%s%s"
+                        % (len(stale), CITATION_INVENTORY, _first_named(stale, "; "), note, offline))
+    if not found:
+        return "NO-DATA", ("%d document(s) scanned under %s and none cites an external URL, so "
+                           "there is nothing to cover%s%s" % (scanned, root, note, offline))
+    return "PASS", ("%d external URL(s) across %d document(s) scanned under %s, each with an "
+                    "inventory entry in %s answering claim, population, date and limit%s%s"
+                    % (len(found), scanned, root, CITATION_INVENTORY, note, offline))
+
+
 def _rel(p):
     """A registry path as the honesty test can rebuild it under a throwaway vault."""
     return os.path.relpath(p, VAULT)
@@ -897,6 +1071,17 @@ _PREDICTIONS = ("# Operator model\n## Prediction ledger\n"
                 "2026-07-03 | the cache ratio holds above 90 | seal-3 | review | no\n"
                 "2026-07-04 | the retry storm does not recur | seal-4 | review | yes\n"
                 "2026-07-05 | the export lands before 09:00 | seal-5 | review | yes\n")
+# One doc citing one URL, one inventory entry answering all four scope fields.
+# The inventory fixture starts at its `##` heading on purpose: a decorative
+# top-level heading would give the hollowing sweep a section whose removal
+# changes nothing, and a scenario that reproduces the fixture is not a scenario.
+_CITATION_DOC = ("# Demo doc\n\n"
+                 "A claim resting on 12 percent of runs (https://example.com/study).\n")
+_CITATION_ENTRY = ("## https://example.com/study\n"
+                   "- claim: 12 percent of runs showed the behavior\n"
+                   "- population: 128 runs of one model under one harness\n"
+                   "- date: 2025-06-05\n"
+                   "- limit: single source, one model family\n")
 
 CHECKS = {
     "ledger-coverage": Check(
@@ -939,6 +1124,14 @@ CHECKS = {
                                                  "value": "%(dir)s"},
                                   full_fixture={"files": {"src/ok.py": "def f():\n    return 1\n"},
                                                 "env": {"SBE_LINT_ROOT": "%(dir)s/src"}}),
+    "citation-inventory": Check(check_citation_inventory, reads=("SBE_CITATION_ROOT",), kind="tree",
+                                severity="gate",
+                                empty_fixture={"files": {"README.md": "# Notes\n\nA shipped doc "
+                                                                      "naming no external URL.\n"},
+                                               "value": "%(dir)s"},
+                                full_fixture={"files": {"README.md": _CITATION_DOC,
+                                                        "docs/CITATIONS.md": _CITATION_ENTRY},
+                                              "env": {"SBE_CITATION_ROOT": "%(dir)s"}}),
 }
 
 

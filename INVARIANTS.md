@@ -47,7 +47,7 @@ design check was fed the defect its eval exists to catch, and caught it. The
 reinjection is executed by the eval bed itself on every run, not once at
 release: every fixture plants the defect and the suite fails if the check stops
 catching it. Measured 2026-07-27 by `python3 evals/run_evals.py`, ending
-"437 evals: 437 passed, 0 regressions." One representative reinjection per
+"444 evals: 444 passed, 0 regressions." One representative reinjection per
 check, from that run:
 
 | Check | Defect reinjected | Eval case | Result |
@@ -62,6 +62,7 @@ check, from that run:
 | datamodel (L4) | a relationship with no cardinality | `unspecified-cardinality-caught` | caught |
 | diagrams (L5) | a node tracing to nothing the dossier declares | `orphan-diagram-node-caught` | caught |
 | placeholder | the shipped template, copied and unedited | `unedited-copied-template-caught` | caught |
+| citation-inventory | an external URL cited with no scoped inventory entry | `citation-url-without-inventory-entry-caught` | caught |
 
 This calibration re-runs whenever a check or the eval bed changes, because the
 shipped CI workflow runs the suite on every pull request; a check that stops

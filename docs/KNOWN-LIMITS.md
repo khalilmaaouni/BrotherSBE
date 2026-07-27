@@ -76,6 +76,16 @@ Every green run this project cites happened in its own repository or on the
 estate it was built on. No external adoption, and no second estate, is
 claimed anywhere.
 
+## The citation check never opens a page
+
+`citation-inventory` proves that every external URL cited in README.md,
+SKILL.md and docs/ has a `docs/CITATIONS.md` entry answering claim,
+population, date and limit, and nothing more. It verifies structure and
+coverage offline, makes no network call, and cannot prove a page still says
+what its entry recorded; its own verdict sentence states that limit.
+Re-checking content against the live page is a human job at review time. Full
+text: `docs/CITATIONS.md` (preamble), `docs/HOW-IT-WORKS.md` (section 6).
+
 ## Windows is untested
 
 The shipped CI runs Linux and macOS. The two `sh` tools and the POSIX file
