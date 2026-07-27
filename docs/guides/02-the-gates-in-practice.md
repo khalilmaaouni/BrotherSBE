@@ -502,7 +502,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of twelve check lines; the rest are omitted here
-silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 23 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_telemetry.py:172, sbe_telemetry.py:212, sbe_telemetry.py:383, sbe_telemetry.py:1144, and 18 more not named), 4 file(s) holding no match at all; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
+silent-failure-lints      PASS     7 file(s) scanned under tools/, 0 unexempted hit(s), 24 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_telemetry.py:172, sbe_telemetry.py:212, sbe_telemetry.py:383, sbe_telemetry.py:1144, and 19 more not named), 4 file(s) holding no match at all; 3 file(s) under tools/ were not opened because this lint has no pattern that reads their kind (.sh 2, .md 1); its patterns are written for .py .sql .swift .rb .js .ts .go, so this verdict covers those kinds and says nothing about the rest; this tool's own source was not scanned (sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over
@@ -510,6 +510,14 @@ a set of suppressed hits is the same sentence as a PASS over an empty manifest. 
 every match in every file scanned had been exempted, the verdict would be NO-DATA
 rather than PASS: a scan whose every finding was waived examined nothing it was
 allowed to report.
+
+It also names what it never opened. The patterns are written for the languages
+they name, so a file of any other kind is counted, named by kind and declared,
+and the word "clean" is withdrawn: a sentence that calls a tree clean while
+thirteen of its fourteen files were removed from consideration in silence is
+the exact class this gate exists to catch, and it was living inside the gate.
+Note the `.sh 2` above: the two shell tools shipped here are outside every
+pattern, so this lint has never read a line of them, and now it says so.
 
 Two mechanisms make that honest rather than lucky:
 
