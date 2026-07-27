@@ -118,13 +118,45 @@ as it already does for CJK ideographs. What remains refused is the soft
 class: same-script name pairs whose every differing letter is one the
 confusable tables fold to ASCII, where a certificate resting on the fold's
 coverage would rest on a table this project's own history proves incomplete.
-Measured over pools of 10 common real names per script (45 pairs each,
-name-only, no email): Russian 10 of 45 pairs unproven (22 percent), Greek 2
-of 45 (4 percent), Vietnamese 1 of 45 (2 percent), Amharic and Hindi 0 of 45.
 Every refused pair passes by recording an email address that differs from the
 author's, which the gate accepts as proof of difference; the refusal sentence
-names that escape. Full text: `tools/sbe_gate.py` (gate_approval),
+names that escape, and the last column below exercises it rather than
+asserting it. Full text: `tools/sbe_gate.py` (gate_approval),
 `tools/sbe_checks.py` (the four character kinds).
+
+The figures below are not typed. They are the output of a script you can run,
+over pools it publishes, and an eval re-runs that script and fails when this
+page disagrees with it. An earlier edition of this section typed its numbers
+by hand over pools it did not publish; the code underneath moved, and the page
+went on reporting a measurement nobody could reproduce, which is the same
+false assurance this project exists to refuse. Regenerate with
+`python3 scripts/derive_refusal_table.py`.
+
+<!-- derived-by: scripts/derive_refusal_table.py -->
+
+```text
+Recomputed by scripts/derive_refusal_table.py on 2026-07-27.
+Pools of 10 real names per script, 45 unordered pairs each, name only,
+no email address recorded. "Unproven" means the gate declines to certify
+the two are different people and says so; it is never a silent pass.
+
+script        pairs  unproven  percent  still unproven with distinct emails
+Amharic          45         0        0                                   0
+Arabic           45         0        0                                   0
+Armenian         45         0        0                                   0
+Georgian         45         0        0                                   0
+Greek            45         9       20                                   0
+Hebrew           45         0        0                                   0
+Hindi            45         0        0                                   0
+Japanese         45         0        0                                   0
+Korean           45         0        0                                   0
+Russian          45        13       29                                   0
+Thai             45         0        0                                   0
+Vietnamese       45         0        0                                   0
+
+Real names read as placeholders by the vacuity backstop: 0 of 240 names
+across 12 scripts, two disjoint pools of 10 per script.
+```
 
 ## The citation check never opens a page
 
