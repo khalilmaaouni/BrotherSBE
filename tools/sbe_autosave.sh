@@ -200,17 +200,29 @@ case "$1" in
     # throttle skipped snapshot points and the runaway warning printed a
     # count materially below the real one, understating most in exactly the
     # case it is written for. mkdir is the POSIX-portable atomic lock. The
-    # wait is bounded (never blocks work); a lock that outlives the wait is
-    # presumed dead (ticks are subsecond) and is broken once; if even that
-    # fails, this tick is SKIPPED WITH A LOG LINE rather than writing a
-    # number nothing measured.
+    # wait is bounded (never blocks work). A lock that outlives the whole
+    # wait AND predates it is presumed dead and is broken ONCE, with a log
+    # line naming the break; a lock created DURING the wait is a live,
+    # contended lock (writers are churning), and breaking a live holder puts
+    # two writers in the section, so that tick is skipped with a log line
+    # instead. If even the break fails, the tick is SKIPPED WITH A LOG LINE
+    # rather than writing a number nothing measured.
     lock="$ctr.lock"
+    stamp="$ctr.waitstamp.$$"
+    : > "$stamp" 2>/dev/null
     tries=0
     until mkdir "$lock" 2>/dev/null; do
       tries=$((tries + 1))
       if [ "$tries" -ge 40 ]; then
+        if [ -e "$stamp" ] && [ "$lock" -nt "$stamp" ]; then
+          rm -f "$stamp" 2>/dev/null
+          log_line "tick skipped for $sid: $lock is live and contended (it was created during this tick's wait, so its holder is not dead); the count was not incremented"
+          exit 0
+        fi
         rmdir "$lock" 2>/dev/null
+        log_line "broke a stale lock for $sid: $lock predates this tick's whole wait and its holder is presumed dead; if that presumption is ever wrong this line is the evidence"
         if ! mkdir "$lock" 2>/dev/null; then
+          rm -f "$stamp" 2>/dev/null
           log_line "tick skipped for $sid: could not take $lock; the count was not incremented"
           exit 0
         fi
@@ -218,8 +230,43 @@ case "$1" in
       fi
       sleep 0.05 2>/dev/null || sleep 1
     done
-    n="$(cat "$ctr" 2>/dev/null)"; n="${n:-0}"; n=$((n + 1))
-    printf '%s' "$n" > "$ctr" 2>/dev/null
+    rm -f "$stamp" 2>/dev/null
+    # The lock is released by the EXIT trap on every path out of the critical
+    # section, so no exit can leak the lock directory and wedge the session;
+    # the trap is cleared right after the manual release below, so it can
+    # never remove a lock a LATER writer has since taken.
+    trap 'rmdir "$lock" 2>/dev/null' EXIT
+    # Content read back from a file is untrusted input: the counter is
+    # validated as digits BEFORE arithmetic. A non-numeric counter used to
+    # reach $((n + 1)) and kill the hook with a raw bash diagnostic and exit
+    # 1, leaking the lock and wedging the session forever, inside a script
+    # whose header promises every path exits 0. An empty counter (a writer
+    # killed between truncate and write) used to restart the count silently.
+    # Both are now a NAMED reset with a log line.
+    n="$(cat "$ctr" 2>/dev/null)"
+    case "$n" in
+      "")
+        [ -f "$ctr" ] && log_line "counter for $sid was empty (a writer died mid-write); count reset to 0"
+        n=0 ;;
+      *[!0-9]*)
+        log_line "counter for $sid held non-numeric content; count reset to 0"
+        n=0 ;;
+      *)
+        # Strip leading zeros so shell arithmetic cannot read 08 as bad octal.
+        n="$(printf '%s' "$n" | sed 's/^00*//')"; n="${n:-0}" ;;
+    esac
+    n=$((n + 1))
+    # The counter write is a boundary call like any other: checked, and on
+    # failure this tick takes the same path the lock timeout takes (a named
+    # skip with a log line). The unchecked write turned continuous autosave
+    # silently OFF when the counter was unwritable: the counter never
+    # advanced, n recomputed to the same value every tick, n % TICK_EVERY
+    # never hit zero, and 25 ticks with real unlanded work produced zero
+    # snapshots, zero log lines and exit 0.
+    if ! printf '%s' "$n" 2>/dev/null > "$ctr"; then
+      log_line "tick skipped for $sid: could not write the counter $ctr; the count was not recorded, so no snapshot decision is made from a number nothing measured. Continuous autosave is OFF for this session until the counter is writable"
+      exit 0
+    fi
     # The warned marker is written INSIDE the lock, so two hooks crossing
     # the threshold together cannot both print the warning.
     warn=0
@@ -228,6 +275,7 @@ case "$1" in
       warn=1
     fi
     rmdir "$lock" 2>/dev/null
+    trap - EXIT
     # Throttle: only snapshot every Nth tool call, so this stays cheap.
     if [ $((n % TICK_EVERY)) -eq 0 ]; then
       snapshot "$repo" "tick $n"
