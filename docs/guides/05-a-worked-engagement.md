@@ -39,7 +39,7 @@ printf 'y\ny\ny\ny\nmany\n' | python3 "$SBE/tools/sbe_intake.py"
 
 ```
 Does this change a data model, an API contract, or a file interface others depend on? (y/n) Does it cross a service, system, or team boundary? (y/n) Is it reversible in under an hour? (y/n) Does it touch money, partner data, personal data, or production state? (y/n) How many downstream consumers break if it is wrong? (none/some/many) tier T3 (artifacts required: 01, 02, 03, 04, 05, 06, 07) written to ./00-intake.json
-To override this tier, edit that file and set BOTH "override" (the tier you are moving to) and "override_reason" (at least 3 words and 12 characters). A tier moved with either field missing FAILs the design check as an edit rather than an override.
+To override this tier, edit that file and set all three fields: "tier" (the tier you are moving to), "override" (the same tier, declaring the move), and "override_reason" (at least 3 words and 12 characters). A move with any of the three missing or disagreeing FAILs the design check as an edit rather than an override.
 ```
 
 The two closing lines are the override contract, printed on every run so the

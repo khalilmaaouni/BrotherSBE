@@ -191,9 +191,16 @@ def main():
         json.dump(out, f, indent=2)
     print("tier %s (artifacts required: %s) written to %s"
           % (tier, ", ".join(required_artifacts(tier)) or "none", path))
-    print("To override this tier, edit that file and set BOTH \"override\" (the tier you are moving "
-          "to) and \"override_reason\" (at least 3 words and 12 characters). A tier moved with either "
-          "field missing FAILs the design check as an edit rather than an override.")
+    # All THREE edits, named. This instruction used to say "set BOTH override
+    # and override_reason", and a reader who did exactly that FAILed the
+    # design check with "the override field and the tier field disagree",
+    # because the contract also requires moving the tier field itself, an
+    # edit the instruction never mentioned: the tool's own printed teaching
+    # led straight to a refusal.
+    print("To override this tier, edit that file and set all three fields: \"tier\" (the tier you "
+          "are moving to), \"override\" (the same tier, declaring the move), and \"override_reason\" "
+          "(at least 3 words and 12 characters). A move with any of the three missing or "
+          "disagreeing FAILs the design check as an edit rather than an override.")
     sys.exit(0)
 
 
