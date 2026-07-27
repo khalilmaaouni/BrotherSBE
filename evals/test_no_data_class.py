@@ -498,10 +498,22 @@ NOT_A_VERDICT = {
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
     ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
-    ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities), not a verdict",
-    ("sbe_gate.py", "_identity_parts"): "returns (canonical emails, name word-sets), not a verdict",
-    ("sbe_gate.py", "_rendered_identity_parts"): "returns (canonical emails, name word-sets) with "
-                                                 "unreadable characters kept, not a verdict",
+    ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities, "
+                                     "author/committer/signer meta), not a verdict",
+    ("sbe_gate.py", "_identity_parts"): "returns (canonical emails, ordered name word-tuples), "
+                                        "not a verdict",
+    ("sbe_gate.py", "_rendered_identity_parts"): "returns (canonical emails, ordered name "
+                                                 "word-tuples) with unreadable characters kept, "
+                                                 "not a verdict",
+    ("sbe_gate.py", "_parts"): "the shared identity parser behind _identity_parts and "
+                               "_rendered_identity_parts; returns parts, not a verdict",
+    ("sbe_gate.py", "_canonical_email"): "returns one canonicalized mailbox string, not a verdict",
+    ("sbe_gate.py", "_wrote"): "gate_approval's local collector; returns (emails, names) for a "
+                               "list of identity strings, not a verdict",
+    ("sbe_gate.py", "_same"): "gate_approval's local sameness probe; returns (shared emails, "
+                              "shared name), not a verdict",
+    ("sbe_checks.py", "_script_family"): "returns the Unicode script family of one character, "
+                                         "not a verdict",
     ("sbe_design.py", "_entity_bullets"): "returns (the entity set, whether a heading declared it), "
                                           "not a verdict",
     ("sbe_design.py", "_rejected_alternatives"): "returns (collected alternatives, chosen table "

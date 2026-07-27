@@ -192,7 +192,7 @@ def _partial(nothing, checked, kind, unit):
 
 
 def git_trailers(root):
-    """(commit body, signature state, the identities that WROTE the commit).
+    """(commit body, signature state, identities that WROTE the commit, meta).
 
     The identities are the addition, and they are the whole of the self-approval
     fix. The gate read the trailer and the signature state and never asked who
@@ -200,23 +200,37 @@ def git_trailers(root):
     authored, signed and approved, and the gate printed the strongest sentence it
     owns over it. `%an %ae` is the author and `%cn %ce` the committer, which are
     the two identities git can prove wrote this commit on this host.
+
+    meta separates what the flat list merges: {"author": [name, email],
+    "committer": [name, email], "signer": %GS}. The signer principal is what
+    the verifier MATCHED (under SSH signing, the allowed-signers email whose
+    key produced the signature), so it is the one identity here that is bound
+    to a key rather than typed into a field. The committer/author split
+    exists because an approver who amends and signs BECOMES the committer:
+    that is git's only spelling of "the reviewer signed", and lumping the
+    committer in with the author made the gate refuse the strongest honest
+    approval shape git can express.
     """
     try:
         out = subprocess.run(["git", "-C", root, "log", "-1",
-                              "--format=%B%n---%n%G?%n%an%n%ae%n%cn%n%ce"],
+                              "--format=%B%n---%n%G?%n%GS%n%an%n%ae%n%cn%n%ce"],
                              capture_output=True, text=True, timeout=10)
         body, _, tail = out.stdout.rpartition("\n---\n")
-        parts = (tail.split("\n") + [""] * 5)[:5]
+        parts = (tail.split("\n") + [""] * 6)[:6]
         sig = parts[0].strip()
+        signer = parts[1].strip()
+        ids = [p.strip() for p in parts[2:]]
         who, seen = [], set()
-        for p in parts[1:]:
-            p = p.strip()
+        for p in ids:
             if p and p not in seen:
                 seen.add(p)
                 who.append(p)
-        return body, sig, who
+        meta = {"author": [p for p in ids[:2] if p],
+                "committer": [p for p in ids[2:] if p],
+                "signer": signer}
+        return body, sig, who, meta
     except Exception:
-        return "", "N", []
+        return "", "N", [], {"author": [], "committer": [], "signer": ""}
 
 
 _EMAIL = re.compile(r"[^\s<>,;()]+@[^\s<>,;()]+")
@@ -250,18 +264,7 @@ def _identity_parts(text):
     render as, so an Approved-by value that is not confusably distinct from
     the author reads as the author.
     """
-    emails, names = set(), []
-    for m in _EMAIL.finditer(text or ""):
-        e = skeleton(m.group(0)).strip(" .,;:'\"<>")
-        local, _, domain = e.partition("@")
-        emails.add(local.split("+")[0] + "@" + domain)
-    rest = re.sub(r"<[^>]*>", " ", text or "")
-    rest = _EMAIL.sub(" ", rest)
-    rest = re.sub(r"\([^)]*\)", " ", rest)
-    words = frozenset(w.strip(".,;:'\"!?") for w in skeleton(rest).split()) - frozenset(("",))
-    if words:
-        names.append(words)
-    return emails, names
+    return _parts(text, skeleton)
 
 
 def _rendered_identity_parts(text):
@@ -272,17 +275,53 @@ def _rendered_identity_parts(text):
     SAMENESS (self-approval); this form decides whether difference is
     PROVEN, which is the only ground a certifying PASS may stand on.
     """
-    emails, names = set(), []
-    for m in _EMAIL.finditer(text or ""):
-        e = fold(m.group(0)).strip(" .,;:'\"<>")
-        local, _, domain = e.partition("@")
-        emails.add(local.split("+")[0] + "@" + domain)
-    rest = re.sub(r"<[^>]*>", " ", text or "")
+    return _parts(text, fold)
+
+
+def _canonical_email(raw, reduce):
+    e = reduce(raw).strip(" .,;:'\"<>")
+    local, _, domain = e.partition("@")
+    return local.split("+")[0] + "@" + domain
+
+
+def _parts(text, reduce):
+    """(canonical emails, candidate name word-TUPLES) of one identity string.
+
+    Names come back as tuples in RECORDED order, because an evidence sentence
+    that quotes an identity must quote it in the order its owner wrote it,
+    and up to two candidate readings are returned when brackets make the
+    value ambiguous. The previous parser DELETED every `<...>` and `(...)`
+    span, so an identity written wholly inside brackets parsed to an empty
+    word list, and a certifying comparison then consumed the empty
+    comparison's "no collision" as proof of difference: one pair of
+    parentheses bought the self-approval control on the money gate. The rule
+    (the founding one): a comparison must first establish that it examined
+    something, and a parser must never hand a certifying caller an empty
+    population where the raw value plainly holds an identity. So: an angle
+    span holding an email is the email; an angle span holding anything else
+    is name text wearing brackets; parenthesized text is annotation when
+    words exist outside it, but it is read AS the name when nothing does,
+    and the all-words reading is kept as a second candidate so a name hidden
+    in an annotation still compares as a name.
+    """
+    text = text or ""
+    emails = set()
+    for m in _EMAIL.finditer(text):
+        emails.add(_canonical_email(m.group(0), reduce))
+    rest = re.sub(r"<([^<>@]*)>", r" \1 ", text)   # <Dana Author> is a name, not a mailbox
+    rest = re.sub(r"<[^>]*>", " ", rest)
     rest = _EMAIL.sub(" ", rest)
-    rest = re.sub(r"\([^)]*\)", " ", rest)
-    words = frozenset(w.strip(".,;:'\"!?") for w in fold(rest).split()) - frozenset(("",))
-    if words:
-        names.append(words)
+
+    def words_of(t):
+        return tuple(w for w in (x.strip(".,;:'\"!?") for x in reduce(t).split()) if w)
+
+    outside = words_of(re.sub(r"\([^)]*\)", " ", rest))
+    everything = words_of(re.sub(r"[()]", " ", rest))
+    names = []
+    if outside:
+        names.append(outside)
+    if everything and everything != outside:
+        names.append(everything)
     return emails, names
 
 
@@ -577,7 +616,7 @@ def gate_migration(root):
 
 def gate_approval(root):
     approvals, pruned = find(root, APPROVAL_FILE)
-    body, sig, authors = git_trailers(root)
+    body, sig, authors, idmeta = git_trailers(root)
     trailer = re.search(r"^Approved-by:\s*(.+)$", body, re.M)
     # The id is whatever the team writes, not one whitespace-free token. `(\S+)$`
     # was a shape rule nothing declared: `Reviewed-in: PR 99999 on the payments
@@ -588,7 +627,11 @@ def gate_approval(root):
     # the line and lets `answered()` be the only test.
     review_id = re.search(r"^Reviewed-in:\s*(.+)$", body, re.M)
     # The APPROVAL file declares this change touches money/partner paths.
-    if not approvals and not trailer:
+    # A commit whose ONLY claim was a Reviewed-in id used to fall into this
+    # return too, and the sentence told a team on the keyless path that their
+    # commit carries no approval claim at all, with the id they recorded
+    # unmentioned. A recorded id IS a claim, so it flows to its own branch.
+    if not approvals and not trailer and not review_id:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
                            "money or partner path that is correct%s" % pruned)
     # A reordering bidi control makes a line RENDER in a different order than
@@ -650,26 +693,75 @@ def gate_approval(root):
     # the same identity three times. A signature proves a key holder signed. It
     # cannot prove a SECOND party looked, and a second party is the entire content
     # of the word approval.
+    cosign = False
     if trailer:
         appr_emails, appr_names = _identity_parts(trailer.group(1))
-        wrote_emails, wrote_names = set(), []
-        for who in authors:
-            e, n = _identity_parts(who)
-            wrote_emails |= e
-            wrote_names.extend(n)
-        same_email = sorted(appr_emails & wrote_emails)
-        same_name = next((" ".join(sorted(a)) for a in appr_names for b in wrote_names
-                          if _names_overlap(a, b)), "")
-        if same_email or same_name:
+
+        def _wrote(ids):
+            emails, names = set(), []
+            for who in ids:
+                e, n = _identity_parts(who)
+                emails |= e
+                names.extend(n)
+            return emails, names
+
+        auth_emails, auth_names = _wrote(idmeta["author"])
+        comm_emails, comm_names = _wrote(idmeta["committer"])
+        # The co-sign shape, and it is the only spelling git has for "the
+        # reviewer signed": under SSH signing an approver signs by amending,
+        # which makes them the COMMITTER, and the old guard lumped committer
+        # in with author, so the strongest honest approval shape git can
+        # express was refused as self-approval while the FAIL's own remedy
+        # ("have the approver sign") pointed straight back into it. The
+        # carve-out is bound to a key, not to typed text: it opens only when
+        # the verifier's matched principal (%GS, the identity whose key
+        # PRODUCED the signature) is the approver's own email, so a spoofed
+        # committer name signed with the author's key stays a FAIL.
+        signer_emails = {_canonical_email(m.group(0), skeleton)
+                         for m in _EMAIL.finditer(idmeta.get("signer", ""))}
+        cosign = (sig == "G" and bool(signer_emails & appr_emails))
+
+        def _joined(names):
+            return {"".join(t) for t in names}
+
+        def _same(emails_w, names_w):
+            # A name is the same person when the word sets overlap, and also
+            # when the SPACELESS renderings match: an invisible character
+            # welded two words into one, and the welded word was structurally
+            # different from every author word, which a certifying comparison
+            # then consumed as proof of difference.
+            se = sorted(appr_emails & emails_w)
+            sn = next((" ".join(a) for a in appr_names for b in names_w
+                       if _names_overlap(frozenset(a), frozenset(b))), "")
+            sj = next(iter(_joined(appr_names) & _joined(names_w)), "")
+            return se, (sn or sj)
+
+        same_email_a, same_name_a = _same(auth_emails, auth_names)
+        same_email_c, same_name_c = _same(comm_emails, comm_names)
+        if same_email_a or same_name_a:
             return "FAIL", ("the Approved-by identity is the identity that wrote the commit (%s); "
                             "author and committer are %s. Self-approval is not approval: a "
                             "signature proves a key holder signed, and it cannot prove a second "
                             "party reviewed. A trailing period, a reordered name, an initial, a "
-                            "plus-address or a role suffix does not make a second person. Have the "
-                            "approver sign, or record a Reviewed-in id pointing at a review "
+                            "plus-address or a role suffix does not make a second person. A second "
+                            "person must review: have them amend and sign with their OWN key and "
+                            "record their email in the trailer (the signature's principal is then "
+                            "the approver's email, and this gate reads that committer as the "
+                            "approver who signed), or record a Reviewed-in id pointing at a review "
                             "somebody else performed"
-                            % (", ".join(same_email) or same_name,
+                            % (", ".join(same_email_a) or same_name_a,
                                ", ".join(authors) or "unrecorded"))
+        if (same_email_c or same_name_c) and not cosign:
+            return "FAIL", ("the Approved-by identity is the identity recorded as this commit's "
+                            "committer (%s), and the signature's principal (%s) is not the "
+                            "approver's email, so this host cannot tell that the approver signed "
+                            "rather than merely being named. Have the approver amend and sign with "
+                            "their OWN key and record their email in the trailer (the signature's "
+                            "principal is then the approver's email, and this gate reads that "
+                            "committer as the approver who signed), or record a Reviewed-in id "
+                            "pointing at a review somebody else performed"
+                            % (", ".join(same_email_c) or same_name_c,
+                               idmeta.get("signer", "").strip() or "unrecorded"))
     # An approval was claimed: now it must be bound to a forgery-resistant identity.
     # Only a signature this host verified AGAINST A PRINCIPAL IT TRUSTS counts,
     # and that is %G? = G alone. U means the signature is cryptographically valid
@@ -693,34 +785,105 @@ def gate_approval(root):
     # positions or in structure and is certified cleanly.
     if trailer and sig == "G":
         appr_emails_r, appr_names_r = _rendered_identity_parts(trailer.group(1))
+        # In the co-sign shape the approver IS the committer, legitimately, so
+        # the difference that must be proven is against the AUTHOR alone.
+        cosigned = cosign and (same_email_c or same_name_c)
+        targets = idmeta["author"] if cosigned else authors
         wrote_emails_r, wrote_names_r = set(), []
-        for who in authors:
+        for who in targets:
             e, n = _rendered_identity_parts(who)
             wrote_emails_r |= e
             wrote_names_r.extend(n)
-        collide = next(("%s could render as the author's %s" % (a, b)
-                        for a in sorted(appr_emails_r) for b in sorted(wrote_emails_r)
-                        if could_render_same(a, b)), "")
-        if not collide:
-            collide = next(("%s could render as the author's %s"
-                            % (" ".join(sorted(a)), " ".join(sorted(b)))
-                            for a in appr_names_r for b in wrote_names_r
-                            if name_sets_could_collide(a, b)), "")
+        cosign_note = ("; the signature's principal is the approver's own email (%s), so the "
+                       "approver's key signed this commit and the identity compared against is "
+                       "the author alone" % idmeta.get("signer", "").strip()) if cosigned else ""
+        # The founding rule, applied to the comparison itself: absence is
+        # never proof. A predicate whose "no collision" can be produced by an
+        # EMPTY input may not be consumed as evidence for a certificate, so
+        # before any "no collision found" counts, the gate establishes that
+        # the comparison examined something on both sides.
+        if not appr_emails_r and not appr_names_r:
+            return "NO-DATA", ("signature verified against a trusted key, but the Approved-by "
+                               "value %r could not be read as a name or an email address, so the "
+                               "identity comparison examined nothing, and a comparison that "
+                               "examined nothing proves nothing; record the approver as a name "
+                               "or an email address" % trailer.group(1).strip())
+        if not wrote_emails_r and not wrote_names_r:
+            return "NO-DATA", ("signature verified against a trusted key, but the commit records "
+                               "no readable author or committer identity to compare the approver "
+                               "against, so the identity comparison examined nothing, and a "
+                               "comparison that examined nothing proves nothing")
+        # A proven email difference is itself a proof of difference, and it
+        # short-circuits: the remedy sentence below used to advertise
+        # "record the approver with an email address" while a recorded,
+        # provably different email fell through to the weaker name test and
+        # changed nothing. A remedy a check prints must be one the code
+        # accepts for THIS value.
+        if appr_emails_r and wrote_emails_r:
+            email_collide = next(("%s could render as the author's %s" % (a, b)
+                                  for a in sorted(appr_emails_r) for b in sorted(wrote_emails_r)
+                                  if could_render_same(a, b)), "")
+            if email_collide:
+                return "NO-DATA", ("signature verified against a trusted key, but this gate "
+                                   "cannot certify the approver and the author are different "
+                                   "people: the approver's recorded email %s, so a look-alike "
+                                   "substitution could map one mailbox onto the other; record an "
+                                   "email address that differs at positions this host reads, or "
+                                   "use a Reviewed-in id (reported as a pointer, not a "
+                                   "certificate)" % email_collide)
+            return "PASS", ("signed commit carries Approved-by: %s, this host verified the "
+                            "signature against a trusted key, and the approver's recorded email "
+                            "address (%s) is proven different from the %s email(s) on record "
+                            "(%s): they differ at positions this host reads, beyond any "
+                            "look-alike substitution%s%s"
+                            % (trailer.group(1).strip(), ", ".join(sorted(appr_emails_r)),
+                               "author's" if cosigned else "author's and committer's",
+                               ", ".join(sorted(wrote_emails_r)), cosign_note, pruned))
+        collide = next(("%s could render as the author's %s"
+                        % (" ".join(a), " ".join(b))
+                        for a in appr_names_r for b in wrote_names_r
+                        if name_sets_could_collide(a, b)
+                        or could_render_same("".join(a), "".join(b))), "")
         if collide:
+            # The reason clause is written for BOTH collision classes,
+            # because the old one ("every letter that differs is one no fold
+            # this host can read") was false for the soft class: the host's
+            # own folds read those letters every time it runs, and what
+            # actually stops the certificate is policy, not inability.
+            if not appr_emails_r:
+                remedy = ("record the approver with an email address that differs from the "
+                          "author's (a proven email difference is accepted as proof of "
+                          "difference), or use a Reviewed-in id (reported as a pointer, not a "
+                          "certificate)")
+            else:
+                remedy = ("the approver's email is recorded but the commit carries no author "
+                          "email to compare it against; record author identities with email "
+                          "addresses, or use a Reviewed-in id (reported as a pointer, not a "
+                          "certificate)")
             return "NO-DATA", ("signature verified against a trusted key, but this gate cannot "
-                               "certify the approver and the author are different people: %s, "
-                               "because every letter that differs is one no fold this host can "
-                               "read, so a look-alike substitution could map one onto the other. "
-                               "The negative 'the approver is not the author' is asserted only "
-                               "when difference is proven; record the approver with an email "
-                               "address or in a spelling this host can read, or use a "
-                               "Reviewed-in id" % collide)
-        return "PASS", ("signed commit carries Approved-by: %s, this host verified the signature "
-                        "against a trusted key, and that identity is proven different from the "
-                        "commit's author or committer (%s): after normalization and confusable "
-                        "folding they differ beyond any look-alike substitution this host can "
-                        "read%s"
-                        % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded", pruned))
+                               "certify the approver and the author are different people: %s. "
+                               "The letters that differ are ones this host will not trust as "
+                               "proof of difference: a fold may read some of them, but a "
+                               "certificate may not rest on a fold's coverage, and a letter no "
+                               "fold reads proves nothing in either direction. The negative "
+                               "'the approver is not the author' is asserted only when "
+                               "difference is proven; %s" % (collide, remedy))
+        if appr_names_r and wrote_names_r:
+            return "PASS", ("signed commit carries Approved-by: %s, this host verified the "
+                            "signature against a trusted key, and that identity is proven "
+                            "different from the commit's author or committer (%s): after "
+                            "normalization and confusable folding they differ beyond any "
+                            "look-alike substitution this host can read%s%s"
+                            % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded",
+                               cosign_note, pruned))
+        # One side has only an email and the other only a name: no comparison
+        # examined anything, and absence of a collision over nothing is not
+        # proof of anything.
+        return "NO-DATA", ("signature verified against a trusted key, but the approver and the "
+                           "commit's identities share no comparable part (one records only an "
+                           "email, the other only a name), so the identity comparison examined "
+                           "nothing, and a comparison that examined nothing proves nothing; "
+                           "record both sides with an email address or with a name")
     if trailer and sig == "U":
         return "NO-DATA", ("signature is cryptographically valid but the key matched no principal "
                            "this host trusts (git %G? = U; under SSH signing that is an unknown "

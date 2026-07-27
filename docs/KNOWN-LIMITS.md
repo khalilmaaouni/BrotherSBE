@@ -76,6 +76,26 @@ Every green run this project cites happened in its own repository or on the
 estate it was built on. No external adoption, and no second estate, is
 claimed anywhere.
 
+## The approval identity proof has a measured refusal remainder (L9)
+
+The approval gate certifies "the approver is not the author" only when the
+difference is proven: by an email address differing at positions the host
+reads, by name structure, by readable letters, or by code point within one
+script. Two names of ONE script compare by code point (two different Ethiopic
+or Devanagari letters are different glyphs, not look-alikes of each other),
+which accepts near-identical glyph pairs WITHIN a script as a limit, exactly
+as it already does for CJK ideographs. What remains refused is the soft
+class: same-script name pairs whose every differing letter is one the
+confusable tables fold to ASCII, where a certificate resting on the fold's
+coverage would rest on a table this project's own history proves incomplete.
+Measured over pools of 10 common real names per script (45 pairs each,
+name-only, no email): Russian 10 of 45 pairs unproven (22 percent), Greek 2
+of 45 (4 percent), Vietnamese 1 of 45 (2 percent), Amharic and Hindi 0 of 45.
+Every refused pair passes by recording an email address that differs from the
+author's, which the gate accepts as proof of difference; the refusal sentence
+names that escape. Full text: `tools/sbe_gate.py` (gate_approval),
+`tools/sbe_checks.py` (the four character kinds).
+
 ## The citation check never opens a page
 
 `citation-inventory` proves that every external URL cited in README.md,

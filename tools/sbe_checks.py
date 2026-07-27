@@ -639,6 +639,19 @@ def _is_invisible(ch):
             or 0xE0100 <= ord(ch) <= 0xE01EF)           # variation selectors supplement
 
 
+# Code points that render as a VISIBLE BLANK while being neither Python
+# whitespace nor invisible: a braille pattern with no dots raised, and the
+# Hangul filler letterforms. `str.split()` does not split on them, so one of
+# them welded two name words into a single long word, and the long word was
+# structurally different from every author word, which a certifying comparison
+# then consumed as proof of difference. What a reader sees as a word gap must
+# BE a word gap wherever text is compared, so these read as a space, by class:
+# a character whose glyph carries no ink either disappears (the invisible
+# class above) or separates (this one), and neither may ever weld.
+_RENDERS_BLANK = frozenset("⠀"                     # braille pattern blank
+                           "ㅤᅟᅠﾠ")  # Hangul fillers
+
+
 def plain_text(text):
     """The text as it renders: compatibility forms folded, invisible characters gone.
 
@@ -647,10 +660,12 @@ def plain_text(text):
     function: a placeholder wearing a zero-width space was "an answer" to the
     vacuity test while the fold two functions up would have erased it. A
     character a reader cannot see is not content a reader can review, wherever
-    the text is about to be compared, tested or counted.
+    the text is about to be compared, tested or counted. A character that
+    renders as a blank (_RENDERS_BLANK) reads as the space a reader sees.
     """
     t = unicodedata.normalize("NFKC", str(text))
-    return "".join(ch for ch in t if not _is_invisible(ch))
+    return "".join(" " if ch in _RENDERS_BLANK else ch
+                   for ch in t if not _is_invisible(ch))
 
 
 def fold(text):
@@ -797,11 +812,38 @@ def _char_reading(ch):
     return ("opaque", ch)
 
 
+def _script_family(ch):
+    """The Unicode script family of one character, by RULE (the name's first
+    word). The Japanese grouping mirrors _letter_families; a character Unicode
+    cannot name is its OWN family (per code point), so two different unnamed
+    characters never share a family, which errs toward refusal in every
+    consumer."""
+    try:
+        fam = unicodedata.name(ch).split()[0]
+    except ValueError:
+        fam = "UNNAMED-U+%04X" % ord(ch)
+    return "JAPANESE" if fam in ("CJK", "HIRAGANA", "KATAKANA",
+                                 "KATAKANA-HIRAGANA") else fam
+
+
 def _pair_could_render_same(a, b, trust_fold):
     ka, ra = a
     kb, rb = b
     if ka == "wide" or kb == "wide":
         return ra == rb          # a wide or RTL letterform is nobody's look-alike
+    if ka == "opaque" and kb == "opaque":
+        # Two letters of the SAME script that no fold can read compare by code
+        # point, on the precedent CJK already set: two different Ethiopic,
+        # Devanagari or Lisu letters are visibly different glyphs of one
+        # script, not look-alikes of each other, so an all-Ethiopic team's two
+        # names are comparable the way two CJK names are. Near-identical
+        # glyph pairs WITHIN one script remain a documented limit, exactly as
+        # for CJK. Across scripts (or where Unicode cannot name a letter) the
+        # pair still proves nothing: the Lisu-spelling-of-an-ASCII-name axis
+        # is opaque-vs-hard and is untouched by this rule.
+        if _script_family(ra) == _script_family(rb):
+            return ra == rb
+        return True
     if ka == "opaque" or kb == "opaque":
         return True              # an unreadable letter could render as anything narrow
     if trust_fold or (ka == "hard" and kb == "hard"):
