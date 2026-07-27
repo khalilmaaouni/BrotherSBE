@@ -41,12 +41,24 @@ VAULT="${BROTHERSBE_VAULT:-$HOME/BrotherSBEVault}"
 TEL_DIR="$VAULT/99-System/telemetry"
 AUTOSAVE_NS="refs/brothersbe/autosave"
 
-# The per-worktree ref for the CURRENT directory's repository. The id is the
-# POSIX cksum CRC of the worktree's absolute top-level path: stable across
-# runs, different per worktree, and computable with nothing beyond POSIX sh.
-# What it is not: cryptographic. It only has to keep two worktrees of one
-# repository from writing over each other's snapshots, not resist an attacker.
+# The per-worktree ref for the CURRENT directory's repository. The id is git's
+# own hash of the worktree's absolute top-level path (git hash-object): stable
+# across runs, different per worktree, and collision-resistant, which the
+# earlier cksum CRC-32 id was not: CRC-32 collides across ordinary short
+# strings, and two colliding worktree paths would silently share one ref,
+# restoring exactly the cross-worktree overwrite this namespacing exists to
+# prevent. git is already a hard dependency of every path that reaches this.
 autosave_ref() {
+  top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  [ -n "$top" ] || { printf '%s' "$AUTOSAVE_NS"; return 0; }
+  wid="$(printf '%s' "$top" | git hash-object --stdin 2>/dev/null)"
+  [ -n "$wid" ] && printf '%s/%s' "$AUTOSAVE_NS" "$wid" || printf '%s' "$AUTOSAVE_NS"
+}
+
+# The id an OLDER version of this script derived (cksum CRC-32 of the same
+# path). Read-only: recover consults it so a snapshot taken before the id
+# changed is found rather than orphaned. Nothing writes here anymore.
+legacy_autosave_ref() {
   top="$(git rev-parse --show-toplevel 2>/dev/null)"
   [ -n "$top" ] || { printf '%s' "$AUTOSAVE_NS"; return 0; }
   wid="$(printf '%s' "$top" | cksum 2>/dev/null | awk '{print $1}')"
@@ -69,6 +81,19 @@ snapshot() {
   cd "$repo" 2>/dev/null || return 0
   # Only meaningful in a git repository; a non-git project is a clean no-op.
   git rev-parse --git-dir >/dev/null 2>&1 || { log_line "skip (not a git repo): $repo"; return 0; }
+  # THE SNAPSHOT COVERS THE WORKTREE THE REF NAMES, or it fails loudly. The
+  # hook's cwd is wherever the session happened to be (a package directory in
+  # a monorepo is the ordinary case), and `git add -A -- '.'` from there
+  # staged one subdirectory while the ref was filed under the whole worktree:
+  # a complete-looking tree with every out-of-cwd file backfilled at HEAD, so
+  # unsaved edits elsewhere read as work that was never done, and a session
+  # whose unlanded work sat entirely outside its cwd wrote NO ref and NO log
+  # line at the token-death moment. The snapshot runs from the worktree top,
+  # always; a top this script cannot resolve or enter is logged, never
+  # guessed at.
+  top="$(git rev-parse --show-toplevel 2>/dev/null)"
+  [ -n "$top" ] || { log_line "SKIPPED (cannot resolve the worktree top from $repo): nothing was saved"; return 0; }
+  cd "$top" 2>/dev/null || { log_line "SKIPPED (cannot enter the worktree top $top): nothing was saved"; return 0; }
 
   # A THROWAWAY index. With GIT_INDEX_FILE pointing at a temp file, `git add -A`
   # stages everything (tracked edits AND untracked new files) into that temp
@@ -108,11 +133,16 @@ snapshot() {
     ':(exclude,glob)**/*.pfx' 2>/dev/null
   tree="$(git write-tree 2>/dev/null)"
 
-  # Skip if nothing changed since HEAD (avoid a pile of identical snapshots).
+  # Skip if nothing changed since HEAD (avoid a pile of identical snapshots),
+  # and SAY SO: this branch used to return without a log line, so a session
+  # whose work was missed for any reason later read "no autosave found" with
+  # nothing anywhere recording that the hook fired and chose not to save.
   if [ -n "$parent" ]; then
     head_tree="$(git rev-parse -q --verify "HEAD^{tree}" 2>/dev/null)"
     if [ "$tree" = "$head_tree" ]; then
-      rm -f "$tmpidx"; unset GIT_INDEX_FILE; return 0
+      rm -f "$tmpidx"; unset GIT_INDEX_FILE
+      log_line "no snapshot ($reason): the worktree at $top matches HEAD, nothing unlanded to save"
+      return 0
     fi
   fi
 
@@ -126,11 +156,16 @@ snapshot() {
   fi
   rm -f "$tmpidx"; unset GIT_INDEX_FILE
 
-  [ -n "$commit" ] || return 0
-  # Point the private per-worktree ref at the snapshot. Never touches any branch.
+  [ -n "$commit" ] || { log_line "SKIPPED ($reason): could not write a snapshot commit in $top"; return 0; }
+  # Point the private per-worktree ref at the snapshot. Never touches any
+  # branch. --create-reflog: the ref is single-slot, so without a reflog a
+  # NEWER snapshot made the older one unreachable and gc-eligible, and the
+  # harmful ordering (a good snapshot, then a destructive local action, then
+  # a snapshot of the damage) destroyed the only copy of the good one. With
+  # the reflog every superseded snapshot stays reachable: git reflog <ref>.
   ref="$(autosave_ref)"
-  git update-ref "$ref" "$commit" 2>/dev/null && \
-    log_line "saved $commit ($reason) at $ref in $repo"
+  git update-ref --create-reflog "$ref" "$commit" 2>/dev/null && \
+    log_line "saved $commit ($reason) at $ref covering the whole worktree $top"
 }
 
 # Read the cwd the hook was invoked for out of its JSON stdin payload. Falls
@@ -159,15 +194,46 @@ case "$1" in
     sid="${2:-session}"
     ctr="$TEL_DIR/.autosave-tick-$(printf '%s' "$sid" | tr -c 'A-Za-z0-9_-' '_')"
     mkdir -p "$TEL_DIR" 2>/dev/null
+    # SERIALIZED read-modify-write. Parallel tool calls are ordinary and a
+    # runaway loop (the exact condition the counter exists to detect) fires
+    # hooks concurrently, so the unlocked increment lost updates: the
+    # throttle skipped snapshot points and the runaway warning printed a
+    # count materially below the real one, understating most in exactly the
+    # case it is written for. mkdir is the POSIX-portable atomic lock. The
+    # wait is bounded (never blocks work); a lock that outlives the wait is
+    # presumed dead (ticks are subsecond) and is broken once; if even that
+    # fails, this tick is SKIPPED WITH A LOG LINE rather than writing a
+    # number nothing measured.
+    lock="$ctr.lock"
+    tries=0
+    until mkdir "$lock" 2>/dev/null; do
+      tries=$((tries + 1))
+      if [ "$tries" -ge 40 ]; then
+        rmdir "$lock" 2>/dev/null
+        if ! mkdir "$lock" 2>/dev/null; then
+          log_line "tick skipped for $sid: could not take $lock; the count was not incremented"
+          exit 0
+        fi
+        break
+      fi
+      sleep 0.05 2>/dev/null || sleep 1
+    done
     n="$(cat "$ctr" 2>/dev/null)"; n="${n:-0}"; n=$((n + 1))
     printf '%s' "$n" > "$ctr" 2>/dev/null
+    # The warned marker is written INSIDE the lock, so two hooks crossing
+    # the threshold together cannot both print the warning.
+    warn=0
+    if [ "$n" -ge "$RUNAWAY_AT" ] && [ ! -f "$ctr.warned" ]; then
+      : > "$ctr.warned" 2>/dev/null
+      warn=1
+    fi
+    rmdir "$lock" 2>/dev/null
     # Throttle: only snapshot every Nth tool call, so this stays cheap.
     if [ $((n % TICK_EVERY)) -eq 0 ]; then
       snapshot "$repo" "tick $n"
     fi
     # Runaway warning, once per session (a very long session is a loop smell).
-    if [ "$n" -ge "$RUNAWAY_AT" ] && [ ! -f "$ctr.warned" ]; then
-      : > "$ctr.warned" 2>/dev/null
+    if [ "$warn" -eq 1 ]; then
       printf '{"systemMessage":"BrotherSBE: this session has made %s tool calls, which can signal an unbounded loop. Consider whether a circuit breaker (section 7) should fire. Your work is autosaved under %s/ (sbe_autosave.sh recover prints the path)."}\n' "$n" "$AUTOSAVE_NS"
     fi
     ;;
@@ -186,13 +252,35 @@ case "$1" in
     ref="$(autosave_ref)"
     sha="$(git rev-parse -q --verify "$ref" 2>/dev/null)"
     if [ -z "$sha" ]; then
+      # A snapshot written by an older version of this script lives under the
+      # cksum-derived id; read it rather than orphaning saved work.
+      legacy="$(legacy_autosave_ref)"
+      sha="$(git rev-parse -q --verify "$legacy" 2>/dev/null)"
+      [ -n "$sha" ] && ref="$legacy"
+    fi
+    if [ -z "$sha" ]; then
       # A snapshot taken before refs were namespaced per worktree lives at the
       # old shared name; read it rather than orphaning saved work.
       sha="$(git rev-parse -q --verify "$AUTOSAVE_NS" 2>/dev/null)"
       [ -n "$sha" ] && ref="$AUTOSAVE_NS"
     fi
     if [ -z "$sha" ]; then
-      echo "sbe_autosave: no autosave found in $repo (ref $ref is empty)."
+      # The sentence describes the NAMESPACE, not the one computed guess. The
+      # id is derived from the worktree's absolute path, so a moved or
+      # renamed project changes the id, and "no autosave found in <repo>"
+      # was false about a repository holding the snapshot one for-each-ref
+      # away: the check reported a conclusion wider than what it examined.
+      others="$(git for-each-ref --format='%(refname) -> %(objectname)' "$AUTOSAVE_NS" 2>/dev/null)"
+      if [ -n "$others" ]; then
+        echo "sbe_autosave: no autosave under this worktree's current id (ref $ref is empty),"
+        echo "  but this repository DOES hold autosave snapshot(s) under other id(s), which is"
+        echo "  what a moved or renamed worktree looks like (the id derives from the path):"
+        printf '%s\n' "$others" | sed 's/^/    /'
+        echo "  Inspect one:  git log --oneline -1 <ref>"
+        echo "  Recover one:  git worktree add --detach <new-empty-dir> <ref>"
+        exit 0
+      fi
+      echo "sbe_autosave: no autosave found in $repo (ref $ref is empty, and nothing else exists under $AUTOSAVE_NS/)."
       exit 0
     fi
     # mktemp -d creates the directory at mode 0700 (owner-only). The chmod is
@@ -215,6 +303,7 @@ case "$1" in
     echo "  Your live working tree at $repo was never touched. Inspect the folder"
     echo "  above, copy back what you need, then remove it with:"
     echo "  git -C $repo worktree remove $tmpdir"
+    echo "  Older superseded snapshots, if any, are listed by: git -C $repo reflog $ref"
     ;;
 
   *)

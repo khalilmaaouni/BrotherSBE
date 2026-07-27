@@ -165,6 +165,120 @@ class TestAutosaveExclusions(unittest.TestCase):
             self.assertIn("UNLANDED", git("show", "%s:wip.txt" % ref).stdout)
 
 
+class TestAutosaveCoversTheWorktree(unittest.TestCase):
+    def _repo(self, root):
+        def git(*a):
+            return subprocess.run(["git", "-C", root, *a], capture_output=True, text=True)
+        git("init", "-q")
+        git("config", "user.email", "t@t.t"); git("config", "user.name", "t")
+        os.makedirs(os.path.join(root, "frontend"))
+        os.makedirs(os.path.join(root, "backend"))
+        io.open(os.path.join(root, "frontend", "index.js"), "w").write("v1")
+        io.open(os.path.join(root, "backend", "app.py"), "w").write("v1")
+        git("add", "-A"); git("commit", "-qm", "init")
+        return git
+
+    def test_subdirectory_session_snapshots_the_whole_tree(self):
+        """The hook's cwd is wherever the session sat (a package directory in
+        a monorepo), and the snapshot used to cover only that subdirectory
+        while the ref named the whole worktree: out-of-cwd edits rode at
+        HEAD (work that looked never done) and a brand-new out-of-cwd file
+        was absent outright. The snapshot now runs from the worktree top."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as repo:
+            git = self._repo(repo)
+            io.open(os.path.join(repo, "frontend", "index.js"), "w").write("v2-EDIT")
+            io.open(os.path.join(repo, "frontend", "newfeature.js"), "w").write("NEW-WORK")
+            env = dict(os.environ, BROTHERSBE_VAULT=tempfile.mkdtemp())
+            subprocess.run(["sh", sh, "precompact"],  # sbe: allow-silent test harness fires the hook; the ref content is asserted below
+                           input=json.dumps({"cwd": os.path.join(repo, "backend")}),
+                           text=True, env=env, timeout=120)
+            ref = git("for-each-ref", "--format=%(refname)",
+                      "refs/brothersbe/autosave").stdout.split()[0]
+            self.assertEqual("v2-EDIT", git("show", "%s:frontend/index.js" % ref).stdout,
+                             "an out-of-cwd edit rode at HEAD instead of being saved")
+            self.assertEqual("NEW-WORK", git("show", "%s:frontend/newfeature.js" % ref).stdout,
+                             "an out-of-cwd untracked file was absent from the snapshot")
+
+    def test_out_of_cwd_only_work_still_writes_a_ref(self):
+        """When every unlanded change sat outside the session's cwd, the old
+        subdirectory-scoped add staged nothing, the identical-tree branch
+        returned early, and the hook exited 0 with no ref and no log line:
+        work on disk, and recover later said no autosave exists."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as repo:
+            git = self._repo(repo)
+            io.open(os.path.join(repo, "frontend", "index.js"), "w").write("HOURS-OF-WORK")
+            vault = tempfile.mkdtemp()
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            subprocess.run(["sh", sh, "precompact"],  # sbe: allow-silent test harness fires the hook; the ref content is asserted below
+                           input=json.dumps({"cwd": os.path.join(repo, "backend")}),
+                           text=True, env=env, timeout=120)
+            refs = git("for-each-ref", "--format=%(refname)",
+                       "refs/brothersbe/autosave").stdout.split()
+            self.assertEqual(1, len(refs), "no snapshot ref for out-of-cwd work")
+            self.assertIn("HOURS-OF-WORK", git("show", "%s:frontend/index.js" % refs[0]).stdout)
+
+    def test_parallel_ticks_lose_no_update_and_a_superseded_snapshot_stays_reachable(self):
+        """Two serialization halves. The tick counter was an unlocked
+        read-modify-write fired from PostToolUse, so parallel tool calls lost
+        updates: the throttle skipped snapshot points and the runaway warning
+        printed a count below the real one. And the single-slot ref had no
+        reflog, so a newer snapshot made the older one unreachable."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as repo:
+            git = self._repo(repo)
+            vault = tempfile.mkdtemp()
+            env = dict(os.environ, BROTHERSBE_VAULT=vault, BROTHERSBE_AUTOSAVE="1")
+            procs = [subprocess.Popen(["sh", sh, "tick", "sess1"], stdin=subprocess.PIPE,
+                                      stdout=subprocess.DEVNULL, text=True, env=env)
+                     for _ in range(30)]
+            for p in procs:
+                p.communicate(json.dumps({"cwd": repo}), timeout=120)
+            tel = os.path.join(vault, "99-System", "telemetry")
+            ctr = [f for f in os.listdir(tel) if f.startswith(".autosave-tick")
+                   and not f.endswith((".lock", ".warned"))][0]
+            self.assertEqual("30", io.open(os.path.join(tel, ctr)).read(),
+                             "parallel ticks lost counter updates")
+            # reflog half: snapshot good work, destroy it, snapshot again
+            io.open(os.path.join(repo, "good.txt"), "w").write("GOOD")
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; the reflog is asserted below
+                           text=True, env=env, timeout=120)
+            ref = git("for-each-ref", "--format=%(refname)",
+                      "refs/brothersbe/autosave").stdout.split()[0]
+            os.remove(os.path.join(repo, "good.txt"))
+            io.open(os.path.join(repo, "other.txt"), "w").write("LATER")
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; the reflog is asserted below
+                           text=True, env=env, timeout=120)
+            self.assertEqual("GOOD", git("show", "%s@{1}:good.txt" % ref).stdout,
+                             "the superseded snapshot is unreachable: no reflog kept it")
+
+    def test_recover_after_a_rename_names_the_sibling_snapshots(self):
+        """The ref id derives from the worktree path, so a moved project
+        changes the id and recover looked in a ref that never existed,
+        printing 'no autosave found in <repo>' about a repository holding
+        the snapshot one for-each-ref away. The empty-ref branch now
+        enumerates the namespace and names what it found."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as parent:
+            repo = os.path.join(parent, "proj")
+            os.makedirs(repo)
+            git = self._repo(repo)
+            io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED")
+            vault = tempfile.mkdtemp()
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),  # sbe: allow-silent test harness fires the hook; recover's output is asserted below
+                           text=True, env=env, timeout=120)
+            renamed = os.path.join(parent, "proj-renamed")
+            os.rename(repo, renamed)
+            out = subprocess.run(["sh", sh, "recover", renamed], capture_output=True,
+                                 text=True, env=env, timeout=120).stdout
+            self.assertIn("DOES hold autosave snapshot(s) under other id(s)", out)
+            self.assertIn("refs/brothersbe/autosave/", out)
+            self.assertNotIn("no autosave found in", out,
+                             "recover still asserts a repo-wide absence it never examined")
+
+
 class TestDigestCap(unittest.TestCase):
     def test_digest_fits_the_cap_the_hook_comment_names(self):
         """sbe_sessionstart.sh injects DIGEST.md into session context and its
