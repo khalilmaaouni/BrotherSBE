@@ -3995,7 +3995,16 @@ def dc_behavior(root):
     import re as _re
     import tokenize as _tok
     gate_path = os.path.join(_REPO, "tools", "sbe_gate.py")
-    gate_src = open(gate_path, errors="replace").read()
+    try:
+        gate_src = open(gate_path, errors="replace").read()
+    except OSError as e:
+        # Not raised out of the case, and never treated as an absence: a source
+        # this guard cannot open is a source whose mechanisms it cannot judge
+        # live, and every family's liveness predicate would read "the mechanism
+        # is gone" from a file that was simply unreadable.
+        return ("the source this guard falsifies against could not be read (%s: %s), so no "
+                "claim family could be judged live and no doc sentence was tested"
+                % (gate_path, e.strerror or e))
 
     def _code_only(path):
         # The source minus its comments: a comment is prose, and prose about
@@ -4104,6 +4113,28 @@ def dc_behavior_derived(root):
     ]
     problems = ["missed: %r" % s[:70] for s in caught if not _widening_claim(s)]
     problems += ["falsely flagged: %r" % s[:70] for s in clear if _widening_claim(s)]
+    # THE ROUND'S LAW, applied to this guard's own input: absence is never
+    # proof, so emptying what the guard reads may never improve its verdict.
+    # Pointed at a directory holding no page at all, it must report that it
+    # read nothing rather than report the pages consistent.
+    # The root is given both live mechanisms and no pages at all, so the branch
+    # under test is the empty DOCUMENT set rather than an unreadable source.
+    write(root, "tools/sbe_gate.py", "def gate_approval(root):\n    return 'NO-DATA', 'stub'\n")
+    global _REPO
+    kept = _REPO
+    try:
+        _REPO = root
+        derived = _shipped_markdown()
+        empty_verdict = dc_behavior(root)
+    finally:
+        _REPO = kept
+    if derived:
+        problems.append("a root holding no page derived %d page(s), so the empty case proves "
+                        "nothing" % len(derived))
+    if empty_verdict == "consistent":
+        problems.append("a root holding no shipped page reported the pages consistent")
+    elif "no shipped markdown page could be derived" not in empty_verdict:
+        problems.append("the empty-document verdict named something else: %r" % empty_verdict[:80])
     return "consistent" if not problems else "; ".join(problems[:4])
 
 

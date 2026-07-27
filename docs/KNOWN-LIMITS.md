@@ -90,6 +90,22 @@ rather than prevented: every unlocked append records itself in
 its own window says so after the rename and points at the per-run byte
 backup. Full text: `tools/sbe_telemetry.py` (_rewrite_locked).
 
+## The writer lock needs a filesystem that honors flock
+
+The telemetry writer lock is an advisory `flock` on a sidecar file. On a
+filesystem that does not honor it (a network mount is the ordinary case; the
+vault is documented as a local directory for this reason), the lock cannot be
+taken, and the degradation is the safe one rather than a silent loss: an
+append proceeds unlocked so the row is never dropped and records itself in
+`<ledger>.unlocked-appends`, and both maintenance rewrites (migrate, dedup)
+REFUSE to rewrite and say so, naming the possibility that the platform has no
+working lock. Executed by forcing `flock` to return the unsupported error on
+this host: the appended row survived, the fallback recorded itself, and both
+rewrites left the file byte-identical. What is lost on such a mount is
+maintenance, not data: migrate and dedup will never run there until the vault
+sits on a filesystem whose locks work. Full text: `tools/sbe_telemetry.py`
+(_writer_lock).
+
 ## The approval identity proof has a measured refusal remainder (L9)
 
 The approval gate certifies "the approver is not the author" only when the
