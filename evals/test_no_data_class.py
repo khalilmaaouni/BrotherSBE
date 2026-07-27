@@ -618,7 +618,22 @@ def pass_returning_functions(mods=None):
 # The modules whose stdout this suite (and any CI grep, and any human) parses
 # for verdict lines. Their printed report IS the interface under test, so every
 # print in them is held to the choke-point rule below.
-REPORT_TOOLS = ("sbe_gate.py", "sbe_design.py", "sbe_score.py")
+# Files whose prints are REVIEWED as not being report lines. The lint below
+# used to run over a three-filename tuple, which was itself the
+# list-of-instances failure it polices: sbe_decide.py printed decision
+# verdicts through raw interpolation, sat outside the tuple, and a decision
+# table's option name forged Recommendation and Alternatives lines. The lint
+# now derives its file set from tool_sources(), the same walk that discovers
+# registries, so a tool added next year is covered on the day it is added;
+# what remains named is the EXCEPTION, each with its reason, reconciled on
+# every run (an entry naming a file with no print the lint would flag is dead
+# and fails, so the exemption cannot outlive what it excuses).
+REPORT_PRINT_EXEMPT = {
+    "sbe_intake.py": "an interactive interview: its prompts, echoes and refusals are dialogue "
+                     "with the operator, and nothing machine-parses them as verdict lines",
+    "sbe_telemetry.py": "operator status lines and hook JSON, never parsed as gate verdicts; "
+                        "its ledger writes are data, not report lines",
+}
 
 
 def unflattened_report_prints():
@@ -635,10 +650,15 @@ def unflattened_report_prints():
     print is an interpolation some future value can climb through, and it is
     flagged here whether or not anyone has typed that value yet.
 
-    Returns [(file, line, why)].
+    Returns ([(file, line, why)], exempt_hits, dead_exemptions): exempt_hits
+    maps each REPORT_PRINT_EXEMPT entry to the flagged-print count it excused
+    this run, and an entry that excused nothing is returned as dead, so the
+    caller fails it rather than letting a review outlive its subject.
     """
     out = []
-    for fn in REPORT_TOOLS:
+    exempt_hits = {k: 0 for k in REPORT_PRINT_EXEMPT}
+    for fn in tool_sources():
+        exempt = os.path.basename(fn) if os.path.basename(fn) in REPORT_PRINT_EXEMPT else ""
         try:
             tree = ast.parse(open(os.path.join(TOOLS_DIR, fn)).read(), filename=fn)
         except (SyntaxError, OSError, ValueError) as e:
@@ -660,11 +680,15 @@ def unflattened_report_prints():
                         and a.func.id in ("one_line", "say")):
                     ok = True
             if not ok:
+                if exempt:
+                    exempt_hits[exempt] += 1
+                    continue
                 out.append((fn, node.lineno,
                             "prints a line the one_line() choke point never flattened; a report "
                             "line is one line by construction, so route it through say() (or "
                             "print a bare constant)"))
-    return sorted(out)
+    dead = sorted(k for k, n in exempt_hits.items() if n == 0)
+    return sorted(out), exempt_hits, dead
 
 
 UNKNOWN_HEAD = object()   # a verdict position this lint cannot read at all
@@ -1381,9 +1405,15 @@ def main():
                         "no scenario in this file reaches them: %s" % ", ".join(unregistered))
     # Every print in a report tool goes through the one_line choke point, so no
     # interpolated value (a path, a root, an error repr) can write a second
-    # report line: the class behind the directory-name verdict forgery.
-    for fn, lineno, why in unflattened_report_prints():
+    # report line: the class behind the directory-name verdict forgery. The
+    # linted set is derived from tool_sources(), never a filename list; the
+    # reviewed exceptions are reconciled here and printed below.
+    unflattened, print_exempt_hits, dead_print_exemptions = unflattened_report_prints()
+    for fn, lineno, why in unflattened:
         failures.append("%s:%s %s" % (fn, lineno, why))
+    for fn in dead_print_exemptions:
+        failures.append("REPORT_PRINT_EXEMPT names %s but no print there needed excusing this "
+                        "run; a review that excuses nothing is dead, remove the entry" % fn)
     # The source lint's own allowlist, reconciled against what it exempted.
     for key, why in sorted(NOT_A_VERDICT.items()):
         hits = EXEMPTION_HITS.get(key, [])
@@ -1562,6 +1592,11 @@ def main():
           "resolved to this run):")
     for e in lint_exemptions or ["none"]:
         print("  %s" % e)
+    print("\ndeclared exemptions from the report-print lint (the linted set is every file "
+          "tool_sources() walks; each entry states its reason and what it excused this run):")
+    for fn in sorted(print_exempt_hits) or ["none"]:
+        print("  %s: excused %d print(s); %s" % (fn, print_exempt_hits[fn],
+                                                 REPORT_PRINT_EXEMPT[fn]))
     if checked < FLOOR_CHECKS:
         failures.append("only %d check(s) discovered, below the floor of %d. Deleting a check "
                         "used to shrink this count in silence, with the anti-shrinkage guarantee "

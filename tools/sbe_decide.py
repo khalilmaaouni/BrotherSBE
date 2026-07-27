@@ -7,6 +7,9 @@ threshold measured on someone else's estate is a default, not a law.
 """
 import json, os, sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sbe_checks import say
+
 
 def recommend(table, context):
     """Score every criterion supplied in context against the table and rank options.
@@ -125,7 +128,33 @@ def load_table(path, key):
     if key not in tables:
         return None, ("no table named %r in %s. Tables that ship: %s. Decision families with no table yet "
                       "are human review, not a tool failure." % (key, path, ", ".join(sorted(tables)) or "none"))
-    return tables[key], ""
+    # The docstring above promises a named failure path for "a malformed file",
+    # and it used to mean only "not valid JSON": a file that is valid JSON and
+    # not a valid TABLE (the malformed case an author actually produces) fell
+    # through to the generic handler as `error KeyError('flip')`, exactly the
+    # Python-repr failure mode the EOFError comment below names as the one to
+    # avoid. The shape the rest of this tool requires is checked here, by name.
+    t = tables[key]
+    problem = ""
+    if not isinstance(t, dict):
+        problem = "is not a mapping"
+    elif not isinstance(t.get("options"), list) or not t["options"] or \
+            not all(isinstance(o, str) for o in t["options"]):
+        problem = "lacks an 'options' list of option names"
+    elif not isinstance(t.get("criteria"), list) or not all(
+            isinstance(c, dict) and isinstance(c.get("name"), str)
+            and c.get("kind") in ("number", "choice")
+            and isinstance(c.get("scores"), dict) and isinstance(c.get("note"), str)
+            for c in t["criteria"]):
+        problem = ("lacks a 'criteria' list in which every entry carries a 'name', a 'kind' of "
+                   "number or choice, a 'scores' mapping and a 'note'")
+    elif not isinstance(t.get("flip"), str) or not t["flip"].strip():
+        problem = "lacks a 'flip' condition (the sentence naming what would reverse the recommendation)"
+    if problem:
+        return None, ("table %r in %s is valid JSON and still not a decision table this tool "
+                      "can read: it %s. Fix the table; a malformed table is a table defect, "
+                      "not an unanswered decision" % (key, path, problem))
+    return t, ""
 
 
 DEFAULT_TABLE_FILE = os.path.join(
@@ -154,7 +183,7 @@ def main():
             key = arg
     table, err = load_table(path, key)
     if err:
-        print("sbe_decide: %s" % err)
+        say("sbe_decide: %s" % err)
         sys.exit(1)
     # key=value arguments answer criteria without the interview. They used to be
     # swallowed: every argument after the table name was discarded without a
@@ -167,8 +196,8 @@ def main():
     for a in extra:
         name, eq, raw = a.partition("=")
         if not eq or name not in known:
-            print("sbe_decide: %r is not an answer this table can read; answers are given as "
-                  "key=value for the criteria: %s" % (a, ", ".join(known)))
+            say("sbe_decide: %r is not an answer this table can read; answers are given as "
+                "key=value for the criteria: %s" % (a, ", ".join(known)))
             sys.exit(1)
         crit = known[name]
         context[name] = int(raw) if crit["kind"] == "number" and raw.isdigit() else raw
@@ -181,31 +210,40 @@ def main():
             # The named failure path for a closed stdin, exactly as sbe_intake
             # has: a Python repr here read as a broken tool rather than as
             # "nobody answered".
-            print("\nsbe_decide: stdin closed before %s was answered; answer the remaining "
-                  "criteria as key=value arguments, or run interactively." % crit["name"])
+            print("")
+            say("sbe_decide: stdin closed before %s was answered; answer the remaining "
+                "criteria as key=value arguments, or run interactively." % crit["name"])
             sys.exit(1)
         if not raw:
             continue
         context[crit["name"]] = int(raw) if crit["kind"] == "number" and raw.isdigit() else raw
     r = recommend(table, context)
+    # Every line below is a verdict-shaped report line, so each goes through
+    # say() (the one_line choke point): a decision-table OPTION NAME carrying
+    # newlines used to write byte-perfect extra Recommendation and
+    # Alternatives lines into this report, indistinguishable from the real
+    # ones. Flattened, the forgery arrives as visible \n escapes inside ONE
+    # line a reader can see and question.
     if r["verdict"] == "NO-DATA":
-        print("\nNO-DATA: no criterion was answered, so no recommendation can be made.")
+        print("")
+        say("NO-DATA: no criterion was answered, so no recommendation can be made.")
     else:
-        print("\nRecommendation: %s" % r["recommendation"])
-        print("Alternatives: %s" % ", ".join(r["alternatives"]))
+        print("")
+        say("Recommendation: %s" % r["recommendation"])
+        say("Alternatives: %s" % ", ".join(r["alternatives"]))
         if r["tie"]:
-            print("Tie: %s scored equal top marks; the recommendation is the table's declared "
-                  "order, not a measured difference (scores: %s)"
-                  % (", ".join(r["tie"]),
-                     ", ".join("%s=%d" % (o, r["scores"][o]) for o in r["scores"])))
+            say("Tie: %s scored equal top marks; the recommendation is the table's declared "
+                "order, not a measured difference (scores: %s)"
+                % (", ".join(r["tie"]),
+                   ", ".join("%s=%d" % (o, r["scores"][o]) for o in r["scores"])))
         print("Decided by:")
         for d in r["deciding_criteria"]:
-            print("  - %s" % d)
-        print("What would flip this: %s" % r["flip_condition"])
+            say("  - %s" % d)
+        say("What would flip this: %s" % r["flip_condition"])
     if r["unrecognized"]:
         print("Unrecognized values (check for typos):")
         for u in r["unrecognized"]:
-            print("  - %s" % u)
+            say("  - %s" % u)
     sys.exit(0)
 
 
@@ -215,5 +253,5 @@ if __name__ == "__main__":
     except Exception as e:
         # Same wrapper as the other tools: a crash names itself and exits nonzero
         # rather than printing a traceback that reads as an unusable tool.
-        print("sbe_decide: error %r" % (e,))
+        say("sbe_decide: error %r" % (e,))
         sys.exit(1)
