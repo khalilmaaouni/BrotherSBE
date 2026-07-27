@@ -42,14 +42,26 @@ can read a promise into.
   `<TODO>`, `TODO(dana)` and `t.b.d.` record no answer, and a container where a
   snapshot id belongs pins nothing. Proven by `a-dressed-up-placeholder-...`,
   `a-bracketed-placeholder-is-not-a-pin` and `a-container-snapshot-id-pins-nothing`.
-- The approval gate certifies two identities as different people only when it
-  can READ both as one alphabet; a word that mixes scripts after normalization
-  and confusable folding is refused by name, so self-approval no longer depends
-  on a homoglyph table's coverage. Proven by
+- The approval gate certifies the NEGATIVE "the approver is not the author"
+  only when the difference is proven: proven means no one-for-one look-alike
+  substitution this host can read maps one identity onto the other (they
+  differ in structure, at a plain-ASCII position, or across a wide or
+  right-to-left letterform). A word mixing script families is refused as a
+  disguise shape; an identity that is letter-for-letter
+  substitution-compatible with the author (a Lisu, Cherokee or Coptic
+  spelling of the author's name) is NO-DATA naming the ambiguity, never a
+  certificate; a value carrying a reordering bidi control (U+202E and
+  family) is refused by code point; and an honest name that merely carries a
+  letter no fold reduces (Þóra, Kjær, Bæk, sœur) is certified by its
+  readable letters instead of being refused for its unreadable one. Proven by
   `a-confusable-outside-the-curated-table-is-refused-not-passed`,
-  `a-same-script-lookalike-letter-is-refused-not-passed`,
   `a-multi-script-forgery-is-refused-whatever-scripts-it-uses`,
-  `a-partially-mapped-single-script-word-is-refused-not-passed` and
+  `a-partially-mapped-single-script-word-is-refused-not-passed`,
+  `a-lisu-spelling-of-the-author-cannot-certify-a-second-person`,
+  `a-bidi-override-cannot-render-an-approver-as-the-author`,
+  `an-icelandic-name-with-thorn-passes-cleanly`,
+  `a-danish-name-with-ae-passes-cleanly`,
+  `a-lisu-spelling-of-tbd-is-not-a-snapshot-pin` and
   `a-wholly-single-script-approver-still-passes` (the printed case ids, so the
   citation greps straight out of the suite's own output).
 - The gate examines the directory it was named and never a silently

@@ -491,6 +491,8 @@ NOT_A_VERDICT = {
     ("sbe_checks.py", "hidden"): "returns (pruned trees holding wanted files, trees the inspection "
                                  "budget left uninspected), not a verdict",
     ("sbe_checks.py", "answered_as"): "returns a reduced value, never a verdict",
+    ("sbe_checks.py", "_char_reading"): "returns (rendering kind, reading) for one character, "
+                                        "not a verdict",
     ("sbe_checks.py", "glob_with_denials"): "returns (glob hits, directories it could not enter), "
                                             "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
@@ -498,6 +500,8 @@ NOT_A_VERDICT = {
     ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
     ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities), not a verdict",
     ("sbe_gate.py", "_identity_parts"): "returns (canonical emails, name word-sets), not a verdict",
+    ("sbe_gate.py", "_rendered_identity_parts"): "returns (canonical emails, name word-sets) with "
+                                                 "unreadable characters kept, not a verdict",
     ("sbe_design.py", "_entity_bullets"): "returns (the entity set, whether a heading declared it), "
                                           "not a verdict",
     ("sbe_design.py", "_coherence_problem"): "returns a problem string, or an (unmeasured, why) "

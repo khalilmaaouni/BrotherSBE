@@ -80,7 +80,8 @@ import json, os, sys, re, subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
                         derivation_fold, distinct, fold, one_line, say, skeleton, unit_of,
-                        Pruner, evidence_problem, unreadable_identity_words)
+                        Pruner, evidence_problem, unreadable_identity_words,
+                        bidi_reordering_controls, could_render_same, name_sets_could_collide)
 
 MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
@@ -258,6 +259,28 @@ def _identity_parts(text):
     rest = _EMAIL.sub(" ", rest)
     rest = re.sub(r"\([^)]*\)", " ", rest)
     words = frozenset(w.strip(".,;:'\"!?") for w in skeleton(rest).split()) - frozenset(("",))
+    if words:
+        names.append(words)
+    return emails, names
+
+
+def _rendered_identity_parts(text):
+    """_identity_parts without the skeleton reduction: the same email
+    canonicalization, suffix stripping and word split, on fold()ed text,
+    keeping every character the fold cannot read so could_render_same and
+    name_sets_could_collide can class it. The skeleton form decides proven
+    SAMENESS (self-approval); this form decides whether difference is
+    PROVEN, which is the only ground a certifying PASS may stand on.
+    """
+    emails, names = set(), []
+    for m in _EMAIL.finditer(text or ""):
+        e = fold(m.group(0)).strip(" .,;:'\"<>")
+        local, _, domain = e.partition("@")
+        emails.add(local.split("+")[0] + "@" + domain)
+    rest = re.sub(r"<[^>]*>", " ", text or "")
+    rest = _EMAIL.sub(" ", rest)
+    rest = re.sub(r"\([^)]*\)", " ", rest)
+    words = frozenset(w.strip(".,;:'\"!?") for w in fold(rest).split()) - frozenset(("",))
     if words:
         names.append(words)
     return emails, names
@@ -568,22 +591,35 @@ def gate_approval(root):
     if not approvals and not trailer:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
                            "money or partner path that is correct%s" % pruned)
-    # An identity this comparison cannot READ is an identity it must not
-    # certify, and the refusal runs FIRST so its sentence is the honest one: a
-    # name carrying an unreadable letter used to fall to the placeholder test
-    # below and be called "names no identity", which is false about a name
-    # that plausibly names someone this tool merely cannot read. The
-    # self-approval guard's PASS asserts the approver is a DIFFERENT person
-    # from the author, and that certification used to rest on a curated
-    # homoglyph table: one code point outside the table (a Coptic o, a Latin
-    # small capital A) rendered as the author's own name and compared as a
-    # second person, restoring the self-approval PASS on the money gate. The
-    # rules replace the table's coverage as the load-bearing part: a word
-    # that mixes alphabets after normalization and folding, or that keeps
-    # Latin-family letters no fold this host has reduces to ASCII, is refused
-    # BY NAME, on either side of the comparison, because the direction of
-    # error here is toward refusal with an honest sentence, never toward
-    # assurance. An honest identity wholly in one non-Latin script still reads.
+    # A reordering bidi control makes a line RENDER in a different order than
+    # it reads: `Approved-by: <U+202E>rohtuA anaD` renders as the author's own
+    # name in git log and every bidi-honoring view, while the stripped
+    # comparison text read the logical order and certified a second person.
+    # Stripping the control hides the reordering rather than undoing it, so a
+    # value carrying one cannot be certified as ANY identity; it is refused
+    # first, by code point, on either side of the comparison.
+    if trailer:
+        controls = bidi_reordering_controls(trailer.group(1))
+        for who in authors:
+            controls += bidi_reordering_controls(who)
+        if controls:
+            return "FAIL", ("this gate cannot certify any identity here: the value carries "
+                            "directional formatting character(s) %s, which make a line render "
+                            "in a different order than it reads, so an approver can render as "
+                            "the author while comparing as a second person. Stripping the "
+                            "character would hide the reordering, not undo it, so it is refused "
+                            "by name; record the identity without directional controls"
+                            % ", ".join("U+%04X" % ord(c) for c in sorted(set(controls))))
+    # A word that mixes script families is an identity written in a disguise
+    # shape (one Cyrillic letter inside an ASCII name renders as the author
+    # while comparing as a second person), and no honest name takes that
+    # shape, so it is refused by name on either side of the comparison. This
+    # refusal is AFFIRMATIVE: it names a forgery shape. A word that is merely
+    # unreadable (wholly one script no fold can reduce) is NOT refused here;
+    # earlier rounds refused those wholesale and rejected ordinary Danish,
+    # Icelandic and French names on the money gate. Whether an unreadable
+    # word can be certified different from THIS author is decided pairwise
+    # below, where an unprovable difference is NO-DATA, never PASS.
     if trailer:
         unreadable = unreadable_identity_words(trailer.group(1))
         for who in authors:
@@ -644,10 +680,46 @@ def gate_approval(root):
     # four commands. E means the signature could not be checked at all, the
     # normal result on a runner with no imported keys. Neither is an approval;
     # both are NO-DATA naming what the host could not do.
+    # The PASS certifies a NEGATIVE: the approver is not the author. A
+    # negative may only be asserted when the difference is PROVEN, and proven
+    # means the difference cannot be explained by one-for-one look-alike
+    # substitution: the identities differ in structure (word count, word
+    # length), or at a position where both characters' renderings are decided
+    # (plain ASCII against plain ASCII, or a wide or right-to-left letterform
+    # against anything narrow). A Lisu, Cherokee or Coptic spelling of the
+    # author's name is letter-for-letter substitution-compatible with it, so
+    # it earns NO-DATA naming the ambiguity, never the certificate; an honest
+    # Icelandic or Danish name (Þóra, Bæk, Kjær) differs at readable
+    # positions or in structure and is certified cleanly.
     if trailer and sig == "G":
+        appr_emails_r, appr_names_r = _rendered_identity_parts(trailer.group(1))
+        wrote_emails_r, wrote_names_r = set(), []
+        for who in authors:
+            e, n = _rendered_identity_parts(who)
+            wrote_emails_r |= e
+            wrote_names_r.extend(n)
+        collide = next(("%s could render as the author's %s" % (a, b)
+                        for a in sorted(appr_emails_r) for b in sorted(wrote_emails_r)
+                        if could_render_same(a, b)), "")
+        if not collide:
+            collide = next(("%s could render as the author's %s"
+                            % (" ".join(sorted(a)), " ".join(sorted(b)))
+                            for a in appr_names_r for b in wrote_names_r
+                            if name_sets_could_collide(a, b)), "")
+        if collide:
+            return "NO-DATA", ("signature verified against a trusted key, but this gate cannot "
+                               "certify the approver and the author are different people: %s, "
+                               "because every letter that differs is one no fold this host can "
+                               "read, so a look-alike substitution could map one onto the other. "
+                               "The negative 'the approver is not the author' is asserted only "
+                               "when difference is proven; record the approver with an email "
+                               "address or in a spelling this host can read, or use a "
+                               "Reviewed-in id" % collide)
         return "PASS", ("signed commit carries Approved-by: %s, this host verified the signature "
-                        "against a trusted key, and that identity is not the commit's author or "
-                        "committer (%s), compared after normalization and confusable folding%s"
+                        "against a trusted key, and that identity is proven different from the "
+                        "commit's author or committer (%s): after normalization and confusable "
+                        "folding they differ beyond any look-alike substitution this host can "
+                        "read%s"
                         % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded", pruned))
     if trailer and sig == "U":
         return "NO-DATA", ("signature is cryptographically valid but the key matched no principal "

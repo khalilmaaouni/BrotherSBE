@@ -482,13 +482,15 @@ def c13i12(root):
     return _approval_with_sig(root, "G", approver="Daոa Authⲟr")
 
 
-@case("a-partially-mapped-single-script-word-is-refused-not-passed", "sig", "FAIL")
+@case("a-partially-mapped-single-script-word-is-refused-not-passed", "sig", "NO-DATA")
 def c13i13(root):
-    # Cyrillic `Дана` (Dana): some letters fold to ASCII
-    # through the confusable table and Д does not, so the folded word
-    # mixes alphabets, which is precisely the point where table coverage runs
-    # out. The refusal fires exactly there instead of certifying a difference
-    # the fold cannot vouch for.
+    # Cyrillic `Дана` (Dana): wholly one script, and exactly the shape of the
+    # author's own name (four letters against four, none of them decided
+    # against its counterpart), which is also how the author would write
+    # their own name in another alphabet. Difference is not proven, sameness
+    # is not proven, and the verdict says precisely that: NO-DATA naming the
+    # substitution-compatibility, never a PASS the fold cannot vouch for and
+    # never a refusal of a name that may be honest.
     return _approval_with_sig(root, "G", approver="Дана Author")
 
 
@@ -514,15 +516,114 @@ def c13i15(root):
                               approver="ᴅᴀɴᴀ ᴀᴜᴛʜᴏʀ")
 
 
-@case("a-latin-letter-with-no-readable-base-is-refused-not-passed", "sig", "FAIL")
+@case("a-latin-letter-with-no-readable-base-proves-nothing-and-structure-decides", "sig", "PASS")
 def c13i16(root):
-    # LATIN SMALL LETTER ALPHA (U+0251) and GAMMA (U+0263): wholly one word,
-    # wholly Latin family, no decomposition, no table row, and their Unicode
-    # names carry no single base letter, so no fold this host has can reduce
-    # them. The readability rule refuses the word by name instead of certifying
-    # a difference the fold cannot vouch for; this is the probe that the
-    # closure is a rule over the whole Latin family and not a wider table.
+    # LATIN SMALL LETTER ALPHA (U+0251) and GAMMA (U+0263): no decomposition,
+    # no table row, no single base letter in the Unicode name, so no fold
+    # this host has can read them, and they prove NOTHING in either
+    # direction. The certificate does not need them: a three-letter word fits
+    # neither `Dana` nor `Author` under any one-for-one substitution, so the
+    # difference is proven by structure alone and the honest verdict is PASS.
+    # The round-11 shape of this case refused the word outright, and that
+    # same wholesale refusal rejected Bæk and Þóra on the money gate; the
+    # substitution-compatible attacks (the Lisu and Cherokee cases below)
+    # are where non-certification now lives.
     return _approval_with_sig(root, "G", approver="ɑɣɑ Author")
+
+
+@case("a-lisu-spelling-of-the-author-cannot-certify-a-second-person", "sig", "NO-DATA")
+def c13i17(root):
+    # Lisu letters ARE Latin capital letterforms (U+A4D0 and neighbours), so
+    # this approver renders as DANA AUTHOR on every screen while no fold this
+    # host has can read a single letter of it. Letter-for-letter it is
+    # substitution-compatible with the author, so the negative "the approver
+    # is not the author" is not proven and the money gate must not assert
+    # it: NO-DATA naming the ambiguity, never the certificate. This is the
+    # class the curated-table and Latin-family rounds kept reopening, closed
+    # as a rule: uncatalogued proves nothing, in either direction.
+    return _approval_with_sig(root, "G", approver="ꓓꓮꓠꓮ ꓮꓴꓔꓧꓳꓣ")
+
+
+@case("a-cherokee-shape-compatible-approver-cannot-certify", "sig", "NO-DATA")
+def c13i18(root):
+    # Cherokee letterforms are Latin-like and wholly unreadable to the fold;
+    # a four-letter word beside a six-letter word is the author's own shape,
+    # so difference is unproven whatever the letters look like.
+    return _approval_with_sig(root, "G", approver="ᎠᎡᎢᎣ ᎤᎥᎦᎧᎨᎩ")
+
+
+@case("a-wholly-coptic-shape-compatible-approver-cannot-certify", "sig", "NO-DATA")
+def c13i19(root):
+    # The mixed Coptic case (c13i10) is refused as a disguise; the WHOLLY
+    # Coptic word has no mixture to refuse and used to pass as readable.
+    # Substitution-compatibility now catches what the mixture rule cannot.
+    return _approval_with_sig(root, "G", approver="ⲟⲁⲟⲁ ⲁⲟⲟⲁⲟⲁ")
+
+
+@case("a-bidi-override-cannot-render-an-approver-as-the-author", "sig", "FAIL")
+def c13i20(root):
+    # U+202E RIGHT-TO-LEFT OVERRIDE: `rohtuA anaD` reversed RENDERS as
+    # `Dana Author` in git log and every bidi-honoring view, while the
+    # stripped comparison reads the logical order and used to certify a
+    # second person. Stripping hides a reordering rather than undoing it, so
+    # a value carrying a reordering control is refused by code point.
+    return _approval_with_sig(root, "G",
+                              approver="\u202erohtuA anaD\u202c")
+
+
+@case("an-icelandic-name-with-thorn-passes-cleanly", "sig", "PASS")
+def c13i21(root):
+    # Þóra carries a letter no fold reduces (thorn), and needs no reduction:
+    # `r` against the author's `n` is a difference both sides render as
+    # plain ASCII, so the difference is proven and the certificate is
+    # earned. The round-11 residue rule refused this name outright, which
+    # taught an honest approver to spell their own name wrong.
+    return _approval_with_sig(root, "G", approver="Þóra Jónsdóttir")
+
+
+@case("a-danish-name-with-ae-passes-cleanly", "sig", "PASS")
+def c13i22(root):
+    # Kjær Sæther is shape-compatible with Dana Author (four letters beside
+    # six), so structure alone cannot certify it; the proof is positional:
+    # `K` against `D` and `S` against `A` are plain-ASCII differences no
+    # substitution explains. The probe that honest ae-carrying names are
+    # certified by their readable letters, not refused for their unreadable
+    # one.
+    return _approval_with_sig(root, "G", approver="Kjær Sæther <kjaer@example.com>")
+
+
+@case("an-icelandic-name-with-eth-passes-cleanly", "sig", "PASS")
+def c13i23(root):
+    # Eth and thorn in both words, and the difference is still proven by the
+    # readable letters around them.
+    return _approval_with_sig(root, "G", approver="Þórður Guðmundsson")
+
+
+@case("a-lisu-spelling-of-tbd-is-not-a-snapshot-pin", "numbers", "FAIL")
+def c14lisu(root):
+    # The snapshot_id renders as TBD (Lisu letterforms are Latin capitals)
+    # while comparing as nothing any fold can read. A value that could
+    # render as a placeholder under look-alike substitution is refused as an
+    # answer, so the gate cannot print "pinned to a snapshot" over it.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "ꓔꓐꓓ",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+
+
+@case("an-unfoldable-letter-in-an-honest-snapshot-id-is-still-an-answer", "numbers", "PASS")
+def c14thorn(root):
+    # The control for the case above: a snapshot id carrying thorn is proven
+    # different from every placeholder token by its readable letters, so the
+    # honest value stays an answer. The round-11 residue backstop read any
+    # value with an unfoldable Latin letter as recording nothing, which
+    # refused ordinary Icelandic, Danish and French words.
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "Þórshöfn-warehouse-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
 
 
 @case("an-invisible-character-is-not-an-answer-and-not-a-derivation", "numbers", "FAIL")
