@@ -76,6 +76,20 @@ Every green run this project cites happened in its own repository or on the
 estate it was built on. No external adoption, and no second estate, is
 claimed anywhere.
 
+## The ledger rewrite guard leaves one instant uncovered
+
+A maintenance rewrite (migrate, dedup) re-measures the live ledger under the
+writer lock immediately before its rename and carries any bytes appended
+since its read into the rewrite, so an append that took the 15 second
+unlocked fallback survives. What remains is the instant between that final
+measurement and the rename itself: an append landing exactly there would be
+in neither the rewritten file nor the rewrite's read. The window is
+microseconds, not the fallback's 15-plus seconds, and it is covered post-hoc
+rather than prevented: every unlocked append records itself in
+`<ledger>.unlocked-appends`, and a rewrite that finds a record from inside
+its own window says so after the rename and points at the per-run byte
+backup. Full text: `tools/sbe_telemetry.py` (_rewrite_locked).
+
 ## The approval identity proof has a measured refusal remainder (L9)
 
 The approval gate certifies "the approver is not the author" only when the

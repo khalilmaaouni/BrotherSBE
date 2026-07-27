@@ -342,6 +342,102 @@ class TestTelemetryWriterSerialization(unittest.TestCase):
             self.assertEqual({2}, schemas,
                              "the printed migration never reached the file: %r" % schemas)
 
+    def _telemetry(self, vault):
+        import importlib
+        os.environ["BROTHERSBE_VAULT"] = vault
+        sys.path.insert(0, HERE)
+        import sbe_telemetry
+        importlib.reload(sbe_telemetry)
+        return sbe_telemetry
+
+    def test_a_fallback_append_during_the_rewrite_window_is_carried_not_destroyed(self):
+        """The round-12 closure of this class was FALSE at scale: the recount
+        ran AFTER the rename, so it compared the rewrite to itself, and a row
+        appended by the 15-second unlocked fallback was destroyed under a
+        printed "count ok" whenever the rewrite outlived the timeout. The
+        freshness guard now runs BEFORE the rename against the live file and
+        carries appended bytes into the rewrite. This test walks the exact
+        window: the tail row exists on disk beyond what the rewrite read."""
+        with tempfile.TemporaryDirectory() as vault:
+            t = self._telemetry(vault)
+            os.makedirs(t.TEL_DIR, exist_ok=True)
+            with io.open(t.LEDGER, "w") as f:
+                f.write('{"session_id":"a"}\n{"session_id":"b"}\n')
+                read_size = f.tell()
+                f.write('{"session_id":"LIVE-FALLBACK-ROW"}\n')  # appended after the read
+            done = t._rewrite_locked(t.LEDGER, ['{"session_id":"a","schema":2}',
+                                                '{"session_id":"b","schema":2}'],
+                                     read_size, "migrate")
+            self.assertIsNotNone(done, "the rewrite refused a carryable tail")
+            n_after, passthrough, count_ok = done
+            self.assertEqual((3, 1, True), (n_after, passthrough, count_ok))
+            body = io.open(t.LEDGER).read()
+            self.assertIn("LIVE-FALLBACK-ROW", body,
+                          "the fallback append was destroyed by the rename")
+
+    def test_a_file_that_shrinks_under_the_lock_is_never_replaced(self):
+        """A file smaller than what the rewrite read means a second writer is
+        ignoring the lock; renaming over it would replace a world this
+        rewrite never saw, so it refuses and leaves everything in place."""
+        with tempfile.TemporaryDirectory() as vault:
+            t = self._telemetry(vault)
+            os.makedirs(t.TEL_DIR, exist_ok=True)
+            original = '{"session_id":"a"}\n'
+            with io.open(t.LEDGER, "w") as f:
+                f.write(original)
+            done = t._rewrite_locked(t.LEDGER, ['{"x":1}'], len(original) + 50, "migrate")
+            self.assertIsNone(done, "a shrunken file was replaced anyway")
+            self.assertEqual(original, io.open(t.LEDGER).read(), "the refusal still wrote")
+            self.assertEqual([], [p for p in os.listdir(t.TEL_DIR) if ".tmp." in p],
+                             "the refusal leaked its temp file")
+
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "needs enforced file modes")
+    def test_an_unopenable_lock_sidecar_never_drops_the_row(self):
+        """The sidecar exists only to protect the row, and its open failure
+        used to raise into the top-level swallow: the row was lost, the
+        operator got a Python repr, and the exit code was 0. Failing to OPEN
+        the lock now takes the same path as failing to TAKE it."""
+        with tempfile.TemporaryDirectory() as vault:
+            t = self._telemetry(vault)
+            os.makedirs(t.TEL_DIR, exist_ok=True)
+            unwritable = t.LEDGER + ".lock"
+            io.open(unwritable, "w").close()
+            os.chmod(unwritable, 0o444)
+            t.atomic_append(t.LEDGER, {"session_id": "row-behind-a-bad-lock"})
+            os.mkdir(t.CORRECTIONS + ".lock")     # the mkdir-shadowed shape
+            t.atomic_append(t.CORRECTIONS, {"session_id": "row-behind-a-dir-lock"})
+            self.assertIn("row-behind-a-bad-lock", io.open(t.LEDGER).read())
+            self.assertIn("row-behind-a-dir-lock", io.open(t.CORRECTIONS).read())
+
+    def test_short_writes_are_completed_not_truncated(self):
+        """os.write may honor fewer bytes than asked on any POSIX host; the
+        unchecked call truncated the row silently. _write_all loops."""
+        with tempfile.TemporaryDirectory() as vault:
+            t = self._telemetry(vault)
+            os.makedirs(t.TEL_DIR, exist_ok=True)
+            real_write = os.write
+            os.write = lambda fd, data: real_write(fd, bytes(data)[:5])
+            try:
+                t.atomic_append(t.LEDGER, {"session_id": "short-write-probe", "n": 12345})
+            finally:
+                os.write = real_write
+            row = json.loads(io.open(t.LEDGER).read())
+            self.assertEqual({"session_id": "short-write-probe", "n": 12345}, row)
+
+    def test_an_intent_record_stays_one_line(self):
+        """The intent log is a line-delimited RECORD whose line structure is
+        its parse: a caller newline used to write a second timestamped record
+        the tool never stamped, and the last-line reader quoted the forged
+        record as the operator's own intent. Every internal break renders as
+        a visible escape."""
+        with tempfile.TemporaryDirectory() as vault:
+            t = self._telemetry(vault)
+            path = os.path.join(t.TEL_DIR, "intent-test.log")
+            t.atomic_append_text(path, "one\n2026-01-01T00:00:00Z  next: FORGED")
+            lines = io.open(path).read().splitlines()
+            self.assertEqual(1, len(lines), "a caller newline split the record: %r" % lines)
+            self.assertIn("\\n", lines[0], "the break vanished instead of rendering visibly")
+
 
 class TestDigestCap(unittest.TestCase):
     def test_digest_fits_the_cap_the_hook_comment_names(self):
@@ -478,6 +574,36 @@ class TestAuditableSurface(unittest.TestCase):
                              "tools/ holds %d lines but SECURITY.md says %d (%.0f%% drift); "
                              "re-measure with `wc -l tools/*.py tools/*.sh` and update the "
                              "stated figure" % (live, said, drift * 100))
+
+    def test_the_zero_network_property_holds_by_ast(self):
+        """SECURITY.md invites a grep and used to pin its hit count in prose,
+        and the pinned number rotted (a count written into prose that nothing
+        recomputes). The docs now state the PROPERTY instead, and this test is
+        the recomputation the property gets: no tool imports urllib, requests,
+        socket or http, and no shell tool invokes curl or wget outside a
+        comment. The redaction fixture in this file carries curl inside a
+        string on purpose; parsing imports rather than grepping text is what
+        keeps that fixture from being a false hit."""
+        import ast
+        banned = {"urllib", "requests", "socket", "http"}
+        for p in glob.glob(os.path.join(HERE, "*.py")):
+            tree = ast.parse(io.open(p, errors="replace").read())
+            for node in ast.walk(tree):
+                mods = []
+                if isinstance(node, ast.Import):
+                    mods = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    mods = [node.module.split(".")[0]]
+                hit = sorted(set(mods) & banned)
+                self.assertEqual([], hit,
+                                 "%s imports %s; the zero-network claim in SECURITY.md "
+                                 "is broken" % (os.path.basename(p), ", ".join(hit)))
+        for p in glob.glob(os.path.join(HERE, "*.sh")):
+            for i, line in enumerate(io.open(p, errors="replace"), 1):
+                code = line.split("#", 1)[0]
+                self.assertFalse(re.search(r"\b(curl|wget)\b", code),
+                                 "%s:%d invokes curl or wget; the zero-network claim "
+                                 "in SECURITY.md is broken" % (os.path.basename(p), i))
 
 
 class TestAutosaveRecover(unittest.TestCase):

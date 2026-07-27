@@ -137,7 +137,21 @@ def _writer_lock(path, timeout_s=15.0):
         yield False
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd = os.open(path + ".lock", os.O_WRONLY | os.O_CREAT, 0o644)
+    try:
+        fd = os.open(path + ".lock", os.O_WRONLY | os.O_CREAT, 0o644)
+    except OSError as e:
+        # The sidecar exists only to protect the row, so failing to OPEN it
+        # takes the same path as failing to TAKE it: yield False and let the
+        # caller decide (an append proceeds unlocked so the row is never
+        # dropped; maintenance refuses). This used to raise out of the
+        # context manager into the top-level swallow, so a chmodded or
+        # mkdir-shadowed .lock file dropped the very row the lock protects,
+        # with a Python repr for a message and exit 0.
+        print("sbe_telemetry: could not open the lock sidecar %s.lock (%s); proceeding as if "
+              "the lock timed out: an append goes ahead unlocked, maintenance refuses"
+              % (path, e.strerror or e), file=sys.stderr)
+        yield False
+        return
     got = False
     try:
         deadline = time.time() + timeout_s
@@ -160,18 +174,43 @@ def _writer_lock(path, timeout_s=15.0):
         os.close(fd)
 
 
+def _write_all(fd, data):
+    """os.write until every byte is written. A short write (possible on any
+    POSIX write) silently truncated a row before this loop existed, and a
+    truncated JSONL row is a corrupt line the readers then have to disclose."""
+    view = memoryview(data)
+    while view:
+        n = os.write(fd, view)
+        view = view[n:]
+
+
 def atomic_append(path, obj, mode=0o644):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     line = (json.dumps(obj, separators=(",", ":")) + "\n").encode()
-    with _writer_lock(path):
+    with _writer_lock(path) as held:
         # Locked or not, the append itself is O_APPEND (atomic against other
         # appends); the lock is what keeps it out of a maintenance rewrite's
         # read-to-rename window.
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, mode)
         try:
-            os.write(fd, line)
+            _write_all(fd, line)
         finally:
             os.close(fd)
+        if not held:
+            # The fallback RECORDS itself, so a rewrite can see that an
+            # unlocked append happened at all: the round-11 loss was invisible
+            # precisely because the fallback left no trace anywhere. Best
+            # effort by design; the row above is already safe on disk.
+            try:
+                nfd = os.open(path + ".unlocked-appends",
+                              os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+                try:
+                    _write_all(nfd, (json.dumps({"ts": now_iso(), "pid": os.getpid()},
+                                                separators=(",", ":")) + "\n").encode())
+                finally:
+                    os.close(nfd)
+            except OSError:  # sbe: allow-silent the note is advisory; the row itself is written, and a hook must never fail over its trace
+                pass
 
 
 def parse_transcript(path, collect_user_texts=False):
@@ -377,12 +416,112 @@ def cmd_migrate():
         return
     with _writer_lock(LEDGER) as held:
         if not held:
-            print("migrate: could not take the writer lock (%s.lock) within its timeout; "
-                  "another writer may be mid-rewrite, or this platform has no fcntl. "
+            print("migrate: could not take or open the writer lock (%s.lock) within its "
+                  "timeout; another writer may be mid-rewrite, the sidecar may be unopenable, "
+                  "or this platform has no fcntl. "
                   "Nothing was touched; run again when the other writer finishes"
                   % os.path.basename(LEDGER))
             return
         _cmd_migrate_locked()
+
+
+def _bak_name(path, kind):
+    # Unique per RUN, never per day: `if not exists(bak)` kept the FIRST
+    # backup of a calendar day, so the second run of the same day printed a
+    # backup name that by construction did not contain the rows that second
+    # run dropped, under a comment promising "the original bytes exist".
+    return "%s.bak-%s%s-%d" % (path, kind,
+                               datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+                               os.getpid())
+
+
+def _rewrite_locked(path, out_lines, read_size, label):
+    """The one rename step every ledger rewrite uses. Returns (rows on disk
+    after the rename, rows passed through) or None after printing a refusal.
+
+    A loss guard must compare against the real post-write world, never
+    against its own output: the old recount ran AFTER the rename, so it
+    counted the file the rewrite had just written and compared it to itself,
+    an identity that can never fail, while the row a fallback append had
+    written to the OLD inode was destroyed unseen. The guard here runs
+    BEFORE the rename, against the live file: the temp file is written
+    first, then the file being replaced is re-measured, any bytes appended
+    since the read are carried into the temp file verbatim (an appended row
+    is a row, whatever command happens to be rewriting), and only a file
+    that measures exactly as read is renamed over. A file that shrinks or
+    keeps growing under the writer lock is never replaced. The instant
+    between the final measurement and the rename remains, is disclosed in
+    KNOWN-LIMITS, and is covered post-hoc: the append fallback records
+    itself in the <ledger>.unlocked-appends note file, and any record from
+    inside this rewrite's window is reported after the rename.
+    """
+    t0 = time.time()
+    passthrough = 0
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    with open(tmp, "w") as f:
+        for line in out_lines:
+            f.write(line + "\n")
+    written = len(out_lines)
+    renamed = False
+    for _ in range(6):
+        try:
+            size_now = os.stat(path).st_size
+        except OSError as e:
+            os.unlink(tmp)
+            print("%s: cannot measure %s before the rename (%s); nothing was replaced"
+                  % (label, os.path.basename(path), e.strerror or e))
+            return None
+        if size_now == read_size:
+            os.rename(tmp, path)
+            renamed = True
+            break
+        if size_now < read_size:
+            os.unlink(tmp)
+            print("%s: %s SHRANK while this rewrite held the writer lock (%d bytes read, %d on "
+                  "disk); a second writer is ignoring the lock, so nothing was replaced"
+                  % (label, os.path.basename(path), read_size, size_now))
+            return None
+        with open(path, "rb") as src:
+            src.seek(read_size)
+            tail = src.read(size_now - read_size)
+        tail_lines = [l for l in tail.decode(errors="replace").splitlines() if l.strip()]
+        with open(tmp, "a") as f:
+            for line in tail_lines:
+                f.write(line + "\n")
+        written += len(tail_lines)
+        passthrough += len(tail_lines)
+        read_size = size_now
+    if not renamed:
+        os.unlink(tmp)
+        print("%s: %s kept growing through 6 freshness checks under the writer lock; refusing "
+              "to replace a file that is still being appended to. Nothing was replaced; run "
+              "again when the appends stop" % (label, os.path.basename(path)))
+        return None
+    n_after = len([l for l in open(path, errors="replace").read().splitlines() if l.strip()])
+    count_ok = (n_after == written)
+    if not count_ok:
+        print("%s: LINE COUNT WRONG after the rename (%d written, %d on disk); restore from "
+              "the backup and investigate!" % (label, written, n_after))
+    note = path + ".unlocked-appends"
+    late = 0
+    try:
+        if os.path.isfile(note) and os.path.getmtime(note) >= t0:
+            for raw in open(note, errors="replace"):
+                try:
+                    if json.loads(raw).get("ts", "") >= datetime.datetime.fromtimestamp(
+                            t0, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"):
+                        late += 1
+                except ValueError:
+                    late += 1
+    except OSError:  # sbe: allow-silent the note is advisory post-hoc coverage; an unreadable note must not fail a completed rewrite, and the freshness guard above already ran
+        late = 0
+    if late:
+        print("%s: %d unlocked append(s) were recorded during this rewrite's window (%s); every "
+              "byte present at the final freshness check was carried over, but an append landing "
+              "in the instant between that check and the rename would be in neither file. Compare "
+              "the backup against %s"
+              % (label, late, os.path.basename(note), os.path.basename(path)))
+    return n_after, passthrough, count_ok
 
 
 def _cmd_migrate_locked():
@@ -391,19 +530,21 @@ def _cmd_migrate_locked():
     # deleted from the ledger AND from the backup while the loss guard compared
     # two counts produced by the same reader and printed "count ok". The guard
     # can only see a loss it measures on the raw file. The whole
-    # read-rewrite-rename-recount runs under the writer lock (see
-    # _writer_lock): without it, a row appended between the read and the
-    # rename was destroyed while both of the guard's counts came from the
-    # pre-append world and agreed.
-    raw_lines = [l for l in open(LEDGER, errors="replace").read().splitlines()
-                 if l.strip()]
+    # read-rewrite-freshness-rename runs under the writer lock (see
+    # _writer_lock and _rewrite_locked): the bytes are read ONCE, and the
+    # freshness guard compares the live file against that read before the
+    # rename, so a row appended by the unlocked fallback is carried, not
+    # destroyed.
+    data = open(LEDGER, "rb").read()
+    read_size = len(data)
+    raw_lines = [l for l in data.decode(errors="replace").splitlines() if l.strip()]
     n_before = len(raw_lines)
-    # The backup is a BYTE COPY of the original, taken before anything is
-    # parsed, so whatever the rewrite does the original bytes exist.
-    bak = LEDGER + ".bak-migrate" + datetime.date.today().strftime("%Y%m%d")
-    if not os.path.exists(bak):
-        with open(bak, "wb") as f:
-            f.write(open(LEDGER, "rb").read())
+    # The backup is a BYTE COPY of the bytes this run READ, under a name
+    # unique to this run, so whatever the rewrite does the original bytes
+    # exist and the printed name is never a stale earlier run's file.
+    bak = _bak_name(LEDGER, "migrate")
+    with open(bak, "wb") as f:
+        f.write(data)
     changed = 0
     preserved = []
     out = []
@@ -431,31 +572,24 @@ def _cmd_migrate_locked():
             # input tokens were never recorded pre-schema-2: stays ABSENT, never invented
             changed += 1
         out.append(json.dumps(r, separators=(",", ":")) if not isinstance(r, str) else raw)
-    # Per-process temp path: two maintenance commands used to share the one
-    # literal ".tmp", so one renamed the other's half-written file out from
-    # under it and the loser surfaced as a bare FileNotFoundError.
-    tmp = "%s.tmp.%d" % (LEDGER, os.getpid())
-    with open(tmp, "w") as f:
-        for line in out:
-            f.write(line + "\n")
-    os.rename(tmp, LEDGER)
-    # The recount is of the REAL post-rename file, taken while the writer
-    # lock is still held, so nothing can change between what was written and
-    # what is counted, and it is compared against the world this rewrite
-    # actually produced (len(out)), not against a remembered before-count
-    # alone.
-    n_after = len([l for l in open(LEDGER, errors="replace").read().splitlines() if l.strip()])
+    # The rename, freshness guard and recount live in _rewrite_locked, shared
+    # with dedup, because "rewriting a file other processes append to" is one
+    # problem, not a property of whichever command met it first.
+    done = _rewrite_locked(LEDGER, out, read_size, "migrate")
+    if done is None:
+        return
+    n_after, passthrough, count_ok = done
+    if not count_ok:
+        return
     note = ("" if not preserved else
             ", %d line(s) this tool could not read as a ledger row preserved verbatim (line %s; "
             "each is either unparseable JSON or valid JSON that is not an object; fix or remove "
             "them by hand, they are in the backup too)"
             % (len(preserved), ", ".join(str(i) for i in preserved[:4])))
-    if n_after != len(out) or n_after < n_before:
-        print("migrate: LINE COUNT WRONG after the rewrite (%d before, %d written, %d on disk); "
-              "restore from the backup and investigate!" % (n_before, len(out), n_after))
-    else:
-        print("migrate: %d lines, %d migrated to schema 2%s, count ok (%d)"
-              % (n_before, changed, note, n_after))
+    carried = ("" if not passthrough else
+               ", %d row(s) appended during the rewrite carried over verbatim" % passthrough)
+    print("migrate: %d lines, %d migrated to schema 2%s%s, count ok (%d)"
+          % (n_before, changed, note, carried, n_after))
 
 
 def cmd_dedup():
@@ -464,7 +598,6 @@ def cmd_dedup():
     set (everything but ts) matches an already-kept row for the same session,
     keeping the LAST occurrence (matches real_sessions semantics). Corrections:
     drop duplicate (session_id, text), keeping the first."""
-    stamp = datetime.date.today().strftime("%Y%m%d")
     for path, keyfn, keep in (
         (LEDGER, lambda r: (r.get("session_id"),
                             json.dumps({k: v for k, v in r.items() if k != "ts"},
@@ -473,15 +606,39 @@ def cmd_dedup():
     ):
         with _writer_lock(path) as held:
             if not held:
-                print("dedup: could not take the writer lock (%s.lock) within its timeout; "
-                      "another writer may be mid-rewrite, or this platform has no fcntl. "
+                print("dedup: could not take or open the writer lock (%s.lock) within its "
+                      "timeout; another writer may be mid-rewrite, the sidecar may be "
+                      "unopenable, or this platform has no fcntl. "
                       "%s was not touched" % (os.path.basename(path), os.path.basename(path)))
                 continue
-            _dedup_one_locked(path, keyfn, keep, stamp)
+            _dedup_one_locked(path, keyfn, keep)
 
 
-def _dedup_one_locked(path, keyfn, keep, stamp):
-        rows, bad = read_jsonl_counted(path)
+def _dedup_one_locked(path, keyfn, keep):
+        # The bytes are read ONCE, so the parse, the backup and the freshness
+        # guard all describe the same file state; the printed counts used to
+        # be computed before the rename from the pre-append world, with no
+        # recount of any kind, which is the exact guard shape the migrate
+        # comment calls the defect.
+        try:
+            data = open(path, "rb").read()
+        except OSError:
+            print("dedup: %s empty or missing, skipped" % os.path.basename(path))
+            return
+        read_size = len(data)
+        rows, bad = [], []
+        for i, raw in enumerate(data.decode(errors="replace").splitlines(), 1):
+            if not raw.strip():
+                continue
+            try:
+                r = json.loads(raw)
+            except ValueError:
+                bad.append((i, raw))
+                continue
+            if isinstance(r, dict):
+                rows.append(r)
+            else:
+                bad.append((i, raw))
         if bad:
             # A rewrite from parsed rows deletes every line the parser dropped.
             # This tool will not rewrite a file it cannot fully read: the
@@ -515,19 +672,24 @@ def _dedup_one_locked(path, keyfn, keep, stamp):
         if len(kept) == len(rows):
             print("dedup: %s already clean (%d lines)" % (os.path.basename(path), len(rows)))
             return
-        bak = "%s.bak-dedup%s" % (path, stamp)
-        if not os.path.exists(bak):
-            with open(bak, "w") as f:
-                for r in rows:
-                    f.write(json.dumps(r, separators=(",", ":")) + "\n")
-        tmp = "%s.tmp.%d" % (path, os.getpid())
-        with open(tmp, "w") as f:
-            for r in kept:
-                f.write(json.dumps(r, separators=(",", ":")) + "\n")
-        os.rename(tmp, path)
-        print("dedup: %s %d -> %d lines (%d duplicate flushes dropped; backup %s)"
+        # A BYTE copy of the bytes this run read, under a per-run name; the
+        # old daily name kept the FIRST backup of a calendar day, so a second
+        # run's sentence named a file that did not hold its dropped rows.
+        bak = _bak_name(path, "dedup")
+        with open(bak, "wb") as f:
+            f.write(data)
+        out = [json.dumps(r, separators=(",", ":")) for r in kept]
+        done = _rewrite_locked(path, out, read_size, "dedup")
+        if done is None:
+            return
+        n_after, passthrough, count_ok = done
+        if not count_ok:
+            return
+        carried = ("" if not passthrough else
+                   "; %d row(s) appended during the rewrite carried over verbatim" % passthrough)
+        print("dedup: %s %d -> %d lines (%d duplicate flushes dropped%s; backup %s; %d on disk)"
               % (os.path.basename(path), len(rows), len(kept),
-                 len(rows) - len(kept), os.path.basename(bak)))
+                 len(rows) - len(kept), carried, os.path.basename(bak), n_after))
 
 
 def outcomes_lines_in_window(min_age_d, max_age_d):
@@ -1053,11 +1215,19 @@ def cmd_intent(argv):
 
 
 def atomic_append_text(path, line):
+    # A line-delimited RECORD is one line by construction, the same rule the
+    # report tools enforce with one_line(): stripping only a TRAILING newline
+    # let a caller-supplied newline write a second timestamped record the tool
+    # never stamped, and the last-line reader then quoted the forged record as
+    # the operator's own intent. Every internal break renders as a visible
+    # escape instead, so the record stays one line and the injection stays
+    # readable as an injection.
+    flat = re.sub("[\r\n\v\f\x85\u2028\u2029]+", "\\\\n", str(line).rstrip("\r\n"))
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    data = (line.rstrip("\n") + "\n").encode()
+    data = (flat + "\n").encode()
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
-        os.write(fd, data)
+        _write_all(fd, data)
     finally:
         os.close(fd)
 
@@ -1175,7 +1345,7 @@ def cmd_precompact_brief():
         rp = _resume_path(cwd)
         fd = os.open(rp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
-            os.write(fd, ("\n".join(lines) + "\n").encode())
+            _write_all(fd, ("\n".join(lines) + "\n").encode())
         finally:
             os.close(fd)
     except OSError:  # sbe: allow-silent boundary handler in a non-blocking hook; the miss surfaces as absent data, never as a false pass

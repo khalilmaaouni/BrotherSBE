@@ -11,7 +11,7 @@ details and ask for a private channel first.
 BrotherSBE makes no network calls. It has no analytics, no account, and no
 server. Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
-yourself; the tools are standard-library Python and shell: 8,193 lines measured
+yourself; the tools are standard-library Python and shell: 9,631 lines measured
 2026-07-27 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather than
 left for you to discover, and a test in `tools/test_sbe.py` fails if it drifts
 more than 15 percent, so the auditability claim degrades loudly instead of
@@ -22,13 +22,18 @@ grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
 ```
 
 What to expect from that grep, so the check is usable rather than reassuring:
-around thirty hits and none of them a network call. Every hit is one of three
-benign shapes: `subprocess` running local `git`, the words "socket" or "http"
+none of the hits is a network call. The exact count moves with the code and is
+deliberately not stated here (an earlier revision pinned a number and it
+rotted); the PROPERTY is what matters, and every hit is one of three benign
+shapes: `subprocess` running local `git`, the words "socket" or "http"
 inside a refusal message or comment, or a fake credential inside a redaction
 TEST FIXTURE (`tools/test_sbe.py` carries a literal `curl ... Bearer ...`
 string precisely to prove such strings get masked). A hit that actually
 imports `urllib` or `requests`, or opens an `http` URL or a network `socket`,
-is a violation of this document; report it.
+is a violation of this document; report it. The property itself is
+drift-tested: `tools/test_sbe.py` parses every tool and fails if any imports
+`urllib`, `requests`, `socket` or `http`, or if a shell tool invokes `curl`
+or `wget`.
 
 Two files inside the vault deserve attention:
 

@@ -50,9 +50,11 @@ and `SECURITY.md` lets you verify the zero-network claim yourself:
 grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
 ```
 
-(Expected result: around thirty hits, none of them a network call; every hit
-is subprocess-for-git, a word inside a message string, or a redaction-test
-fixture. `SECURITY.md` states the same expectation beside the command.)
+(Expected result: none of the hits is a network call; every hit is
+subprocess-for-git, a word inside a message string, or a redaction-test
+fixture. The count moves with the code, so no number is stated; `SECURITY.md`
+states the same property beside the command, and a test in
+`tools/test_sbe.py` re-checks the property itself on every run.)
 
 A lesson crosses from the private side to the shared side exactly once, and only
 one way: a reviewed pull request into `LEARNED.md`. Everything in this doc hangs
