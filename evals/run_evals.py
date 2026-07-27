@@ -751,6 +751,145 @@ def c15i13(root):
                               signer="dana@example.com")
 
 
+# The punctuation class, as a CLASS rather than as the characters that were
+# reported. Three repairs in this family were an enumerated strip set
+# (`.,;:'"!?` was the last one) and each lost to the first character nobody
+# listed: every decoration below left the approver's words structurally
+# different from the author's own, and the certifying comparison consumed that
+# structural difference as PROOF a second person approved a money change. The
+# rule replacing the list: a word is split by Unicode CLASS, so punctuation and
+# symbols are decoration wherever they sit and letters, marks and digits are
+# the identity. These cases pin the class, including characters nobody has
+# typed at this gate yet.
+@case("square-brackets-do-not-make-a-second-person", "sig", "FAIL")
+def c16p1(root):
+    return _approval_with_sig(root, "G", approver="[Dana Author]")
+
+
+@case("braces-do-not-make-a-second-person", "sig", "FAIL")
+def c16p2(root):
+    return _approval_with_sig(root, "G", approver="{Dana Author}")
+
+
+@case("asterisk-emphasis-does-not-make-a-second-person", "sig", "FAIL")
+def c16p3(root):
+    # What a commit message written in a markdown-shaped editor produces.
+    return _approval_with_sig(root, "G", approver="**Dana Author**")
+
+
+@case("underscore-emphasis-does-not-make-a-second-person", "sig", "FAIL")
+def c16p4(root):
+    # An underscore is Pc, connector punctuation: a different Unicode class
+    # from the brackets above and from the hyphen below, which is why the
+    # rule is "category P or S", not a list of the three that were reported.
+    return _approval_with_sig(root, "G", approver="_Dana Author_")
+
+
+@case("slashes-do-not-make-a-second-person", "sig", "FAIL")
+def c16p5(root):
+    return _approval_with_sig(root, "G", approver="/Dana Author/")
+
+
+@case("backticks-do-not-make-a-second-person", "sig", "FAIL")
+def c16p6(root):
+    # A backtick is Sk, a modifier SYMBOL rather than punctuation, so a rule
+    # naming only the punctuation categories would still lose to it.
+    return _approval_with_sig(root, "G", approver="`Dana Author`")
+
+
+@case("a-leading-hyphen-does-not-make-a-second-person", "sig", "FAIL")
+def c16p7(root):
+    # One character, at one edge, was the whole exploit.
+    return _approval_with_sig(root, "G", approver="-Dana Author")
+
+
+@case("a-trailing-hyphen-does-not-make-a-second-person", "sig", "FAIL")
+def c16p8(root):
+    return _approval_with_sig(root, "G", approver="Dana Author-")
+
+
+@case("a-mathematical-symbol-does-not-make-a-second-person", "sig", "FAIL")
+def c16p9(root):
+    # U+2211 N-ARY SUMMATION, category Sm: nobody has typed this at this gate,
+    # which is the point of pinning the class instead of the report.
+    return _approval_with_sig(root, "G", approver="∑Dana Author")
+
+
+@case("a-non-ascii-punctuation-mark-does-not-make-a-second-person", "sig", "FAIL")
+def c16p10(root):
+    # U+3010 and U+3011, CJK lenticular brackets, and U+060C, the Arabic
+    # comma: punctuation from blocks outside ASCII entirely.
+    return _approval_with_sig(root, "G", approver="【Dana، Author】")
+
+
+@case("a-decorated-author-identity-is-still-the-author", "sig", "FAIL")
+def c16p11(root):
+    # The same defect from the side the committer controls: git's user.name is
+    # written by whoever runs the commit, so an agent decorates its OWN
+    # identity and writes a clean-looking trailer that a human reviewer reads
+    # as normal. Both sides reduce through the same function, so both sides
+    # read as the same words.
+    return _approval_with_sig(root, "G", approver="Dana Author",
+                              authors=("[Dana Author]", "dana@example.com"))
+
+
+@case("a-decorated-author-identity-is-still-the-author-with-emphasis", "sig", "FAIL")
+def c16p12(root):
+    return _approval_with_sig(root, "G", approver="Dana Author",
+                              authors=("**Dana Author**", "dana@example.com"))
+
+
+@case("an-unassigned-code-point-cannot-prove-two-people", "sig", "NO-DATA")
+def c16p13(root):
+    # The rule one layer deeper than the class split, and the reason this
+    # family closes here: the certificate may not rest on the REDUCER'S
+    # coverage either. U+0378 is unassigned in this build of Unicode, which
+    # is exactly how a character added to Unicode after this code was written
+    # appears from here. The host cannot class it as letter, mark, digit or
+    # separator, so what it renders as is undecidable, and undecidable is
+    # NO-DATA naming the code point. Absence of understanding is not proof of
+    # difference.
+    return _approval_with_sig(root, "G", approver="Dana Auth\u0378or")
+
+
+@case("a-private-use-code-point-cannot-prove-two-people", "sig", "NO-DATA")
+def c16p14(root):
+    # The sibling: a private-use code point renders as whatever the reader's
+    # font vendor decided, so this host can say nothing about it either.
+    return _approval_with_sig(root, "G", approver="Dana Author\ue000")
+
+
+@case("an-irish-name-with-an-apostrophe-still-passes", "sig", "PASS")
+def c16p15(root):
+    # The control the class rule must not break: names with legitimate
+    # internal punctuation stay readable and stay certifiable. Hardening the
+    # comparison must never teach an honest approver to spell their own name
+    # wrong, and must never read every colleague as the author.
+    return _approval_with_sig(root, "G", approver="Siobhan O'Brien")
+
+
+@case("a-hyphenated-french-name-still-passes", "sig", "PASS")
+def c16p16(root):
+    return _approval_with_sig(root, "G", approver="Jean-Luc Picard")
+
+
+@case("an-italian-name-with-an-apostrophe-still-passes", "sig", "PASS")
+def c16p17(root):
+    return _approval_with_sig(root, "G", approver="Marco D'Angelo")
+
+
+@case("a-hyphenated-given-name-still-passes", "sig", "PASS")
+def c16p18(root):
+    return _approval_with_sig(root, "G", approver="Anna-Maria Rossi")
+
+
+@case("a-decorated-honest-approver-still-passes", "sig", "PASS")
+def c16p19(root):
+    # Decoration removes the disguise, not the person: a real second party
+    # whose name arrived wrapped in brackets is still a real second party.
+    return _approval_with_sig(root, "G", approver="[Robin Reviewer]")
+
+
 @case("a-lisu-spelling-of-tbd-is-not-a-snapshot-pin", "numbers", "FAIL")
 def c14lisu(root):
     # The snapshot_id renders as TBD (Lisu letterforms are Latin capitals)
