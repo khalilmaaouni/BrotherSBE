@@ -91,6 +91,46 @@ can read a promise into.
   `an-in-bullet-chosen-marker-cannot-inflate-the-rejected-count`,
   `unmarked-options-with-an-unnamed-winner-are-nodata-not-a-count` and
   `a-colon-led-hurried-adr-is-read-as-its-sections`.
+- Every report line prints through one flattening choke point (`say()`), so no
+  interpolated value of any kind can move the cursor or open a second verdict
+  line, and the source lint that enforces it derives its file set from the
+  tool walk rather than a filename list: a tool added later is linted on
+  arrival, the reviewed exceptions are named with reasons and reconciled on
+  every run, and `sbe_decide.py` (whose Recommendation and Alternatives lines
+  a table's option name could forge) is inside it. Proven by
+  `a-receipt-field-cannot-move-the-cursor-in-the-rendered-report` and the
+  report-print lint in `evals/test_no_data_class.py`, whose dead-exemption
+  reconciliation is itself a failure path.
+- `verify-install.sh` names UNWALKABLE directories and discloses that it
+  verifies content, not modes; a shipped doc sentence asserting tool behavior
+  is falsified against the source by the doc-behavior guard, whose liveness
+  predicates read the MECHANISM (comment-stripped source for the removed
+  re-root; the raw marker text for the waiver marker, which is itself
+  comment-shaped) and never prose, and one dead claim family is a failure by
+  itself. Proven by `no-shipped-doc-describes-tool-behavior-the-tools-no-longer-have`.
+- Autosave snapshots cover the worktree the ref names (never the hook's cwd
+  subtree), the skip-and-save decisions are logged, the tick counter and
+  runaway warning serialize on a lock so the printed count is the measured
+  one, every superseded snapshot stays reachable through the ref's reflog,
+  the per-worktree id is git's own hash of the path (CRC-32 collided across
+  ordinary paths), and recover's empty-ref sentence describes the whole
+  namespace with legacy-id fallbacks. Proven by TestAutosaveCoversTheWorktree
+  in `tools/test_sbe.py`.
+- Telemetry writers serialize on an exclusive lock with per-process temp
+  paths, and the migrate loss guard recounts the real post-rename file under
+  that lock, so a live session's appended row survives a concurrent migrate
+  and a maintenance collision cannot report a migration that reached no file.
+  Proven by TestTelemetryWriterSerialization in `tools/test_sbe.py`, which
+  runs the writers concurrently for real.
+- The diagrams FAIL names what it examined (declared entities, components,
+  states and systems of record) instead of asserting a whole-dossier absence,
+  and a system of record an entity names is a traceable declaration. Proven
+  by `a-system-of-record-named-in-the-data-model-traces-a-diagram-node`.
+- Guide 01's planted-drift demonstration is replayed from the guide's own
+  fenced steps by the suite, and the intake's printed override teaching names
+  all three edits while the mismatch FAIL names the completing edit. Proven
+  by `guide-01s-drift-demonstration-replays-from-its-own-steps` and the
+  override evals in `evals/run_evals.py`.
 - An exemption key resolves against the fixture leaf or heading it names, the
   access and legacy axes are non-exemptible by construction, and a waiver that
   excuses no PASS is a meta-test failure. Proven by the `gd_exempt*` guards and
