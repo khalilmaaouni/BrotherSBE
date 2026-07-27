@@ -200,7 +200,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  437 evals: 437 passed, 0 regressions.
+  444 evals: 444 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects
@@ -331,11 +331,13 @@ evolution.
 python3 ~/.claude/skills/brothersbe/tools/sbe_score.py
 ```
 
-`sbe_score.py` runs eleven mechanical checks and labels each PASS, FAIL, or NO-DATA:
+`sbe_score.py` runs twelve mechanical checks and labels each PASS, FAIL, or NO-DATA:
 ledger coverage, schema uniformity, cache economy (warm-read ratio floor 90
 percent), a vault log per active day, fence hygiene, correction latency,
 budget-vs-tier tagging, prediction seals, felt-outcome ratings, review cadence,
-and the silent-failure lints. It prints a tally and exits 0 (advisory); CI runs it
+the silent-failure lints, and the citation inventory (every external URL cited in
+the shipped docs carries its claim, population, date and limit in
+docs/CITATIONS.md, checked offline, never against live page content). It prints a tally and exits 0 (advisory); CI runs it
 `--strict` to block on a FAIL. The rule the whole loop turns on: **the LLM judge
 scores only the residue the code cannot decide.** Anything a check can settle
 mechanically is off the judge's desk, which is what keeps scoring cheap and

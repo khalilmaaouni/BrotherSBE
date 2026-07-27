@@ -2370,12 +2370,14 @@ def r2(root):
 
 SCORE_CHECKS = ("ledger-coverage", "schema-2-uniform", "cache-economy", "vault-log-per-active-day",
                 "fence-hygiene", "correction-latency", "budget-vs-tier", "prediction-seals",
-                "felt-outcome-ratings", "review-cadence", "silent-failure-lints")
+                "felt-outcome-ratings", "review-cadence", "silent-failure-lints",
+                "citation-inventory")
 
 
 def score_check(name, vault, env=None, args=()):
     e = dict(os.environ)
-    e.update({"BROTHERSBE_VAULT": vault, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": ""})
+    e.update({"BROTHERSBE_VAULT": vault, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": "",
+              "SBE_CITATION_ROOT": ""})
     e.update(env or {})
     out = subprocess.run([sys.executable, SCORE] + list(args), capture_output=True, text=True, env=e)
     for line in out.stdout.splitlines():
@@ -2463,6 +2465,86 @@ def sc9(root):
           "def a():\n    try:\n        f()\n    except Exception:\n        pass  # sbe: allow-silent lint fixture, never executed\n")
     write(root, "src/clean.py", "def b():\n    return 1\n")
     return score_check("silent-failure-lints", root, args=(src,))
+
+
+# The citation-inventory check: an external URL cited in the shipped docs must
+# carry its scope (claim, population, date, limit) in docs/CITATIONS.md, or the
+# gate fails. The defect class is this repository's own: its design document
+# once deployed a 2024 benchmark score in the present tense over a page whose
+# live leaderboard had moved past it. The check is offline by design, and the
+# last eval here pins the sentence in which it says so.
+_CITE_DOC = "# Doc\n\nA figure of 12 percent (https://example.com/study).\n"
+_CITE_ENTRY = ("## https://example.com/study\n"
+               "- claim: 12 percent of runs showed the behavior\n"
+               "- population: 128 runs of one model under one harness\n"
+               "- date: 2025-06-05\n"
+               "- limit: single source, one model family\n")
+
+
+def _cite_root(root, doc=None, inventory=None):
+    if doc is not None:
+        write(root, "README.md", doc)
+    if inventory is not None:
+        write(root, "docs/CITATIONS.md", inventory)
+    return root
+
+
+def _cite_line(cite_root):
+    return _cite_line_at(cite_root, cite_root)
+
+
+def _cite_line_at(cite_root, vault):
+    e = dict(os.environ)
+    e.update({"BROTHERSBE_VAULT": vault, "BROTHERSBE_REGISTRIES": "", "SBE_LINT_ROOT": "",
+              "SBE_CITATION_ROOT": cite_root})
+    out = subprocess.run([sys.executable, SCORE], capture_output=True, text=True, env=e)
+    return next((l for l in out.stdout.splitlines() if l.startswith("citation-inventory")), "")
+
+
+@case("citation-url-without-inventory-entry-caught", "score", "FAIL")
+def ci1(root):
+    return score_check("citation-inventory", root,
+                       env={"SBE_CITATION_ROOT": _cite_root(root, doc=_CITE_DOC)})
+
+
+@case("citation-entry-with-a-placeholder-scope-field-caught", "score", "FAIL")
+def ci2(root):
+    hollow = _CITE_ENTRY.replace("- limit: single source, one model family\n", "- limit: TODO\n")
+    return score_check("citation-inventory", root,
+                       env={"SBE_CITATION_ROOT": _cite_root(root, doc=_CITE_DOC, inventory=hollow)})
+
+
+@case("citation-entry-missing-a-scope-field-caught", "score", "FAIL")
+def ci3(root):
+    gutted = _CITE_ENTRY.replace("- population: 128 runs of one model under one harness\n", "")
+    return score_check("citation-inventory", root,
+                       env={"SBE_CITATION_ROOT": _cite_root(root, doc=_CITE_DOC, inventory=gutted)})
+
+
+@case("citation-stale-inventory-entry-caught", "score", "FAIL")
+def ci4(root):
+    return score_check("citation-inventory", root,
+                       env={"SBE_CITATION_ROOT": _cite_root(root, doc="# Doc\n\nNo link here.\n",
+                                                            inventory=_CITE_ENTRY)})
+
+
+@case("citation-covered-url-passes", "score", "PASS")
+def ci5(root):
+    return score_check("citation-inventory", root,
+                       env={"SBE_CITATION_ROOT": _cite_root(root, doc=_CITE_DOC,
+                                                            inventory=_CITE_ENTRY)})
+
+
+@case("citation-verdict-states-its-offline-limit", "score", "stated")
+def ci6(root):
+    # The check can prove structure and coverage, never that a page still says
+    # what the entry recorded; a verdict that omitted that limit would claim
+    # more than the tool examined, so the sentence itself is pinned here.
+    line = _cite_line(_cite_root(root, doc=_CITE_DOC, inventory=_CITE_ENTRY))
+    if not line:
+        return "no citation-inventory verdict line at all"
+    return ("stated" if "never live page content" in line and "no network connection" in line
+            else line)
 
 
 # ---------------------------------------------------------------------------
@@ -3943,6 +4025,21 @@ def dc5(root):
             if word.isdigit() and int(word) in words and int(word) != n:
                 wrong.append("%s: %r but sbe_score.py registers %d checks" % (rel, m.group(0), n))
     return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
+@case("every-url-in-the-shipped-docs-has-a-scoped-inventory-entry", "docs", "consistent")
+def dc7(root):
+    # The gate for the citation class: a URL added to README.md, SKILL.md or
+    # docs/ without a docs/CITATIONS.md entry answering claim, population, date
+    # and limit fails this suite, so a scopeless citation cannot merge. The
+    # check itself is offline (structure and coverage, never live page content),
+    # and the ci* evals above prove each direction of its bite on fixtures;
+    # this one runs it against the real tree.
+    line = _cite_line_at(_REPO, root)
+    parts = line.split()
+    if parts[1:2] != ["PASS"]:
+        return line or "no citation-inventory verdict line printed"
+    return "consistent"
 
 
 # ---------------------------------------------------------------------------
