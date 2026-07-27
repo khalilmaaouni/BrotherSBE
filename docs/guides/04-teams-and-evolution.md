@@ -467,7 +467,7 @@ python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py purge-corrections
 grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
 ```
 
-The receipt files the gates read live next to your change in the worktree:
+The receipt files the gates read live next to your change, under the directory you hand the gate:
 `numbers-manifest.json`, `migration-receipt.json`, `ran-receipt.json`, and the
 `APPROVAL` file plus a signed `Approved-by:` commit trailer or a `Reviewed-in:`
 review id. Their exact fields are in section 2 and in `tools/sbe_gate.py`.

@@ -3747,42 +3747,77 @@ def dc_behavior(root):
     was gated by nothing.
 
     The rule this encodes: a doc sentence that asserts a mechanism must name
-    one that exists in the source. Each pair below is (a phrase a doc would
-    only contain if it were describing the old behavior, why it is wrong),
-    and the guard fails on any shipped doc still carrying one. A phrase is
-    retired from this list only when the behavior it describes comes back.
+    one that exists in the source. Each family below is (name, a liveness
+    predicate over the MECHANISM, a phrase a doc would only contain if it
+    were describing the old behavior, why it is wrong). Two laws earned by
+    this guard's own first defect: a guard may not take evidence from prose
+    it is meant to police (the toplevel predicate substring-matched the
+    COMMENT documenting the removal, so the whole family was dead at its own
+    landing commit and a planted forbidden sentence read as consistent), so
+    the toplevel predicate now reads the source with comments stripped; and
+    each family reports its own liveness, so ONE dead family is a failure by
+    itself rather than being hidden until both die.
     """
     import re as _re
-    gate_src = open(os.path.join(_REPO, "tools", "sbe_gate.py"), errors="replace").read()
-    claims = []
-    # Each entry is (regex over doc text, predicate over the source that must
-    # hold for the sentence to be true, why the sentence would be false).
-    if "--show-toplevel" not in gate_src:
-        claims.append((r"(?i)resolves? (?:its root|it) to the git (?:worktree top|toplevel)"
-                       r"|resolves? its root to your git worktree top"
-                       r"|resolve it to the git worktree top"
-                       r"|defaults? to the current git worktree"
-                       r"|walks the git worktree"
-                       r"|inspects the current\s+git worktree",
-                       "the gate examines exactly the directory it was named; nothing "
-                       "re-roots to a git worktree top (no --show-toplevel in sbe_gate.py)"))
-    if "sbe: allow-silent" not in gate_src:
-        claims.append((r"(?i)in `?sbe_gate\.py`? the marker sits|git-worktree fallback",
-                       "sbe_gate.py carries no `sbe: allow-silent` marker and no git-worktree "
-                       "fallback"))
+    import tokenize as _tok
+    gate_path = os.path.join(_REPO, "tools", "sbe_gate.py")
+    gate_src = open(gate_path, errors="replace").read()
+
+    def _code_only(path):
+        # The source minus its comments: a comment is prose, and prose about
+        # a removed mechanism must not count as the mechanism. Docstrings
+        # stay: a string in code can BE the mechanism (a subprocess argument
+        # is a string). A file tokenize cannot read yields "", which makes
+        # every family live and the guard strict, never silently dead.
+        try:
+            with open(path, "rb") as f:
+                return " ".join(t.string for t in _tok.tokenize(f.readline)
+                                if t.type != _tok.COMMENT)
+        except (OSError, _tok.TokenError, SyntaxError):
+            return ""
+    gate_code = _code_only(gate_path)
+    # (family, live, doc pattern, why the sentence would be false). Family
+    # liveness is judged where each mechanism LIVES: the re-root was an
+    # invocation, so its family reads comment-stripped code; the allow-silent
+    # marker is itself comment-shaped, so its family reads the raw text.
+    families = [
+        ("worktree-reroot",
+         "--show-toplevel" not in gate_code,
+         r"(?i)resolves? (?:its root|it) to the git (?:worktree top|toplevel)"
+         r"|resolves? its root to your git worktree top"
+         r"|resolve it to the git worktree top"
+         r"|defaults? to the current git worktree"
+         r"|walks the git worktree"
+         r"|inspects the current\s+git worktree"
+         r"|found anywhere in the (?:git )?worktree"
+         r"|find it (?:anywhere )?in the (?:git )?worktree"
+         r"|anywhere in the worktree",
+         "the gate examines exactly the directory it was named; nothing "
+         "re-roots to a git worktree top (no --show-toplevel invocation in "
+         "sbe_gate.py), so a receipt is found under the directory you name, "
+         "not anywhere in the worktree"),
+        ("allow-silent-marker",
+         "sbe: allow-silent" not in gate_src,
+         r"(?i)in `?sbe_gate\.py`? the marker sits|git-worktree fallback",
+         "sbe_gate.py carries no `sbe: allow-silent` marker and no git-worktree "
+         "fallback"),
+    ]
+    dead = [name for name, live, _, _ in families if not live]
+    if dead:
+        return ("family %s of %d checked nothing: the mechanism it knows how to falsify "
+                "is present in the source again, so its claims must be re-derived; a "
+                "family that checks nothing is a failure by itself, not coverage"
+                % (", ".join(dead), len(families)))
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
         if not os.path.isfile(p):
             continue
         for n, line in enumerate(open(p, errors="replace").read().splitlines(), 1):
-            for pattern, why in claims:
+            for _name, _live, pattern, why in families:
                 if _re.search(pattern, line):
                     wrong.append("%s:%d describes behavior the tools do not have (%s)"
                                  % (rel, n, why))
-    if not claims:
-        return ("this guard checked nothing: every behavior it knows how to falsify is "
-                "present in the source again, so the claims must be re-derived")
     return "consistent" if not wrong else "; ".join(wrong[:5])
 
 
