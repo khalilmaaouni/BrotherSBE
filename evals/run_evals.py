@@ -1091,8 +1091,8 @@ def madr1(root):
     # DEFINITION, and every bullet under it was counted as a rejected
     # alternative: the two-alternatives floor was satisfiable by
     # chosen-plus-one, the exact single-alternative ADR it exists to refuse.
-    # This fixture carries the three re-entry routes round 10 found, so the
-    # closure is pinned at its boundaries, not at its center: the chosen name
+    # This fixture carries three re-entry routes at once, so the closure is
+    # pinned at its boundaries and not at its center: the chosen name
     # is 66 characters (a 60-character collection cap once made it unequal to
     # itself), the chosen line WRAPS mid-name at prose width (a line-anchored
     # regex once compared its first line only), and a Pros and Cons table
