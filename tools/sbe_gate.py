@@ -75,7 +75,7 @@ receipt is INTERNALLY CONSISTENT (a run id resolves to a nonzero duration and an
 exit code, a manifest's second query differs textually from the first), because
 the operating record proves pasted receipts get invented.
 """
-import json, os, sys, re, subprocess
+import json, os, sys, re, subprocess, unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
@@ -250,10 +250,11 @@ def _identity_parts(text):
 
     So: emails are canonicalized (case folded, a `+tag` in the local part
     dropped, because `dana+ops@` is the same mailbox as `dana@`); names are
-    compared as SETS of words with trailing punctuation stripped, so order and
-    a stray period stop mattering; a parenthesized suffix is annotation, not
-    identity; and a single-letter word is an initial, matched against any word
-    sharing its first letter by _names_overlap.
+    compared as SETS of words split by Unicode CLASS (_name_words: punctuation
+    and symbols are decoration, not identity, wherever they sit), so order, a
+    stray period and a pair of brackets stop mattering; a parenthesized suffix
+    is annotation, not identity; and a single-letter word is an initial,
+    matched against any word sharing its first letter by _names_overlap.
 
     Everything reads through sbe_checks.skeleton(), not fold(), and that is
     the sixth and seventh forgery closed: one soft hyphen inside the name or
@@ -282,6 +283,69 @@ def _canonical_email(raw, reduce):
     e = reduce(raw).strip(" .,;:'\"<>")
     local, _, domain = e.partition("@")
     return local.split("+")[0] + "@" + domain
+
+
+def _name_words(text):
+    """The identity-carrying words of an already-reduced string, split by CLASS.
+
+    Three repairs in this family were an ENUMERATED strip set, and each lost to
+    the first character nobody had listed. The last spelling, `.,;:'\"!?`, left
+    `[Dana Author]`, `**Dana Author**`, `_Dana Author_`, `{Dana Author}`,
+    `Dana Author/` and `-Dana Author` as words structurally different from the
+    author's own, and the certifying comparison consumed that structural
+    difference as PROOF that a second person approved the money change. A
+    remembered list of characters is not a rule, and a fourth list would lose
+    to the fourth character nobody listed.
+
+    The rule: what carries identity is a letter, a mark or a digit (Unicode
+    general category L, M or N). Punctuation and symbols (P and S) are
+    decoration wherever they sit, leading, trailing or interior, so they END A
+    WORD, whatever they are and whenever they were added to Unicode. That is
+    how a reader reads it: `[Dana Author]` holds the words Dana and Author, and
+    so do `**Dana Author**` and `-Dana Author`; `O'Brien`, `Jean-Luc`,
+    `D'Angelo` and `Anna-Maria` hold the words their owners see in them, still
+    readable and still comparable.
+
+    Whatever is neither (category C: controls, surrogates, private-use code
+    points, and code points this build of Unicode does not assign, which is
+    what a character newer than this interpreter looks like from here) is kept
+    INSIDE the word rather than dropped, so no caller can mistake it for
+    absence: _unreadable_identity_chars finds it there and the certifying
+    caller refuses to certify over it.
+    """
+    words, word = [], []
+    for ch in text:
+        kind = unicodedata.category(ch)[0]
+        if kind in ("L", "M", "N"):
+            word.append(ch)
+        elif kind in ("P", "S", "Z") or ch.isspace():
+            if word:
+                words.append("".join(word))
+                word = []
+        else:
+            word.append(ch)
+    if word:
+        words.append("".join(word))
+    return tuple(words)
+
+
+def _unreadable_identity_chars(values):
+    """The characters in an identity this host cannot classify AT ALL.
+
+    _name_words reduces by class: L, M and N carry identity, P, S and Z are
+    decoration or separation. What survives that is category C, a code point
+    this host can say nothing about: a control, a surrogate, a private-use
+    code point, or one this build of Unicode does not assign (which is exactly
+    how a character added to Unicode after this code was written appears here).
+
+    The certificate may not rest on the reducer's coverage. If the reduction
+    met something it could not classify, then whether the two identities read
+    the same is UNDECIDABLE, and undecidable is NO-DATA naming the character,
+    never "proven different". Absence of understanding is not proof of
+    difference: this project's founding law, applied to its own reducer.
+    """
+    return sorted({ch for v in values for ch in v
+                   if unicodedata.category(ch)[0] == "C"})
 
 
 def _parts(text, reduce):
@@ -313,10 +377,10 @@ def _parts(text, reduce):
     rest = _EMAIL.sub(" ", rest)
 
     def words_of(t):
-        return tuple(w for w in (x.strip(".,;:'\"!?") for x in reduce(t).split()) if w)
+        return _name_words(reduce(t))
 
     outside = words_of(re.sub(r"\([^)]*\)", " ", rest))
-    everything = words_of(re.sub(r"[()]", " ", rest))
+    everything = words_of(rest)
     names = []
     if outside:
         names.append(outside)
@@ -813,6 +877,28 @@ def gate_approval(root):
                                "no readable author or committer identity to compare the approver "
                                "against, so the identity comparison examined nothing, and a "
                                "comparison that examined nothing proves nothing")
+        # The same rule one layer deeper, and it is why this family closed
+        # here rather than in a fourth strip set: the certificate may not rest
+        # on the REDUCER'S COVERAGE either. _name_words classes every character
+        # as identity-carrying (letter, mark, digit) or as decoration and
+        # separation (punctuation, symbol, separator). A code point it can
+        # class as neither is one this host can say nothing about, so whether
+        # these two identities read the same is undecidable, and undecidable
+        # is NO-DATA naming the character. Absence of understanding is not
+        # proof of difference.
+        unreadable = _unreadable_identity_chars(
+            [w for t in appr_names_r for w in t] + sorted(appr_emails_r)
+            + [w for t in wrote_names_r for w in t] + sorted(wrote_emails_r))
+        if unreadable:
+            return "NO-DATA", ("signature verified against a trusted key, but the identities "
+                               "carry %d code point(s) this host cannot classify as a letter, a "
+                               "mark, a digit or a separator (%s), so it cannot say what they "
+                               "render as, and a difference it cannot read is not a difference "
+                               "it can prove; record the approver and the author in characters "
+                               "this host can read, or use a Reviewed-in id (reported as a "
+                               "pointer, not a certificate)"
+                               % (len(unreadable),
+                                  ", ".join("U+%04X" % ord(c) for c in unreadable)))
         # A proven email difference is itself a proof of difference, and it
         # short-circuits: the remedy sentence below used to advertise
         # "record the approver with an email address" while a recorded,
