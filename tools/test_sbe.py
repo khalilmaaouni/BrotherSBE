@@ -279,6 +279,70 @@ class TestAutosaveCoversTheWorktree(unittest.TestCase):
                              "recover still asserts a repo-wide absence it never examined")
 
 
+class TestTelemetryWriterSerialization(unittest.TestCase):
+    def test_a_live_append_survives_a_concurrent_migrate(self):
+        """Two REAL writers, racing. cmd_migrate is a read-modify-write over
+        the whole ledger and there was no lock anywhere in the repository, so
+        a row appended between its read and its rename was destroyed by the
+        rename while the loss guard compared two pre-append counts and
+        printed "count ok". Writers now serialize on an exclusive flock and
+        the guard recounts the real post-rename file under that lock."""
+        with tempfile.TemporaryDirectory() as vault:
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            led = os.path.join(tel, "outcomes.jsonl")
+            with io.open(led, "w") as f:
+                for i in range(120000):
+                    f.write(json.dumps({"session_id": "s%d" % i, "out_tokens": i}) + "\n")
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            mig = subprocess.Popen(
+                [sys.executable, os.path.join(HERE, "sbe_telemetry.py"), "migrate"],
+                env=env, stdout=subprocess.PIPE, text=True)
+            appenders = [subprocess.Popen(
+                [sys.executable, "-c",
+                 "import sys; sys.path.insert(0, %r); import sbe_telemetry as t; "
+                 "t.atomic_append(t.LEDGER, {'schema': 2, 'session_id': 'LIVE-%d'})" % (HERE, i)],
+                env=env) for i in range(4)]
+            out, _ = mig.communicate(timeout=300)
+            for a in appenders:
+                a.wait(timeout=300)
+            body = io.open(led, errors="replace").read()
+            for i in range(4):
+                self.assertIn("LIVE-%d" % i, body,
+                              "a live session's appended row was destroyed by migrate")
+            self.assertIn("count ok", out, "migrate did not finish cleanly: %r" % out.strip())
+            self.assertEqual(120004, sum(1 for l in body.splitlines() if l.strip()))
+
+    def test_two_concurrent_migrates_both_finish_and_the_ledger_is_migrated(self):
+        """The two maintenance commands used to share one literal .tmp path,
+        so one renamed the other's half-written file out from under it and
+        the loser died with a bare FileNotFoundError; racing migrate against
+        dedup could leave a ledger with ZERO schema-2 rows under a printed
+        "migrated to schema 2, count ok". Serialized writers and per-process
+        temp paths: both commands finish, and the migration reaches the file."""
+        with tempfile.TemporaryDirectory() as vault:
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            led = os.path.join(tel, "outcomes.jsonl")
+            with io.open(led, "w") as f:
+                for i in range(60000):
+                    f.write(json.dumps({"session_id": "s%d" % i, "out_tokens": i}) + "\n")
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            runs = [subprocess.Popen(
+                [sys.executable, os.path.join(HERE, "sbe_telemetry.py"), cmd],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                for cmd in ("migrate", "dedup")]
+            outs = [p.communicate(timeout=300)[0] for p in runs]
+            for o in outs:
+                self.assertNotIn("FileNotFoundError", o,
+                                 "a maintenance command lost its temp file to the other")
+            schemas = set()
+            for l in io.open(led, errors="replace"):
+                schemas.add(json.loads(l).get("schema"))
+            self.assertEqual({2}, schemas,
+                             "the printed migration never reached the file: %r" % schemas)
+
+
 class TestDigestCap(unittest.TestCase):
     def test_digest_fits_the_cap_the_hook_comment_names(self):
         """sbe_sessionstart.sh injects DIGEST.md into session context and its
