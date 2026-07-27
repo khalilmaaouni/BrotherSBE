@@ -851,6 +851,28 @@ def _pair_could_render_same(a, b, trust_fold):
     return True                  # a soft mismatch is the fold's claim, not proof
 
 
+def _unmarked(text):
+    """`text` without its combining marks: the characters a reader COUNTS.
+
+    A certifying comparison rejects a difference it cannot see, and it counted
+    characters a reader does not. `casefold("İ")` is `i` plus U+0307 COMBINING
+    DOT ABOVE, which NFKC cannot recompose, so an approver who wrote `Irmak`
+    and an author recorded as `İrmak` had names of five and six characters, the
+    LENGTH test decided it on its own, and the money gate certified one Turkish
+    person as two people. Nothing else in this apparatus would have: a
+    precomposed accent already reads as its base letter through the soft
+    branch, where an unequal reading never proves difference. The mark was the
+    one form of accent the comparison was measuring rather than reading.
+
+    So: a difference that consists only of combining marks is not proof of
+    difference, in the same sentence and for the same reason as an accent. It
+    still supports SAMENESS, which is what `skeleton` (which also drops marks)
+    is for on the self-approval side. Direction of error: one more pair the
+    gate declines to certify, and the refusal names the escape.
+    """
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+
+
 def could_render_same(a, b, trust_fold=False):
     """True when `a` could render as `b` under one-for-one look-alike substitution.
 
@@ -867,8 +889,8 @@ def could_render_same(a, b, trust_fold=False):
     vacuity backstop uses this, where the cost of trusting the fold is one
     refused placeholder-shaped value rather than a forged certificate.
     """
-    aa = [_char_reading(ch) for ch in a]
-    bb = [_char_reading(ch) for ch in b]
+    aa = [_char_reading(ch) for ch in _unmarked(a)]
+    bb = [_char_reading(ch) for ch in _unmarked(b)]
     return len(aa) == len(bb) and all(_pair_could_render_same(x, y, trust_fold)
                                       for x, y in zip(aa, bb))
 
@@ -954,6 +976,10 @@ def could_read_as(value, target):
 def _word_could_match(a, b):
     # A single-letter word is an initial: it collides with any word whose
     # first letter it could render as, mirroring _names_overlap's expansion.
+    # Read without combining marks, for the reason _unmarked states: a mark is
+    # not a character a reader counts, and the initial of `İrmak` is the
+    # initial of `Irmak`.
+    a, b = _unmarked(a), _unmarked(b)
     if (len(a) == 1) != (len(b) == 1) and a and b:
         return _pair_could_render_same(_char_reading(a[0]), _char_reading(b[0]), False)
     return could_render_same(a, b)
@@ -999,6 +1025,19 @@ def _letter_families(word):
             fam = "UNNAMED-U+%04X" % ord(ch)
         if fam in ("CJK", "HIRAGANA", "KATAKANA", "KATAKANA-HIRAGANA"):
             fam = "JAPANESE"
+        # A SCRIPT-NEUTRAL MODIFIER LETTER is not a second alphabet. U+02BC
+        # MODIFIER LETTER APOSTROPHE is category Lm and belongs to no script:
+        # it is the apostrophe Unicode recommends inside names, and it is what
+        # this platform types by default. Counted as its own family, it made
+        # `OʼBrien` a word that "mixes letters from more than one script
+        # (LATIN, MODIFIER)" and the money gate FAILED an honest approver by
+        # name, which is a control teaching a person to misspell themselves.
+        # Read by rule, not by row: a name beginning MODIFIER marks the
+        # script-neutral modifier letters, while a modifier that DOES belong
+        # to a script keeps its script's name (KATAKANA-HIRAGANA PROLONGED
+        # SOUND MARK is part of an ordinary Japanese word) and is unaffected.
+        if fam == "MODIFIER":
+            continue
         fams.add(fam)
     return fams
 
