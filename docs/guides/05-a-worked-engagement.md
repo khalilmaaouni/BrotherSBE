@@ -722,8 +722,12 @@ step that surfaces any design waiver as something a human is shown:
         run: |
           python3 evals/test_no_data_class.py
           python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave)
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
         run: python3 tools/test_sbe.py
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py
 ```
 
 None of it forces ceremony on small work. A T0 change writes no dossier at all,

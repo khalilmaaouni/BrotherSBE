@@ -8,6 +8,39 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe impact` closes the oldest hole in this project: the tier was computed
+  from five answers and nothing ever read the code, so a change rewriting an API
+  contract could be classified T0 by answering "no" five times, and every gate
+  downstream then agreed the change owed no evidence. The scan derives those
+  same five answers from the git diff and runs them through
+  `sbe_intake.compute_tier`, the SAME table a person's answers go through: one
+  rule, one place, two inputs, so a derived tier and a declared tier cannot drift
+  apart. It may raise a declared tier and may never lower one. A disagreement is
+  resolved only by a disposition naming the detector, the decision, the reason,
+  the author and the head commit it was decided against; a disposition from
+  another commit resolves nothing and one with no reason is an off switch rather
+  than a decision. The proposed tier is a FLOOR, not a ceiling: `consumers`
+  cannot be read from a diff and is assumed at its lowest value, and every
+  changed file no detector covers is listed by name under `unmeasured` rather
+  than folded into a clean result. Verdicts are PASS, REVIEW-REQUIRED, FAIL and
+  NO-DATA, and `--strict` makes NO-DATA block for protected CI. Twenty-two
+  detectors ship (OpenAPI, AsyncAPI, protobuf, Avro, GraphQL, event schemas,
+  migrations, SQL data definition language, dbt models, ORM models, destructive
+  operations, payment paths, partner paths, personal data paths and field names,
+  authorization paths, production configuration, secret material,
+  infrastructure, CI pipelines, queue configuration). Sixteen fixtures in
+  `tools/test_sbe_impact.py` build real git repositories and run the real
+  command: the defect, the sound case, hollow and malformed intakes, an
+  unsupported language reported as unmeasured, four bypass attempts (deleting
+  the intake, a stale disposition, an unreasoned disposition, a deletion
+  misread as an addition), and the invariant that a declared tier is never
+  lowered. Calibrated by neutralizing the control and confirming five of the
+  sixteen fail before trusting the green. Limits stated beside the behavior in
+  `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
+- Two suites that existed and ran on nobody's merge path now run in CI: the
+  fence hook tests and the impact fixtures. The workflow's own comment already
+  said it: a fixture no merge runs cannot stop anything.
+
 - One command line, `bin/sbe`, over the nine script paths, plus an importable
   `src/brothersbe/` package. It is a facade and says so: every built subcommand
   delegates to the tool in `tools/` that already carries the behavior and the

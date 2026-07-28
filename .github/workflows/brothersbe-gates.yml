@@ -105,5 +105,14 @@ jobs:
         run: |
           python3 evals/test_no_data_class.py
           python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave)
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
         run: python3 tools/test_sbe.py
+      # Both suites below existed and ran on nobody's merge path, which is the
+      # same "documentation rather than a gate" condition the comment above
+      # names. The fence hook is an enforcement boundary and the impact fixtures
+      # carry the defect that a declared tier can contradict the diff; neither
+      # is worth anything if a merge never runs it.
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py

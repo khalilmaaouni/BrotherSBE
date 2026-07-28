@@ -121,8 +121,12 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
         run: |
           python3 evals/test_no_data_class.py
           python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave)
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
         run: python3 tools/test_sbe.py
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py
 ```
 
 Seven steps, not three. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The waiver step (third of the seven) surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.

@@ -195,6 +195,46 @@ def _cmd_doctor(args):
     return EXIT_CONTROL_FAILED if failed else EXIT_OK
 
 
+def _cmd_impact(args):
+    """Reconcile what the diff shows against what the human declared at intake."""
+    from . import impact as impact_mod
+    try:
+        data = impact_mod.report(os.path.abspath(args.path), base=args.base, head=args.head,
+                                 intake_path=args.intake, disposition_path=args.disposition)
+    except impact_mod.DiffUnavailable as exc:
+        sys.stderr.write("sbe impact: NO-DATA. %s\n" % exc)
+        return EXIT_CONTROL_FAILED if args.strict else EXIT_OK
+    if args.json:
+        sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write("%s\n" % data["scope"])
+        for hit in data["detected"]:
+            sys.stdout.write("  DETECTED  %-22s %s (%s)\n"
+                             % (hit["detector"], hit["file"], hit["why"]))
+        for un in data["unmeasured"]:
+            sys.stdout.write("  UNMEASURED %s%s\n"
+                             % ((un["file"] + ": ") if un["file"] else "", un["reason"]))
+        sys.stdout.write("\nproposed tier %s (a floor, not a ceiling), declared tier %s\n"
+                         % (data["proposedTier"], data["humanTier"] or "none read"))
+        if data["intakeProblem"]:
+            sys.stdout.write("intake: %s\n" % data["intakeProblem"])
+        for dis in data["disagreements"]:
+            sys.stdout.write("  DISAGREEMENT %-22s %s [disposition: %s]\n"
+                             % (dis["detector"], dis["file"], dis["disposition"]))
+        sys.stdout.write("verdict: %s\n" % data["verdict"])
+        if data["verdict"] == "REVIEW-REQUIRED":
+            sys.stdout.write(
+                "The diff shows more than the intake declared. This tool will not lower a "
+                "human tier and will not raise one behind your back either: record a "
+                "disposition naming the detector, the decision, the reason, who decided, and "
+                "the head commit it was decided against.\n")
+    if data["verdict"] in ("REVIEW-REQUIRED", "FAIL"):
+        return EXIT_CONTROL_FAILED
+    if data["verdict"] == "NO-DATA" and args.strict:
+        return EXIT_CONTROL_FAILED
+    return EXIT_OK
+
+
 def _cmd_version(args):
     sys.stdout.write("sbe %s (evidence schema %s, python %d.%d)\n"
                      % (version(), SCHEMA_VERSION, sys.version_info[0], sys.version_info[1]))
@@ -231,9 +271,8 @@ COMMANDS = [
     ("fences", "print the live fences the write hook would enforce",
      lambda a: _delegate("sbe_fence_hook.py", ["fences"] + list(a.rest))),
     ("version", "print the version and the evidence schema version", _cmd_version),
-    ("inspect-change", "build a change manifest from the git diff",
-     _not_built("inspect-change", 3, "Nothing here reads a diff yet, so the tier still comes "
-                                     "from the operator's answers rather than from the code.")),
+    ("impact", "read the git diff and reconcile it with the declared intake tier", _cmd_impact),
+    ("inspect-change", "alias of impact, the name the finalization brief uses", _cmd_impact),
     ("plan", "generate the control plan for the detected change",
      _not_built("plan", 3, "Applicability is not computed yet, so a missing control cannot be "
                            "told apart from a control that was never required.")),
@@ -270,6 +309,21 @@ def build_parser():
             child.add_argument("--json", action="store_true",
                                help="machine-readable output carrying the tool and schema "
                                     "versions")
+        elif name in ("impact", "inspect-change"):
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository to inspect (default: the current one)")
+            child.add_argument("--base", default=None,
+                               help="the commit or ref to diff from; without it the merge "
+                                    "base with the default branch is used, and a repository "
+                                    "with neither is reported rather than guessed at")
+            child.add_argument("--head", default="HEAD", help="the commit or ref to diff to")
+            child.add_argument("--intake", default=None,
+                               help="path to 00-intake.json, the tier the human declared")
+            child.add_argument("--disposition", default=None,
+                               help="path to a recorded, commit-bound disposition file")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
+            child.add_argument("--strict", action="store_true",
+                               help="make NO-DATA block as well, for protected CI")
         elif name in ("verify", "review"):
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")

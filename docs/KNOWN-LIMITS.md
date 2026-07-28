@@ -221,3 +221,29 @@ POSIX mode there as a courtesy.
 `tables/`, the RUBRIC baselines, and the lint's own numbers were measured
 where this project was built. Re-measure on yours; NO-DATA is a legal score.
 Full text: `README.md` (What this is not), `RUBRIC.md`, `INVARIANTS.md`.
+
+## The impact scan proposes a floor, and reads paths more than it reads code
+
+`sbe impact` derives the five intake answers from the git diff and runs them
+through the SAME tier table a person's answers go through, so the two can never
+drift apart. What it cannot do, stated where the behavior is:
+
+- Two of the five answers are not derivable from a diff. `consumers` is assumed
+  `none`, and `crosses_boundary` is inferred only from infrastructure-shaped
+  files, so a service call added inside existing code is invisible to it. Both
+  assumptions can only LOWER the proposal. The proposed tier is therefore a
+  FLOOR: it can say a change is bigger than declared, never smaller.
+- A PASS from it means "nothing in the diff contradicts the declared tier". It
+  does not mean the declared tier is right.
+- Detection is mostly path-shaped, with content patterns only for SQL data
+  definition language, destructive operations, and personal-data field names.
+  A payment path in a file named nothing like a payment is not detected.
+- Content patterns read ADDED lines only, so removing a sensitive line is not
+  classified as adding one. The reverse is also true: a deletion that IS the
+  risky change (dropping a column in code rather than in a migration) is not
+  caught by a content pattern.
+- Every changed file no detector covers is reported under `unmeasured`, by name.
+  A clean report over an unsupported language is not available from this tool.
+- Maturity: INTERNAL-EVAL. It has been exercised on this repository's fixtures
+  and on this repository's own diff, and on no other estate.
+Full text: `src/brothersbe/impact.py`, `docs/CLI.md`.
