@@ -8,6 +8,31 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- An onboarding set for engineers who have never seen this tool ships at
+  `docs/for-engineers/`: eight pages (install and first run, one per role for
+  backend, data, infrastructure and ETL, the limits page, and the adoption page)
+  plus four complete worked dossiers under `docs/for-engineers/examples/`, one
+  per role, each carrying the receipts its change would owe. Every block of tool
+  output on every page was executed against this tree rather than carried
+  forward, and the four dossiers pass all five design checks at their shipped
+  path. The eight pages are in `SHIPPED_DOCS`, so the guards that recompute eval
+  counts, meta-test counts and pasted lint lines read them too; the ETL page's
+  three lint lines are recomputed by
+  `no-shipped-doc-prints-a-silent-failure-lint-line-the-scorer-does-not-produce`
+  from a fixture rather than exempted from it.
+
+- Every citation that credited `SKILL.md` with a law the lazy-core split moved
+  out of it now names the reference file that declares the law. Fifteen
+  (file, law) pairs across six documents were dangling: `docs/KNOWN-LIMITS.md`,
+  `docs/guides/01-quickstart.md`, `docs/guides/03-work-doctrines.md`,
+  `docs/HOW-IT-WORKS.md`, `RUBRIC.md` and `MANIFEST-extraction.md`'s own worked
+  example. Nine further pointers that describe `SKILL.md` as the whole law, and
+  carry no law number for a check to read, were widened by hand. Proven by
+  `every-law-citation-names-a-file-that-holds-that-law`, which globs
+  `references/` for the law-text files and requires the file being credited to
+  declare the law with its own heading, and which fails on a planted wrong
+  pointer rather than on a remembered list of known-bad citations.
+
 The first named version. Before this line the only name for an install was a
 commit hash, which `tools/sbe_telemetry.py check-update` compares but no human
 can read a promise into.
