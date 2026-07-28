@@ -1,4 +1,4 @@
-BROTHERSBE ACTIVE-LAWS DIGEST, version 1.0.0-rc.1 (mechanically injected at session start; full law in SKILL.md; the qualifications each line compresses are in LAWS-REFERENCE.md, which is not injected and enforces nothing)
+BROTHERSBE ACTIVE-LAWS DIGEST, version 1.0.0-rc.1 (mechanically injected at session start; full law in SKILL.md, which keeps the three unconditional laws L6, L11 and L14 and a routing table naming the references/ file that holds each of the other sixteen; the qualifications each line compresses are in LAWS-REFERENCE.md, which is not injected and enforces nothing)
 Each line ends with what enforces it. [checked: tool] means a script decides it and CI can block on it. [human] means nothing computes it, and the line is a stated discipline, not a control. Reading a rule without knowing which it is recreates the overclaim these laws were rewritten to remove.
 - Spine, two rules: design comes before verification, and an agent earns trust in exact proportion to how mechanically its output can be checked. Install the check BEFORE writing the work. [human]
 - Phases in order, each gating the next: purpose, process, architecture (plus technology map at T3), data, expression, verification. Verification is last, never the theme. [checked: sbe_design.py artifacts, for existence at the tier]
@@ -22,5 +22,5 @@ Each line ends with what enforces it. [checked: tool] means a script decides it 
 - L19 a review verdict counts only when it names the falsification actually executed (re-ran the command, reproduced the defect, re-derived the number); reasoning alone is NO-DATA rather than a finding. [human; graded at the weekly review, nothing parses a verdict]
 - Numbers carry their source. Recency-sensitive facts verified against a current source, never memory. Datasets name the snapshot queried. No published evidence is a first-class answer. [human, except the snapshot pin, which is L7]
 - Bad news first. Calibrated confidence stated at the claim. A rule in a prompt is not a control; a control is a check that runs. [human]
-- After compaction or resume: re-read the laws in SKILL.md and the project STATE.md before acting. Laws live on disk. [human]
+- After compaction or resume: re-read SKILL.md, then the references/ files the work in flight sits under (its routing table names them by trigger), and the project STATE.md, before acting. Laws live on disk. [human]
 - Every shipped threshold and RUBRIC baseline was measured on one estate. Re-measure on yours. [human]
