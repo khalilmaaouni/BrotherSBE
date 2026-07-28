@@ -24,7 +24,8 @@ Two things live in two places, and keeping them straight is the whole model.
 **The shared repository** (cloned to `~/.claude/skills/brothersbe` on every
 machine) carries the law and the tools:
 
-- `SKILL.md`, the outermost law when `/brothersbe` is invoked.
+- `SKILL.md` and the `references/*.md` files its routing table names, the outermost law
+  when `/brothersbe` is invoked.
 - `tools/sbe_gate.py`, `tools/sbe_score.py`, `tools/sbe_telemetry.py`, the hooks.
 - `RUBRIC.md`, the metric definitions the weekly review scores against.
 - `memory-template/LEARNED.md`, the team law file. This is the only
@@ -202,7 +203,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  508 evals: 508 passed, 0 regressions.
+  509 evals: 509 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects
@@ -292,7 +293,7 @@ A second engineer reviews the PR. They are not confirming that the author was
 annoyed; they are judging whether the rule is a law worth binding the whole team
 to. Concretely they check: is the `because` clause the real reason and not a
 restatement of the rule; does the rule contradict anything already in `LEARNED.md`
-or `SKILL.md`; is it specific enough to follow and general enough to matter; does
+or in the law (`SKILL.md` and its `references/` files); is it specific enough to follow and general enough to matter; does
 it need a gate or a lint to have teeth (here it already has one, so the rule
 documents the design intent behind an existing lint). If it needs changes, that is
 a review comment, same as any code PR.
@@ -358,7 +359,7 @@ external evidence (a passing CI run, a reviewer approval, a reproduced number).
 ### Amendments are reverted if their named signal did not move
 
 This is the part that stops the skill from drifting. The review lands at most one
-consolidation edit to `SKILL.md` per week, and every amendment names the measured
+consolidation edit to the law (`SKILL.md` or one of its `references/` files) per week, and every amendment names the measured
 signal it is supposed to move. Before landing this week's edit, the reviewer checks
 last week's amendment against the signal it named, and reverts it if the signal did
 not improve. A rejected candidate keeps its reason and is not re-proposed without

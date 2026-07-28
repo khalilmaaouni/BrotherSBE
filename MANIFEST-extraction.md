@@ -99,7 +99,7 @@ reads the number out of the sentence, so the claim and the assert still cannot d
 - Law numbers are unchanged, and SKILL.md's routing table carries a column naming which
   file holds which law, so an `L9` written in `docs/`, in `DIGEST.md` or in
   `LAWS-REFERENCE.md` still resolves.
-- Pointers written as "SKILL.md L7" in files outside this change's fence
+- Pointers that named SKILL.md together with a law number, in files outside this fence
   (`docs/KNOWN-LIMITS.md`, `docs/HOW-IT-WORKS.md`, `docs/DESIGN.md`, the guides) now name
   a file that holds the law's number in a table rather than the law's text. Nothing
   breaks mechanically; the pointers are one hop longer until they are updated.

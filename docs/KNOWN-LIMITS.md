@@ -3,7 +3,9 @@
 Every law already states what its machinery does not do, but those statements
 live inside the digest and the law text, where the honest half of the product
 is the hardest part to read. This page collects them: one heading per limit,
-each naming the law it qualifies and the file where the full text lives.
+each naming the law it qualifies and the file where the full text lives. Three
+laws (L6, L11, L14) live in `SKILL.md` itself; the other sixteen and the six
+phases live in the `references/*.md` file its routing table names.
 Nothing here is new; a limit stated only on this page and nowhere else would
 be a bug in this page.
 
@@ -18,7 +20,7 @@ are [human] lines: no tool computes whether you did. Full text: `SKILL.md`
 The gate verifies an approval that was declared. It cannot notice a money-path
 change that declared nothing, and nothing resolves a `Reviewed-in:` id, which
 is why that path reports NO-DATA rather than an approval. Full text:
-`SKILL.md` L9 and `LAWS-REFERENCE.md` (the hard gates).
+`references/laws-hard-gates.md` L9 and `LAWS-REFERENCE.md` (the hard gates).
 
 ## The tier comes from answers about contracts that no checker reads
 
@@ -44,7 +46,7 @@ text: `SKILL.md` L6.
 Fence hygiene and budget-vs-tier run only over registries named in
 `BROTHERSBE_REGISTRIES`, and only over fence lines containing the word
 "agent". Writing the fence, comparing scopes, and resuming after a kill are
-human. Full text: `SKILL.md` L13, `LAWS-REFERENCE.md`.
+human. Full text: `references/laws-parallel-writers.md` L13, `LAWS-REFERENCE.md`.
 
 ## Blast radius revokes nothing (L14)
 
@@ -56,14 +58,16 @@ already holds. Full text: `SKILL.md` L14.
 
 `--strict` blocks only in a repository that wired it. No CODEOWNERS and no
 branch protection ships, so nothing makes editing the workflow require a
-review; that is your repository's setting. Full text: `SKILL.md` L16.
+review; that is your repository's setting. Full text:
+`references/laws-overrides-and-waivers.md` L16.
 
 ## Most of the close is human (L17)
 
 Only the vault session log has a check, and only where `BROTHERSBE_VAULT`
 points at a vault, which the shipped CI does not set: on a stock runner every
 ledger check is NO-DATA at exit 0. Open items, the failures index, the
-scorecard and the self-score cap are human review. Full text: `SKILL.md` L17.
+scorecard and the self-score cap are human review. Full text:
+`references/laws-closing-and-review.md` L17.
 
 ## Telemetry observes, it never decides
 
@@ -74,7 +78,8 @@ it. The checks fed by it are named on their own digest lines. Full text:
 ## The UNVERIFIED label is the agent's to write
 
 No tool applies it. A session that fails to label unverified output is not
-caught by a check. Full text: `SKILL.md` L7 and L16, `DIGEST.md`.
+caught by a check. Full text: `references/laws-hard-gates.md` L7,
+`references/laws-overrides-and-waivers.md` L16, `DIGEST.md`.
 
 ## The doc-honesty guard reads proximity, not grammar
 

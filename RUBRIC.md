@@ -14,7 +14,7 @@ Floor gates (pass/fail, NEVER tradeable for scores; a fail voids the week's scor
    flags reviewed. Evidence: outcomes.jsonl coverage, reviews.jsonl, skill git log,
    prediction-audit output.
 2. TOKEN ECONOMY (baseline 4): zero "not measured" runs, PRIMARY SIGNAL actual
-   spend vs the tier declared in each brief and fence (T1/T2/T3, SKILL.md L1 and L13),
+   spend vs the tier declared in each brief and fence (T1/T2/T3, `references/laws-tier-and-artifacts.md` L1 and `references/laws-parallel-writers.md` L13),
    fleet budgets enforced via the Workflow engine, spend per shipped surface
    trending down across 3 weekly reviews, zero waste incidents. Evidence: ledger
    math, sbe_score budget-vs-tier check, incident lines in OUTCOMES.md.

@@ -82,7 +82,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-508 evals: 508 passed, 0 regressions.
+509 evals: 509 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -456,8 +456,10 @@ until the receipt is there and consistent.
 
 ## Where to go next
 
-- `SKILL.md` L7 to L10 are the four hard gates, L11 the lints CI runs beside them,
-  L15 the override rule and L16 the one that makes `--strict` unavailable to a session.
+- `references/laws-hard-gates.md` L7 to L10 are the four hard gates, and `SKILL.md` L11
+  is the lints CI runs beside them. `references/laws-overrides-and-waivers.md` holds L15,
+  the override rule, and L16, the one that makes `--strict` unavailable to a session.
+  `SKILL.md` is the always-on core and its routing table names which file holds which law.
 - `evals/run_evals.py` is the proof: one planted defect per class, each caught by its
   gate. Read the fixtures to see the exact shape of every receipt.
 - `SECURITY.md` documents the zero-network posture: the tools make no network call,
