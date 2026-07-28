@@ -288,6 +288,7 @@ python3 tools/sbe_gate.py --strict .    # enforcing: exits nonzero on any FAIL
 - [docs/guides/05-a-worked-engagement.md](docs/guides/05-a-worked-engagement.md): one system designed end to end, real commands, real output. The best place to start.
 - [docs/DESIGN.md](docs/DESIGN.md): the why and what, in the real order.
 - [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): the mechanical half, tool by tool.
+- [docs/for-engineers/](docs/for-engineers/): onboarding for backend, data, infrastructure and ETL engineers who have never seen this tool. Start at [00-READ-ME-FIRST.md](docs/for-engineers/00-READ-ME-FIRST.md); four complete worked dossiers are in [docs/for-engineers/examples/](docs/for-engineers/examples/).
 - [docs/SETUP.md](docs/SETUP.md) to install, and the rest of [docs/guides/](docs/guides/) for the gates, the doctrines, and teams.
 - [SKILL.md](SKILL.md) plus the [`references/`](references/) files its routing table names are the law itself; [SECURITY.md](SECURITY.md) is the data and network posture (no network calls, no analytics, no account, no server).
 
