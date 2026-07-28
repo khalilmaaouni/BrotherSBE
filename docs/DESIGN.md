@@ -38,8 +38,9 @@ Two rules sit under everything:
 1. **Design comes before verification.** Six phases, each gating the next.
 2. **An agent earns trust in exact proportion to how mechanically its output can
    be checked.** Not by fluency, not by model quality. Every law in
-   [SKILL.md](../SKILL.md) names the thing that enforces it, and a rule that cannot
-   name one is advice, filed in [PRACTICES.md](../PRACTICES.md), which says so.
+   [SKILL.md](../SKILL.md) and in the [`references/`](../references/) files its routing
+   table names states the thing that enforces it, and a rule that cannot name one is
+   advice, filed in [PRACTICES.md](../PRACTICES.md), which says so.
 
 ## 2. The order of operations
 

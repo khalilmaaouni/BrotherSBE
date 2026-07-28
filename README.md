@@ -2,7 +2,7 @@
 
 BrotherSBE is a Claude Code skill that acts as a senior backend and data engineering colleague. It designs systems in the order the work actually runs: purpose, process, architecture, data, expression, then verification. It produces a design dossier, decides architecture from decision tables with named criteria, and holds the result to checks that run.
 
-Identity, five words, each a law in [SKILL.md](SKILL.md): **realistic, SOTA, best practices driven, proven, trustable.**
+Identity, five words, each a law in [SKILL.md](SKILL.md) and the [`references/`](references/) files its routing table names: **realistic, SOTA, best practices driven, proven, trustable.**
 
 It is the domain specialist sibling of [BrotherModeUp](https://github.com/khalilmaaouni/BrotherModeUp), the general orchestrator. BrotherSBE is standalone: clone it and it works with nothing else installed. See [PARITY.md](PARITY.md) for what the two share and where they diverge.
 
@@ -21,7 +21,7 @@ Two rules carry the design.
 
 **Design comes before verification.** The expensive mistakes are made while deciding what to build, how the process runs, what shape the system takes, and how the data is modeled. Checking the result at the end catches none of them.
 
-**An agent earns trust in exact proportion to how mechanically its output can be checked.** Not by fluency, not by model quality. Every law in [SKILL.md](SKILL.md) names the thing that enforces it; a rule that cannot name one is advice and lives in [PRACTICES.md](PRACTICES.md), which says so.
+**An agent earns trust in exact proportion to how mechanically its output can be checked.** Not by fluency, not by model quality. Every law names the thing that enforces it; the laws live in [SKILL.md](SKILL.md), which keeps the three that fire on no announced trigger, and in the [`references/`](references/) file its routing table sends each of the other sixteen to; a rule that cannot name one is advice and lives in [PRACTICES.md](PRACTICES.md), which says so.
 
 ## The dossier
 
@@ -246,7 +246,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-508 evals: 508 passed, 0 regressions.
+509 evals: 509 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -289,7 +289,7 @@ python3 tools/sbe_gate.py --strict .    # enforcing: exits nonzero on any FAIL
 - [docs/DESIGN.md](docs/DESIGN.md): the why and what, in the real order.
 - [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): the mechanical half, tool by tool.
 - [docs/SETUP.md](docs/SETUP.md) to install, and the rest of [docs/guides/](docs/guides/) for the gates, the doctrines, and teams.
-- [SKILL.md](SKILL.md) is the law itself; [SECURITY.md](SECURITY.md) is the data and network posture (no network calls, no analytics, no account, no server).
+- [SKILL.md](SKILL.md) plus the [`references/`](references/) files its routing table names are the law itself; [SECURITY.md](SECURITY.md) is the data and network posture (no network calls, no analytics, no account, no server).
 
 ## License
 

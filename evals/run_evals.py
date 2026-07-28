@@ -7,7 +7,7 @@ tested against the exact defects the operating record produced.
 
 Every fixture is generalized: no client, employer, or private project appears.
 """
-import fnmatch, json, os, sys, tempfile, subprocess
+import fnmatch, json, os, re, sys, tempfile, subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "..", "tools", "sbe_gate.py")
@@ -4062,6 +4062,119 @@ def dc2(root):
                              "scenarios, %d waived"
                              % (rel, m.group(0), checks, regs, scen, waived))
     return "consistent" if not wrong else "; ".join(wrong[:4])
+
+
+def _law_homes():
+    """The files that hold law TEXT, as opposed to files that summarize it.
+
+    SKILL.md keeps L6, L11 and L14; the routing table sends every other law to a
+    file under references/. Derived by globbing rather than listed, so a twelfth
+    reference file is covered on the day it lands.
+    """
+    homes = ["SKILL.md"]
+    refs = os.path.join(_REPO, "references")
+    if os.path.isdir(refs):
+        homes += ["references/" + n for n in sorted(os.listdir(refs)) if n.endswith(".md")]
+    return homes
+
+
+# A citation is a law-text FILE followed by the law numbers it is being credited
+# with: "`SKILL.md` L13", "(SKILL.md L16)", "`SKILL.md` L7 to L10",
+# "`SKILL.md` L7 and L16", "SKILL.md law L13". The law group stops at the first
+# token that is not another law number, so "`SKILL.md` L9 and `LAWS-REFERENCE.md`"
+# credits L9 to SKILL.md and nothing to the summary file beside it.
+_CITE = re.compile(r"`?(?P<file>SKILL\.md|references/[A-Za-z0-9._-]+\.md)`?[\s,]*"
+                   r"(?:law[s]?\s+)?(?P<laws>L\d+(?:\s*(?:,|and|to|/|through)\s*L?\d+)*)")
+
+
+def _cited_laws(text):
+    """Every (file, law number) pair a page asserts, ranges expanded.
+
+    Returns pairs rather than a verdict so the same reading can be used on the
+    shipped pages and on the planted defects below: a guard whose detector is
+    only ever run against text that passes has not been shown to detect anything.
+    """
+    pairs = []
+    for m in _CITE.finditer(text):
+        nums = [int(n) for n in re.findall(r"\d+", m.group("laws"))]
+        span = m.group("laws")
+        # "L7 to L10" and "L17 through L19" name a run; a comma or "and" names
+        # the endpoints only. Both spellings appear in the shipped pages.
+        if len(nums) == 2 and re.search(r"\b(to|through)\b", span):
+            nums = list(range(min(nums), max(nums) + 1))
+        for n in nums:
+            pairs.append((m.group("file"), n))
+    return pairs
+
+
+@case("every-law-citation-names-a-file-that-holds-that-law", "docs", "consistent")
+def dc_cite(root):
+    """A pointer nobody opens is the defect this whole product is about.
+
+    Sixteen laws and six phases moved out of SKILL.md into `references/*.md`.
+    Every "Full text: `SKILL.md` L9" written before that move still parsed, still
+    read as a citation, and named a file that no longer carried the text. No test
+    read those pointers, which is exactly why they could rot in silence: the
+    counts guards recompute numbers and the behavior guard reads sentences, and a
+    cross-reference was gated by nothing.
+
+    The rule, not a list of known citations: a page may credit a law number to a
+    law-text file only if that file actually declares the law. `_law_homes` globs
+    the reference directory and `_cited_laws` reads any spelling of the citation,
+    so a new reference file, a new law, or a citation nobody has written yet is
+    covered without editing this case.
+    """
+    homes, unreadable = {}, []
+    for rel in _law_homes():
+        try:
+            body = open(os.path.join(_REPO, rel), errors="replace").read()
+        except OSError as e:
+            # Named, never skipped: a law-text file this guard could not open is
+            # a file whose laws every citation would then be reported missing
+            # from, and a silent `continue` would turn that into a clean verdict.
+            unreadable.append("%s could not be read (%s)" % (rel, e.strerror or e))
+            continue
+        homes[rel] = {int(n) for n in re.findall(r"^###\s+L(\d+)\.", body, re.M)}
+    if unreadable:
+        return "; ".join(unreadable[:4])
+    if not homes or not any(homes.values()):
+        return ("no law-text file could be read, or none declares a law heading, so this "
+                "guard resolved no citation and cannot report the pointers consistent")
+    # The detector, proved against planted defects before it is trusted on the
+    # real pages. CAUGHT are the exact shapes the lazy-core split created.
+    known = sorted(next(iter(homes.values())))[:1]
+    live = "L%d" % known[0] if known else "L6"
+    caught = ["Full text: `SKILL.md` L9.", "the fence is human (SKILL.md L13)",
+              "`SKILL.md` L7 to L10 are the four hard gates",
+              "`references/laws-hard-gates.md` L13"]
+    clear = ["Full text: `references/laws-hard-gates.md` L9.",
+             "`SKILL.md` %s and `LAWS-REFERENCE.md` (the hard gates)" % live,
+             "`references/laws-parallel-writers.md` L13, `LAWS-REFERENCE.md`."]
+
+    def unresolved(text):
+        return [(f, n) for f, n in _cited_laws(text) if n not in homes.get(f, set())]
+    problems = ["missed a planted wrong pointer: %r" % s for s in caught if not unresolved(s)]
+    problems += ["flagged a correct pointer: %r" % s for s in clear if unresolved(s)]
+    docs, checked = _shipped_markdown(), 0
+    if not docs:
+        return ("no shipped markdown page could be derived, so no citation was resolved and "
+                "none can be called consistent")
+    for rel in docs:
+        try:
+            text = open(os.path.join(_REPO, rel), errors="replace").read()
+        except OSError as e:
+            problems.append("%s could not be read (%s)" % (rel, e.strerror or e))
+            continue
+        for f, n in _cited_laws(text):
+            checked += 1
+            if n not in homes.get(f, set()):
+                problems.append("%s credits L%d to %s, which does not declare it (L%d is in %s)"
+                                % (rel, n, f,
+                                   n, ", ".join(h for h, ls in homes.items() if n in ls) or "no shipped file"))
+    if not checked:
+        return ("no shipped page cites a law by file and number, so the mechanism that ties a "
+                "pointer to the file holding the law is checking nothing")
+    return "consistent" if not problems else "; ".join(problems[:4])
 
 
 @case("every-shipped-doc-path-in-this-suite-opens-a-file", "docs", "consistent")

@@ -17,7 +17,7 @@ Two rules sit under every doctrine below, so they are stated once here:
   never. Those four classes (numbers, migrations, money and partner paths,
   unexecuted checks) each have a mechanical gate in `tools/sbe_gate.py`. Ungated
   output ships labeled UNVERIFIED. A HARD gate is never waived by a session
-  instruction (SKILL.md L16).
+  instruction (`references/laws-overrides-and-waivers.md` L16).
 
 Every gate command in this doc is real. `tools/sbe_gate.py` inspects the current
 directory (or a directory you pass, and exactly that one) for the receipt that

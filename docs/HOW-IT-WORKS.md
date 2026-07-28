@@ -10,7 +10,10 @@ Every mechanism named here is a real file in this repository. Where a section na
 a tool, that tool is under `tools/` and is exercised by `evals/run_evals.py`.
 
 ```
-SKILL.md              the law: 19 laws in WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY form
+SKILL.md              the always-on core: the spine, the law form, L6, L11, L14,
+                      and the routing table naming which reference file holds the rest
+references/*.md       the other sixteen laws and the six phases, in the same
+                      WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY form, loaded on trigger
 PRACTICES.md          the advice, which says it is advice
 DIGEST.md             the law's shadow, injected at session start
 STATE.template.md     the per-project fence registry format
@@ -374,7 +377,8 @@ no tier tag. Both see only a line containing the word "agent": a fence naming it
 writer some other way ("writer W1 on src/foo.py") is invisible to both and is
 neither passed nor failed, it is simply not seen. Unset registries report NO-DATA
 rather than guessing. The rest of the
-fence discipline is human review, and SKILL.md law L13 says so in its own text.
+fence discipline is human review, and `references/laws-parallel-writers.md` L13 says so
+in its own text.
 
 **State on disk.** Event-time logging rather than batch-end logging; write-ahead
 intent before a risky action; `tools/sbe_autosave.sh` snapshotting the whole
@@ -443,8 +447,8 @@ the measured signal it should move. The next review compares strictly and revert
 any amendment whose signal did not move. Rejected amendments keep their reasons and
 are not re-proposed without new evidence.
 
-`DIGEST.md` is maintained BY HAND against `SKILL.md` and updated in the same
-change. No generator exists and nothing mechanically compares the two, so a
+`DIGEST.md` is maintained BY HAND against `SKILL.md` and its `references/` files,
+and updated in the same change. No generator exists and nothing mechanically compares the two, so a
 divergence in CONTENT is caught by review, not by a tool; it is the file
 injected at session start, which is why every edit to a law carries an edit
 here. Its SIZE is checked: the digest must fit the injection cap the hook
@@ -453,8 +457,10 @@ cap out of the comment and fails when the file outgrows it, and the
 qualifications each digest line compresses live in `LAWS-REFERENCE.md`, which
 is not injected and enforces nothing.
 
-A practice becomes a law by acquiring a check. It moves from `PRACTICES.md` into
-`SKILL.md` in the law form (WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY), with the new
+A practice becomes a law by acquiring a check. It moves from `PRACTICES.md` into the
+law form (WHEN, INPUTS, RULE, OUTPUT, ENFORCED BY), written into the `references/` file
+whose trigger matches it, or into `SKILL.md` itself if no act announces the trigger, and
+added to `SKILL.md`'s routing table either way, with the new
 check named on the enforcement line and a fixture in `evals/` proving the check
 catches the defect it claims to catch. On a team, that promotion is a reviewed pull
 request into the shared repository and `memory-template/LEARNED.md`. No colleague's
