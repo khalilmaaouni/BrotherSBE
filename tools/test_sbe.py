@@ -842,6 +842,84 @@ class TestStrictMode(unittest.TestCase):
                           "the verdict line must print the severity it declared")
 
 
+class TestNoPrivateNameShips(unittest.TestCase):
+    """This repository is public. The estates it was built on are not, and
+    neither are the clients, employers and projects whose work taught it every
+    threshold it ships. A client name reaching a tracked file cannot be taken
+    back: a public git history is a permanent record, and the fix after the fact
+    is a history rewrite, not an edit.
+
+    The list of names is NOT in this file, for the obvious reason that a
+    blocklist naming the client leaks the client. It is read from outside the
+    repository, and when it is absent this test SKIPS with a message saying it
+    examined nothing, rather than passing. An empty check reporting green is the
+    exact failure mode the rest of this project exists to prevent.
+
+    Set BROTHERSBE_PRIVATE_NAMES to a comma-separated list, or
+    BROTHERSBE_PRIVATE_NAMES_FILE to a path holding one name per line
+    (blank lines and # comments ignored). Keep that file outside this tree.
+
+    One honest narrowing, also stated in PUBLISH-CHECKLIST.md: this scans the
+    tracked tree at HEAD. A name that was committed once and deleted later is
+    still in the history and this test cannot see it. The forensic history sweep
+    stays a manual checklist item for that reason."""
+
+    def _names(self):
+        raw = os.environ.get("BROTHERSBE_PRIVATE_NAMES", "")
+        names = [n.strip() for n in raw.split(",") if n.strip()]
+        path = os.environ.get("BROTHERSBE_PRIVATE_NAMES_FILE", "")
+        if not path:
+            default = os.path.expanduser("~/.brothersbe-private-names")
+            if os.path.exists(default):
+                path = default
+        if path and os.path.exists(path):
+            for line in io.open(path, encoding="utf-8"):
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    names.append(line)
+        return sorted(set(names))
+
+    def test_no_private_name_appears_in_a_tracked_file(self):
+        names = self._names()
+        if not names:
+            self.skipTest(
+                "no private-name list configured, so NOTHING was scanned. This is NO-DATA, "
+                "not a clean result: set BROTHERSBE_PRIVATE_NAMES or "
+                "BROTHERSBE_PRIVATE_NAMES_FILE (a path outside this repository) to make this "
+                "check real.")
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=root,
+                                capture_output=True, text=True)
+        self.assertEqual(listed.returncode, 0,
+                         "git ls-files failed, so the scan set is unknown; refusing to report "
+                         "a clean scan over a file list nobody could build")
+        files = [f for f in listed.stdout.split("\0") if f]
+        self.assertTrue(files, "git tracks no files here; that is not a clean scan either")
+        hits, scanned = [], 0
+        for rel in files:
+            full = os.path.join(root, rel)
+            if not os.path.isfile(full):
+                continue
+            try:
+                body = io.open(full, encoding="utf-8", errors="ignore").read()
+            except (IOError, OSError):
+                continue
+            scanned += 1
+            low = body.lower()
+            for name in names:
+                if name.lower() in low:
+                    # Print the FILE and the name's length, never the name and
+                    # never the surrounding line: a failure message is written
+                    # into CI logs, and a leak-detector that prints the leak has
+                    # moved the problem rather than caught it.
+                    hits.append("%s (private name of %d chars)" % (rel, len(name)))
+        self.assertEqual(hits, [],
+                         "a private name reached %d tracked file(s): %s. Fix before the next "
+                         "push; if it is already pushed, the fix is a history rewrite."
+                         % (len(hits), hits))
+        self.assertGreater(scanned, 0, "scanned zero files, which is NO-DATA and not a pass")
+
+
 class TestPluginSurface(unittest.TestCase):
     """The plugin packaging and the law it packages are two surfaces that can
     drift apart in silence: a skill can cite a reference file that was renamed,

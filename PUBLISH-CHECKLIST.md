@@ -12,6 +12,17 @@ observation to make on the day, not a claim this document makes on its own behal
 - [ ] Zero private or client terms in any git blob. The history is multi-commit
       (`git rev-list --all --count`), so a forensic sweep covers every commit,
       not just the tree at HEAD.
+      Half of this is now mechanical: `TestNoPrivateNameShips` in
+      `tools/test_sbe.py` scans every tracked file for the names in a private
+      list held OUTSIDE this repository (`BROTHERSBE_PRIVATE_NAMES`, or
+      `BROTHERSBE_PRIVATE_NAMES_FILE`, default `~/.brothersbe-private-names`),
+      and when no list is configured it SKIPS while saying it examined nothing,
+      because a leak check with no names is NO-DATA and never a clean result.
+      Its failure message names the file and the length of the matched name,
+      never the name itself: a detector that prints the leak into a CI log has
+      moved the problem rather than caught it. The other half stays manual and
+      stays on this list: that check reads the tree at HEAD, so it cannot see a
+      name that was committed and later deleted. Only a history sweep can.
 - [ ] Green: `python3 tools/test_sbe.py`, `python3 evals/run_evals.py` and
       `python3 evals/test_no_data_class.py` all pass.
 - [ ] Self-consistent: `python3 tools/sbe_gate.py --strict .`,
