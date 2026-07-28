@@ -354,3 +354,28 @@ read it:
 Full text: `tools/sbe_telemetry.py` (the capture policy block),
 `tools/sbe_autosave.sh` (the content scan block), `SECURITY.md`,
 `docs/THREAT_MODEL.md`.
+
+## A green bypass suite covers the scenarios it covers
+
+An external review listed 35 ways a person or an agent could get past these
+controls. `docs/BYPASS-COVERAGE.md` is the table: one row per scenario, each row
+COVERED (with the fixture named), UNREACHABLE HERE (with the missing thing
+named: a GitHub token, branch protection, a warehouse, a real second estate) or
+UNCOVERED (with what covering it would take). As this file is written, 16 rows
+are COVERED, 6 are UNREACHABLE HERE and 13 are UNCOVERED.
+
+So: a green `python3 tools/test_sbe_bypass.py` means the COVERED scenarios were
+tested. It is not a statement about the other 19, and it is not a claim that the
+list of 35 is the whole space of bypasses. Some fixtures in that file pin a
+bypass that WORKS, and carry `_is_a_limit` in their names for exactly that
+reason; a limit fixture is a tripwire on this documentation, not coverage.
+
+Two holes found while writing that table are recorded here rather than fixed,
+because fixing them changes code that was outside the wave that found them.
+`sbe evidence verify` opens the receipt path without the access check the hard
+gates use, so a FIFO where a receipt is expected hangs the command forever and
+prints no verdict in either mode. And the evidence wrapper runs the operator's
+command with no timeout, so a command that hangs hangs the wrapper. Both are row
+35 of the table.
+
+Full text: `docs/BYPASS-COVERAGE.md`, `tools/test_sbe_bypass.py`.

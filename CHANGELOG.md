@@ -8,6 +8,29 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The 35 bypasses an external review listed are now answered one by one, in
+  `docs/BYPASS-COVERAGE.md`, and the answer for each is exactly one of three:
+  COVERED with the fixture named, UNREACHABLE HERE with the missing thing named
+  (a GitHub token, branch protection, a warehouse, a real second estate), or
+  UNCOVERED with what covering it would take. Sixteen are COVERED, twelve of
+  them by suites that already existed and four by the new
+  `tools/test_sbe_bypass.py`: an invented review id is a pointer and never an
+  approval, an approval stops counting at the next commit, an exemption naming a
+  wildcard waives nothing, and a monorepo package carrying no receipt is named
+  in its neighbour's PASS line. Six are UNREACHABLE HERE and thirteen are
+  UNCOVERED, and the table says so rather than quietly dropping them, because
+  the honesty of that count is the deliverable and the fixture count is not.
+  Fixtures that pin a bypass WORKING carry `_is_a_limit` in their names (an
+  alias-only second derivation passes, a rehearsal against an empty database
+  passes on zero equals zero, a case variant escapes a fence on a
+  case-insensitive filesystem), so each hole is a decision somebody made rather
+  than a surprise somebody finds. Every fixture was calibrated by breaking the
+  control it targets and watching it go red: 21 breaks, 21 red. Two holes found
+  in the writing are recorded in `docs/KNOWN-LIMITS.md` and not fixed here,
+  because fixing them changes code this wave was not allowed to touch:
+  `sbe evidence verify` hangs forever on a FIFO receipt (no access check before
+  the open), and the evidence wrapper runs the operator's command with no
+  timeout.
 - Two privacy defects an external review found are closed, and both were
   defaults rather than bugs. FIRST: this tool parsed the session transcript and
   stored excerpts of the operator's own messages by default, with best-effort
