@@ -247,3 +247,55 @@ drift apart. What it cannot do, stated where the behavior is:
 - Maturity: INTERNAL-EVAL. It has been exercised on this repository's fixtures
   and on this repository's own diff, and on no other estate.
 Full text: `src/brothersbe/impact.py`, `docs/CLI.md`.
+
+## The evidence wrapper binds a run to a commit, and proves less than that sounds
+
+`sbe evidence run` executes the command itself, so the duration, the exit code
+and the output digests come from a run rather than from a keyboard, and
+`sbe evidence verify` refuses a receipt whose commit or covered files have
+moved. What that does NOT establish, stated where the behavior is:
+
+- The `runId` seal is TAMPER EVIDENCE, not a signature. It catches a plausible
+  receipt typed to satisfy the schema. It does not stop anybody who has read
+  `src/brothersbe/evidence.py`, because the input is the receipt itself and
+  there is no key. A locally generated receipt is therefore never more than
+  LOCAL-ADVISORY, and `show` says so on every receipt rather than leaving it to
+  the reader to remember.
+- `PROTECTED-CI` is only as trustworthy as the environment that set
+  `SBE_CI_RUN_ID`. Nothing here can tell a run id minted by a CI system from one
+  an agent exported into its own shell. The label states where the value came
+  from; it does not authenticate it. What makes it worth having is that a
+  protected CI configuration is a thing a human controls and an agent in a
+  worktree usually does not.
+- Nothing checks that the command was the RIGHT command. `sbe evidence run --
+  true` produces a flawless receipt for a run that tested nothing. The receipt
+  records the exact argv so a reader can see that; deciding whether that argv is
+  the work the gate wanted is a person's job, and no field here does it.
+- `argv` is recorded verbatim, on purpose, because a receipt whose command was
+  paraphrased proves nothing about what happened. So a credential passed ON the
+  command line IS persisted in the receipt, and the digests-only policy that
+  covers stdout and stderr does not cover it. Pass secrets through the
+  environment or a file, never as an argument. A fixture pins this so it stays a
+  decision rather than a surprise.
+- The digests prove the same bytes came back. They carry none of them, so a
+  receipt cannot be used to audit what a command printed, only to detect that it
+  printed something different.
+- Coverage is what the caller named, or the diff between base and head. A change
+  to a file the receipt does not cover is invisible to `verify`, and a receipt
+  covering no file at all is NO-DATA rather than a pass, naming why.
+- The staleness check is deliberately strict in one direction: a covered file
+  written after the run ended FAILs even when its bytes are unchanged, so a
+  checkout or a formatter that rewrites a file identically invalidates the
+  receipt. Regenerating is cheap; a receipt that speaks for a file it did not
+  see is not.
+- `verify` compares against the CURRENT head of the working directory it is
+  given. A receipt made on a branch tip and verified at a merge commit FAILs,
+  correctly and inconveniently: it is evidence for the commit it was made
+  against and for no other.
+- Writing a receipt INTO the repository it covers makes that tree dirty, so the
+  next receipt generated there is advisory. Keep receipts outside the tree, or
+  ignore them, or accept NO-DATA.
+- Maturity: INTERNAL-EVAL. Exercised by 27 fixtures in
+  `tools/test_sbe_evidence.py` that build real git repositories and run real
+  commands, on this repository and on no other estate.
+Full text: `src/brothersbe/evidence.py`, `docs/CLI.md`.

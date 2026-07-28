@@ -235,6 +235,19 @@ def _cmd_impact(args):
     return EXIT_OK
 
 
+def _cmd_evidence(args):
+    """Generate, verify and show commit-bound receipts.
+
+    Not a delegation: there is no tool in `tools/` behind this one, because the
+    defect it closes is that a receipt could be written by hand by the same
+    agent whose work it verifies. The fix has to be a wrapper that runs the
+    command itself, so it lives in the package.
+    """
+    from . import evidence as evidence_mod
+    return evidence_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                             exit_usage=EXIT_USAGE)
+
+
 def _cmd_version(args):
     sys.stdout.write("sbe %s (evidence schema %s, python %d.%d)\n"
                      % (version(), SCHEMA_VERSION, sys.version_info[0], sys.version_info[1]))
@@ -276,10 +289,8 @@ COMMANDS = [
     ("plan", "generate the control plan for the detected change",
      _not_built("plan", 3, "Applicability is not computed yet, so a missing control cannot be "
                            "told apart from a control that was never required.")),
-    ("evidence", "show, validate and bind evidence to a commit",
-     _not_built("evidence", 4, "Evidence is still hand-authorable and is not bound to a "
-                               "commit, so there is nothing here to show you that would mean "
-                               "more than the file itself.")),
+    ("evidence", "run a command and write the receipt it earned, verify one, or show one",
+     _cmd_evidence),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",

@@ -8,6 +8,47 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe evidence` closes the hole under every gate in this project: a receipt
+  could be typed by hand by the same agent whose work it verified, so a
+  fabricated duration, exit code, row count or rerun id satisfied the schema and
+  a gate could PASS on a run nobody's command ever performed, and nothing bound
+  a receipt to a commit either, so one written against older code still passed
+  after that code changed. The invariant now: a receipt only counts as evidence
+  for the commit it was generated against, by a wrapper that ran the command
+  itself. `sbe evidence run --out r.json -- <command...>` EXECUTES the command
+  through subprocess and records what it observed (repository identity, base and
+  head commit, the exact argv, start and end in ISO 8601 UTC, duration, exit
+  code, python and sbe versions, platform, tree dirtiness, and the covered files
+  with their content digests); there is no flag that accepts a duration or an
+  exit code, and the wrapper's own exit code is the command's, so a failing
+  command cannot be laundered into a passing evidence step. `sbe evidence
+  verify` FAILs on an unknown schema version, a vacuous required field (through
+  the same `answered()` every other receipt field goes through), a broken
+  `runId` seal, a head commit that has moved, or a covered file that changed,
+  vanished or was written after the run ended; it returns NO-DATA rather than
+  PASS for a receipt generated on a dirty tree or covering no file, because
+  advisory is not a pass; and every verdict line names what it inspected.
+  `sbe evidence show` prints the trust level unconditionally: PROTECTED-CI only
+  when `SBE_CI_RUN_ID` was set by the environment AND the tree was clean,
+  LOCAL-ADVISORY otherwise, since a CI job over uncommitted edits is a local run
+  wearing a badge. stdout and stderr are recorded as SHA256 digests and byte
+  counts, never as text, because a receipt is the one artifact everybody is
+  encouraged to share and a command that prints a token would otherwise persist
+  it there forever. The `runId` seal is stated as tamper evidence rather than a
+  signature, in the module, in `docs/CLI.md` and in `docs/KNOWN-LIMITS.md`: it
+  catches a receipt nobody's command produced and it does not stop somebody who
+  read the source, which is exactly why a local receipt is never more than
+  advisory. Twenty-seven fixtures in `tools/test_sbe_evidence.py` build real git
+  repositories and run real commands: the defect (three hand-authored and
+  doctored receipts), the sound case, a stale commit, a stale file, a deleted
+  covered file, a dirty tree, malformed and unknown-schema receipts, vacuous
+  required fields, and the assertion that a secret printed by the command
+  reaches the receipt only as a digest. Calibrated by neutralizing each of the
+  four controls in turn and confirming the matching fixtures fail (commit
+  binding 1, seal 2, dirty-tree NO-DATA 2, covered-file staleness 2) before
+  trusting the green. One limit the fixtures found and now pin: `argv` is
+  recorded verbatim, so a credential passed on the command line IS persisted.
+  Limits in full in `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
 - `sbe impact` closes the oldest hole in this project: the tier was computed
   from five answers and nothing ever read the code, so a change rewriting an API
   contract could be classified T0 by answering "no" five times, and every gate

@@ -904,7 +904,7 @@ class TestCliSurface(unittest.TestCase):
         # inspect-change left this list when `sbe impact` shipped: it is now an
         # alias of a real command. The list is the wave-by-wave record of what is
         # still owed, so a name leaves it only when something stands behind it.
-        unbuilt = ["plan", "evidence", "policy", "exceptions", "adopt"]
+        unbuilt = ["plan", "policy", "exceptions", "adopt"]
         known = [n for (n, _h, _r) in cli.COMMANDS]
         for name in unbuilt:
             self.assertIn(name, known, "%s vanished from the command table" % name)

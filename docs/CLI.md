@@ -35,9 +35,10 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `fences` | prints the live fences the write hook would enforce |
 | `impact` | reads the git diff and reconciles it with the declared intake tier |
 | `inspect-change` | alias of `impact`, the name the finalization brief uses |
+| `evidence` | generate a receipt by running the command, verify it, or show its trust level |
 | `version` | the version and the evidence schema version |
 
-Five more are **present and refuse**: `plan`, `evidence`, `policy`, `exceptions` and `adopt`.
+Four more are **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.
 Each names what is missing and which wave builds it, and exits 3.
 They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
 rather than printing an empty result, because a command that succeeds at nothing is the exact
@@ -108,3 +109,58 @@ on this repository's fixtures and its own diff, and on no other estate.
 3.9, which is the system Python on the machine that maintains this, so it is the floor that is
 actually exercised rather than the one that sounds modern. `doctor` checks it and FAILs below
 it.
+
+## `sbe evidence`, and the rule that makes a receipt mean something
+
+```bash
+bin/sbe evidence run --out evidence/tests.json -- pytest -q
+bin/sbe evidence verify evidence/tests.json
+bin/sbe evidence show evidence/tests.json
+```
+
+The invariant, in one sentence: **a receipt only counts as evidence for the commit it was
+generated against, by a wrapper that ran the command itself.**
+
+Before this, every receipt the gates read could be typed by hand by the same agent whose work
+it verified. A fabricated duration, exit code, row count or rerun id satisfied the schema, so a
+gate could PASS on a run nobody's command ever performed, and nothing bound a receipt to a
+commit either, so one written against older code still passed after that code changed.
+
+`run` **executes the command**. There is no flag that accepts a duration, an exit code or an
+output digest; those come from the run or the receipt does not exist. It records repository
+identity, base and head commit, the exact argv, start and end in ISO 8601 UTC, duration, exit
+code, python and `sbe` versions, the platform, whether the tree was dirty, and the files the
+receipt covers with their content digests. Its own exit code is the command's, so a failing
+command cannot be laundered into a passing evidence step by the fact that a receipt got
+written about it.
+
+`--covers <path>` is repeatable and names the files this run is evidence for. Without it, the
+files changed between base and head are used. `verify` re-hashes those files, which is how it
+tells you the code moved after the evidence was made.
+
+**stdout and stderr are recorded as SHA256 digests and byte counts, never as text.** A receipt
+gets committed, pasted into a pull request and handed to whoever asks for evidence, and a
+command that prints a token would otherwise persist it in the one artifact everybody is
+encouraged to share.
+
+`verify` verdicts:
+
+| Verdict | When |
+|---|---|
+| `PASS` | the seal matches, the head commit is current, every covered file still holds the bytes recorded, and the tree was clean at generation time |
+| `FAIL` | the receipt does not parse, its schema version is unknown, a required field records nothing, the seal does not match, the head commit has moved, or a covered file changed or vanished |
+| `NO-DATA` | the receipt is sound but was generated on a dirty tree, or covers no file at all. Advisory is NO-DATA here, never a pass |
+
+`--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
+verdict that does not say what it read is not trustworthy output.
+
+`show` prints the receipt and names its **trust level** every time: `PROTECTED-CI` when
+`SBE_CI_RUN_ID` was set by the environment AND the tree was clean, `LOCAL-ADVISORY` otherwise.
+A CI job over uncommitted edits is a local run wearing a badge, and it is labelled as one.
+
+The `runId` seal is **tamper evidence, not a signature**: it catches a plausible receipt nobody
+produced, and it does not stop somebody who read `src/brothersbe/evidence.py`. That is why a
+local receipt is never more than advisory. Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
+**INTERNAL-EVAL**.
+
+Four commands remain **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.
