@@ -8,6 +8,32 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- One command line, `bin/sbe`, over the nine script paths, plus an importable
+  `src/brothersbe/` package. It is a facade and says so: every built subcommand
+  delegates to the tool in `tools/` that already carries the behavior and the
+  tests, and returns that tool's exit code. Nothing in `tools/` changed, and the
+  old invocations are NOT deprecated in this change: deprecating commands that
+  509 evals and a dozen pasted doc examples point at is its own change with its
+  own risk, and it is not being smuggled into a packaging wave. No install step
+  either, because zero dependencies is a promise on the front page and
+  `pip install` would retract it for anyone in a CI image with no package index.
+  Six subcommands the finalization brief calls for (`inspect-change`, `plan`,
+  `evidence`, `policy`, `exceptions`, `adopt`) are PRESENT and REFUSE: each names
+  what is missing, names the wave that builds it, and exits 3 rather than
+  printing an empty result. Exit codes are fixed at 0 no control failed, 1 a
+  control failed, 2 usage, 3 not built, and `verify` and `review` close with a
+  line saying that exit 0 is not a pass, because a run where every check reported
+  NO-DATA also exits 0 and an exit code cannot tell those apart. Documented in
+  `docs/CLI.md`. Six new tests in `tools/test_sbe.py` pin the surface: the
+  launcher reports the one version in `VERSION`, no command is advertised without
+  a runner or implemented without a help line, an unbuilt command exits 3 and
+  names its wave, the four exit codes a CI job would branch on hold, `verify`
+  cannot exit 0 over an empty directory without saying no control passed, and the
+  package imports with nothing installed. Two of them were calibrated by
+  injecting the defect (an unbuilt command made to succeed, and a command
+  advertised with nothing behind it) and confirming they fail before trusting the
+  green.
+
 - BrotherSBE is now a Claude Code plugin, and nothing was moved to make that
   true. `.claude-plugin/plugin.json` declares it, `skills/` holds six thin
   namespaced skills (`kickoff`, `design`, `verify`, `review`, `learn`, `adopt`)

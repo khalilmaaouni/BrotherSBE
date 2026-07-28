@@ -842,6 +842,115 @@ class TestStrictMode(unittest.TestCase):
                           "the verdict line must print the severity it declared")
 
 
+class TestCliSurface(unittest.TestCase):
+    """`bin/sbe` is a facade: every built subcommand delegates to a tool in
+    tools/ that already carries the behavior and the tests. The failure modes a
+    facade adds are its own, and they are what this class pins: a command that
+    exists in the code and not in --help (or the reverse), an unbuilt command
+    that quietly succeeds at nothing, and an exit code that drifts from what the
+    docstring promises a CI job can rely on."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def _run(self, *argv):
+        return subprocess.run([sys.executable, self.SBE] + list(argv),
+                              capture_output=True, text=True, cwd=self.ROOT)
+
+    def _commands(self):
+        spec = importlib.util.spec_from_file_location(
+            "brothersbe_cli", os.path.join(self.ROOT, "src", "brothersbe", "cli.py"),
+            submodule_search_locations=[os.path.join(self.ROOT, "src", "brothersbe")])
+        sys.path.insert(0, os.path.join(self.ROOT, "src"))
+        try:
+            import brothersbe.cli as cli
+            return cli
+        finally:
+            sys.path.pop(0)
+            del spec
+
+    def test_the_launcher_runs_and_reports_the_one_version_this_project_has(self):
+        out = self._run("--version")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        declared = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        self.assertIn(declared, out.stdout,
+                      "the CLI prints a version that is not the one in VERSION")
+
+    def test_every_advertised_command_has_something_behind_it(self):
+        """Scoped honestly, because the first version of this test was close to
+        tautological: --help is generated from the same list the dispatcher
+        reads, so comparing one to the other proves little. What it pins now is
+        the pair of failures that list cannot prevent by construction: a name
+        advertised in the help text with no callable behind it, and a command
+        whose help line is missing so a reader cannot discover it. Both are
+        reachable by hand-editing the epilog or the table."""
+        cli = self._commands()
+        out = self._run("--help")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        advertised = set(re.findall(r"^  ([a-z][a-z-]+) {2,}", out.stdout, re.M))
+        implemented = set(name for (name, _h, _r) in cli.COMMANDS)
+        self.assertEqual(advertised - implemented, set(),
+                         "advertised in --help with nothing behind it: %s"
+                         % (advertised - implemented))
+        self.assertEqual(implemented - advertised, set(),
+                         "implemented but undiscoverable in --help: %s"
+                         % (implemented - advertised))
+        for name, help_, run in cli.COMMANDS:
+            self.assertTrue(callable(run), "%s has no runner" % name)
+            self.assertTrue(help_.strip(), "%s has no help line" % name)
+
+    def test_an_unbuilt_command_refuses_loudly_and_names_its_wave(self):
+        cli = self._commands()
+        unbuilt = ["inspect-change", "plan", "evidence", "policy", "exceptions", "adopt"]
+        known = [n for (n, _h, _r) in cli.COMMANDS]
+        for name in unbuilt:
+            self.assertIn(name, known, "%s vanished from the command table" % name)
+            out = self._run(name)
+            self.assertEqual(out.returncode, cli.EXIT_NOT_BUILT,
+                             "%s exited %d; an unbuilt command must exit %d rather than "
+                             "printing an empty result and succeeding"
+                             % (name, out.returncode, cli.EXIT_NOT_BUILT))
+            self.assertIn("NOT BUILT", out.stderr + out.stdout)
+            self.assertRegex(out.stderr + out.stdout, r"wave \d",
+                             "%s refuses without saying what will build it" % name)
+
+    def test_the_exit_codes_a_ci_job_would_branch_on(self):
+        cli = self._commands()
+        self.assertEqual(self._run("doctor").returncode, cli.EXIT_OK)
+        self.assertEqual(self._run("bogus-command").returncode, cli.EXIT_USAGE,
+                         "an unknown command must be a usage error, never a silent success")
+        self.assertEqual(self._run("verify", "/nonexistent-path-on-purpose").returncode,
+                         cli.EXIT_USAGE,
+                         "a mistyped path must be a usage error; it must never read as a "
+                         "clean scan")
+
+    def test_verify_never_lets_exit_zero_read_as_a_pass(self):
+        """The aggregating commands exit 0 when nothing FAILED, and a run where
+        every check reported NO-DATA also exits 0. The closing line has to say
+        so, because an exit code cannot."""
+        v = tempfile.mkdtemp()
+        try:
+            out = self._run("verify", v)
+            self.assertEqual(out.returncode, 0)
+            self.assertIn("does not mean a control passed", out.stdout,
+                          "verify exited 0 over an empty directory without saying that no "
+                          "control passed")
+        finally:
+            shutil.rmtree(v, ignore_errors=True)
+
+    def test_the_package_imports_with_nothing_installed(self):
+        """Zero dependencies is a promise this project makes on its front page.
+        A facade that needs a pip install to reach the command line would retract
+        it for anyone on a locked-down machine or in a CI image with no index."""
+        out = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import brothersbe; "
+             "print(brothersbe.__version__)" % os.path.join(self.ROOT, "src")],
+            capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertTrue(out.stdout.strip(), "the package imported but reports no version")
+
+
 class TestNoPrivateNameShips(unittest.TestCase):
     """This repository is public. The estates it was built on are not, and
     neither are the clients, employers and projects whose work taught it every
@@ -935,7 +1044,13 @@ class TestPluginSurface(unittest.TestCase):
         """Return the YAML-ish frontmatter block of a skill or agent file as a
         dict of the top-level scalar keys. Deliberately not a YAML parser: the
         loader needs name and description, and a hand-rolled reader keeps this
-        suite dependency-free the way the rest of it is."""
+        suite dependency-free the way the rest of it is.
+
+        Returns the dict alone, not a (dict, body) pair. It used to return the
+        pair, and `evals/test_no_data_class.py` correctly refused it: a function
+        returning a two-tuple whose first element could be a verdict, sitting in
+        no registry, is indistinguishable to that lint from a check nothing can
+        reach. The body was unused by every caller anyway."""
         body = io.open(path, encoding="utf-8").read()
         self.assertTrue(body.startswith("---\n"),
                         "%s does not open with a frontmatter block" % path)
@@ -946,7 +1061,7 @@ class TestPluginSurface(unittest.TestCase):
             m = re.match(r"^([a-zA-Z_]+):\s*(.*)$", line)
             if m:
                 out[m.group(1)] = m.group(2).strip()
-        return out, body
+        return out
 
     def test_manifest_parses_and_agrees_with_the_version_file(self):
         manifest = json.load(io.open(os.path.join(self.ROOT, ".claude-plugin", "plugin.json"),
@@ -967,7 +1082,7 @@ class TestPluginSurface(unittest.TestCase):
         self.assertGreaterEqual(len(skills), 6,
                                 "expected the six namespaced skills, found %d" % len(skills))
         for path in skills:
-            front, _ = self._frontmatter(path)
+            front = self._frontmatter(path)
             directory = os.path.basename(os.path.dirname(path))
             self.assertEqual(front.get("name"), directory,
                              "%s declares name '%s' but sits in skills/%s; the loader uses the "
@@ -989,7 +1104,7 @@ class TestPluginSurface(unittest.TestCase):
         self.assertGreaterEqual(len(agents), 7,
                                 "expected seven reviewer agents, found %d" % len(agents))
         for path in agents:
-            front, _ = self._frontmatter(path)
+            front = self._frontmatter(path)
             stem = os.path.splitext(os.path.basename(path))[0]
             self.assertEqual(front.get("name"), stem,
                              "%s declares name '%s'" % (path, front.get("name")))
