@@ -8,6 +8,31 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- BrotherSBE is now a Claude Code plugin, and nothing was moved to make that
+  true. `.claude-plugin/plugin.json` declares it, `skills/` holds six thin
+  namespaced skills (`kickoff`, `design`, `verify`, `review`, `learn`, `adopt`)
+  that route into the existing law rather than restating it, `agents/` holds
+  seven read-only reviewer agents, and `hooks/hooks.json` ships the four hooks
+  with self-resolving `${CLAUDE_PLUGIN_ROOT}` paths so no engineer hand-edits a
+  shared settings file. `SKILL.md`, `references/`, `tools/`, `tables/`,
+  `templates/` and every law citation stay exactly where they were: the
+  conversion was constrained to add a surface, never to move the law. Proven by
+  `claude plugin validate .` (passes) and by five new tests in
+  `tools/test_sbe.py` that pin the manifest to the `VERSION` file, require the
+  frontmatter each skill and agent loader reads, forbid a write tool in an agent
+  documented as read-only, and resolve every `${CLAUDE_PLUGIN_ROOT}` path cited
+  by a skill, an agent or a hook. The frontmatter test exists because
+  `claude plugin validate` caught a defect this suite's first version accepted:
+  an unquoted colon in a description makes the YAML parse fail, and the skill
+  then loads with empty metadata in silence. That test was calibrated by
+  re-injecting the defect and watching it fail. Rationale, the three rejected
+  alternatives and the flip condition: `docs/adr/2026-07-28-plugin-conversion.md`.
+  What the conversion does NOT fix is unchanged and still listed in
+  `docs/KNOWN-LIMITS.md`: evidence can still be hand-authored, the tier is still
+  computed from answers rather than from the diff, approvals are still not
+  resolved against a review platform, and the write fence still fails open and
+  does not gate Bash.
+
 - An onboarding set for engineers who have never seen this tool ships at
   `docs/for-engineers/`: eight pages (install and first run, one per role for
   backend, data, infrastructure and ETL, the limits page, and the adoption page)

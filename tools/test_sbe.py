@@ -842,5 +842,151 @@ class TestStrictMode(unittest.TestCase):
                           "the verdict line must print the severity it declared")
 
 
+class TestPluginSurface(unittest.TestCase):
+    """The plugin packaging and the law it packages are two surfaces that can
+    drift apart in silence: a skill can cite a reference file that was renamed,
+    a hook can point at a tool that moved, the manifest version can wander away
+    from VERSION, and the plugin still loads perfectly in every one of those
+    cases. Loading is not the property worth asserting. These tests assert the
+    ones that are, by reading the claims out of the shipped files rather than
+    hardcoding a second copy of them here."""
+
+    ROOT = os.path.join(HERE, "..")
+
+    def _frontmatter(self, path):
+        """Return the YAML-ish frontmatter block of a skill or agent file as a
+        dict of the top-level scalar keys. Deliberately not a YAML parser: the
+        loader needs name and description, and a hand-rolled reader keeps this
+        suite dependency-free the way the rest of it is."""
+        body = io.open(path, encoding="utf-8").read()
+        self.assertTrue(body.startswith("---\n"),
+                        "%s does not open with a frontmatter block" % path)
+        end = body.find("\n---\n", 3)
+        self.assertGreater(end, 0, "%s has an unterminated frontmatter block" % path)
+        out = {}
+        for line in body[4:end].split("\n"):
+            m = re.match(r"^([a-zA-Z_]+):\s*(.*)$", line)
+            if m:
+                out[m.group(1)] = m.group(2).strip()
+        return out, body
+
+    def test_manifest_parses_and_agrees_with_the_version_file(self):
+        manifest = json.load(io.open(os.path.join(self.ROOT, ".claude-plugin", "plugin.json"),
+                                     encoding="utf-8"))
+        self.assertEqual(manifest.get("name"), "brothersbe",
+                         "the plugin name is the skill namespace; changing it renames every "
+                         "/brothersbe: command without warning anyone")
+        version = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        self.assertEqual(manifest.get("version"), version,
+                         "plugin.json says %s and VERSION says %s; `claude plugin tag` "
+                         "validates that they agree, so a release cut from this state fails"
+                         % (manifest.get("version"), version))
+        for field in ("description", "repository", "license"):
+            self.assertTrue(manifest.get(field), "plugin.json is missing %s" % field)
+
+    def test_every_skill_declares_the_frontmatter_the_loader_reads(self):
+        skills = sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+        self.assertGreaterEqual(len(skills), 6,
+                                "expected the six namespaced skills, found %d" % len(skills))
+        for path in skills:
+            front, _ = self._frontmatter(path)
+            directory = os.path.basename(os.path.dirname(path))
+            self.assertEqual(front.get("name"), directory,
+                             "%s declares name '%s' but sits in skills/%s; the loader uses the "
+                             "directory, so the two must not disagree"
+                             % (path, front.get("name"), directory))
+            self.assertTrue(front.get("description"),
+                            "%s has no description; a skill with no description is a skill "
+                            "nothing will ever route to" % path)
+
+    def test_every_agent_declares_itself_and_stays_read_only(self):
+        """The reviewer agents claim to be read-only in their own prose. A claim
+        in prose is not a restriction, but the tools list IS one, so the two are
+        pinned together here: an agent that grows a write tool has to change this
+        test, which is the moment somebody notices. The evidence auditor matters
+        most, because an auditor that can write the evidence it approves is not
+        an auditor."""
+        write_tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+        agents = sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))
+        self.assertGreaterEqual(len(agents), 7,
+                                "expected seven reviewer agents, found %d" % len(agents))
+        for path in agents:
+            front, _ = self._frontmatter(path)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            self.assertEqual(front.get("name"), stem,
+                             "%s declares name '%s'" % (path, front.get("name")))
+            self.assertTrue(front.get("description"), "%s has no description" % path)
+            tools = front.get("tools", "")
+            self.assertTrue(tools, "%s declares no tools list" % path)
+            for banned in write_tools:
+                self.assertNotIn(banned, tools,
+                                 "%s is documented as read-only but declares %s"
+                                 % (path, banned))
+
+    def test_no_frontmatter_value_can_break_the_yaml_parser(self):
+        """Found the hard way, by `claude plugin validate` rather than by this
+        suite: a skill description containing a colon followed by a space is not
+        a valid YAML plain scalar, and the failure is silent at runtime. The
+        skill still loads, with EMPTY metadata, so nothing routes to it and no
+        error is printed anywhere. The first version of this test class read the
+        frontmatter with a regex and happily accepted the broken file, which is
+        why the rule is asserted here directly rather than left to the reader:
+        a value holding ': ' must be quoted. Same for a leading '[', '{', '&',
+        '*' or '!', which start YAML structures rather than prose."""
+        starts_structure = ("[", "{", "&", "*", "!", "%", "@", "`")
+        for path in (sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+                     + sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))):
+            body = io.open(path, encoding="utf-8").read()
+            end = body.find("\n---\n", 3)
+            for line in body[4:end].split("\n"):
+                m = re.match(r"^([a-zA-Z_]+):\s*(.*)$", line)
+                if not m:
+                    continue
+                key, value = m.group(1), m.group(2).strip()
+                if not value:
+                    continue
+                quoted = ((value[0] == '"' and value[-1] == '"')
+                          or (value[0] == "'" and value[-1] == "'"))
+                if quoted:
+                    continue
+                self.assertNotIn(": ", value,
+                                 "%s: the %s value holds a colon and is unquoted, so the YAML "
+                                 "parser drops the whole frontmatter and the skill loads with "
+                                 "no metadata at all" % (path, key))
+                if value[0] in starts_structure and not value.startswith("["):
+                    self.fail("%s: the %s value starts with %r, which YAML reads as structure "
+                              "rather than text; quote it" % (path, key, value[0]))
+
+    def test_every_hook_command_points_at_a_file_that_exists(self):
+        hooks = json.load(io.open(os.path.join(self.ROOT, "hooks", "hooks.json"),
+                                  encoding="utf-8"))
+        commands = []
+        for event, blocks in hooks["hooks"].items():
+            for block in blocks:
+                for hook in block["hooks"]:
+                    commands.append((event, hook["command"]))
+        self.assertTrue(commands, "hooks.json wires nothing")
+        for event, command in commands:
+            for cited in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\"\s]+)", command):
+                self.assertTrue(os.path.exists(os.path.join(self.ROOT, cited)),
+                                "the %s hook runs %s, which does not exist" % (event, cited))
+
+    def test_every_plugin_root_path_cited_by_a_skill_or_agent_resolves(self):
+        """This is the drift check. Six skills and seven agents cite the law
+        files, the tools and the templates by path. Renaming any of them leaves
+        a plugin that still validates and still loads, pointing at nothing."""
+        cited = []
+        for path in (sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+                     + sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))):
+            body = io.open(path, encoding="utf-8").read()
+            for ref in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)", body):
+                cited.append((path, ref.rstrip(".,)`")))
+        self.assertTrue(cited, "no skill or agent cites the plugin root at all")
+        missing = [(p, r) for (p, r) in cited
+                   if not os.path.exists(os.path.join(self.ROOT, r))]
+        self.assertEqual(missing, [],
+                         "these citations resolve to nothing: %s" % missing)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
