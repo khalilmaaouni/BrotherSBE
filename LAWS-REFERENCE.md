@@ -3,10 +3,16 @@
 This file is NOT injected anywhere and enforces nothing. It exists because the
 injected digest must fit the session-start cap named in
 `tools/sbe_sessionstart.sh`, so each law there is one line, and the full
-qualifications that line compresses live here. The law itself is `SKILL.md`;
-where this file and `SKILL.md` disagree, `SKILL.md` wins. Each entry keeps the
-enforcement marker of its digest line: [checked: tool] means a script decides
+qualifications that line compresses live here. The law itself is `SKILL.md`
+together with the `references/` files its routing table names (`SKILL.md` keeps
+the three unconditional laws, L6, L11 and L14, and routes the other sixteen and
+all six phases); where this file and those disagree, they win. Each entry keeps
+the enforcement marker of its digest line: [checked: tool] means a script decides
 it, [human] means nothing computes it.
+
+This file is not a third copy of the law. It compresses nothing that the
+`references/` files hold verbatim; it expands the digest lines, which is a
+different job, and it is the only one of the three that enforces nothing.
 
 ## Phases
 
