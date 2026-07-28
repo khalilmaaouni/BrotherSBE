@@ -101,7 +101,7 @@ python3 ~/.claude/skills/brothersbe/tools/sbe_gate.py numbers
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift; read 1 numbers-manifest.json under . (numbers-manifest.json); 0 of 0 director(y/ies) directly under . contributed no numbers-manifest.json [severity: gate]
 ```
 
 Change `secondary` to `4820109` and the same gate prints
@@ -202,7 +202,7 @@ python3 ~/.claude/skills/brothersbe/evals/run_evals.py
   overstated-total-caught                want=FAIL     got=FAIL     ok
   sound-number-passes                    want=PASS     got=PASS     ok
   ...
-  505 evals: 505 passed, 0 regressions.
+  508 evals: 508 passed, 0 regressions.
 ```
 
 That is what "proven" means here: the gates are tested against the exact defects

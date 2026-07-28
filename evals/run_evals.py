@@ -2526,12 +2526,18 @@ def a8(root):
 # path of a behaviour that had none.
 # ---------------------------------------------------------------------------
 
-def gate_line(root, klass):
+def gate_line(root, klass, cwd=None):
     """The whole verdict line, so a fixture can pin the EVIDENCE and not only the
     verdict. A gate that says PASS for the right reason and a gate that says PASS
-    while claiming work nobody did are the same string to a verdict-only test."""
+    while claiming work nobody did are the same string to a verdict-only test.
+
+    `cwd` lets a caller invoke the gate the way the docs tell a reader to invoke
+    it, from inside the change directory with `.` as the root. Every verdict now
+    names the root it examined, and a scratch directory's name is different on
+    every run, so a guide can only quote a line produced this way."""
     script = DESIGN if klass in DESIGN_CLASSES else GATE
-    out = subprocess.run([sys.executable, script, klass, root], capture_output=True, text=True)
+    out = subprocess.run([sys.executable, os.path.abspath(script), klass, root],
+                         capture_output=True, text=True, cwd=cwd)
     for line in out.stdout.splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[0] == klass:
@@ -4785,7 +4791,10 @@ def dc_worked(root):
                         if _re.match(r"^\s*%s\s+(PASS|FAIL|NO-DATA)\b" % gate, l))
             with tempfile.TemporaryDirectory() as d:
                 write(d, fname, obj)
-                got = gate_line(d, gate)
+                # Invoked from inside the directory, with `.` as the root, which
+                # is the invocation every doc shows. The verdict line names the
+                # root it examined, and a scratch path is different on every run.
+                got = gate_line(".", gate, cwd=d)
             replayed += 1
             if " ".join(got.split()) != " ".join(want.split()):
                 wrong.append("%s:%d the %s block prints %r but the tool prints %r"
@@ -4956,6 +4965,12 @@ def dc7(root):
             # matching; that the suffix is present and correct on quoted lines
             # is its own guard above.
             evidence = _re.sub(r"\s*\[severity: (?:gate|soft)\]$", "", evidence)
+            # Same reason as the severity suffix, and the same source: the
+            # design tool's main() appends the dossier each verdict examined,
+            # outside every evidence template, so that a verdict read one line
+            # at a time still names what it opened. It is built from paths, so
+            # template matching over it would assert nothing anyway.
+            evidence = _re.sub(r"\s*; examined \S+ under \S+$", "", evidence)
             for fragment in [evidence] + evidence.split("; "):
                 if any(rx.fullmatch(fragment) for rx in templates):
                     break
@@ -7096,6 +7111,95 @@ def f10(root):
     if line.split()[1:2] != ["PASS"]:
         return line
     return "disclosed" if "declared in this artifact itself" in line else line
+
+
+# The scope-naming class: a positive verdict that does not name what it examined
+# lets a target that contributed nothing be absorbed into that verdict. Closed in
+# sbe_checks.scope_note, which sbe_gate.find and sbe_design.find_dossiers both
+# call, because closing it at the two sites a reviewer probed is what this
+# project has already done once and had come back one level deeper.
+_POOLED = [("numbers", "numbers-manifest.json",
+            {"figures": [{"label": "gmv", "snapshot_id": "snap-2026-07",
+                          "query": "SELECT SUM(amount) FROM orders",
+                          "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+                          "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]}),
+           ("migration", "migration-receipt.json",
+            {"forward": {"ran_against_restore": True},
+             "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+             "row_counts": {"before": 100, "after_reverse": 100}}),
+           ("ran", "ran-receipt.json",
+            {"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})]
+
+
+@case("a-change-directory-with-no-receipt-is-named-in-the-verdict-that-pools-it",
+      "gaterun", "disclosed")
+def sc1(root):
+    """A parent holding three change directories, the middle one carrying no
+    receipt at all, printed one PASS over the pool and named the silent
+    directory nowhere; alone, that same directory printed NO-DATA. Reproduced on
+    `ran` and asserted here on all three receipt gates, because "the source
+    shape is the same" is a claim about code nobody ran: the two siblings were
+    never executed against this shape until this case existed."""
+    bad = []
+    for gate, fname, receipt in _POOLED:
+        d = os.path.join(root, gate)
+        write(d, os.path.join("a", fname), receipt)
+        write(d, os.path.join("c", fname), receipt)
+        os.makedirs(os.path.join(d, "b"), exist_ok=True)
+        line = gate_line(".", gate, cwd=d)
+        if line.split()[1:2] != ["PASS"]:
+            bad.append("%s did not reach PASS over the pool: %s" % (gate, line[:90]))
+            continue
+        for want in ("read 2 %s under ." % fname,          # the targets it read
+                     "a/%s" % fname, "c/%s" % fname,       # named, not counted
+                     "1 of 3 director(y/ies)",             # the silent one, counted
+                     "contributed no %s (b)" % fname):     # and named
+            if want not in line:
+                bad.append("%s PASS does not say %r: %s" % (gate, want, line[:120]))
+    return "disclosed" if not bad else "; ".join(bad[:3])
+
+
+@case("the-approval-verdict-names-which-approval-file-it-read", "gaterun", "named")
+def sc2(root):
+    """The refusal quoted one APPROVAL file's own words and identified neither
+    the file nor that a second one existed, so a reader could not tell which
+    claim was refused. Same class as the pooled PASS: a sentence about a target
+    that does not name the target."""
+    write(root, "a/APPROVAL", "touches the partner payout path\n")
+    write(root, "c/APPROVAL", "touches the settlement path\n")
+    os.makedirs(os.path.join(root, "b"), exist_ok=True)
+    line = gate_line(".", "approval", cwd=root)
+    for want in ("a/APPROVAL", "of 2 APPROVAL file(s) read"):
+        if want not in line:
+            return "the refusal does not say %r: %s" % (want, line[:140])
+    return "named"
+
+
+@case("an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else",
+      "designrun", "disclosed")
+def sc3(root):
+    """Pointed at an EMPTY directory with SBE_DOSSIER_ROOT set elsewhere, this
+    tool printed five PASS lines byte for byte identical to the run against the
+    complete dossier: the argument was discarded in silence and no printed
+    sentence named the root actually read. Two runs that examined different
+    trees must not be able to print the same report."""
+    write(root, "real/00-intake.json", {"tier": "T2", "answers": T2_ANSWERS, "override": None})
+    write(root, "real/01-purpose.md", PURPOSE)
+    empty = os.path.join(root, "empty")
+    os.makedirs(empty, exist_ok=True)
+    real = os.path.join(root, "real")
+    env = {"SBE_DOSSIER_ROOT": real}
+    a = subprocess.run([sys.executable, DESIGN, real], capture_output=True, text=True,
+                       env=dict(os.environ, **env))
+    b = subprocess.run([sys.executable, DESIGN, empty], capture_output=True, text=True,
+                       env=dict(os.environ, **env))
+    if a.stdout == b.stdout:
+        return "the empty directory printed the real dossier's report byte for byte"
+    if real not in a.stdout:
+        return "the run against the dossier never names the root it read"
+    if "SBE_DOSSIER_ROOT=%s replaced it" % real not in b.stdout:
+        return "the substituted root is not disclosed: %s" % b.stdout[:160]
+    return "disclosed"
 
 
 def main():

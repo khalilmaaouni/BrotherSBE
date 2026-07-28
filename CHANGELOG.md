@@ -12,6 +12,25 @@ The first named version. Before this line the only name for an install was a
 commit hash, which `tools/sbe_telemetry.py check-update` compares but no human
 can read a promise into.
 
+- Every verdict names the root it examined and the targets it read, and names
+  or counts the directories inside that root that contributed nothing. Two
+  defects were the same absence: pointed at an EMPTY directory with
+  `SBE_DOSSIER_ROOT` set elsewhere, the design tool printed five PASS lines
+  byte for byte identical to the run against a complete dossier, and a parent
+  holding three change directories, the middle one carrying no receipt at all,
+  printed one gate PASS over the pool while that directory alone printed
+  NO-DATA. Closed once in `sbe_checks.scope_note`, which both walkers
+  (`sbe_gate.find` and `sbe_design.find_dossiers`) call, so a gate added later
+  inherits it; the design tool also prints a scope line and prints the dossier
+  heading unconditionally, and a configured root that replaces a directory
+  named on the command line is disclosed next to the root it replaced. The
+  approval refusal names which APPROVAL file it quoted and how many it read.
+  No verdict changed. Proven by
+  `a-change-directory-with-no-receipt-is-named-in-the-verdict-that-pools-it`
+  (executed on the numbers, migration and ran gates, not asserted from their
+  source shape), `the-approval-verdict-names-which-approval-file-it-read` and
+  `an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else` in
+  `evals/run_evals.py`.
 - The approval identity proof examines something before it certifies. A
   bracketed or parenthesized approver is read as the reader reads it rather
   than parsed to an empty set, a character whose glyph carries no ink
