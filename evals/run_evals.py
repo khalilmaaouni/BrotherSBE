@@ -3994,7 +3994,20 @@ SHIPPED_DOCS = ("README.md", "docs/SETUP.md", "docs/HOW-IT-WORKS.md", "PUBLISH-C
                 # only in a fresh clone: on the author's machine the untracked file
                 # was present, the suite was green, and CI was red on arrival. The
                 # shippable artifact is the template, so the template is what ships.
-                "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.template.md")
+                "SKILL.md", "PARITY.md", "PRACTICES.md", "RUBRIC.md", "STATE.template.md",
+                # The onboarding set quotes the eval total, the meta-test line and
+                # the manifest file count, so it belongs to the same guards as
+                # every other page that prints a number the suite can recompute.
+                # A page whose whole job is "here is real output from this
+                # machine" is the worst place for a count nothing rechecks.
+                "docs/for-engineers/00-READ-ME-FIRST.md",
+                "docs/for-engineers/01-install-and-first-run.md",
+                "docs/for-engineers/10-backend-engineer.md",
+                "docs/for-engineers/11-data-engineer.md",
+                "docs/for-engineers/12-infrastructure-architect.md",
+                "docs/for-engineers/13-etl-builder.md",
+                "docs/for-engineers/20-what-it-will-not-tell-you.md",
+                "docs/for-engineers/30-adopting-it-on-a-team.md")
 _REPO = os.path.abspath(os.path.join(HERE, ".."))
 
 
@@ -5137,6 +5150,33 @@ def dc4(root):
         for l in yours.stdout.splitlines():
             if l.startswith("silent-failure-lints"):
                 live.add(_re.sub(r"\s+", " ", l))
+    # The ETL onboarding page pastes three lint lines off one sample directory:
+    # the three-hit run, the run whose only waiver carries no reason, and the run
+    # whose every finding is waived and therefore reports NO-DATA rather than
+    # clean. Reproduced here rather than exempted, for the same reason the
+    # quickstart's fixture above is: a doc quote nothing recomputes is the defect
+    # this guard exists for, and those three lines are the ETL page's evidence.
+    loader = ("import subprocess\n\n\ndef load(batch):\n    try:\n        stage(batch)\n"
+              "    except DuplicateBatch:\n        pass\n")
+    waived = ("import subprocess\n\n\ndef load(batch):\n    try:\n        stage(batch)\n"
+              "    except DuplicateBatch:\n        pass  # sbe: allow-silent %s\n")
+    variants = [(loader + "\n\ndef archive(path):\n    subprocess.run([\"mv\", path, \"/archive\"])\n",
+                 "INSERT INTO ledger_staging (batch_id, amount_cents)\n"
+                 "SELECT batch_id, amount_cents FROM settlement_raw\n"
+                 "ON CONFLICT (batch_id) DO NOTHING;\n"),  # sbe: allow-silent this is the DEFECT the ETL page's lint run is supposed to catch, written into a fixture the guard hands to the scorer; suppressing the hit on the fixture is what lets the guard prove the scorer still reports it
+                (waived % "TBD", None),
+                (waived % ("a duplicate content hash is the idempotency contract, not an "
+                           "error; the batch is already loaded"), None)]
+    for py, sql in variants:
+        with tempfile.TemporaryDirectory() as d:
+            write(d, "sample-etl/load_settlements.py", py)
+            if sql:
+                write(d, "sample-etl/upsert.sql", sql)
+            got = subprocess.run([sys.executable, SCORE, "sample-etl"],
+                                 capture_output=True, text=True, cwd=d)
+            for l in got.stdout.splitlines():
+                if l.startswith("silent-failure-lints"):
+                    live.add(_re.sub(r"\s+", " ", l))
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
