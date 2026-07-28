@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
 from sbe_checks import (Check, run_guarded, answered, answered_as, derivation_fold, vacuous,
                         domain_vacuous, all_vacuous, distinct, one_line, say, Pruner,
-                        evidence_problem, without_comments)
+                        scope_note, evidence_problem, without_comments)
 
 ARTIFACT_FILES = {
     "01": "01-purpose.md", "02": "02-process.md", "03": "03-adr.md",
@@ -2624,6 +2624,7 @@ def find_dossiers(root):
     intake, because the tier cannot be established without it.
     """
     hits, exempt, refused = [], [], []
+    entered = []
     pruner = Pruner()
     # onerror: a directory this walk cannot enter may hold a dossier, and os.walk
     # swallows the refusal by default, so a chmod 000 design/ directory made the
@@ -2631,6 +2632,7 @@ def find_dossiers(root):
     # one, at exit 0, with five checks silently removed. The refusal now lands in
     # the note every dossier line prints.
     for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
+        entered.append(dp)
         dns[:] = pruner(dp, dns)
         if not (INTAKE in fns or (set(fns) & set(ARTIFACT_FILES.values()))):
             continue
@@ -2656,8 +2658,20 @@ def find_dossiers(root):
                 hits.append(dp)
             continue
         hits.append(dp)
-    return hits, exempt, refused, pruner.note(
-        lambda f: f == INTAKE or f in set(ARTIFACT_FILES.values()))
+    # The note leads with the scope: the root actually walked, the dossiers
+    # actually found, and the count of directories under that root that held
+    # none. Same rule as sbe_gate.find, same shared function, same reason. A
+    # verdict whose sentence names no root is a verdict an unrelated directory
+    # can be absorbed into, and that is exactly what happened here: an EMPTY
+    # directory named on the command line printed five PASS lines identical to
+    # the run against a complete dossier.
+    # Two channels, kept apart on purpose. `pruned` is what this walk did not
+    # cover and is printed only when it is non-empty, because a NO-DATA line on
+    # a healthy run trains a reader to skip NO-DATA lines. `scope` is what this
+    # walk DID cover, and it is printed always.
+    return (hits, exempt, refused,
+            scope_note(root, "dossier", hits, entered),
+            pruner.note(lambda f: f == INTAKE or f in set(ARTIFACT_FILES.values())))
 
 
 def main():
@@ -2687,7 +2701,19 @@ def main():
     # Declared and empty is a broken configuration, so it FAILS; undeclared and
     # empty is a repository with nothing to check, which is NO-DATA and says so.
     configured = os.environ.get("SBE_DOSSIER_ROOT", "").strip()
+    # A root the operator did not name replacing one they did is a substitution,
+    # and a substitution nobody prints is the whole defect: run against an EMPTY
+    # directory with this variable set, this tool printed five PASS lines byte
+    # for byte identical to the run against a complete dossier, because the
+    # argument was discarded here in silence and no sentence downstream named the
+    # root actually read. The verdicts below are unchanged; the substitution is
+    # now said out loud, in the scope line, next to the root it replaced.
+    replaced = ""
     if configured:
+        if roots and os.path.abspath(roots[0]) != os.path.abspath(configured):
+            replaced = ("; the directory named on the command line (%s) is NOT what was examined: "
+                        "SBE_DOSSIER_ROOT=%s replaced it, so every verdict below is about %s"
+                        % (roots[0], configured, configured))
         root = configured
     fails = 0
     waivers = 0
@@ -2710,9 +2736,15 @@ def main():
         # tells the reader to run it, so the off switch installed itself.
         # A root that is itself a dossier is one more dossier, not a reason to
         # stop, and find_dossiers reports it as one because os.walk starts there.
-        targets, exempt, refused, pruned = find_dossiers(root)
+        targets, exempt, refused, scope, pruned = find_dossiers(root)
     else:
+        scope = "%s is not a directory, so nothing was walked and no dossier was read" % root
         targets = []
+    # Printed before any verdict, always, whatever the outcome: what root this
+    # run examined, what it read there, and what inside that root contributed
+    # nothing. Two runs that examined different trees must not be able to print
+    # the same report.
+    say("  %-10s %-8s %s" % ("scope", "-", scope + replaced))
     waived_by = {os.path.abspath(d): set(w) for d, w, _ in exempt}
     for d, waived, why in exempt:
         # Printed as a WAIVER, never as a pass and never in silence, and marked
@@ -2779,8 +2811,15 @@ def main():
         say("  %-10s %-8s %s" % ("dossier", "NO-DATA",
               "%d dossier(s) checked under %s%s" % (len(targets), root, pruned)))
     for target in targets:
-        if len(targets) > 1 or os.path.abspath(target) != os.path.abspath(root):
-            say("  dossier: %s" % os.path.relpath(target, root))
+        # UNCONDITIONAL. This line used to print only when there was more than
+        # one target or the target differed from the root, which made the single
+        # substituted target the one case that printed nothing at all: exactly
+        # the case where the reader most needs to be told what was opened.
+        say("  dossier: %s (under %s)" % (os.path.relpath(target, root), root))
+        # Every verdict below carries the dossier it came from inside its own
+        # sentence, because a reader (and a log parser) takes one line at a time
+        # and a heading two lines up is not part of the verdict.
+        examined = "; examined %s under %s" % (os.path.relpath(target, root), root)
         skip = waived_by.get(os.path.abspath(target), set())
         for name in which:
             if name in skip:
@@ -2795,7 +2834,7 @@ def main():
             # one_line: evidence quotes artifact content, and an artifact
             # carrying a newline must not write its own report lines.
             say("  %-10s %-8s %s [severity: %s]"
-                  % (name, verdict, one_line(ev), CHECKS[name].severity))
+                  % (name, verdict, one_line(ev) + examined, CHECKS[name].severity))
     if waivers:
         say("WAIVERS: %d check(s) were waived by a %s and examined nothing. A waiver is not a "
               "pass; run `--strict --strict-waivers` to make one block a merge." % (waivers, EXEMPT))

@@ -47,7 +47,7 @@ design check was fed the defect its eval exists to catch, and caught it. The
 reinjection is executed by the eval bed itself on every run, not once at
 release: every fixture plants the defect and the suite fails if the check stops
 catching it. Measured 2026-07-27 by `python3 evals/run_evals.py`, ending
-"505 evals: 505 passed, 0 regressions." One representative reinjection per
+"508 evals: 508 passed, 0 regressions." One representative reinjection per
 check, from that run:
 
 | Check | Defect reinjected | Eval case | Result |
@@ -63,6 +63,9 @@ check, from that run:
 | diagrams (L5) | a node tracing to nothing the dossier declares | `orphan-diagram-node-caught` | caught |
 | placeholder | the shipped template, copied and unedited | `unedited-copied-template-caught` | caught |
 | citation-inventory | an external URL cited with no scoped inventory entry | `citation-url-without-inventory-entry-caught` | caught |
+| scope naming (gates) | a change directory carrying no receipt, pooled into a sibling's PASS | `a-change-directory-with-no-receipt-is-named-in-the-verdict-that-pools-it` | caught |
+| scope naming (approval) | a refusal quoting one of several APPROVAL files and naming none | `the-approval-verdict-names-which-approval-file-it-read` | caught |
+| scope naming (design) | an empty directory printing another root's five PASS lines | `an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else` | caught |
 
 This calibration re-runs whenever a check or the eval bed changes, because the
 shipped CI workflow runs the suite on every pull request; a check that stops

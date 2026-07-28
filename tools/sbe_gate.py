@@ -80,7 +80,7 @@ import json, os, sys, re, subprocess, unicodedata
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (Check, run_guarded, answered, answered_as, numeric, count,
                         derivation_fold, distinct, fold, one_line, say, skeleton, unit_of,
-                        Pruner, evidence_problem, unreadable_identity_words,
+                        Pruner, scope_note, evidence_problem, unreadable_identity_words,
                         bidi_reordering_controls, could_render_same, name_sets_could_collide)
 
 MANIFEST = "numbers-manifest.json"
@@ -142,20 +142,31 @@ def _items(d, key):
 
 
 def find(root, name):
-    """(receipt paths, a sentence naming any pruned tree that also holds one).
+    """(receipt paths, the sentence every verdict built on them must carry).
 
     The note is the second return value and every caller prints it, because a
     directory this walk refused to enter is a directory the verdict does not
     cover, and "no numbers-manifest found" over a tree that holds one is this
     project's headline defect class wearing the walker's clothes.
+
+    The note now opens with sbe_checks.scope_note: the root actually read, the
+    receipts actually opened, and the count of directories inside the requested
+    scope that carried none. This walker is the one place every gate acquires
+    its evidence, so it is the one place the rule can hold for every gate at
+    once, including a gate added later. Closing it inside a single gate is what
+    was already tried: a parent holding three change directories, one of them
+    with no receipt at all, printed "ran PASS 5 recorded check(s)" over the
+    pool, and the silent directory alone printed NO-DATA.
     """
     hits = []
     misplaced = []
+    entered = []
     pruner = Pruner()
     # onerror: a directory this walk cannot enter must land in the note, not in
     # silence. os.walk swallows the OSError by default, so a chmod 000 directory
     # holding a receipt used to vanish from a sentence that read as complete.
     for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
+        entered.append(dp)
         # Match directory NAMES, not a substring of the path: `.git` as a
         # substring test also hid `.github/`, so the workflow that wires these
         # gates into CI was invisible to every one of them. And then not by name
@@ -168,7 +179,7 @@ def find(root, name):
         dns[:] = pruner(dp, dns)
         if name in fns:
             hits.append(os.path.join(dp, name))
-    note = pruner.note(lambda f: f == name)
+    note = "; " + scope_note(root, name, hits, entered) + pruner.note(lambda f: f == name)
     if misplaced:
         note += ("; a DIRECTORY named %s sits at %s and was not read, because a receipt "
                  "is a file" % (name, ", ".join(misplaced[:2])))
@@ -445,10 +456,10 @@ def _names_overlap(a, b):
 
 
 def gate_numbers(root):
-    manifests, pruned = find(root, MANIFEST)
+    manifests, scope = find(root, MANIFEST)
     if not manifests:
         return "NO-DATA", ("no numbers-manifest found; if this change presents no decision figure "
-                           "that is correct, else add one%s" % pruned)
+                           "that is correct, else add one%s" % scope)
     problems = []
     unreadable = []
     nothing = []
@@ -604,13 +615,13 @@ def gate_numbers(root):
                        "; %d figure(s) share a snapshot id already used by another figure (%d "
                        "distinct snapshot(s) in all), which pins them to one read rather than to "
                        "several" % (reused, len(set(snapshots))),
-                       pruned))
+                       scope))
 
 
 def gate_migration(root):
-    receipts, pruned = find(root, MIGRATION_RECEIPT)
+    receipts, scope = find(root, MIGRATION_RECEIPT)
     if not receipts:
-        return "NO-DATA", ("no migration in this change, or no migration-receipt.json%s" % pruned)
+        return "NO-DATA", ("no migration in this change, or no migration-receipt.json%s" % scope)
     problems = []
     unreadable = []
     nothing = []
@@ -708,11 +719,11 @@ def gate_migration(root):
                     "comparison(s) matched, and a rehearsal id string is recorded%s%s"
                     % (len(unique), compared,
                        "" if not dupes else
-                       "; %d identical receipt(s) counted once" % dupes, pruned))
+                       "; %d identical receipt(s) counted once" % dupes, scope))
 
 
 def gate_approval(root):
-    approvals, pruned = find(root, APPROVAL_FILE)
+    approvals, scope = find(root, APPROVAL_FILE)
     body, sig, authors, idmeta = git_trailers(root)
     trailer = re.search(r"^Approved-by:\s*(.+)$", body, re.M)
     # The id is whatever the team writes, not one whitespace-free token. `(\S+)$`
@@ -730,7 +741,7 @@ def gate_approval(root):
     # unmentioned. A recorded id IS a claim, so it flows to its own branch.
     if not approvals and not trailer and not review_id:
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
-                           "money or partner path that is correct%s" % pruned)
+                           "money or partner path that is correct%s" % scope)
     # A reordering bidi control makes a line RENDER in a different order than
     # it reads: `Approved-by: <U+202E>rohtuA anaD` renders as the author's own
     # name in git log and every bidi-honoring view, while the stripped
@@ -957,7 +968,7 @@ def gate_approval(root):
                             "look-alike substitution%s%s"
                             % (trailer.group(1).strip(), ", ".join(sorted(appr_emails_r)),
                                "author's" if cosigned else "author's and committer's",
-                               ", ".join(sorted(wrote_emails_r)), cosign_note, pruned))
+                               ", ".join(sorted(wrote_emails_r)), cosign_note, scope))
         collide = next(("%s could render as the author's %s"
                         % (" ".join(a), " ".join(b))
                         for a in appr_names_r for b in wrote_names_r
@@ -994,7 +1005,7 @@ def gate_approval(root):
                             "normalization and confusable folding they differ beyond any "
                             "look-alike substitution this host can read%s%s"
                             % (trailer.group(1).strip(), ", ".join(authors) or "unrecorded",
-                               cosign_note, pruned))
+                               cosign_note, scope))
         # One side has only an email and the other only a name: no comparison
         # examined anything, and absence of a collision over nothing is not
         # proof of anything.
@@ -1043,17 +1054,22 @@ def gate_approval(root):
             except OSError:
                 first = ""
             if first:
-                claim = "the APPROVAL file declares %r, but " % first[:60]
+                # Named, not "the APPROVAL file": with several under one root
+                # this sentence quoted one of them and identified none, so a
+                # reader could not tell which claim was being refused, nor that
+                # the other files existed at all.
+                claim = ("%s (of %d APPROVAL file(s) read) declares %r, but "
+                         % (os.path.relpath(p, root), len(approvals), first[:60]))
     return "FAIL", ("%sapproval is a typed name with no signature or review id; a name in a text "
                     "field is not a control (add a signed Approved-by trailer or a Reviewed-in "
                     "review id)" % claim)
 
 
 def gate_ran(root):
-    receipts, pruned = find(root, RAN_RECEIPT)
+    receipts, scope = find(root, RAN_RECEIPT)
     if not receipts:
         return "NO-DATA", ("no ran-receipt.json; a SQL or pipeline change is not done until its "
-                           "check executed and left a receipt%s" % pruned)
+                           "check executed and left a receipt%s" % scope)
     problems = []
     unreadable = []
     nothing = []
@@ -1122,7 +1138,7 @@ def gate_ran(root):
     return "PASS", ("%d recorded check(s), each with a zero exit and a nonzero duration%s%s"
                     % (len(unique),
                        "" if not dupes else
-                       "; %d identical entry/entries counted once" % dupes, pruned))
+                       "; %d identical entry/entries counted once" % dupes, scope))
 
 
 # The registry is the contract. Each gate declares the evidence it opens, what its

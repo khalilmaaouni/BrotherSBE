@@ -497,7 +497,7 @@ NOT_A_VERDICT = {
                                             "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
-    ("sbe_gate.py", "find"): "returns (paths found, pruning note), not a verdict",
+    ("sbe_gate.py", "find"): "returns (paths found, scope and pruning note), not a verdict",
     ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities, "
                                      "author/committer/signer meta), not a verdict",
     ("sbe_gate.py", "_identity_parts"): "returns (canonical emails, ordered name word-tuples), "

@@ -346,6 +346,78 @@ class Pruner:
         return "".join(parts)
 
 
+def _named_few(items, limit=6):
+    """A bounded list that never hides how much it left out."""
+    items = list(items)
+    if len(items) <= limit:
+        return ", ".join(items)
+    return "%s, and %d more" % (", ".join(items[:limit]), len(items) - limit)
+
+
+def _top_level(root, path):
+    """The first path component of `path` beneath `root`, or "." for root itself."""
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:            # different drives on Windows
+        return path
+    if rel in ("", os.curdir):
+        return os.curdir
+    head = rel.split(os.sep)[0]
+    return head if head not in ("", os.curdir, os.pardir) else os.curdir
+
+
+def scope_note(root, unit, targets, entered):
+    """The sentence a verdict carries naming WHAT it examined and what it did not.
+
+    Pruner.note() covers the places a walk was refused or refused to enter. This
+    covers the places it did enter and found nothing, which is the other half,
+    and the half that shipped broken twice.
+
+    The rule, stated as a rule rather than as the two repairs that provoked it:
+    a positive verdict names the root it examined and the targets it read; any
+    target inside the requested scope that contributed no evidence is named in
+    the same sentence; where naming every one is impractical the COUNT of
+    targets that contributed nothing appears, and it is never zero by omission.
+
+    Both instances of the class were the same absence. An EMPTY directory named
+    on the command line printed five PASS lines, byte for byte identical to a
+    run against a complete dossier, because a configured root had replaced the
+    argument and not one printed sentence named the root actually read. A parent
+    holding three change directories, the middle one carrying no receipt at all,
+    printed one PASS over the pool, and the directory that contributed nothing
+    was named nowhere; alone, that same directory reported NO-DATA. A count with
+    no scope behind it is a number a silent target can be absorbed into.
+
+    `entered` is every directory the walk actually entered. A directory that was
+    pruned or could not be opened belongs in Pruner.note() and is deliberately
+    NOT reported here: "contributed nothing" is a claim about a place that was
+    read, and making it about a place nobody could open would be a second false
+    completeness sentence wearing the first one's clothes.
+    """
+    targets = sorted(str(t) for t in targets)
+    read = [_top_level(root, t) for t in targets]
+    contributed = set(read)
+    under = set()
+    for d in entered:
+        head = _top_level(root, d)
+        if head != os.curdir:
+            under.add(head)
+    silent = sorted(under - contributed)
+    if targets:
+        first = "read %d %s under %s (%s)" % (
+            len(targets), unit, root,
+            _named_few([os.path.relpath(t, root) for t in targets]))
+    else:
+        first = "no %s read under %s" % (unit, root)
+    # Printed at zero too. "0 of 7" is the sentence that tells a reader the
+    # question was asked; omitting the clause when nothing was silent is how a
+    # reader learns to read its absence as an absence of the check.
+    second = "%d of %d director(y/ies) directly under %s contributed no %s%s" % (
+        len(silent), len(under), root, unit,
+        " (%s)" % _named_few(silent) if silent else "")
+    return "%s; %s" % (first, second)
+
+
 VERDICTS = ("PASS", "FAIL", "NO-DATA")
 
 

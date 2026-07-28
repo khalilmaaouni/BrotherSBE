@@ -83,7 +83,9 @@ python3 "$SBE/tools/sbe_design.py" artifacts .
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md [severity: gate]
+  scope      -        read 1 dossier under . (.); 0 of 0 director(y/ies) directly under . contributed no dossier
+  dossier: . (under .)
+  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; examined . under . [severity: gate]
 ```
 
 If the same task had been reversible, non-sensitive, contract-free and read by
@@ -486,11 +488,13 @@ python3 "$SBE/tools/sbe_design.py" .
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md [severity: gate]
-  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content [severity: gate]
-  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality [severity: gate]
-  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction) [severity: gate]
-  placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker [severity: gate]
+  scope      -        read 1 dossier under . (.); 0 of 0 director(y/ies) directly under . contributed no dossier
+  dossier: . (under .)
+  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 07-verification.md; examined . under . [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content; examined . under . [severity: gate]
+  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality; examined . under . [severity: gate]
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction); examined . under . [severity: gate]
+  placeholder PASS     6 artifact(s) present, none still carrying an unfilled-template marker; examined . under . [severity: gate]
 ```
 
 Read the diagrams line, because it is doing two things worth understanding. The tail
@@ -523,11 +527,13 @@ python3 "$SBE/tools/sbe_design.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  artifacts  PASS     tier T3: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names [severity: gate]
-  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content [severity: gate]
-  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality [severity: gate]
-  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction) [severity: gate]
-  placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker [severity: gate]
+  scope      -        read 1 dossier under . (.); 0 of 0 director(y/ies) directly under . contributed no dossier
+  dossier: . (under .)
+  artifacts  PASS     tier T3: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names; examined . under . [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review); 4 listed option(s) carry no verdict of their own and were not counted, and criteria, decision, consequences and flip condition each carry content; examined . under . [severity: gate]
+  datamodel  PASS     5 entities, each with a system of record; 4 relationship line(s) read, each carrying cardinality; examined . under . [severity: gate]
+  diagrams   PASS     7 diagram node(s) in erDiagram, flowchart, all traceable: 5 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction), flowchart TD (the diagram declaration: type and direction); examined . under . [severity: gate]
+  placeholder PASS     7 artifact(s) present, none still carrying an unfilled-template marker; examined . under . [severity: gate]
 exit: 0
 ```
 
@@ -615,10 +621,10 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
-  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded [severity: gate]
-  approval  FAIL     the APPROVAL file declares 'This change writes partner order data and creates the partne', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]
-  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration [severity: gate]
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift; read 1 numbers-manifest.json under . (numbers-manifest.json); 0 of 0 director(y/ies) directly under . contributed no numbers-manifest.json [severity: gate]
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded; read 1 migration-receipt.json under . (migration-receipt.json); 0 of 0 director(y/ies) directly under . contributed no migration-receipt.json [severity: gate]
+  approval  FAIL     APPROVAL (of 1 APPROVAL file(s) read) declares 'This change writes partner order data and creates the partne', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]
+  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration; read 1 ran-receipt.json under . (ran-receipt.json); 0 of 0 director(y/ies) directly under . contributed no ran-receipt.json [severity: gate]
 STRICT: 1 hard gate(s) failed; exiting nonzero to block the merge.
 exit: 1
 ```
@@ -651,10 +657,10 @@ python3 "$SBE/tools/sbe_gate.py" --strict . ; echo "exit: $?"
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
-  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded [severity: gate]
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift; read 1 numbers-manifest.json under . (numbers-manifest.json); 0 of 0 director(y/ies) directly under . contributed no numbers-manifest.json [severity: gate]
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded; read 1 migration-receipt.json under . (migration-receipt.json); 0 of 0 director(y/ies) directly under . contributed no migration-receipt.json [severity: gate]
   approval  NO-DATA  commit records Reviewed-in: PR-482. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict [severity: gate]
-  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration [severity: gate]
+  ran       PASS     3 recorded check(s), each with a zero exit and a nonzero duration; read 1 ran-receipt.json under . (ran-receipt.json); 0 of 0 director(y/ies) directly under . contributed no ran-receipt.json [severity: gate]
 exit: 0
 ```
 
@@ -768,11 +774,13 @@ python3 "$SBE/tools/sbe_design.py" design/my-project
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for [severity: gate]
-  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content [severity: gate]
-  datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality [severity: gate]
-  diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; 2 of the component trace(s) resolve to bullets declared in this artifact itself, so for those the declaration and the diagram are one file; a row in 04-technology-map.md is the cross-artifact form; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction) [severity: gate]
-  placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design [severity: gate]
+  scope      -        read 1 dossier under design/my-project (.); 0 of 0 director(y/ies) directly under design/my-project contributed no dossier
+  dossier: . (under design/my-project)
+  artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for; examined . under design/my-project [severity: gate]
+  adr        PASS     2 distinct rejected alternatives (each explicitly rejected in its own text, or listed beside an identified chosen option), each carrying at least 2 words and 8 characters of its own text (that the text says why the option lost, rather than restating its name, is human review), and criteria, decision, consequences and flip condition each carry content; examined . under design/my-project [severity: gate]
+  datamodel  PASS     3 entities, each with a system of record; 2 relationship line(s) read, each carrying cardinality; examined . under design/my-project [severity: gate]
+  diagrams   PASS     5 diagram node(s) in erDiagram, flowchart, all traceable: 3 to entities in 05-data-model.md, 2 to declared components, 0 to declared lifecycle states, 0 to a system of record an entity names; 2 of the component trace(s) resolve to bullets declared in this artifact itself, so for those the declaration and the diagram are one file; a row in 04-technology-map.md is the cross-artifact form; tokens read as diagram syntax rather than as nodes: erDiagram (the diagram declaration: type), flowchart LR (the diagram declaration: type and direction); examined . under design/my-project [severity: gate]
+  placeholder FAIL     still the shipped template, unedited: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; each carries its SBE-TEMPLATE-UNFILLED marker comment, which the template says to delete once the section is your own design; examined . under design/my-project [severity: gate]
 ```
 
 Three green, one red, and one that opened nothing, which is the point of all three

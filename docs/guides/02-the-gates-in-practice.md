@@ -87,7 +87,7 @@ number.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift [severity: gate]
+  numbers   PASS     1 figure(s) each pinned to a snapshot, with a second derivation whose text differs beyond case, whitespace and comments, re-run to zero drift; read 1 numbers-manifest.json under . (numbers-manifest.json); 0 of 0 director(y/ies) directly under . contributed no numbers-manifest.json [severity: gate]
 ```
 
 ### Worked FAIL
@@ -184,7 +184,7 @@ came back to where it started.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded [severity: gate]
+  migration PASS     1 receipt(s): forward and reverse both ran against a restore, 1 row-count comparison(s) matched, and a rehearsal id string is recorded; read 1 migration-receipt.json under . (migration-receipt.json); 0 of 0 director(y/ies) directly under . contributed no migration-receipt.json [severity: gate]
 ```
 
 ### Worked FAIL
@@ -360,7 +360,7 @@ The fields the gate reads per check: `name`, `exit_code`, `duration_ms`.
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration [severity: gate]
+  ran       PASS     1 recorded check(s), each with a zero exit and a nonzero duration; read 1 ran-receipt.json under . (ran-receipt.json); 0 of 0 director(y/ies) directly under . contributed no ran-receipt.json [severity: gate]
 ```
 
 ### Worked FAIL
