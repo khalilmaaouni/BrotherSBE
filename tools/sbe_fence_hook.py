@@ -240,14 +240,13 @@ def is_live_fence(s):
     into a second spelling here."""
     if not isinstance(s, str):
         return False
-    mod = require_checks_module()
-    return _score_is_live_fence(mod)(s.strip())
+    return live_fence_rule()(s.strip())
 
 
 _LIVE_FENCE_FN = None
 
 
-def _score_is_live_fence(_checks_mod):
+def live_fence_rule():
     """`sbe_score._is_live_fence`, loaded by path exactly once.
 
     sbe_score.py reads BROTHERSBE_REGISTRIES at import time to build its own
