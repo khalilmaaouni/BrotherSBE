@@ -1222,6 +1222,48 @@ CHECKS = {
 }
 
 
+def _resolved_sources(check):
+    """Where this check's evidence lives on THIS machine.
+
+    Resolved the way each check resolves it, from the same environment, so the
+    grouping below reports what the run actually read rather than what a
+    registry entry hints at. An env-var entry in `reads` names a source the
+    operator points at; anything else is already a path.
+    """
+    out = []
+    for r in check.reads:
+        if r == "BROTHERSBE_REGISTRIES":
+            out.extend(REGISTRIES)
+        elif r == "SBE_LINT_ROOT":
+            out.append(os.environ.get("SBE_LINT_ROOT") or
+                       next((a for a in sys.argv[1:]
+                             if not a.startswith("-") and os.path.isdir(a)), ""))
+        elif r == "SBE_CITATION_ROOT":
+            # Unset, this check reads the INSTALLED SKILL'S OWN TREE, which is
+            # why it belongs on the other side of the split on anybody else's
+            # repository: its verdict is true, and it is not about their code.
+            v = os.environ.get("SBE_CITATION_ROOT")
+            out.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                       if v is None else v)
+        else:
+            out.append(r)
+    return [p for p in out if p]
+
+
+def _reads_this_tree(check, here):
+    """True when at least one of this check's sources exists inside `here`."""
+    for p in _resolved_sources(check):
+        try:
+            a = os.path.abspath(p)
+        except (OSError, ValueError):
+            continue
+        if not os.path.exists(a):
+            continue
+        if a == here or a.startswith(here + os.sep):
+            return True
+    return False
+
+
 def main():
     # Building the context is itself guarded. It used to sit outside run_guarded,
     # so a context that could not be built took every check with it. A check whose
@@ -1248,10 +1290,41 @@ def main():
                for name in ordered]
     width = max(len(n) for n, _, _ in results)
     fails = sum(1 for _, v, _ in results if v == "FAIL")
-    for n, v, e in results:
-        # one_line: evidence quotes ledger fields and file names, and a value
-        # carrying a newline must not get to write its own report lines.
-        say("%-*s  %-7s  %s [severity: %s]" % (width, n, v, one_line(e), CHECKS[n].severity))
+    # THE SPLIT, and the reason it exists. Severity ordering was not enough. On
+    # a first run against a repository that has installed nothing, the one line
+    # in the report that is TRUE ABOUT THE READER'S OWN CODE printed eleventh,
+    # underneath ten NO-DATA lines about a vault path that does not exist on
+    # their machine and a citation check reading the installed skill's own tree.
+    # A reader who stops at line three has read nothing about their repository
+    # and has no way to know it. So the lines are grouped by whether the check
+    # opened a file in THIS directory, the heading says which is which, and a
+    # group that examined nothing here says so before its first line. Nothing
+    # about the verdicts changes: no aggregation, no score, no new PASS.
+    here = os.path.abspath(os.getcwd())
+    mine = [r for r in results if _reads_this_tree(CHECKS[r[0]], here)]
+    elsewhere = [r for r in results if r not in mine]
+
+    def block(rows):
+        for n, v, e in rows:
+            # one_line: evidence quotes ledger fields and file names, and a value
+            # carrying a newline must not get to write its own report lines.
+            say("%-*s  %-7s  %s [severity: %s]" % (width, n, v, one_line(e), CHECKS[n].severity))
+
+    say("CHECKS THAT OPENED A FILE IN %s (%d of %d): these verdicts are about the code here."
+        % (here, len(mine), len(results)))
+    if mine:
+        block(mine)
+    else:
+        say("  (none: no check found evidence inside this directory, so nothing below is "
+            "a statement about the code here)")
+    print("")
+    absent = sum(1 for n, _v, _e in elsewhere
+                 if not any(os.path.exists(p) for p in _resolved_sources(CHECKS[n])))
+    say("CHECKS FED BY A VAULT OR REGISTRY OUTSIDE %s (%d of %d, of which %d have no source on "
+        "this machine at all): a verdict here is not a statement about the code in this "
+        "directory." % (here, len(elsewhere), len(results), absent))
+    if elsewhere:
+        block(elsewhere)
     print("")
     say("%d checks: %d PASS, %d FAIL, %d NO-DATA. LLM judge scores only the residue."
         % (len(results), sum(1 for _, v, _ in results if v == "PASS"), fails,

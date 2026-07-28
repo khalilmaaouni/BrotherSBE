@@ -100,6 +100,8 @@ Each gate walks the directory it was named (the default is the current directory
 
 ## Install in minutes
 
+What a first run on an unmodified repository tells you, and what it does not. It tells you one thing about your code immediately: the linter scans the tree you point it at and names every place an error is swallowed, with the file, the line and the pattern. Everything else starts empty on purpose. The four gates read receipts that a change has to produce, so on a repository that has never written one they report NO-DATA on all four, which means "no evidence either way" and never "checked and fine". The design checks read a dossier directory that does not exist yet. The graded checks read a telemetry vault and fence registries you have not installed, so their verdicts are about files outside your repository, and the report prints them under a heading that says exactly that. Nothing here infers quality from a repository's shape: a green first run is a report about what was read, and on a fresh install that is the linter and nothing else.
+
 **1. Clone into your skills directory.**
 
 ```bash

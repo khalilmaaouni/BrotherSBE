@@ -20,6 +20,19 @@ change that declared nothing, and nothing resolves a `Reviewed-in:` id, which
 is why that path reports NO-DATA rather than an approval. Full text:
 `SKILL.md` L9 and `LAWS-REFERENCE.md` (the hard gates).
 
+## The tier comes from answers about contracts that no checker reads
+
+The intake asks whether the change alters a data model, an API contract, or a
+file interface. Those answers are what set the tier, and the tier is what
+decides which design artifacts are required. Nothing anywhere in this tool opens
+a schema, a contract, an OpenAPI document, a protobuf file or a file format
+specification, so nothing can confirm or contradict an answer: `sbe_intake.py`
+records what it is told, `compute_tier` applies the rule to that record, and the
+design checks then verify the artifacts a tier requires are present and carry
+content. A wrong answer produces a lower tier, fewer required artifacts, and a
+run whose every verdict is honest about what it read. The check on that answer
+is a person.
+
 ## The forcing conditions are read by a person (L6)
 
 Stop-on-ambiguity, contradiction, gate collision, and disproven assumption are

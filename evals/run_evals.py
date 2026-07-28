@@ -5009,7 +5009,21 @@ def dc4(root):
     live = [l for l in out.stdout.splitlines() if l.startswith("silent-failure-lints")]
     if not live:
         return "the scorer printed no silent-failure-lints line at all"
-    live = _re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/")
+    live = {_re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/")}
+    # The quickstart's first ten minutes shows a run against the READER'S OWN
+    # repository, which cannot be a line about this one. A doc quote nothing
+    # reproduces is the defect this guard exists for, so the worked repository
+    # is reproduced here instead of the quote being exempted: two files, one
+    # swallow on line 7. Change either the fixture or the doc and this fails.
+    with tempfile.TemporaryDirectory() as d:
+        write(d, "src/config.py",
+              "import json\n\n\ndef load(p):\n    try:\n        return json.load(open(p))\n"
+              "    except Exception:\n        pass\n    return {}\n")
+        write(d, "src/util.py", "def ok():\n    return 1\n")
+        yours = subprocess.run([sys.executable, SCORE, "."], capture_output=True, text=True, cwd=d)
+        for l in yours.stdout.splitlines():
+            if l.startswith("silent-failure-lints"):
+                live.add(_re.sub(r"\s+", " ", l))
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
@@ -5018,8 +5032,9 @@ def dc4(root):
         for line in open(p, errors="replace").read().splitlines():
             if not line.startswith("silent-failure-lints"):
                 continue
-            if _re.sub(r"\s+", " ", line) != live:
-                wrong.append("%s pastes a lint line the tool does not produce today" % rel)
+            if _re.sub(r"\s+", " ", line) not in live:
+                wrong.append("%s pastes a lint line the tool does not produce today: %r"
+                             % (rel, line[:90]))
     return "consistent" if not wrong else "; ".join(wrong[:3])
 
 

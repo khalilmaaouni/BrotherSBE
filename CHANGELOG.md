@@ -31,6 +31,21 @@ can read a promise into.
   source shape), `the-approval-verdict-names-which-approval-file-it-read` and
   `an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else` in
   `evals/run_evals.py`.
+- The scorer's report is split by what it opened. Checks that opened a file in
+  the directory being examined print first, under a heading that says so;
+  checks fed by a telemetry vault or fence registries outside that directory
+  print under a second heading that says a verdict there is not a statement
+  about the code here, and counts how many of those sources are not on the
+  machine at all. Measured against a foreign repository, the single line in the
+  whole first run that was true about the reader's own code printed eleventh,
+  underneath ten NO-DATA lines about a vault path that does not exist for them
+  and one PASS about the installed skill's own tree. Severity ordering alone
+  did not fix that. No verdict changed, and nothing is aggregated, scored or
+  graded. The quickstart's first ten minutes now runs against the reader's own
+  repository first, with the real output including the pruning disclosure, and
+  the eval bed is step two; the README states what a first run on an unmodified
+  repository does and does not tell you; `docs/KNOWN-LIMITS.md` states that the
+  intake's contract question sets the tier and that no checker reads a contract.
 - The approval identity proof examines something before it certifies. A
   bracketed or parenthesized approver is read as the reader reads it rather
   than parsed to an empty set, a character whose glyph carries no ink
