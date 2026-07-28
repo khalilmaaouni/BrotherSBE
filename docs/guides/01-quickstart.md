@@ -21,27 +21,58 @@ subcommand below is invented; each one is read by the code in `tools/`.
 
 ---
 
-## The first ten minutes: prove the gates catch what they claim
+## The first ten minutes: point it at your own repository
 
 Clone the skill wherever your Claude Code skills live. These docs assume the
 default install path; set a shell variable so the commands are copy-pasteable.
+Then run it where your work is, not where the skill is.
 
 ```bash
 SBE="$HOME/.claude/skills/brothersbe"     # wherever you cloned BrotherSBE
-python3 "$SBE/tools/sbe_gate.py"          # runs all four gates, advisory, exits 0
+cd ~/your-repo
+python3 "$SBE/tools/sbe_score.py" .       # the linter, over the code in .
+```
+
+The report is split, and the split is the point. The first group is the checks
+that opened a file in the directory you are standing in. The second is fed by a
+telemetry vault and fence registries you have not installed yet, so its lines
+are true and are not about your code:
+
+```
+CHECKS THAT OPENED A FILE IN /home/you/your-repo (1 of 12): these verdicts are about the code here.
+silent-failure-lints      FAIL     1 hit(s) in 2 file(s) scanned: src/config.py:7 except-then-pass (swallows the error) [severity: gate]
+
+CHECKS FED BY A VAULT OR REGISTRY OUTSIDE /home/you/your-repo (11 of 12, of which 10 have no source on this machine at all): a verdict here is not a statement about the code in this directory.
+```
+
+That one FAIL is the whole first run: a file, a line, and the reason. Everything
+under the second heading is the tool telling you what it did not read.
+
+Now the four gates, on the same directory:
+
+```bash
+python3 "$SBE/tools/sbe_gate.py" .        # all four gates, advisory, exits 0
 ```
 
 With no receipts present you get four NO-DATA lines. NO-DATA is never a pass: it
 means "no evidence either way", which is the honest verdict for a change that
-carries no figure, no migration, no money path, and no SQL. The header states the
-contract every time:
+carries no figure, no migration, no money path, and no SQL. Every verdict names
+the root it examined, what it read there, and what inside that root contributed
+nothing, including any tree the walk pruned:
 
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)
-  numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one [severity: gate]
+  numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one; no numbers-manifest.json read under .; 1 of 1 director(y/ies) directly under . contributed no numbers-manifest.json (src) [severity: gate]
+  ran       NO-DATA  no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt; no ran-receipt.json read under .; 1 of 1 director(y/ies) directly under . contributed no ran-receipt.json (src); 1 pruned director(y/ies) hold file(s) this check reads and were NOT examined, so this verdict does not cover them: ./node_modules (installed node packages (its entries carry their own package.json)) [severity: gate]
 ```
 
-Before you trust the gates, watch them fail on purpose. The eval suite plants the
+Read the tail of that last line. The walk skipped `node_modules`, that tree
+holds a file this gate reads, and the verdict says so rather than reporting an
+absence it did not establish.
+
+## Step two: watch the gates fail on purpose
+
+Before you trust a verdict, watch the gate earn it. The eval suite plants the
 exact defects the operating record produced (an overstated multi-year total, an
 untested reverse migration, a typed-name approval, a green-on-red check) and
 asserts the matching gate catches each one:
