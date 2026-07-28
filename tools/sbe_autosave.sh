@@ -21,6 +21,15 @@
 #   branch, your index, or your working tree, and it NEVER pushes anywhere. The
 #   snapshot is local git only, so the audited zero-network property still holds.
 #
+# WHAT IT DOES NOT DO
+#   A snapshot is a permanent git object. Every candidate file's CONTENT is read
+#   before `git add` runs, and a file whose content matches a secret shape, or
+#   that is too large or too binary to scan, is kept out and written down in
+#   $EXCL_LOG with its reason. That is pattern matching, not a guarantee: a
+#   secret in a shape these patterns do not know still enters the snapshot. And
+#   the ref is local, which is not the same as private: a backup, a mirror, or
+#   any process that copies .git can carry it off this machine.
+#
 # INVARIANTS (do not break these)
 #   - Never blocks work: every path exits 0, always.
 #   - No network: runs git locally only, never `git push`, never a remote.
@@ -66,6 +75,97 @@ legacy_autosave_ref() {
 }
 TICK_EVERY="${BROTHERSBE_AUTOSAVE_EVERY:-20}"      # snapshot every N tool calls
 RUNAWAY_AT="${BROTHERSBE_RUNAWAY_AT:-600}"         # warn once past this many calls
+
+# ---------------------------------------------------------------------------
+# THE CONTENT SCAN. Excluding secret-shaped FILE NAMES was never a control over
+# secrets: a credential lives in a normally named source file at least as often
+# as in a file called .env, and `src/config.py` matches no name pattern anybody
+# will ever write. Every candidate file's CONTENT is now read before `git add`
+# runs, which is the moment a blob would be created, so a file the scan rejects
+# never becomes a git object at all. Rejecting it is not free (the file is left
+# out of the snapshot, and an unlanded edit to it is not preserved), so every
+# rejection is written down with its reason in $EXCL_LOG.
+#
+# Three reject conditions besides the name patterns, and the second and third
+# are limits rather than detections, which is why they are recorded the same
+# way: content matching a secret shape, a file past the size limit (never
+# scanned), and a binary file (this scanner cannot read one for secret shapes).
+# A candidate whose path git could not print literally is rejected too: a file
+# the scanner could not open must never be treated as scanned and clean.
+# ---------------------------------------------------------------------------
+MAX_BYTES="${BROTHERSBE_AUTOSAVE_MAX_BYTES:-1048576}"       # scan limit, per file
+MAX_EXCLUSIONS="${BROTHERSBE_AUTOSAVE_MAX_EXCLUSIONS:-200}" # past this, refuse to snapshot
+EXCL_LOG="$TEL_DIR/autosave-exclusions.log"
+SECRET_SHAPES='(sk|rk)[-_][A-Za-z0-9_-]{12,}|gh[oprsu]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN[ A-Z]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
+SECRET_ASSIGNMENTS='(pass(word|wd|phrase)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)s?[[:space:]]*[:=][[:space:]]*.?[A-Za-z0-9/+_=-]{8,}|bearer[[:space:]]+[A-Za-z0-9._~+/=-]{16,}'
+# The name patterns, kept as a pathspec list for the `git add` below AND read by
+# secret_named() for the record. Two readers, one list, so a name excluded from
+# the snapshot is a name the record explains.
+STATIC_EXCLUDES="':(exclude,glob)**/.env' ':(exclude).env' ':(exclude,glob)**/.env.*' \
+':(exclude,glob)**/.envrc' ':(exclude).envrc' \
+':(exclude,glob)**/.netrc' ':(exclude).netrc' \
+':(exclude,glob)**/.npmrc' ':(exclude).npmrc' \
+':(exclude,glob)**/*.pem' ':(exclude,glob)**/*.key' ':(exclude,glob)**/*.p12' \
+':(exclude,glob)**/*.keystore' ':(exclude,glob)**/*.jks' ':(exclude,glob)**/*.ppk' \
+':(exclude,glob)**/id_rsa' ':(exclude,glob)**/id_dsa' \
+':(exclude,glob)**/id_ecdsa' ':(exclude,glob)**/id_ed25519' \
+':(exclude,glob)**/*.pfx'"
+
+excl_record() {
+  # The exclusion record. Paths and reasons only, never the matched content: a
+  # record of what was kept out of a snapshot must not become the place the
+  # secret is written down. Owner-only, best effort, never fatal.
+  mkdir -p "$TEL_DIR" 2>/dev/null || return 0
+  if [ ! -f "$EXCL_LOG" ]; then
+    touch_file "$EXCL_LOG" || return 0
+    chmod 600 "$EXCL_LOG" 2>/dev/null
+  fi
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
+    2>/dev/null >> "$EXCL_LOG" || true
+}
+
+secret_named() {
+  case "${1##*/}" in
+    .env|.env.*|.envrc|.netrc|.npmrc) return 0 ;;
+    id_rsa|id_dsa|id_ecdsa|id_ed25519) return 0 ;;
+    *.pem|*.key|*.p12|*.keystore|*.jks|*.ppk|*.pfx) return 0 ;;
+  esac
+  return 1
+}
+
+is_binary() {
+  # A NUL byte in the first 4096 bytes. dd and tr are POSIX; the byte counts
+  # come back through command substitution as numbers, so no NUL ever passes
+  # through a shell variable.
+  raw="$(dd if="$1" bs=4096 count=1 2>/dev/null | wc -c | tr -d ' 	')"
+  txt="$(dd if="$1" bs=4096 count=1 2>/dev/null | tr -d '\000' | wc -c | tr -d ' 	')"
+  [ "$raw" != "$txt" ]
+}
+
+scan_exclude() {
+  # Record one rejection and add it to the pathspec list `git add` will receive.
+  # Single quotes inside a path are escaped so the eval below cannot be turned
+  # into a command by a filename.
+  excluded=$((excluded + 1))
+  q="$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+  EXCL_ARGS="$EXCL_ARGS ':(exclude,literal)$q'"
+  excl_record "  excluded $1 :: $2"
+}
+
+production_repo() {
+  # A repository the operator has DECLARED production. Autosave is opt-in there:
+  # a snapshot of production work is still a private git object holding whatever
+  # the worktree held, and that is a decision for the person who owns the
+  # repository rather than a default. Prints the marker it read.
+  case "$(printf '%s' "${BROTHERSBE_REPO_CLASS:-}" | tr 'A-Z' 'a-z')" in
+    production|prod)
+      printf '%s' "BROTHERSBE_REPO_CLASS=$BROTHERSBE_REPO_CLASS"; return 0 ;;
+  esac
+  if [ -f "$1/.brothersbe-production" ]; then
+    printf '%s' "$1/.brothersbe-production"; return 0
+  fi
+  return 1
+}
 
 log_line() {
   # Best-effort append to a local log. Never fail the hook if the disk is full.
@@ -136,6 +236,75 @@ snapshot() {
   [ -n "$top" ] || { log_line "SKIPPED (cannot resolve the worktree top from $repo): nothing was saved"; return 0; }
   cd "$top" 2>/dev/null || { log_line "SKIPPED (cannot enter the worktree top $top): nothing was saved"; return 0; }
 
+  # OPT-IN IN A PRODUCTION REPOSITORY. Declared with BROTHERSBE_REPO_CLASS or a
+  # .brothersbe-production file at the worktree top; enabled with
+  # BROTHERSBE_AUTOSAVE_PRODUCTION. The skip names both, so nobody has to guess
+  # which of the two is missing.
+  marker="$(production_repo "$top")" && {
+    case "$(printf '%s' "${BROTHERSBE_AUTOSAVE_PRODUCTION:-}" | tr 'A-Z' 'a-z')" in
+      1|true|yes|on) : ;;
+      *)
+        log_line "SKIPPED ($reason): $top is declared a production repository by $marker, where autosave is opt-in; nothing was saved. Set BROTHERSBE_AUTOSAVE_PRODUCTION=1 to enable it there"
+        return 0 ;;
+    esac
+  }
+
+  # THE CONTENT SCAN RUNS BEFORE ANY GIT OBJECT EXISTS. `git add` is what writes
+  # blobs, so a file rejected here is never turned into one, which is the whole
+  # difference between this and a path exclusion applied after the fact.
+  cand="$(mktemp 2>/dev/null)" || { log_line "SKIPPED ($reason): no temporary file for the content scan in $top; nothing was saved"; return 0; }
+  git ls-files --cached --others --exclude-standard > "$cand" 2>/dev/null
+  scanned=0
+  excluded=0
+  EXCL_ARGS=""
+  excl_record "scan ($reason) at $top:"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      '"'*)
+        scan_exclude "$f" "git printed this path quoted (it holds a newline, a quote or a control character), so the scanner could not open it and will not call it scanned"
+        continue ;;
+    esac
+    if [ -L "$f" ]; then
+      continue          # a symlink is stored as its target string, not as content
+    fi
+    [ -f "$f" ] || continue
+    scanned=$((scanned + 1))
+    if secret_named "$f"; then
+      scan_exclude "$f" "the file name is one of the secret-shaped names"
+      continue
+    fi
+    size="$(wc -c < "$f" 2>/dev/null | tr -d ' 	')"
+    case "$size" in
+      ''|*[!0-9]*)
+        scan_exclude "$f" "its size could not be read, so its content was never scanned"
+        continue ;;
+    esac
+    if [ "$size" -gt "$MAX_BYTES" ]; then
+      scan_exclude "$f" "$size bytes, past the $MAX_BYTES byte limit, so its content was never scanned"
+      continue
+    fi
+    if is_binary "$f"; then
+      scan_exclude "$f" "binary content, which this scanner cannot read for secret shapes"
+      continue
+    fi
+    if LC_ALL=C grep -Eq -- "$SECRET_SHAPES" "$f" 2>/dev/null ||
+       LC_ALL=C grep -Eqi -- "$SECRET_ASSIGNMENTS" "$f" 2>/dev/null; then
+      scan_exclude "$f" "content matched a secret shape"
+      continue
+    fi
+  done < "$cand"
+  rm -f "$cand"
+  excl_record "  scanned $scanned candidate file(s), excluded $excluded"
+  if [ "$excluded" -gt "$MAX_EXCLUSIONS" ]; then
+    # Fail closed. Past this many pathspecs the single `git add` below can
+    # exceed the argument limit, and a failed add produces an EMPTY tree that
+    # would then be committed as if it were the work: refusing loudly is the
+    # only honest branch, and the record already names every file.
+    log_line "SKIPPED ($reason): the content scan excluded $excluded of $scanned candidate file(s) in $top, past the $MAX_EXCLUSIONS this script will pass to git in one command; nothing was saved. Read $EXCL_LOG, then raise BROTHERSBE_AUTOSAVE_MAX_EXCLUSIONS if those exclusions are expected"
+    return 0
+  fi
+
   # A THROWAWAY index. With GIT_INDEX_FILE pointing at a temp file, `git add -A`
   # stages everything (tracked edits AND untracked new files) into that temp
   # index, so the developer's real index and working tree are never touched.
@@ -156,22 +325,26 @@ snapshot() {
   # file (the edit may be the secret, so it stays out by design), and any file
   # matching the exclusions that was never committed.
   [ -n "$parent" ] && git read-tree HEAD 2>/dev/null
-  # Stage everything EXCEPT secret-shaped files. A solo operator has no teammate to
-  # catch a stray .env or private key before it becomes a git object; these path
-  # patterns are excluded from the snapshot so credentials never enter the autosave
-  # ref. The list names the MODERN key and rc formats too: id_ed25519 has been
-  # ssh-keygen's default since OpenSSH 8.5, and a list that stopped at id_rsa
-  # captured a fresh private key while this comment promised it would not.
-  git add -A -- '.' \
-    ':(exclude,glob)**/.env' ':(exclude).env' ':(exclude,glob)**/.env.*' \
-    ':(exclude,glob)**/.envrc' ':(exclude).envrc' \
-    ':(exclude,glob)**/.netrc' ':(exclude).netrc' \
-    ':(exclude,glob)**/.npmrc' ':(exclude).npmrc' \
-    ':(exclude,glob)**/*.pem' ':(exclude,glob)**/*.key' ':(exclude,glob)**/*.p12' \
-    ':(exclude,glob)**/*.keystore' ':(exclude,glob)**/*.jks' ':(exclude,glob)**/*.ppk' \
-    ':(exclude,glob)**/id_rsa' ':(exclude,glob)**/id_dsa' \
-    ':(exclude,glob)**/id_ecdsa' ':(exclude,glob)**/id_ed25519' \
-    ':(exclude,glob)**/*.pfx' 2>/dev/null
+  # Stage everything EXCEPT what the name patterns and the content scan reject.
+  # A solo operator has no teammate to catch a stray .env or private key before
+  # it becomes a git object. The name list names the MODERN key and rc formats
+  # too: id_ed25519 has been ssh-keygen's default since OpenSSH 8.5, and a list
+  # that stopped at id_rsa captured a fresh private key while an earlier version
+  # of this comment promised it would not.
+  #
+  # WHAT THE NAME PATTERNS DO NOT DO, stated here because this comment used to
+  # claim the opposite ("so credentials never enter the autosave ref"): a name
+  # pattern cannot see a secret in a normally named file, which is where most
+  # of them live. That is the content scan's job, above, and even the content
+  # scan is pattern matching over the shapes it knows. Neither is a guarantee.
+  # docs/KNOWN-LIMITS.md and SECURITY.md carry the full statement.
+  #
+  # The name patterns and everything the content scan rejected, in one command.
+  # eval is what lets a list built at runtime reach git as separate arguments in
+  # a shell with no arrays; every path in EXCL_ARGS was single-quoted by
+  # scan_exclude with its own quotes escaped, so a filename cannot become a
+  # command here.
+  eval "git add -A -- '.' $STATIC_EXCLUDES $EXCL_ARGS" 2>/dev/null
   tree="$(git write-tree 2>/dev/null)"
 
   # Skip if nothing changed since HEAD (avoid a pile of identical snapshots),
@@ -206,7 +379,7 @@ snapshot() {
   # the reflog every superseded snapshot stays reachable: git reflog <ref>.
   ref="$(autosave_ref)"
   git update-ref --create-reflog "$ref" "$commit" 2>/dev/null && \
-    log_line "saved $commit ($reason) at $ref covering the whole worktree $top"
+    log_line "saved $commit ($reason) at $ref covering the whole worktree $top, minus $excluded of $scanned scanned file(s) the content scan rejected (each named with its reason in $EXCL_LOG)"
 }
 
 # Read the cwd the hook was invoked for out of its JSON stdin payload. Falls
@@ -402,6 +575,14 @@ case "$1" in
     echo "  above, copy back what you need, then remove it with:"
     echo "  git -C $repo worktree remove $tmpdir"
     echo "  Older superseded snapshots, if any, are listed by: git -C $repo reflog $ref"
+    if [ -f "$EXCL_LOG" ]; then
+      echo "  What the snapshot does NOT hold: every file the content scan rejected is named,"
+      echo "  with its reason, in $EXCL_LOG. Those files were never copied anywhere; they are"
+      echo "  still in your working tree, and any unsaved edit to one of them is only there."
+    else
+      echo "  No exclusion record exists at $EXCL_LOG, so no snapshot in this vault has"
+      echo "  rejected a file yet, or the record was removed."
+    fi
     ;;
 
   *)

@@ -51,7 +51,7 @@ Into `~/.claude/settings.json`, or a project `.claude/settings.json`. The harnes
 }
 ```
 
-What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). PreCompact does two things: it snapshots the whole worktree to a private git ref so a token-death is recoverable, and it writes the brief that survives the compaction. Both commands are in the block above; a setup carrying only the first loses the brief. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
+What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd captures nothing by default: each category is separately opt-in through `BROTHERSBE_TELEMETRY_METRICS`, `BROTHERSBE_TELEMETRY_TRANSCRIPT` and `BROTHERSBE_TELEMETRY_CORRECTIONS`, and `BROTHERSBE_TELEMETRY_DISABLE` forces all of them off for an organization that wants no choice in the matter. A category that stays off names the switch that kept it off. The data dictionary is in [SECURITY.md](../SECURITY.md). PreCompact does two things: it snapshots the whole worktree to a private git ref so a token-death is recoverable, and it writes the brief that survives the compaction. Both commands are in the block above; a setup carrying only the first loses the brief. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
 
 ## 4. Prove it works, in 60 seconds
 

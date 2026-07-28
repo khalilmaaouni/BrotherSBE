@@ -1184,5 +1184,311 @@ class TestPluginSurface(unittest.TestCase):
                          "these citations resolve to nothing: %s" % missing)
 
 
+class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
+    """Two privacy defects an external review found, and the fixtures that hold
+    them closed.
+
+    The first: this tool parsed the session transcript and stored excerpts of
+    the operator's own messages by DEFAULT, with best-effort redaction standing
+    between a customer name and a file on disk. A repository holding customer,
+    partner, security or company-confidential material has to be able to install
+    this and have it capture nothing until somebody says otherwise, per
+    category, with an organization switch that cannot be reversed locally.
+
+    The second: the autosave excluded secret-shaped file NAMES, and a secret in
+    a normally named source file (`src/config.py` holding an API key) matched no
+    name pattern and became a permanent git object. The scan now reads CONTENT
+    before `git add` runs, which is the moment a blob would be created.
+
+    Every fixture here runs the real tools in a temporary vault and a real git
+    repository. The environment is scrubbed of every BROTHERSBE_ variable and
+    the organization policy is pinned at a path that does not exist, so a real
+    policy file or an exported switch on the machine running these cannot decide
+    the result."""
+
+    TEL = os.path.join(HERE, "sbe_telemetry.py")
+    AUTOSAVE = os.path.join(HERE, "sbe_autosave.sh")
+    SECRET_LINE = 'API_KEY = "sk-ant-api03-ABCDEFGHIJKLMNOP"\n'
+    OPERATOR_TEXT = "no, that is not what i asked; always use the acme staging bucket"
+
+    def _env(self, vault, **switches):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BROTHERSBE_")}
+        env["BROTHERSBE_VAULT"] = vault
+        env["BROTHERSBE_TELEMETRY_POLICY"] = os.path.join(vault, "policy-that-does-not-exist")
+        env.update(switches)
+        return env
+
+    def _transcript(self, path):
+        """A session over the activity floor, carrying one correction-shaped
+        operator message and one tool command with a client path in it."""
+        msgs = [{"type": "user", "message": {"content": self.OPERATOR_TEXT}}]
+        for i in range(bm.MIN_API_MSGS):
+            body = [{"type": "text", "text": "planning the acme migration"}]
+            if i == 0:
+                body.append({"type": "tool_use", "name": "Bash",
+                             "input": {"command": "ls /srv/acme-partner"}})
+            msgs.append({"type": "assistant",
+                         "message": {"id": "m%d" % i, "model": "claude-test",
+                                     "usage": {"input_tokens": 10, "output_tokens": 20},
+                                     "content": body}})
+        io.open(path, "w").write("\n".join(json.dumps(m) for m in msgs) + "\n")
+        return path
+
+    def _fire(self, vault, subcommand, cwd, **switches):
+        """Run one hook subcommand against a fresh transcript. Returns the
+        completed process, so its exit code and output are inspectable rather
+        than discarded."""
+        tp = self._transcript(os.path.join(vault, "transcript.jsonl"))
+        payload = json.dumps({"transcript_path": tp, "cwd": cwd, "session_id": "sess-abc123"})
+        return subprocess.run([sys.executable, self.TEL, subcommand], input=payload,
+                              text=True, capture_output=True, env=self._env(vault, **switches))
+
+    def _paths(self, vault):
+        tel = os.path.join(vault, "99-System", "telemetry")
+        return (tel, os.path.join(tel, "outcomes.jsonl"), os.path.join(tel, "corrections.jsonl"))
+
+    def _vault(self):
+        v = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, v, True)
+        os.makedirs(os.path.join(v, "99-System", "telemetry"))
+        return v
+
+    def _brief(self, vault):
+        tel = os.path.join(vault, "99-System", "telemetry")
+        briefs = [f for f in os.listdir(tel) if f.startswith("last-resume-")]
+        self.assertEqual(len(briefs), 1, "expected one resume brief, found %r" % briefs)
+        return io.open(os.path.join(tel, briefs[0])).read()
+
+    def test_a_default_installation_captures_no_transcript_text_and_no_correction(self):
+        vault = self._vault()
+        tel, ledger, corrections = self._paths(vault)
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend")
+        self.assertEqual(end.returncode, 0, end.stderr)
+        self.assertFalse(os.path.exists(corrections),
+                         "a default installation wrote %s" % corrections)
+        self.assertFalse(os.path.exists(ledger), "a default installation wrote %s" % ledger)
+        for var in ("BROTHERSBE_TELEMETRY_METRICS", "BROTHERSBE_TELEMETRY_CORRECTIONS"):
+            self.assertIn(var, end.stdout,
+                          "the hook recorded nothing without naming %s: %s" % (var, end.stdout))
+        pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend")
+        self.assertEqual(pre.returncode, 0, pre.stderr)
+        body = self._brief(vault)
+        for leaked in ("staging bucket", "acme migration", "acme-partner", "not what i asked"):
+            self.assertNotIn(leaked, body, "the default resume brief captured %r" % leaked)
+        self.assertIn("[REDACTED]", body)
+        self.assertIn("BROTHERSBE_TELEMETRY_TRANSCRIPT", body,
+                      "the withheld brief does not name the switch that would fill it in")
+
+    def test_each_switch_turns_on_exactly_one_category(self):
+        cases = (
+            ("BROTHERSBE_TELEMETRY_METRICS", True, False, False),
+            ("BROTHERSBE_TELEMETRY_CORRECTIONS", False, True, False),
+            ("BROTHERSBE_TELEMETRY_TRANSCRIPT", False, False, True),
+        )
+        for var, want_ledger, want_corrections, want_text in cases:
+            vault = self._vault()
+            _tel, ledger, corrections = self._paths(vault)
+            end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **{var: "1"})
+            self.assertEqual(end.returncode, 0, end.stderr)
+            self.assertEqual(os.path.exists(ledger), want_ledger,
+                             "%s=1 got outcomes.jsonl exists=%s, wanted %s (%s)"
+                             % (var, os.path.exists(ledger), want_ledger, end.stdout))
+            self.assertEqual(os.path.exists(corrections), want_corrections,
+                             "%s=1 got corrections.jsonl exists=%s, wanted %s (%s)"
+                             % (var, os.path.exists(corrections), want_corrections, end.stdout))
+            if want_corrections:
+                rows = [json.loads(l) for l in io.open(corrections) if l.strip()]
+                self.assertTrue(any("staging bucket" in r.get("text", "") for r in rows),
+                                "corrections capture is on and captured nothing: %r" % rows)
+            pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **{var: "1"})
+            self.assertEqual(pre.returncode, 0, pre.stderr)
+            body = self._brief(vault)
+            self.assertEqual("staging bucket" in body, want_text,
+                             "%s=1 got transcript text in the brief=%s, wanted %s"
+                             % (var, "staging bucket" in body, want_text))
+
+    def test_the_organization_override_forces_every_category_off(self):
+        every_switch = {"BROTHERSBE_TELEMETRY_METRICS": "1",
+                        "BROTHERSBE_TELEMETRY_CORRECTIONS": "1",
+                        "BROTHERSBE_TELEMETRY_TRANSCRIPT": "1"}
+        # (a) the environment override
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        switches = dict(every_switch, BROTHERSBE_TELEMETRY_DISABLE="1")
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **switches)
+        self.assertFalse(os.path.exists(ledger), "a local switch beat the environment override")
+        self.assertFalse(os.path.exists(corrections),
+                         "a local switch beat the environment override")
+        self.assertIn("BROTHERSBE_TELEMETRY_DISABLE", end.stdout,
+                      "the override fired without naming itself: %s" % end.stdout)
+        pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **switches)
+        self.assertEqual(pre.returncode, 0, pre.stderr)
+        self.assertNotIn("staging bucket", self._brief(vault),
+                         "a local switch beat the environment override in the resume brief")
+        # (b) the policy file, which is the half a local shell cannot unset
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        policy = os.path.join(vault, "telemetry-policy.conf")
+        io.open(policy, "w").write("# set by the platform team\ncapture = off\n")
+        switches = dict(every_switch, BROTHERSBE_TELEMETRY_POLICY=policy)
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **switches)
+        self.assertFalse(os.path.exists(ledger), "a local switch beat the policy file")
+        self.assertFalse(os.path.exists(corrections), "a local switch beat the policy file")
+        self.assertIn(policy, end.stdout,
+                      "the policy file decided the run without being named: %s" % end.stdout)
+        # (c) a policy file this version cannot read fails CLOSED
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        broken = os.path.join(vault, "broken-policy.conf")
+        io.open(broken, "w").write("capture = maybe\n")
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                         **dict(every_switch, BROTHERSBE_TELEMETRY_POLICY=broken))
+        self.assertFalse(os.path.exists(ledger),
+                         "an unreadable policy directive let capture proceed")
+        self.assertIn("fails closed", end.stdout, end.stdout)
+
+    # -- the autosave half -------------------------------------------------
+
+    def _git(self, repo):
+        def git(*a):
+            return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True)
+        return git
+
+    def _repo(self):
+        repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, repo, True)
+        git = self._git(repo)
+        git("init", "-q")
+        git("config", "user.email", "t@t.t")
+        git("config", "user.name", "t")
+        os.makedirs(os.path.join(repo, "src"))
+        io.open(os.path.join(repo, "src", "app.py"), "w").write("def f():\n    return 1\n")
+        git("add", "-A")
+        git("commit", "-qm", "init")
+        return repo
+
+    def test_a_secret_in_a_normally_named_source_file_never_becomes_a_git_object(self):
+        repo = self._repo()
+        git = self._git(repo)
+        vault = self._vault()
+        # A file no name pattern will ever match, holding an API key, beside
+        # real unlanded work that MUST still be saved.
+        io.open(os.path.join(repo, "src", "config.py"), "w").write(self.SECRET_LINE)
+        io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED-WORK")
+        fired = subprocess.run(["sh", self.AUTOSAVE, "precompact"],
+                               input=json.dumps({"cwd": repo}), text=True,
+                               capture_output=True, env=self._env(vault))
+        self.assertEqual(fired.returncode, 0, fired.stderr)
+        refs = git("for-each-ref", "--format=%(refname)", "refs/brothersbe/autosave").stdout.split()
+        self.assertEqual(len(refs), 1, "expected one autosave ref, got %r" % refs)
+        listed = git("ls-tree", "-r", "--name-only", refs[0]).stdout.split()
+        self.assertNotIn("src/config.py", listed,
+                         "the secret-bearing source file entered the snapshot tree")
+        self.assertIn("wip.txt", listed, "the content scan dropped the work it exists to save")
+        # The stronger claim, and the one the brief asks for: no git OBJECT for
+        # that content exists anywhere in the repository, so it was never
+        # written rather than written and then hidden from the tree.
+        sha = git("hash-object", os.path.join(repo, "src", "config.py")).stdout.strip()
+        self.assertTrue(sha, "could not compute the blob id of the planted file")
+        present = git("cat-file", "-e", sha)
+        self.assertNotEqual(present.returncode, 0,
+                            "a blob for the secret-bearing file exists in the object database "
+                            "(%s); the scan ran after git add, not before it" % sha)
+
+    def test_the_exclusion_record_names_what_was_excluded_and_why(self):
+        repo = self._repo()
+        vault = self._vault()
+        io.open(os.path.join(repo, "src", "config.py"), "w").write(self.SECRET_LINE)
+        io.open(os.path.join(repo, "blob.dat"), "wb").write(b"pre\x00post")
+        io.open(os.path.join(repo, "big.txt"), "w").write("x" * 4096)
+        fired = subprocess.run(["sh", self.AUTOSAVE, "precompact"],
+                               input=json.dumps({"cwd": repo}), text=True, capture_output=True,
+                               env=self._env(vault, BROTHERSBE_AUTOSAVE_MAX_BYTES="1024"))
+        self.assertEqual(fired.returncode, 0, fired.stderr)
+        record = os.path.join(vault, "99-System", "telemetry", "autosave-exclusions.log")
+        self.assertTrue(os.path.exists(record), "no exclusion record was written at all")
+        body = io.open(record).read()
+        for path, reason in (("src/config.py", "content matched a secret shape"),
+                             ("blob.dat", "binary content"),
+                             ("big.txt", "past the 1024 byte limit")):
+            self.assertIn(path, body, "%s was dropped without being named" % path)
+            self.assertIn(reason, body, "%s was named without a reason" % path)
+        self.assertNotIn("sk-ant-api03", body,
+                         "the exclusion record wrote down the secret it excluded")
+        self.assertIn("scanned", body, "the record does not say how many files it scanned")
+
+    def test_autosave_is_opt_in_in_a_declared_production_repository(self):
+        repo = self._repo()
+        git = self._git(repo)
+        vault = self._vault()
+        io.open(os.path.join(repo, ".brothersbe-production"), "w").write("")
+        io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED-WORK")
+        off = subprocess.run(["sh", self.AUTOSAVE, "precompact"], input=json.dumps({"cwd": repo}),
+                             text=True, capture_output=True, env=self._env(vault))
+        self.assertEqual(off.returncode, 0, off.stderr)
+        self.assertEqual([], git("for-each-ref", "--format=%(refname)",
+                                 "refs/brothersbe/autosave").stdout.split(),
+                         "a production repository was snapshotted without being opted in")
+        log = io.open(os.path.join(vault, "99-System", "telemetry", "autosave.log")).read()
+        self.assertIn("BROTHERSBE_AUTOSAVE_PRODUCTION", log,
+                      "the skip does not name the switch that would enable it: %s" % log)
+        on = subprocess.run(["sh", self.AUTOSAVE, "precompact"], input=json.dumps({"cwd": repo}),
+                            text=True, capture_output=True,
+                            env=self._env(vault, BROTHERSBE_AUTOSAVE_PRODUCTION="1"))
+        self.assertEqual(on.returncode, 0, on.stderr)
+        refs = git("for-each-ref", "--format=%(refname)", "refs/brothersbe/autosave").stdout.split()
+        self.assertEqual(len(refs), 1, "opting in did not produce a snapshot: %r" % refs)
+
+    # -- see it, take it, delete it ----------------------------------------
+
+    def test_show_export_and_purge_do_what_they_claim(self):
+        vault = self._vault()
+        tel, ledger, corrections = self._paths(vault)
+        stored = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                            BROTHERSBE_TELEMETRY_METRICS="1",
+                            BROTHERSBE_TELEMETRY_CORRECTIONS="1")
+        self.assertEqual(stored.returncode, 0, stored.stderr)
+        self.assertTrue(os.path.exists(ledger) and os.path.exists(corrections),
+                        "the fixture stored nothing to show, export or purge: %s" % stored.stdout)
+
+        shown = subprocess.run([sys.executable, self.TEL, "data-show"],
+                               capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        for want in (ledger, corrections, "record(s)", "policy:"):
+            self.assertIn(want, shown.stdout, "data-show does not report %r" % want)
+
+        out = os.path.join(vault, "export.json")
+        exported = subprocess.run([sys.executable, self.TEL, "data-export", "--out", out],
+                                  capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertTrue(os.path.exists(out), "data-export wrote nothing: %s" % exported.stdout)
+        bundle = json.loads(io.open(out).read())
+        by_path = {f["path"]: f for f in bundle["files"]}
+        self.assertIn("staging bucket", by_path[corrections]["content"],
+                      "the export does not carry what is stored")
+        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o600,
+                         "the export is not owner-only")
+
+        dry = subprocess.run([sys.executable, self.TEL, "data-purge"],
+                             capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertTrue(os.path.exists(corrections),
+                        "data-purge deleted without --yes")
+        self.assertIn("--yes", dry.stdout)
+
+        purged = subprocess.run([sys.executable, self.TEL, "data-purge", "--yes"],
+                                capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(purged.returncode, 0, purged.stderr)
+        for path in (ledger, corrections):
+            self.assertFalse(os.path.exists(path),
+                             "data-purge reported success and %s is still on disk: %s"
+                             % (path, purged.stdout))
+            self.assertIn(path, purged.stdout, "%s was removed without being named" % path)
+        self.assertIn("0 failed", purged.stdout)
+        # The export made outside the vault survives, which is the point of
+        # having an export at all, and is why the docs call it sensitive.
+        self.assertTrue(os.path.exists(out))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

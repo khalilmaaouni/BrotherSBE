@@ -215,10 +215,16 @@ gate without its eval moving with it.
 ## 3. The team-learning law: what stays local, what becomes a law
 
 Voluntary logging collapses, so telemetry is written by hooks, never by promises.
-`sbe_telemetry.py outcomes-append` runs at `SessionEnd` and appends one idempotent
-line to `outcomes.jsonl`. It also scans the session's short messages for
-correction candidates and writes them, secret-redacted and owner-only, to
-`corrections.jsonl`. None of that leaves the machine.
+`sbe_telemetry.py outcomes-append` runs at `SessionEnd`, and by default it captures
+nothing at all. Each category is separately opt-in: `BROTHERSBE_TELEMETRY_METRICS`
+for the idempotent line in `outcomes.jsonl`, `BROTHERSBE_TELEMETRY_TRANSCRIPT` for
+anything read out of the session transcript, and `BROTHERSBE_TELEMETRY_CORRECTIONS`
+for the correction candidates written, secret-redacted and owner-only, to
+`corrections.jsonl`. `BROTHERSBE_TELEMETRY_DISABLE` forces every category off and
+cannot be re-enabled locally. A category that stays off names the switch that kept
+it off, so an empty file is never mistaken for a quiet session. None of it leaves
+the machine either way, and the default is now off because best-effort redaction is
+not a safe default for a repository that may hold customer or partner material.
 
 A candidate is raw material, not a law. It is an excerpt of one engineer's own
 message on one machine. It becomes a law only by being distilled into a rule with

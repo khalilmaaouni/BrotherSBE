@@ -299,3 +299,58 @@ moved. What that does NOT establish, stated where the behavior is:
   `tools/test_sbe_evidence.py` that build real git repositories and run real
   commands, on this repository and on no other estate.
 Full text: `src/brothersbe/evidence.py`, `docs/CLI.md`.
+
+## The privacy controls are defaults and patterns, not guarantees
+
+Capture is off by default per category, an organization switch can force it all
+off, and the autosave reads file CONTENT before any git object is created. What
+none of that does, stated where somebody deciding whether to install this can
+read it:
+
+- A file name exclusion has never prevented secret capture and this page will
+  not say otherwise. A credential lives in a normally named source file at
+  least as often as in a file called `.env`, and this project shipped a comment
+  claiming the name patterns meant "credentials never enter the autosave ref".
+  They never did. The content scan is what addresses that class, and it is
+  pattern matching over the shapes it knows: a secret in a shape it does not
+  know still enters the snapshot.
+- A local git ref is not a private one. `refs/brothersbe/autosave/<id>` never
+  leaves the machine by any action of this tool, and that is a statement about
+  this tool only: a backup, a mirror, a sync client or anything else that copies
+  `.git` carries the snapshot with it, including whatever a snapshot preserved
+  before the content scan existed. Snapshots taken by an earlier version are
+  still in your object database; `git reflog <ref>` lists them.
+- Excluding a file loses work. An excluded file is left out of the snapshot
+  entirely, so an unsaved edit to it is preserved nowhere. The scan is
+  deliberately conservative, so it will sometimes exclude a file holding no
+  secret at all. Both cases are named with their reason in
+  `99-System/telemetry/autosave-exclusions.log`, which is the only reason this
+  trade is visible rather than silent.
+- Three of the scan's reject reasons are limits, not detections: a file past
+  the size limit, a binary file, and a path git could not print literally were
+  never scanned at all. They are excluded and recorded on exactly that basis,
+  because a file the scanner could not read must not be treated as clean.
+- The scan reads every candidate file on every snapshot, and the tick mode
+  snapshots every N tool calls. On a very large worktree that cost is real and
+  nothing here caps it. Past `BROTHERSBE_AUTOSAVE_MAX_EXCLUSIONS` (200) the
+  snapshot is refused outright rather than truncated, because a `git add` whose
+  argument list is too long produces an empty tree that would then be committed
+  as though it were the work.
+- Content already committed is not the autosave's doing and not its to withhold.
+  The snapshot index is seeded from HEAD so tracked work is never dropped, so a
+  secret that is already in a commit rides along in the snapshot tree. The
+  control here is about what a snapshot ADDS to the object database.
+- The organization telemetry override is a policy control on a cooperating
+  machine. Root can put the file where an ordinary user cannot write it, and a
+  user who runs a patched copy of the script is past it regardless. It fails
+  closed on an unreadable or unrecognized policy, which is the strongest thing
+  it can honestly do.
+- Redaction is unchanged and still best effort. What changed is that nothing is
+  read out of a transcript until a switch says so, which means the redactor is
+  no longer the only thing between a session and a file on disk.
+- `data-show` and `data-purge` see one vault. Copies made by a backup, a mirror
+  or an export you took yourself are outside their reach, and `data-export`
+  deliberately creates one such copy.
+Full text: `tools/sbe_telemetry.py` (the capture policy block),
+`tools/sbe_autosave.sh` (the content scan block), `SECURITY.md`,
+`docs/THREAT_MODEL.md`.

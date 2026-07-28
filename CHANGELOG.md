@@ -8,6 +8,57 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- Two privacy defects an external review found are closed, and both were
+  defaults rather than bugs. FIRST: this tool parsed the session transcript and
+  stored excerpts of the operator's own messages by default, with best-effort
+  redaction standing between a customer name, a partner term or an unreleased
+  design and a file on disk. Best effort is the right engineering for a redactor
+  and the wrong basis for a default. Capture is now OFF unless switched on, per
+  category and independently: `BROTHERSBE_TELEMETRY_METRICS` for the per-session
+  row in `outcomes.jsonl`, `BROTHERSBE_TELEMETRY_TRANSCRIPT` for the transcript
+  text in the resume brief, `BROTHERSBE_TELEMETRY_CORRECTIONS` for the excerpts
+  in `corrections.jsonl`. The invariant, and the fixture that holds it: a
+  default installation captures no transcript text and no correction excerpt,
+  and nothing is read out of a transcript until a category that needs it is on.
+  `metrics` is opt-in too, because its row carries the working directory
+  basename and a basename can be a client's name. An organization override
+  (`BROTHERSBE_TELEMETRY_DISABLE`, or `capture = off` in
+  `/etc/brothersbe/telemetry-policy.conf`) forces all three off and no local
+  switch reverses it; a policy file that cannot be read, or that carries a
+  directive this version does not recognize, FAILS CLOSED and names the file and
+  the line. Three new subcommands make the stored data visible, portable and
+  removable from one shared inventory: `data-show`, `data-export` and
+  `data-purge`, the last re-checking the filesystem after each removal and
+  reporting anything that survived rather than reporting success from its own
+  intention. Every field that can be stored is now published field by field in
+  `SECURITY.md`. SECOND: the autosave excluded secret-shaped file NAMES, and a
+  secret in a normally named source file (`src/config.py` holding an API key)
+  matched no pattern and became a permanent git object; the documentation said
+  the name patterns meant "credentials never enter the autosave ref", which was
+  never true. Every candidate file's CONTENT is now read BEFORE `git add` runs,
+  which is the moment a blob would be created, so a rejected file never becomes
+  a git object at all. Files past `BROTHERSBE_AUTOSAVE_MAX_BYTES` (1 MiB) and
+  binary files are excluded as UNSCANNED rather than assumed clean, as is a path
+  git cannot print literally. Every exclusion is recorded in
+  `99-System/telemetry/autosave-exclusions.log` with its reason, as a path and a
+  reason only, and `recover` points at that record because what a snapshot does
+  NOT hold matters at recovery time. In a repository declared production
+  (`BROTHERSBE_REPO_CLASS=production` or a `.brothersbe-production` file)
+  autosave is opt-in and snapshots nothing until `BROTHERSBE_AUTOSAVE_PRODUCTION`
+  is set. Seven fixtures in `tools/test_sbe.py`
+  (`TestCaptureDefaultsAndAutosaveContentScan`) run the real tools in temporary
+  vaults and real git repositories, and the secret-in-a-source-file fixture
+  asserts that no git OBJECT for that content exists anywhere, not merely that
+  the tree omits it. Calibrated by breaking each control in turn and confirming
+  the matching fixtures fail: capture default (2 fixtures), organization
+  override (1), content scan (2), exclusion record (1), production opt-in (1),
+  purge removal (1). `docs/THREAT_MODEL.md` is new and covers fifteen threats,
+  including the ones nothing here stops: a direct push, a deleted workflow, a
+  compromised CI runner, and prompt injection from repository content. What
+  these controls do NOT stop is in `docs/KNOWN-LIMITS.md`, including the two
+  sentences that matter most: a path exclusion never prevented secret capture,
+  and a local git ref can still be carried off the machine by a backup or a
+  mirror.
 - `sbe evidence` closes the hole under every gate in this project: a receipt
   could be typed by hand by the same agent whose work it verified, so a
   fabricated duration, exit code, row count or rerun id satisfied the schema and
