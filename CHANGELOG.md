@@ -29,6 +29,58 @@ checklist's own rules.
   the behavior in `docs/CLI.md`, `docs/KNOWN-LIMITS.md` and
   `docs/HOW-IT-WORKS.md` (the two-layer scope model). Maturity:
   INTERNAL-EVAL.
+- `sbe adopt` and `sbe init` are built, closing the refusal `cli.py` used to print for `adopt`
+  ("the adoption doctor cannot yet tell a protected repository from an unprotected one, and a
+  readiness report that omits that is worse than none"). `sbe adopt` detects a repository's
+  stack by walking the tree (languages, a migrations directory, dbt models, API contract files,
+  existing CI workflows), reusing the SAME path patterns `sbe impact` already carries
+  (`brothersbe.impact.DETECTORS`) rather than a second copy of them, and proposes a provisional
+  `.brothersbe/policy.json` (wave 3's own policy file and JSON schema had not shipped when this
+  was written; the file's own `note` field says so) plus a `.github/CODEOWNERS` generated from
+  that same policy, protecting the manifest, hooks, this repository's own policy and config,
+  where the evidence schema is declared, product and consumer CI, and release files. THE KILL
+  CRITERION THIS WAVE WAS BUILT AROUND: the adoption report never claims a GitHub-side
+  protection (branch protection, required status checks, review from a code owner being
+  REQUIRED) is PRESENT, because nothing here holds a GitHub token or asks for one; all three
+  report UNVERIFIABLE-HERE unconditionally, naming what checking them for real would take, and
+  `tools/test_sbe_adopt.py::TestAdoptionReportNeverClaimsPresent` pins exactly that. A
+  CODEOWNERS file merely existing in the tree is reported separately, under `localFacts`, so it
+  is never read as proof GitHub actually requires that review. Both proposals are deterministic
+  (no timestamp, no run id), which is what lets a second `--apply` recognize nothing changed and
+  write nothing; an existing file that differs is never overwritten without `--force`.
+  `sbe init` installs BrotherSBE's own local footprint (`.brothersbe/config.json`, a
+  `design/.gitkeep` dossier marker, and, only with `--with-consumer-ci`, a copy of this
+  installation's own consumer CI workflow and composite action), refuses outside a git
+  repository naming the reason, and writes or refreshes an install receipt
+  (`.brothersbe/install-receipt.json`) naming every path it has written and the exact `rm -f`
+  uninstall line for each, only when something was actually written that run; a no-op run leaves
+  the receipt, timestamp included, untouched. `.github/workflows/brothersbe-gates.yml` gained
+  the missing `push` (to `main`) trigger beside `pull_request`, and a new
+  `.github/workflows/consumer-check.yml` plus `.github/actions/sbe-consumer/action.yml` give a
+  client repository something to copy or call that runs ONLY `sbe impact`, `sbe evidence
+  verify` (when receipts exist), `sbe status` (wave 8; guarded by a file-exists check and
+  skipped honestly until that wave lands), and the design checks in strict mode when a dossier
+  is declared, and never BrotherSBE's own test files; both new workflow files carry the same
+  honest header the product workflow already does, that a workflow file guards nothing on its
+  own until branch protection requires it (`docs/KNOWN-LIMITS.md` L16). Eleven fixtures across
+  17 test methods in `tools/test_sbe_adopt.py` build real temporary git repositories and run the
+  real command: dry-run writes nothing (proved by hashing the whole tree, not by checking the
+  paths this module happens to propose today), apply-then-reapply is a no-op, an existing file
+  is never overwritten without `--force`, the kill criterion itself, stack detection shifting
+  the proposed policy for a planted dbt project and a planted migrations directory, the init
+  receipt and its uninstall instructions, `sbe init` refusing outside a git repository, and the
+  two shipped workflow files' triggers and scope, read as text and grepped the same
+  line-oriented way `evals/run_evals.py` already reads `brothersbe-gates.yml` (this project
+  ships no YAML parser). Calibrated by neutralizing each control in turn and confirming the
+  matching fixture goes red before trusting the green: the dry-run guard, apply idempotence, the
+  force guard, the kill criterion itself, each stack-detection shift, the receipt's uninstall
+  match, the git-repository refusal, and both workflow-file assertions, eight breaks, eight red.
+  One pre-existing test could not be updated in this change and is a known, expected regression
+  rather than a silently accepted one: `tools/test_sbe.py::TestCliSurface::
+  test_an_unbuilt_command_refuses_loudly_and_names_its_wave` hardcodes `adopt` in its list of
+  commands still expected to refuse and exit 3; building `adopt` this wave makes that one line
+  false, and the one-line fix (removing `"adopt"` from that list) touches a file this wave was
+  not allowed to edit. Limits in full in `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
 - The two defects the bypass-coverage table recorded rather than fixed are
   closed, and the table and `docs/KNOWN-LIMITS.md` are updated to match.
   `sbe evidence verify` used to open a receipt path with no access check, so a

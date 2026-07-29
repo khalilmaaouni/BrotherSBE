@@ -901,10 +901,11 @@ class TestCliSurface(unittest.TestCase):
 
     def test_an_unbuilt_command_refuses_loudly_and_names_its_wave(self):
         cli = self._commands()
-        # inspect-change left this list when `sbe impact` shipped: it is now an
-        # alias of a real command. The list is the wave-by-wave record of what is
-        # still owed, so a name leaves it only when something stands behind it.
-        unbuilt = ["plan", "policy", "exceptions", "adopt"]
+        # inspect-change left this list when `sbe impact` shipped, and adopt left
+        # it when wave 9 built the adoption kit: each is now a real command. The
+        # list is the wave-by-wave record of what is still owed, so a name leaves
+        # it only when something stands behind it.
+        unbuilt = ["plan", "policy", "exceptions"]
         known = [n for (n, _h, _r) in cli.COMMANDS]
         for name in unbuilt:
             self.assertIn(name, known, "%s vanished from the command table" % name)

@@ -336,7 +336,10 @@ first). The workflow, verbatim:
 name: BrotherSBE gates
 permissions:
   contents: read
-on: [pull_request]
+on:
+  pull_request:
+  push:
+    branches: [main]
 env:
   # Where your dossiers live. Empty means "search the whole checkout": every
   # directory holding a 00-intake.json OR any of 01 through 07 is found and

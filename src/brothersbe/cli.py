@@ -259,6 +259,131 @@ def _cmd_task(args):
     from . import tasks as tasks_mod
     return tasks_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                           exit_usage=EXIT_USAGE)
+def _cmd_adopt(args):
+    """Inspect a repository for BrotherSBE readiness. Dry run by default:
+    prints every proposal as a unified diff and writes nothing. `--apply`
+    writes; `--force` allows overwriting an existing file that differs from
+    the proposal. See `brothersbe.adopt` for what the report can and cannot
+    tell you, and why.
+    """
+    root = os.path.abspath(args.path)
+    if not os.path.isdir(root):
+        sys.stderr.write("sbe adopt: '%s' is not a directory. A mistyped path must not read "
+                         "as a clean scan.\n" % root)
+        return EXIT_USAGE
+    from . import adopt as adopt_mod
+
+    applied = None
+    if args.apply:
+        written, skipped, _planned = adopt_mod.write(root, force=args.force)
+        applied = {"written": written, "skipped": skipped}
+    data = adopt_mod.report(root)
+
+    if args.json:
+        payload = dict(data)
+        if applied is not None:
+            payload["applied"] = applied
+        sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        return EXIT_OK
+
+    sys.stdout.write("sbe adopt: %s\n" % data["root"])
+    stack = data["detectedStack"]
+    langs = ", ".join("%s(%d)" % (k, v) for k, v in stack["languages"].items())
+    sys.stdout.write("  languages: %s\n" % (langs or "none detected"))
+    sys.stdout.write("  migrations: %s, dbt models: %s, api contracts: %s, ci workflows: %s\n"
+                     % (stack["hasMigrations"], stack["hasDbtModels"],
+                        stack["hasApiContracts"], stack["hasCiWorkflows"]))
+    if applied is not None:
+        for path in applied["written"]:
+            sys.stdout.write("  WROTE     %s\n" % path)
+        for item in applied["skipped"]:
+            sys.stdout.write("  SKIPPED   %s: %s\n" % (item["path"], item["reason"]))
+        if not applied["written"]:
+            sys.stdout.write("  nothing written; every proposal already matches this tree\n")
+    else:
+        for prop in data["proposals"]:
+            if prop["identical"]:
+                sys.stdout.write("  UNCHANGED %s\n" % prop["path"])
+            else:
+                sys.stdout.write("  PROPOSED  %s (%s)\n"
+                                 % (prop["path"], "new file" if not prop["exists"]
+                                    else "would overwrite, needs --force"))
+                sys.stdout.write(prop["diff"] or "")
+    for prot in data["protections"]:
+        sys.stdout.write("  PROTECTION %-28s %s\n" % (prot["name"], prot["status"]))
+    for fact in data["localFacts"]:
+        sys.stdout.write("  LOCAL      %-28s %s\n" % (fact["name"], fact["status"]))
+    if applied is None:
+        sys.stdout.write("\nsbe adopt: dry run, nothing written. Rerun with --apply to write, "
+                         "or --apply --force to overwrite a file that already exists and "
+                         "differs.\n")
+    return EXIT_OK
+
+
+def _cmd_init(args):
+    """Install BrotherSBE's local footprint (config, dossier directory,
+    optionally a copy of the consumer CI, and a receipt) into a repository.
+    Dry run by default; refuses outside a git repository. See
+    `brothersbe.initcmd` for the idempotence guarantee.
+    """
+    from . import initcmd
+
+    root = os.path.abspath(args.path)
+    if not os.path.isdir(root):
+        sys.stderr.write("sbe init: '%s' is not a directory.\n" % root)
+        return EXIT_USAGE
+
+    if not args.apply:
+        reason = initcmd.refusal_reason(root)
+        if reason:
+            sys.stderr.write("sbe init: refused. %s\n" % reason)
+            if args.json:
+                sys.stdout.write(json.dumps({"refused": reason}, indent=2, sort_keys=True)
+                                 + "\n")
+            return EXIT_USAGE
+        proposals, warnings = initcmd.plan(root, with_consumer_ci=args.with_consumer_ci)
+        if args.json:
+            sys.stdout.write(json.dumps({"root": root, "proposals": proposals,
+                                        "warnings": warnings}, indent=2, sort_keys=True) + "\n")
+        else:
+            sys.stdout.write("sbe init: %s\n" % root)
+            for item in proposals:
+                if item["identical"]:
+                    sys.stdout.write("  UNCHANGED %s\n" % item["path"])
+                else:
+                    sys.stdout.write("  PROPOSED  %s (%s)\n"
+                                     % (item["path"], "new file" if not item["exists"]
+                                        else "would overwrite"))
+            for warning in warnings:
+                sys.stdout.write("  WARNING   %s\n" % warning)
+            sys.stdout.write("\nsbe init: dry run, nothing written. Rerun with --apply to "
+                             "write.\n")
+        return EXIT_OK
+
+    try:
+        result = initcmd.apply(root, with_consumer_ci=args.with_consumer_ci)
+    except initcmd.NotAGitRepository as exc:
+        sys.stderr.write("sbe init: refused. %s\n" % exc)
+        if args.json:
+            sys.stdout.write(json.dumps({"refused": str(exc)}, indent=2, sort_keys=True) + "\n")
+        return EXIT_USAGE
+
+    if args.json:
+        sys.stdout.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        return EXIT_OK
+
+    if result["skippedAsNoop"]:
+        sys.stdout.write("sbe init: already installed; nothing written this run.\n")
+    else:
+        for path in result["written"]:
+            sys.stdout.write("  WROTE %s\n" % path)
+        receipt = result["receipt"] or {}
+        sys.stdout.write("\nsbe init: installed. Uninstall with:\n")
+        for line in receipt.get("uninstallInstructions", []):
+            sys.stdout.write("  %s\n" % line)
+    for warning in result["warnings"]:
+        sys.stdout.write("  WARNING %s\n" % warning)
+    return EXIT_OK
 
 
 def _cmd_version(args):
@@ -312,9 +437,9 @@ COMMANDS = [
      _not_built("exceptions", 4, "Exceptions are still free-form exemption files with no "
                                  "owner, approver or expiry to list.")),
     ("adopt", "inspect a repository for installation readiness, dry run by default",
-     _not_built("adopt", 9, "The adoption doctor cannot yet tell a protected repository from "
-                            "an unprotected one, and a readiness report that omits that is "
-                            "worse than none.")),
+     _cmd_adopt),
+    ("init", "install BrotherSBE's local footprint into a repository, dry run by default",
+     _cmd_init),
 ]
 
 
@@ -353,6 +478,33 @@ def build_parser():
         elif name in ("verify", "review"):
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")
+        elif name == "adopt":
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository to inspect (default: the current one)")
+            child.add_argument("--dry-run", action="store_true",
+                               help="propose without writing; this is the default whether "
+                                    "or not the flag is given")
+            child.add_argument("--apply", action="store_true",
+                               help="write the proposed files; without it, nothing is "
+                                    "written")
+            child.add_argument("--force", action="store_true",
+                               help="overwrite an existing file that differs from the "
+                                    "proposal; without it, an existing file is skipped and "
+                                    "named")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
+        elif name == "init":
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository to install into (default: the current "
+                                    "one)")
+            child.add_argument("--dry-run", action="store_true",
+                               help="show intended mutations without writing; this is the "
+                                    "default whether or not the flag is given")
+            child.add_argument("--apply", action="store_true",
+                               help="write the installation; without it, nothing is written")
+            child.add_argument("--with-consumer-ci", action="store_true",
+                               help="also propose copying the consumer CI workflow and "
+                                    "composite action; never done unless asked")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
         else:
             child.add_argument("rest", nargs=argparse.REMAINDER,
                                help="arguments passed through to the underlying tool")

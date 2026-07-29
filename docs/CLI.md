@@ -37,9 +37,11 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `inspect-change` | alias of `impact`, the name the finalization brief uses |
 | `evidence` | generate a receipt by running the command, verify it, or show its trust level |
 | `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
+| `adopt` | inspect a repository for installation readiness, dry run by default |
+| `init` | install BrotherSBE's local footprint into a repository, dry run by default |
 | `version` | the version and the evidence schema version |
 
-Four more are **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.
+Three more are **present and refuse**: `plan`, `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.
 They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
 rather than printing an empty result, because a command that succeeds at nothing is the exact
@@ -225,4 +227,62 @@ deletes a task on a clock. Concurrent writers of the registry file are out of sc
 rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
 **INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
 
-Four commands remain **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.
+## `sbe adopt`, and the line it will never cross
+
+```bash
+bin/sbe adopt .                 # dry run (the default): every proposal as a unified diff, writes nothing
+bin/sbe adopt . --apply         # writes what was proposed; never overwrites an existing file
+bin/sbe adopt . --apply --force # overwrites an existing file that differs from the proposal
+```
+
+Detects the stack by walking the tree (languages by extension, a migrations directory, dbt
+models, API contract files, existing CI workflows), reusing the SAME path patterns `sbe impact`
+already carries (`brothersbe.impact.DETECTORS`), so a pattern that means "this is an OpenAPI
+document" to one tool means the same thing to the other. From that it proposes a provisional
+`.brothersbe/policy.json` (wave 3's own repository policy schema has not shipped; this is a
+smaller shape built from what `sbe adopt` can detect, and the file says so) and a
+`.github/CODEOWNERS` generated from that same policy, protecting the manifest, the hooks, this
+repository's own policy and config, where the evidence schema is declared, product and consumer
+CI, and release files. Both proposals are **deterministic**, which is what makes a second
+`--apply` a no-op: nothing about them changes between two runs over an unchanged tree.
+
+The adoption report also names three protections that live on GitHub, not on a filesystem:
+branch protection, required status checks, and whether review from a code owner is *required*.
+**None of the three can ever read `PRESENT` from this command.** They report `UNVERIFIABLE-HERE`
+unconditionally, naming what checking them for real would take (a GitHub token with repo scope,
+plus admin rights), because this tool holds no credentials and asks for none. A CODEOWNERS file
+merely *existing* in the tree is a separate, locally-checkable fact under `localFacts`, never
+folded into a claim about GitHub's settings. `tools/test_sbe_adopt.py`'s kill-criterion fixture
+pins exactly this: a report that ever claims one of the three PRESENT from a local read is worse
+than the refusal this command used to print instead of a result.
+
+Full checklist of what only a human with admin rights can turn on: `docs/ADOPTION.md`. Limits in
+full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+## `sbe init`, and the idempotence it is built on
+
+```bash
+bin/sbe init .                        # dry run (the default): every mutation as a diff, writes nothing
+bin/sbe init . --apply                # writes: config, dossier directory, install receipt
+bin/sbe init . --apply --with-consumer-ci  # also copies the consumer CI workflow and action, only when asked
+```
+
+Writes `.brothersbe/config.json` (the schema version, tool version, and the dossier root,
+`design/`), a `design/.gitkeep` marker so the dossier directory is trackable before it holds
+anything, and, only with `--with-consumer-ci`, a copy of this installation's own
+`.github/workflows/consumer-check.yml` and `.github/actions/sbe-consumer/action.yml`. Refuses
+outside a git repository, naming the reason: there is nowhere for the config, the dossier
+directory or the receipt to be versioned.
+
+Every proposal is deterministic content, compared byte for byte against what is already on disk,
+which is what makes **running it twice under `--apply` change nothing the second time**: the
+second run finds every proposal already matches and writes nothing, and the install receipt
+(the one file that legitimately carries a timestamp) is left untouched rather than rewritten,
+because nothing happened this run for it to describe. When something IS written, `sbe init`
+writes or refreshes `.brothersbe/install-receipt.json`: the schema and tool version, when it
+ran, every path it has ever written (across this call and any prior one), and exact uninstall
+instructions, `rm -f <path>` for each, printed at the end and saved into the same receipt.
+
+Limits in full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+Three commands remain **present and refuse**: `plan`, `policy` and `exceptions`.

@@ -455,3 +455,56 @@ this wave writes it.
 STATE.md style file. Nothing reads markdown fences back into the registry, so
 a hand-edited fence line and the registry can disagree, and the registry is
 the one the postcondition reads.
+## The adoption kit proposes, and verifies only what a filesystem can answer
+
+`sbe adopt` detects a repository's stack and proposes a policy file and a CODEOWNERS example;
+`sbe init` installs BrotherSBE's own local footprint. What neither does, stated where the
+behavior is:
+
+- `sbe adopt`'s report names three protections that live on GitHub's code review platform, not
+  on a filesystem: branch protection, required status checks, and whether review from a code
+  owner is REQUIRED. None of the three can ever read PRESENT here. They report
+  UNVERIFIABLE-HERE unconditionally, naming what checking them for real would take (a GitHub
+  token with repo scope, plus admin rights on the repository), because this tool holds no
+  GitHub credentials and asks for none. This is the kill criterion the plugin conversion plan
+  states for this wave, made into a fixture:
+  `tools/test_sbe_adopt.py::TestAdoptionReportNeverClaimsPresent`.
+- A CODEOWNERS file merely existing in the tree IS a fact this tool can read, and it is reported
+  separately, under `localFacts`, so it is never folded into a claim about whether GitHub
+  actually requires that review. The file existing and GitHub requiring it are two different
+  facts, one local and one not, and only one of them is checkable from a clone.
+- The repository policy `sbe adopt` proposes (`.brothersbe/policy.json`) is NOT wave 3's
+  eventual policy file and JSON schema, which had not shipped as this wave was written. It is a
+  smaller, provisional shape built from what stack detection can already see, and the file says
+  so on its own `note` field. Replacing it once wave 3 ships its schema is expected, not a
+  regression.
+- Stack detection walks the tree pruning conventional vendor and build directories by name
+  (`.git`, `node_modules`, `vendor`, `venv`, `.venv`, `dist`, `build`, `__pycache__`, `.tox`,
+  `.mypy_cache`, `.pytest_cache`, `target`), never by content. A project keeping first-party
+  source inside a directory with one of those names is under-detected, and a very large
+  unconventionally-named vendor directory is walked in full, which costs real time on a large
+  repository with nothing here to cap it.
+- Detection of a contract, migration or dbt-shaped path reuses the SAME path patterns
+  `sbe impact` runs against a diff (`brothersbe.impact.DETECTORS`), applied here to a full tree
+  walk instead. The same limits `sbe impact` already states about those patterns being
+  path-shaped rather than content-read apply here too: a migrations directory named something
+  this project's patterns do not recognize is not detected.
+- The CODEOWNERS example this proposes carries the placeholder `@REPLACE-ME` on every line.
+  Neither `sbe adopt` nor anything else in this project has repository membership to read a
+  real username or team from, and a placeholder left in place protects nothing: GitHub will not
+  resolve it to an owner. `docs/ADOPTION.md` says so before the checklist of what to click.
+- `sbe init --with-consumer-ci` copies this INSTALLATION's own shipped
+  `.github/workflows/consumer-check.yml` and `.github/actions/sbe-consumer/action.yml`. When
+  those files cannot be read from the installation running the command, the copy is skipped and
+  named under a warning rather than writing a partial or empty file in their place.
+- Both `sbe adopt` and `sbe init` propose deterministic content (no timestamp, no run id) so a
+  second `--apply` can recognize nothing changed. The one exception is `sbe init`'s own install
+  receipt, which legitimately carries an install timestamp; it is written or refreshed only when
+  something else was actually written this run, and left untouched on a no-op run, which is what
+  keeps "running it twice changes nothing" true even though the receipt itself is not
+  deterministic content.
+- Maturity: INTERNAL-EVAL. Exercised by `tools/test_sbe_adopt.py` against real temporary git
+  repositories built by the test itself, and against this repository's own diff, and on no other
+  estate.
+Full text: `src/brothersbe/adopt.py`, `src/brothersbe/initcmd.py`, `docs/ADOPTION.md`,
+`docs/CLI.md`.

@@ -1,0 +1,45 @@
+# What a CLIENT repository copies or calls after installing BrotherSBE. This
+# is the consumer path, not the product path: it runs ONLY sbe impact, sbe
+# evidence verify (when receipts exist), sbe status (once wave 8 ships it,
+# guarded until then), and the design checks in strict mode when a dossier is
+# declared, all via the composite action at .github/actions/sbe-consumer. It
+# never runs tools/test_sbe*.py or evals/run_evals.py: those prove
+# BrotherSBE's own tools are correct against BrotherSBE's own repository, and
+# a client repository has neither.
+#
+# HONEST LIMIT, same one docs/KNOWN-LIMITS.md states for the product workflow
+# (L16, "The CI workflow guards nothing until you copy it"): this workflow can
+# fail its job, but nothing here makes passing it a requirement to merge.
+# That is a branch protection setting on the repository that copied this
+# file in, and copying the file does not turn the setting on. `sbe adopt`
+# reports the same limit under `protections` as UNVERIFIABLE-HERE.
+#
+# Hardening matches brothersbe-gates.yml: actions pinned to full commit SHAs
+# (verified against the live repositories with `git ls-remote` on
+# 2026-07-27, the trailing comment names the tag), permissions read-only.
+name: BrotherSBE consumer checks
+permissions:
+  contents: read
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  consumer-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+      # sbe-path: '.' assumes BrotherSBE's own bin/sbe is checked out at the
+      # repository root, which is true here because this workflow is running
+      # inside BrotherSBE's own repository as its own reference example. A
+      # client repository that vendors BrotherSBE elsewhere (a submodule, a
+      # sparse checkout, a plugin path) points sbe-path there instead.
+      - uses: ./.github/actions/sbe-consumer
+        with:
+          sbe-path: '.'
+          strict: 'true'

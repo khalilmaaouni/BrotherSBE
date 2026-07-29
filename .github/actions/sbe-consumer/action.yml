@@ -1,0 +1,124 @@
+# A CONSUMER repository's checks: what a client repository copies or calls
+# after installing BrotherSBE, without running BrotherSBE's own unit,
+# adversarial or eval suites. Those suites prove BrotherSBE's tools are
+# correct against BrotherSBE's OWN repository; running them here would check
+# the wrong code for what a consumer's merge needs checked.
+#
+# HONEST LIMIT, consistent with docs/KNOWN-LIMITS.md ("The CI workflow guards
+# nothing until you copy it", L16): this action can FAIL its job, but nothing
+# here makes passing it a REQUIREMENT to merge. That is a branch protection
+# setting on the repository that calls it, and this file cannot turn that
+# setting on by existing. Until an admin marks the calling job as a required
+# status check, a contributor can merge over a red run exactly as easily as
+# a green one. `sbe adopt` reports this same limit under `protections` as
+# UNVERIFIABLE-HERE, because it is the same fact read from two places.
+#
+# Every input is passed into `run:` through `env:`, never interpolated
+# straight into the shell with `${{ }}`, on purpose: this file is meant to be
+# copied into a repository this project does not control, and a caller that
+# ever wires an input from untrusted event text (a PR title, a branch name)
+# must not turn that text into shell syntax just because it reached this
+# action.
+name: 'BrotherSBE consumer checks'
+description: >-
+  Runs sbe impact, sbe evidence verify (when receipts exist), sbe status
+  (once wave 8 ships it), and the design checks in strict mode (when a
+  dossier is declared), against the calling repository's own diff and
+  dossier. Never runs BrotherSBE's own test files.
+inputs:
+  sbe-path:
+    description: >-
+      Path to the checked-out BrotherSBE installation providing bin/sbe.
+      Default '.' assumes the calling workflow checked out the repository
+      that carries bin/sbe at its root, which is how this repository runs
+      its own copy of this action.
+    required: false
+    default: '.'
+  base:
+    description: 'The ref sbe impact diffs against. Empty lets sbe impact resolve its own merge base.'
+    required: false
+    default: ''
+  intake:
+    description: 'Path to 00-intake.json for sbe impact, if this repository keeps one.'
+    required: false
+    default: ''
+  receipts-dir:
+    description: >-
+      A directory of evidence receipts (*.json) to check with sbe evidence
+      verify, if this repository writes them. Empty skips this step
+      entirely rather than failing on a directory nobody declared.
+    required: false
+    default: ''
+  dossier:
+    description: 'Path to a design dossier to run the strict design checks against. Empty skips this step.'
+    required: false
+    default: ''
+  strict:
+    description: "'true' passes --strict to sbe impact and sbe evidence verify, making NO-DATA block too."
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: sbe impact (the diff versus the declared intake, if any)
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_BASE: ${{ inputs.base }}
+        SBE_INTAKE: ${{ inputs.intake }}
+        SBE_STRICT: ${{ inputs.strict }}
+      run: |
+        set -eu
+        args=(impact . --json)
+        if [ -n "$SBE_BASE" ]; then args+=(--base "$SBE_BASE"); fi
+        if [ -n "$SBE_INTAKE" ]; then args+=(--intake "$SBE_INTAKE"); fi
+        if [ "$SBE_STRICT" = "true" ]; then args+=(--strict); fi
+        "$SBE_PATH/bin/sbe" "${args[@]}"
+
+    - name: sbe evidence verify (every receipt under receipts-dir, if any were declared)
+      if: ${{ inputs.receipts-dir != '' }}
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+        SBE_STRICT: ${{ inputs.strict }}
+      run: |
+        set -eu
+        shopt -s nullglob
+        found=0
+        for receipt in "$SBE_RECEIPTS_DIR"/*.json; do
+          found=1
+          args=(evidence verify "$receipt")
+          if [ "$SBE_STRICT" = "true" ]; then args+=(--strict); fi
+          "$SBE_PATH/bin/sbe" "${args[@]}"
+        done
+        if [ "$found" = "0" ]; then
+          echo "no receipts found under $SBE_RECEIPTS_DIR; nothing to verify"
+        fi
+
+    - name: sbe status --json (wave 8; skipped honestly until it lands)
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+      run: |
+        set -eu
+        # wave 8 delivers `sbe status`. As this action was written it had not
+        # landed (docs/KNOWN-LIMITS.md names the wave), so this step is guarded
+        # by a file the installation would carry once it has: src/brothersbe/
+        # status.py. A missing file is reported and the step is skipped, never
+        # treated as a failure of a command that does not exist yet.
+        if [ -f "$SBE_PATH/src/brothersbe/status.py" ]; then
+          "$SBE_PATH/bin/sbe" status --json
+        else
+          echo "sbe status is not built in this BrotherSBE installation (wave 8 has not landed here); step skipped, not failed"
+        fi
+
+    - name: sbe design --strict (only when a dossier is declared)
+      if: ${{ inputs.dossier != '' }}
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_DOSSIER: ${{ inputs.dossier }}
+      run: |
+        set -eu
+        "$SBE_PATH/bin/sbe" design --strict "$SBE_DOSSIER"
