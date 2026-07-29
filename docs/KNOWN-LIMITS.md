@@ -48,6 +48,26 @@ Fence hygiene and budget-vs-tier run only over registries named in
 "agent". Writing the fence, comparing scopes, and resuming after a kill are
 human. Full text: `references/laws-parallel-writers.md` L13, `LAWS-REFERENCE.md`.
 
+## The case-fold confirmation trusts one probe of the project's own volume
+
+`tools/sbe_fence_hook.py::paths_overlap` closes the case-insensitive-filesystem
+escape (`docs/BYPASS-COVERAGE.md` row 21) by retrying a missed comparison
+case-folded and confirming the fold against the filesystem before trusting it,
+never on the string match alone. When both spellings already exist, the
+confirmation is `os.path.samefile`, which is definitive. When one or both do
+not exist yet, there is nothing to `samefile`, so the confirmation instead
+probes whether the PROJECT ROOT's own directory entry answers to a case-swapped
+spelling, on the reasoning that case (in)sensitivity is a property of the
+volume, not of any one file on it. Two edges follow from that reasoning and are
+worth stating rather than assuming away: a root whose own directory name
+carries no letters to swap (all digits or symbols) cannot be probed, and this
+hook's fail-open bias means an inconclusive probe allows the write rather than
+denying it; and a project split across two mounts with different case
+sensitivity (a fenced file reached through a symlink onto a different volume
+than `root`) is answered by `root`'s volume, not the target's. Neither edge is
+fixtured, because neither can be constructed without a filesystem this suite
+does not control.
+
 ## Blast radius revokes nothing (L14)
 
 "No apply rights on production state" is a working rule plus whatever access
@@ -361,21 +381,35 @@ An external review listed 35 ways a person or an agent could get past these
 controls. `docs/BYPASS-COVERAGE.md` is the table: one row per scenario, each row
 COVERED (with the fixture named), UNREACHABLE HERE (with the missing thing
 named: a GitHub token, branch protection, a warehouse, a real second estate) or
-UNCOVERED (with what covering it would take). As this file is written, 16 rows
-are COVERED, 6 are UNREACHABLE HERE and 13 are UNCOVERED.
+UNCOVERED (with what covering it would take). As this file is written, 18 rows
+are COVERED, 6 are UNREACHABLE HERE and 11 are UNCOVERED.
 
 So: a green `python3 tools/test_sbe_bypass.py` means the COVERED scenarios were
-tested. It is not a statement about the other 19, and it is not a claim that the
+tested. It is not a statement about the other 17, and it is not a claim that the
 list of 35 is the whole space of bypasses. Some fixtures in that file pin a
 bypass that WORKS, and carry `_is_a_limit` in their names for exactly that
 reason; a limit fixture is a tripwire on this documentation, not coverage.
 
-Two holes found while writing that table are recorded here rather than fixed,
-because fixing them changes code that was outside the wave that found them.
-`sbe evidence verify` opens the receipt path without the access check the hard
-gates use, so a FIFO where a receipt is expected hangs the command forever and
-prints no verdict in either mode. And the evidence wrapper runs the operator's
-command with no timeout, so a command that hangs hangs the wrapper. Both are row
-35 of the table.
+Two holes found while writing that table were fixed in a later wave, both in
+`src/brothersbe/evidence.py`. `sbe evidence verify` used to open the receipt
+path with no access check, so a FIFO where a receipt was expected hung the
+command forever with no verdict in either mode; it now runs the same
+`evidence_problem` access check the hard gates use before opening, and refuses
+a FIFO, socket, device or unreadable file by name in bounded time instead
+(`tools/test_sbe_evidence.py::TestAccessAndTimeout`). The evidence wrapper's
+`subprocess.run` used to carry no timeout at all, so a command that hung, hung
+the wrapper; `sbe evidence run` now takes an optional `--timeout SECONDS` that
+kills the child and writes no receipt rather than one that could later verify
+PASS. It has NO DEFAULT, on purpose: a silent one would kill a legitimate
+long-running test suite, which is the exact false-positive shape this
+project's own kill criteria warn against, so a command run with no `--timeout`
+can still hang the wrapper forever, precisely as before. One more limit,
+measured rather than assumed (a `sh -c "sleep 60 & sleep 60"` run under
+`timeout=2` returned in 2.00 seconds and left both sleeps alive): expiry kills
+the CHILD, not its descendants, because nothing here kills a process group. The
+refusal comes back at the bound, and a grandchild the command spawned may keep
+running, detached, after the wrapper has already said no. Both were row 35 of
+the table, now COVERED with that residual stated on the row itself.
 
-Full text: `docs/BYPASS-COVERAGE.md`, `tools/test_sbe_bypass.py`.
+Full text: `docs/BYPASS-COVERAGE.md`, `tools/test_sbe_bypass.py`,
+`docs/CLI.md` ("sbe evidence").

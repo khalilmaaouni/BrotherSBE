@@ -432,18 +432,15 @@ class TestFenceScopeEscapes(BypassFixture):
                       "a symlink into a fenced file was allowed")
         self.assertIn("docs/SETUP.md", out)
 
-    def test_a_case_variant_of_a_fenced_path_is_allowed_which_is_a_limit(self):
-        """SCENARIO 21, the case half, and it is a real escape rather than a
-        theoretical one. On a case-insensitive filesystem (the macOS default)
-        `docs/setup.md` and `docs/SETUP.md` are ONE file: the fixture proves
-        that by inode before it proves anything about the hook. The comparison
-        is case-sensitive, so the second writer is allowed, and the write lands
-        on the fenced file.
-
-        Closing this needs a change to tools/sbe_fence_hook.py (case-folding the
-        comparison when the filesystem is case-insensitive), which is not this
-        file's to make, so the scenario is UNCOVERED in the table and pinned
-        here."""
+    def test_a_case_variant_of_a_fenced_path_is_refused(self):
+        """SCENARIO 21, the case half. On a case-insensitive filesystem (the
+        macOS default) `docs/setup.md` and `docs/SETUP.md` are ONE file: the
+        fixture proves that by inode before it proves anything about the hook,
+        exactly as it did while this was still a limit. `paths_overlap` in
+        `tools/sbe_fence_hook.py` now retries a missed comparison case-folded
+        and confirms the fold against the filesystem (`os.path.samefile` here,
+        since both spellings already exist) before trusting it, so the second
+        writer is refused rather than allowed onto the fenced file."""
         fenced = os.path.join(self.project, "docs", "SETUP.md")
         variant = os.path.join(self.project, "docs", "setup.md")
         if not os.path.exists(variant):
@@ -453,12 +450,11 @@ class TestFenceScopeEscapes(BypassFixture):
         self.assertEqual(os.stat(fenced).st_ino, os.stat(variant).st_ino,
                          "the two spellings must be one file, or this fixture is not the "
                          "bypass it claims to be")
-        self.assertEqual(self.decide(variant), "",
-                         "the hook denied the case variant, which would be an improvement; "
-                         "update docs/BYPASS-COVERAGE.md row 21 and delete this fixture")
+        self.assertIn('"permissionDecision": "deny"', self.decide(variant),
+                      "a case variant of a fenced path reached the fenced file")
         self.assertIn('"permissionDecision": "deny"', self.decide(fenced),
-                      "the control fixture beside the limit: the exact spelling IS refused, "
-                      "so the difference above is the case comparison and nothing else")
+                      "the control fixture beside the coverage: the exact spelling is refused "
+                      "too, so the fold did not weaken the ordinary case")
 
 
 # ---------------------------------------------------------------------------

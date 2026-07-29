@@ -8,6 +8,35 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The two defects the bypass-coverage table recorded rather than fixed are
+  closed, and the table and `docs/KNOWN-LIMITS.md` are updated to match.
+  `sbe evidence verify` used to open a receipt path with no access check, so a
+  FIFO where a receipt was expected hung the command forever with no verdict
+  in either mode; it now runs the same `sbe_checks.evidence_problem` access
+  check the hard gates use before opening, and refuses a FIFO, socket, device
+  or unreadable file by name in bounded time instead, in both text and
+  `--json` mode (`tools/test_sbe_evidence.py::TestAccessAndTimeout`, two
+  fixtures). `sbe evidence run` gained an optional `--timeout SECONDS`: past
+  it, the child is killed and no receipt is written, so nothing can later
+  verify PASS for a run whose exit code was never observed. There is
+  deliberately no default, because a silent one would kill a legitimate
+  long-running suite, the exact false-positive shape this project's own kill
+  criteria warn against, so a command run with no `--timeout` can still hang
+  the wrapper as before; that residual is stated on row 35 of
+  `docs/BYPASS-COVERAGE.md` rather than left implicit. Separately,
+  `tools/sbe_fence_hook.py::paths_overlap` closed the case-insensitive-
+  filesystem escape (row 21): a fence written for `docs/SETUP.md` used to let
+  a second writer land on `docs/setup.md` because the comparison was
+  case-sensitive on a filesystem that is not. A missed comparison is now
+  retried case-folded and the fold is confirmed against the filesystem
+  (`os.path.samefile` when both spellings exist, a volume-level probe when
+  one does not) before it is trusted, so two honestly different files named
+  `a.md` and `A.md` on a case-sensitive filesystem still do not conflict.
+  `tools/test_sbe_bypass.py::test_a_case_variant_of_a_fenced_path_is_refused`
+  moved from a LIMIT fixture to a COVERAGE fixture, and
+  `tools/test_sbe_fence_hook.py::TestCaseFoldConfirmation` pins the
+  confirmation itself. Bypass-coverage totals move from 16 COVERED / 6
+  UNREACHABLE HERE / 13 UNCOVERED to 18 / 6 / 11.
 - The 35 bypasses an external review listed are now answered one by one, in
   `docs/BYPASS-COVERAGE.md`, and the answer for each is exactly one of three:
   COVERED with the fixture named, UNREACHABLE HERE with the missing thing named

@@ -57,7 +57,7 @@ from .impact import DiffUnavailable, changed_files, resolve_range, _git
 TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
 if os.path.abspath(TOOLS) not in sys.path:
     sys.path.insert(0, os.path.abspath(TOOLS))
-from sbe_checks import answered  # noqa: E402
+from sbe_checks import answered, evidence_problem  # noqa: E402
 
 #: Schema versions this module knows how to read. An unknown version is refused
 #: rather than parsed hopefully: a consumer that reads an old field under new
@@ -189,12 +189,22 @@ def trust_level(receipt):
             "set for itself" % ci)
 
 
-def generate(cwd, argv, base=None, head="HEAD", covers=None):
+def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None):
     """Run `argv` and return the receipt describing what actually happened.
 
     The command runs HERE. Nothing in the signature accepts a duration, an exit
     code or an output digest, which is the whole point: those three are the
     fields a hand-written receipt gets to invent today.
+
+    `timeout`, in seconds, is None unless the caller passes `--timeout`. There
+    is no default: a silent one would kill a legitimate long suite and hand
+    back a receipt about a run that never finished, which is the exact
+    false-positive pattern this project's kill criteria warn against. When it
+    is set and the command outruns it, `subprocess.run` kills the child and
+    waits for it (that is Python's own contract for `timeout=`, not something
+    hand-rolled here), and this raises `ReceiptUnreadable` rather than writing
+    a receipt: no exit code was ever observed, so there is nothing honest to
+    seal, and the caller's stderr names what happened instead.
     """
     if not argv:
         raise ReceiptUnreadable("no command to run: `sbe evidence run` needs `-- <command...>`")
@@ -221,10 +231,18 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None):
     started = time.time()
     try:
         proc = subprocess.run(list(argv), cwd=cwd, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
+                              stderr=subprocess.PIPE, timeout=timeout)
     except OSError as exc:
         raise ReceiptUnreadable(
             "the command did not start, so there is no run to write a receipt about: %s" % exc)
+    except subprocess.TimeoutExpired:
+        elapsed = time.time() - started
+        raise ReceiptUnreadable(
+            "the command was killed after %.3fs, past --timeout %ss. No exit code was ever "
+            "observed, so no receipt was written for this run: a timeout is a fact about the "
+            "wrapper, never a fact worth sealing as if the command had answered. Rerun without "
+            "--timeout, or with a longer one, if this command legitimately needs more time"
+            % (elapsed, timeout))
     ended = time.time()
 
     # Pass the child's output through untouched. A wrapper that swallows what
@@ -285,10 +303,24 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None):
 
 
 def load(path):
-    """The receipt at `path`, or raise. A file that is not JSON is not a receipt."""
+    """The receipt at `path`, or raise. A file that is not JSON is not a receipt.
+
+    ACCESS is checked BEFORE open(), by stat rather than by opening: a FIFO
+    where a receipt was expected used to hang this command forever, in both
+    text and JSON mode, with no verdict line at all, which is worse than any
+    parse failure because a parse failure at least prints FAIL. This is the
+    same `evidence_problem` check the hard gates use (`tools/sbe_checks.py`,
+    `tools/sbe_gate.py::load_receipt`), so a FIFO, socket, device or
+    unreadable file is refused by name here in bounded time instead.
+    """
     if not path or not os.path.exists(path):
         raise ReceiptUnreadable("no receipt at %s; absent evidence is NO-DATA, never a pass"
                                 % path)
+    problem = evidence_problem(path)
+    if problem:
+        raise ReceiptUnreadable(
+            "%s was refused before it was opened: %s. Opening it directly could block this "
+            "command forever; a broken claim must never look like a hang" % (path, problem))
     if os.path.isdir(path):
         raise ReceiptUnreadable("%s is a directory, not a receipt" % path)
     try:
@@ -552,6 +584,10 @@ def _parser():
     run.add_argument("--base", default=None, help="the commit to diff from for --covers")
     run.add_argument("--head", default="HEAD", help="the commit this receipt is made against")
     run.add_argument("--cwd", default=".", help="the repository to run in")
+    run.add_argument("--timeout", type=float, default=None,
+                     help="kill the command and refuse the receipt if it runs longer than "
+                          "this many seconds. No default: a silent one would kill a "
+                          "legitimate long-running suite")
 
     ver = sub.add_parser("verify", help="check a receipt against the current commit")
     ver.add_argument("receipt")
@@ -590,7 +626,7 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
             return exit_usage
         try:
             receipt = generate(os.path.abspath(args.cwd), command, base=args.base,
-                               head=args.head, covers=args.covers)
+                               head=args.head, covers=args.covers, timeout=args.timeout)
         except ReceiptUnreadable as exc:
             sys.stderr.write("sbe evidence run: no receipt written. %s\n" % exc)
             return exit_failed

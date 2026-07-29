@@ -85,7 +85,7 @@ class EvidenceFixture(unittest.TestCase):
         env = dict(os.environ)
         env.update(kwargs.get("env") or {})
         return subprocess.run([sys.executable, SBE] + list(argv), capture_output=True,
-                              text=True, env=env)
+                              text=True, env=env, timeout=kwargs.get("timeout"))
 
     @staticmethod
     def output(proc):
@@ -445,6 +445,69 @@ class TestNoRawOutputLeak(EvidenceFixture):
         self.assertEqual(raw.count(self.SECRET), 1,
                          "the secret is in argv and nowhere else: the printed copy still went "
                          "to a digest")
+
+
+class TestAccessAndTimeout(EvidenceFixture):
+    """DEFECT: `verify()` opened a receipt path with no access check, so a FIFO
+    where a receipt was expected hung the command forever with no verdict in
+    either mode; and `generate()`'s subprocess.run carried no timeout, so a
+    command that hung, hung the wrapper. Both fixtures bound their own
+    subprocess call from the OUTSIDE (`run_sbe(..., timeout=N)`), so a
+    regression shows up as this test failing on TimeoutExpired rather than as
+    the whole suite hanging."""
+
+    def test_a_fifo_receipt_is_refused_in_bounded_time_json_mode(self):
+        fifo_path = self.receipt_path("ran-receipt.json")
+        os.mkfifo(fifo_path)
+        try:
+            proc = self.run_sbe("evidence", "verify", fifo_path, "--cwd", self.repo,
+                                "--json", timeout=20)
+        except subprocess.TimeoutExpired:
+            self.fail("sbe evidence verify --json hung on a FIFO instead of refusing it")
+        text = self.output(proc)
+        blob = text[text.index("{"):text.rindex("}") + 1] if "{" in text else "{}"
+        data = json.loads(blob)
+        self.assertEqual(data["verdict"], "FAIL", text)
+        self.assertNotEqual(proc.returncode, 0, text)
+        self.assertIn("not a regular file", json.dumps(data["reasons"]), text)
+
+    def test_a_fifo_receipt_is_refused_in_bounded_time_text_mode(self):
+        fifo_path = self.receipt_path("ran-receipt.json")
+        os.mkfifo(fifo_path)
+        try:
+            proc = self.run_sbe("evidence", "verify", fifo_path, "--cwd", self.repo,
+                                timeout=20)
+        except subprocess.TimeoutExpired:
+            self.fail("sbe evidence verify hung on a FIFO instead of refusing it")
+        text = self.output(proc)
+        self.assertTrue(text.startswith("FAIL"), text)
+        self.assertNotEqual(proc.returncode, 0, text)
+        self.assertIn("not a regular file", text, text)
+
+    def test_run_with_timeout_over_a_slow_command_produces_no_pass_receipt(self):
+        """The child is killed, no exit code was ever observed, and no receipt
+        is written that a later `verify` could read as PASS. There is no
+        default: this test passes `--timeout` explicitly, the way an operator
+        would have to."""
+        out = self.receipt_path()
+        argv = ["evidence", "run", "--out", out, "--cwd", self.repo, "--base", self.base,
+                "--timeout", "2", "--", "python3", "-c", "import time; time.sleep(30)"]
+        try:
+            proc = self.run_sbe(*argv, timeout=15)
+        except subprocess.TimeoutExpired:
+            self.fail("sbe evidence run --timeout did not bound the child; the wrapper hung")
+        text = self.output(proc)
+        self.assertNotEqual(proc.returncode, 0, text)
+        self.assertFalse(os.path.exists(out),
+                         "a timed-out run must not leave a receipt behind to verify later")
+        self.assertIn("timeout", text.lower(), text)
+
+    def test_run_without_timeout_is_unaffected(self):
+        """No default: an ordinary run with no --timeout at all must behave
+        exactly as it always has."""
+        path, code, text = self.generate()
+        self.assertEqual(code, 0, text)
+        self.assertTrue(os.path.exists(path), text)
 
 
 class TestTheInvariant(EvidenceFixture):

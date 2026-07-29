@@ -138,6 +138,19 @@ written about it.
 files changed between base and head are used. `verify` re-hashes those files, which is how it
 tells you the code moved after the evidence was made.
 
+`--timeout SECONDS` bounds the command. Past it, the child is killed and no receipt is written:
+no exit code was ever observed, so there is nothing honest to seal, and `sbe evidence run` exits
+non-zero with the timeout named on stderr instead. **There is no default.** A silent timeout
+would kill a legitimate long-running test suite and hand back nothing to show for it, which is
+the exact false-positive pattern this project's own kill criteria warn against, so a run with no
+`--timeout` can hang exactly as far as the command itself hangs. Pass it explicitly when the
+command is untrusted or has hung before.
+
+`verify` refuses a receipt path it cannot safely open **before** it opens it: a FIFO, a socket, a
+device, or a file with no read permission is named and refused in bounded time, in both text and
+`--json` mode, rather than read directly, which used to block the command forever on a FIFO with
+no verdict printed at all.
+
 **stdout and stderr are recorded as SHA256 digests and byte counts, never as text.** A receipt
 gets committed, pasted into a pull request and handed to whoever asks for evidence, and a
 command that prints a token would otherwise persist it in the one artifact everybody is
@@ -148,7 +161,7 @@ encouraged to share.
 | Verdict | When |
 |---|---|
 | `PASS` | the seal matches, the head commit is current, every covered file still holds the bytes recorded, and the tree was clean at generation time |
-| `FAIL` | the receipt does not parse, its schema version is unknown, a required field records nothing, the seal does not match, the head commit has moved, or a covered file changed or vanished |
+| `FAIL` | the receipt path could not be safely opened (a FIFO, socket, device or unreadable file), the receipt does not parse, its schema version is unknown, a required field records nothing, the seal does not match, the head commit has moved, or a covered file changed or vanished |
 | `NO-DATA` | the receipt is sound but was generated on a dirty tree, or covers no file at all. Advisory is NO-DATA here, never a pass |
 
 `--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
