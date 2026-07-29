@@ -8,6 +8,10 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- PRACTICES.md gains the loop close-out interview: open loops are put to their
+  decision owner as per-loop question sets, each question carrying a
+  recommendation, its pros, and its cons. Advice, not a control, and it says so.
+
 - `sbe status`: one truthful, blocker-first answer to "where does this change stand",
   read from state other commands already recorded rather than computed fresh. It never
   runs the suites itself and never becomes a second gate runner: nothing in it starts a
