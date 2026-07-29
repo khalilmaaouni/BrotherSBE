@@ -442,6 +442,20 @@ jobs:
         run: python3 tools/test_sbe_fence_hook.py
       - name: Impact fixtures (a declared tier cannot contradict the diff silently)
         run: python3 tools/test_sbe_impact.py
+      # The kill criterion this wave was cut against, verbatim: an install
+      # that needs a manual global settings edit. This proves a plain
+      # `git archive HEAD` extracts on its own into an empty directory and
+      # verifies clean there (scripts/verify-install.sh, bin/sbe doctor),
+      # nothing written outside that one directory.
+      - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
+        run: sh scripts/test-install-artifact.sh
+      # Exercises the real upgrade/rollback path once this repository has cut
+      # its first tag; until then it prints NO-DATA and exits 0 without
+      # claiming an upgrade was tested, which is the honest result here, not
+      # a skip and not a pass (docs/KNOWN-LIMITS.md, "The release candidate
+      # ships packaging, not a release").
+      - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
+        run: sh scripts/test-upgrade-rollback.sh
 ```
 
 Why the two settings matter:

@@ -39,6 +39,35 @@ checklist's own rules.
   `.sbe/` at the inspected path itself, not discovered under a nested `design/<change>/`
   dossier) and the argv-substring heuristic used to recognize a design/gate/score receipt.
   Maturity: INTERNAL-EVAL.
+- Release-candidate packaging: `.claude-plugin/marketplace.json` names the
+  plugin, the repository, and the version, in the shape `claude plugin
+  marketplace add` and `claude plugin validate` (installed CLI 2.1.207)
+  accept; `tools/test_sbe.py`'s new `TestMarketplaceManifest` class pins its
+  version against `VERSION` and `.claude-plugin/plugin.json` (a four-way pin,
+  extending the pin `TestPluginSurface` already held) and re-runs the
+  installed CLI's own validator as a subprocess, skipping honestly (not
+  passing) when `claude` is not on PATH. `scripts/test-install-artifact.sh`
+  proves a plain `git archive HEAD` extracts into an empty directory and
+  verifies clean there (`scripts/verify-install.sh`, `bin/sbe doctor`),
+  nothing written outside that directory, the kill criterion this wave was
+  cut against. `scripts/test-upgrade-rollback.sh` proves the same for a
+  previous-tag-to-HEAD-to-rollback cycle when a previous tag exists, and
+  reports NO-DATA honestly (exit 0, no claim of a tested upgrade) today,
+  because this repository has cut no tag yet; both scripts were calibrated
+  by breaking each fixture in a disposable clone of this repository and
+  watching it go red, then restoring it and watching it go green, on both
+  branches of the upgrade-rollback script. Both new steps are wired into
+  `.github/workflows/brothersbe-gates.yml`. `docs/ROLLOUT.md` is new: a
+  staged rollout for an adopting organization (shadow mode, then a
+  founder-gated move to enforced, then the adoption kit), a support and
+  ownership model with no invented SLA, the upgrade and rollback procedure,
+  and the blocked list verbatim (signed release, branch protection, `gh
+  auth`, real-estate maturity claims). `docs/KNOWN-LIMITS.md` gets a matching
+  section naming the same four blocks in this project's own voice. No
+  control was weakened; the pre-existing suite counts only rose (`sbe`: 47 to
+  49). Maturity: INTERNAL-EVAL, proven against this repository and a
+  disposable clone of it, and no other estate, exactly as `docs/ROLLOUT.md`
+  states plainly rather than implies.
 - `sbe task`: a write-scope registry with a diff postcondition that survives
   Bash. The fence hook fails open and cannot govern shell writes because shell
   cannot be parsed reliably; `sbe task open` now records who owns what in

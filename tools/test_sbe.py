@@ -1491,5 +1491,97 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         self.assertTrue(os.path.exists(out))
 
 
+class TestMarketplaceManifest(unittest.TestCase):
+    """Wave 10 packages this plugin for `claude plugin marketplace add`, which
+    means a SECOND file, `.claude-plugin/marketplace.json`, now carries the
+    same version number `.claude-plugin/plugin.json` and `VERSION` already pin
+    against each other (`TestPluginSurface.
+    test_manifest_parses_and_agrees_with_the_version_file`). A marketplace
+    entry that drifts from the plugin it names is the same silent packaging
+    defect that test already guards against, one file further out, so this
+    class extends the same pin rather than starting a second one.
+
+    The shape asserted here was not taken from memory. The installed CLI
+    (`claude --version` reported 2.1.207 when this was written) was asked
+    directly, and its decisive lines were:
+
+        `claude plugin marketplace add --help` prints:
+        "Add a marketplace from a URL, path, or GitHub repo"
+
+        `claude plugin validate --help` prints:
+        "Validate a plugin or marketplace manifest"
+
+    Neither --help prints a JSON schema, so the field shape itself (top-level
+    name/owner/plugins, each plugin entry's name/source/description/version)
+    was cross-checked against real, already-installed marketplace.json files
+    on this machine that ship a single self-hosted plugin the same way this
+    repository does (`~/.claude/plugins/marketplaces/mattpocock` and
+    `.../karpathy-skills`, both using `"source": "./"` to name the repo's own
+    root rather than a second clone URL), and then confirmed the only way
+    that actually counts: running the installed `claude plugin validate`
+    against the exact file this project ships, which the second test below
+    re-runs so a future shape change is caught here rather than only at the
+    next human's release-day run of the same command."""
+
+    ROOT = os.path.join(HERE, "..")
+    MANIFEST = os.path.join(ROOT, ".claude-plugin", "marketplace.json")
+
+    def test_marketplace_manifest_parses_and_pins_every_version_together(self):
+        self.assertTrue(os.path.exists(self.MANIFEST),
+                        "%s does not exist; `claude plugin marketplace add` has nothing to read"
+                        % self.MANIFEST)
+        manifest = json.load(io.open(self.MANIFEST, encoding="utf-8"))
+        self.assertEqual(manifest.get("name"), "brothersbe",
+                         "the marketplace name; changing it changes what a user types after "
+                         "`claude plugin marketplace add`")
+        self.assertIn("owner", manifest, "marketplace.json has no owner")
+
+        plugins = manifest.get("plugins")
+        self.assertTrue(plugins, "marketplace.json declares no plugins")
+        entry = plugins[0]
+        self.assertEqual(entry.get("name"), "brothersbe",
+                         "the plugin entry name must match .claude-plugin/plugin.json's own "
+                         "name or `claude plugin install brothersbe@brothersbe` resolves to "
+                         "the wrong thing")
+        self.assertEqual(entry.get("source"), "./",
+                         "this repository ships the plugin it also markets, so the entry "
+                         "points at its own root, not a second clone URL")
+        self.assertTrue(entry.get("description"), "the plugin entry has no description")
+
+        version = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        plugin_manifest = json.load(io.open(
+            os.path.join(self.ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8"))
+        self.assertEqual(plugin_manifest.get("version"), version,
+                         "plugin.json and VERSION already disagree; that is "
+                         "TestPluginSurface's own pin, so if this line fails, that one is "
+                         "failing too")
+        self.assertEqual(entry.get("version"), version,
+                         "marketplace.json's plugin entry says %s, VERSION says %s; `claude "
+                         "plugin tag` validates that plugin.json and any enclosing marketplace "
+                         "entry agree, so a release cut from this state fails that check"
+                         % (entry.get("version"), version))
+        top_version = (manifest.get("metadata") or {}).get("version")
+        self.assertEqual(top_version, version,
+                         "marketplace.json's own metadata.version says %s, VERSION says %s"
+                         % (top_version, version))
+
+    def test_marketplace_manifest_validates_against_the_installed_cli(self):
+        claude_bin = shutil.which("claude")
+        if not claude_bin:
+            self.skipTest(
+                "the `claude` CLI is not on PATH in this environment, so nothing ran "
+                "`claude plugin validate` here. This is NO-DATA, not a pass: "
+                "test_marketplace_manifest_parses_and_pins_every_version_together above still "
+                "checks the shape by hand, but only a real run of the installed CLI proves the "
+                "CLI itself accepts this file, and that did not happen on this run.")
+        result = subprocess.run([claude_bin, "plugin", "validate", self.MANIFEST],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0,
+                         "`claude plugin validate %s` exited %d:\nSTDOUT:\n%s\nSTDERR:\n%s"
+                         % (self.MANIFEST, result.returncode, result.stdout, result.stderr))
+        self.assertIn("Validation passed", result.stdout,
+                      "the CLI exited 0 but did not say Validation passed: %s" % result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

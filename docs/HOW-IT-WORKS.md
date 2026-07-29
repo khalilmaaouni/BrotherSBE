@@ -339,6 +339,10 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
         run: python3 tools/test_sbe_fence_hook.py
       - name: Impact fixtures (a declared tier cannot contradict the diff silently)
         run: python3 tools/test_sbe_impact.py
+      - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
+        run: sh scripts/test-install-artifact.sh
+      - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
+        run: sh scripts/test-upgrade-rollback.sh
 ```
 
 The checkout step needs `fetch-depth: 0` because the approval gate reads commit

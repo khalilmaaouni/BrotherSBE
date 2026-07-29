@@ -508,3 +508,51 @@ behavior is:
   estate.
 Full text: `src/brothersbe/adopt.py`, `src/brothersbe/initcmd.py`, `docs/ADOPTION.md`,
 `docs/CLI.md`.
+
+## The release candidate ships packaging, not a release
+
+Wave 10 adds `.claude-plugin/marketplace.json` (so `claude plugin marketplace
+add` has something to read), an install-artifact test, and an
+upgrade-rollback test. None of that is a release. Four things stay blocked,
+named here in this tool's own voice rather than left for a reader to infer
+from what is absent:
+
+- **Signed release.** No tag this project produces is signed. A signed
+  release is blocked on a key the founder holds, not on anything this code
+  could compute for itself, and nothing here claims otherwise. `git tag -a`
+  (`docs/RELEASE.md`, `docs/ROLLOUT.md`) makes an annotated tag, which
+  records who ran the command and when; it is not a signature, and this file
+  does not call it one.
+- **Branch protection.** Unchanged from the limit already stated above under
+  "The adoption kit proposes, and verifies only what a filesystem can
+  answer": branch protection, required status checks, and required code-owner
+  review are GitHub platform settings, never `PRESENT` from a local read,
+  always `UNVERIFIABLE-HERE`. Shipping a marketplace manifest changes nothing
+  about that; there is still no GitHub token anywhere in this project.
+- **`gh auth`.** Nothing in this wave runs `gh auth login`, stores a GitHub
+  token, or automates a GitHub-side action on anyone's behalf. Every
+  GitHub-side step `docs/ROLLOUT.md` and `PUBLISH-CHECKLIST.md` describe
+  (opening a repository, protecting a branch, pushing a tag) is a human
+  authorizing it in the GUI.
+- **Real-estate maturity claims.** The install-artifact test and the
+  upgrade-rollback test are exercised against THIS repository's own git
+  history (`tools/test_sbe.py`'s new `TestMarketplaceManifest` class checks
+  the manifest shape and re-runs the installed CLI's own validator; the two
+  shell scripts are calibrated by breaking each fixture and watching it go
+  red, then restoring it and watching it go green, against this
+  repository and a disposable clone of it). None of that is evidence from a
+  second, independent estate. Maturity: INTERNAL-EVAL, same word this file
+  uses everywhere else, meaning the same thing everywhere else: proven here,
+  claimed nowhere beyond here.
+
+The upgrade-rollback script carries one limit of its own, stated where the
+behavior is rather than only here: as of this wave, this repository has cut
+no tag (`docs/RELEASE.md`), so `scripts/test-upgrade-rollback.sh` finds no
+previous release to upgrade FROM and reports NO-DATA rather than PASSED,
+every time it runs, until the first tag exists. A NO-DATA verdict here is not
+a weaker pass; it is the honest absence of the one fixture the script needs,
+named as exactly that.
+
+Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
+`scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
+(`TestMarketplaceManifest`).
