@@ -81,6 +81,21 @@ JSON output on the other commands arrives with the evidence work, not before: em
 envelope around a verdict whose provenance is not yet bound to a commit would dress an
 advisory result as a machine-readable authoritative one.
 
+## `sbe doctor`, and what WARNING means
+
+Every check returns one of four results, never folded together: `PASS`, `FAIL`, `NO-DATA` (an
+environment question nobody could answer, never counted as a pass), and `WARNING` (something
+worth a person's attention that is not, by itself, grounds to block a run). Only `FAIL` moves
+the exit code; a `WARNING` is doctor observing, not doctor failing.
+
+The `identity` check reads this repository's `git config user.email` and `user.name` and flags
+a fixture identity, an `@example.com` email or the literal name `ci`, as a `WARNING`, quoting
+the value it found. That shape of identity authoring real commits is a leak that goes
+unnoticed until someone reads the log by hand: a CI or scratch git config left active in a real
+checkout is exactly how it happens. `doctor` surfaces it rather than passing silently over it,
+and rather than hard-failing an otherwise-healthy environment over a question this command can
+only observe, not adjudicate.
+
 ## `sbe impact`, and the one rule that makes it safe
 
 ```bash
@@ -333,6 +348,14 @@ anything, and, only with `--with-consumer-ci`, a copy of this installation's own
 outside a git repository, naming the reason: there is nowhere for the config, the dossier
 directory or the receipt to be versioned.
 
+It also ensures `.gitignore` carries one line, `.brothersbe/install-receipt.json`, under a
+one-line comment explaining why: the receipt records this machine's absolute install path, a
+local, personal fact with no business being tracked. That mutation is **appended, never owned**:
+`sbe init` reads whatever is already in `.gitignore` and adds the comment and the line only
+when they are missing, leaving every other line in the file untouched. Present means untouched,
+the same idempotence rule as everything else here, and dry-run shows it as a proposed diff like
+every other mutation.
+
 Every proposal is deterministic content, compared byte for byte against what is already on disk,
 which is what makes **running it twice under `--apply` change nothing the second time**: the
 second run finds every proposal already matches and writes nothing, and the install receipt
@@ -341,7 +364,101 @@ because nothing happened this run for it to describe. When something IS written,
 writes or refreshes `.brothersbe/install-receipt.json`: the schema and tool version, when it
 ran, every path it has ever written (across this call and any prior one), and exact uninstall
 instructions, `rm -f <path>` for each, printed at the end and saved into the same receipt.
+`.gitignore` is the one exception to that written set: it is written like any other proposal
+when its line is missing, but it is never listed in `writtenPaths` or the uninstall
+instructions, because `sbe init` only appended a line to a file it does not own, and an
+uninstall instruction of `rm -f .gitignore` would delete every other line a real project keeps
+in that file.
 
 Limits in full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+## `tools/sbe_telemetry.py` data commands: `data-show`, `data-export`, `data-purge`
+
+```bash
+python3 tools/sbe_telemetry.py data-show
+python3 tools/sbe_telemetry.py data-export [--out PATH]
+python3 tools/sbe_telemetry.py data-purge [--category NAME] [--yes]
+```
+
+These three are not on `sbe`, and they are not going to be. `sbe` is the facade in front of the
+assurance tools in the table above (`design`, `gate`, `score`, `intake`, `decide`, `verify`, `review`,
+`impact`, `status`, and the rest): commands a CI job or a reviewer runs routinely, over a directory,
+on somebody else's schedule. `data-show`, `data-export` and `data-purge` read and delete what
+BrotherSBE has captured about the operator's own sessions, ratings, and messages. That is a privacy
+surface, not an assurance surface, and folding it into a menu a script tabs through would make
+"delete what was captured about me" one habitual keystroke away instead of something a person runs
+deliberately, by name, on purpose. They live only on `tools/sbe_telemetry.py`, invoked directly, the
+same way `intent`, `rate` and `purge-corrections` already do.
+
+All three read the SAME inventory. The tool's own comment states the invariant: "a file that
+`data-show` lists is a file `data-export` copies and `data-purge` removes," built from this module's
+path constants plus a glob of the telemetry directory, so a per-project file cannot be listed by one
+of the three and missed by the other two.
+
+**Where the vault is:** `BROTHERSBE_VAULT`, default `~/BrotherSBEVault`. The telemetry directory
+these three commands read and write is `<vault>/99-System/telemetry`.
+
+### `data-show`
+
+Read-only, never writes. Prints the capture policy in force for each category (`corrections`,
+`metrics`, `transcript`, gated respectively by `BROTHERSBE_TELEMETRY_CORRECTIONS`,
+`BROTHERSBE_TELEMETRY_METRICS`, `BROTHERSBE_TELEMETRY_TRANSCRIPT`, every category off by default),
+then every file the tool can write: category, path, record count, byte size, file mode, and what it
+holds, or "absent, so nothing is stored at this path" for one that does not exist. No flags. Real
+output against this repository's own vault, paths abbreviated below, capture off:
+
+```
+BROTHERSBE STORED DATA (vault ~/BrotherSBEVault)
+  policy: corrections capture is off: BROTHERSBE_TELEMETRY_CORRECTIONS is not set, and every category is off by default
+  policy: metrics capture is off: BROTHERSBE_TELEMETRY_METRICS is not set, and every category is off by default
+  policy: transcript capture is off: BROTHERSBE_TELEMETRY_TRANSCRIPT is not set, and every category is off by default
+  [metrics] .../telemetry/outcomes.jsonl: absent, so nothing is stored at this path
+  [metrics] .../telemetry/ratings.jsonl: absent, so nothing is stored at this path
+  [metrics] .../telemetry/reviews.jsonl: absent, so nothing is stored at this path
+  [corrections] .../telemetry/corrections.jsonl: absent, so nothing is stored at this path
+  [housekeeping] .../telemetry/installed-skill-version: 1 record(s), 41 bytes, mode 644 -- the git sha of the installed skill at the last check
+  [autosave] .../telemetry/autosave.log: 5 record(s), 1408 bytes, mode 644 -- one line per autosave snapshot, skip or lock event
+  [autosave] .../telemetry/autosave-exclusions.log: 5 record(s), 487 bytes, mode 600 -- paths the autosave content scan kept out of a snapshot, and why (paths and reasons only, never the matched content)
+read 3 file(s), 4 path(s) absent, 0 that could not be measured, under .../telemetry.
+This lists this vault only. A backup, a mirror or a sync client may hold copies of any of it, and nothing here can see those.
+```
+
+### `data-export`
+
+Writes ONE owner-only JSON bundle, file mode 600, named `brothersbe-telemetry-export.json` in the
+current directory by default, `--out PATH` to name another location. The bundle carries the actual
+file CONTENT for every path in the same inventory `data-show` lists, not just the counts, so it
+"holds the stored data itself" in the tool's own words, and it says so on every run: "treat as
+sensitive; redaction was applied at capture time and is best effort." This is how a person gets their
+own captured data out of the vault to read somewhere else, not a routine export a script should
+schedule. Note for anyone testing this command: it has no dry-run mode and no real `--help` short
+circuit for its subcommands (an unrecognized flag is simply ignored), so running it writes the file
+for real every time.
+
+### `data-purge`
+
+Deletes what is stored. Same dry-run shape as `sbe adopt` and `sbe init`: prints the inventory that
+currently exists on disk and stops there unless `--yes` is also given. With `--yes`, it deletes each
+file, then RE-CHECKS the filesystem afterward and reports removed / failed / still-present counts,
+because, in the tool's own words, "a purge that reports success from its own intention has proven
+nothing." `--category NAME` narrows the purge to one category.
+
+Categories are not a fixed enum. They are read from whatever `data-show`'s own inventory currently
+finds on disk, so an unrecognized name is refused with the live list, not a hardcoded one. Real
+output against this repository's own vault, where only `autosave`, `corrections`, `housekeeping` and
+`metrics` currently have a matching file to glob:
+
+```
+data-purge: no category named 'nope'; categories are autosave, corrections, housekeeping, metrics
+```
+
+A file that fails to remove, or that still exists after `os.remove` reported success, is named on its
+own line rather than folded into a clean exit.
+
+### The one law that governs all three, and everything else on this tool
+
+`tools/sbe_telemetry.py` never blocks work: every path exits 0, and an unhandled exception is caught
+and printed rather than propagated ("sbe_telemetry: swallowed error (never blocks)"). Numbers are
+parsed or absent; the tool never invents one.
 
 Three commands remain **present and refuse**: `plan`, `policy` and `exceptions`.

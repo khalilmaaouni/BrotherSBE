@@ -111,17 +111,53 @@ STATIC_EXCLUDES="':(exclude,glob)**/.env' ':(exclude).env' ':(exclude,glob)**/.e
 ':(exclude,glob)**/id_ecdsa' ':(exclude,glob)**/id_ed25519' \
 ':(exclude,glob)**/*.pfx'"
 
+# The fallback landing spot when the VAULT ITSELF cannot be written (chmod'd
+# read-only, or an ancestor that cannot be created). Without this, an
+# unwritable vault did not make the hook fail loudly (every path already
+# exited 0), it made the hook fail SILENTLY: log_line's own `mkdir -p
+# "$TEL_DIR"` failed the same way the write it was about to explain failed,
+# so the reason a tick or a precompact skipped landed nowhere a person would
+# ever read it, not in autosave.log, not in autosave-exclusions.log, not on
+# stderr (which this file deliberately keeps clean; see the test that pins
+# it). This resolves a spot beside the repository's own git metadata, which
+# every caller here already depends on (git is a hard requirement of the
+# whole autosave path) and which does not depend on the vault at all. Empty
+# output and a nonzero return when the current directory is not inside a
+# git worktree, which the two callers below already treat as "there is
+# truly nowhere left to write" and return quietly, the same best-effort
+# shape as every other double-failure in this file.
+#
+# Stated limit: this resolves relative to the CURRENT directory, not the
+# hook's target repo. Every call this matters for either runs after
+# snapshot() has already `cd`'d to the worktree top, or runs from the
+# directory Claude Code invoked the hook in, which is the target repo in
+# the ordinary case; a hook invoked from a genuinely different cwd than the
+# repo it names can still lose the reason here, and that residual gap is
+# not fixed by this fallback.
+fallback_log_path() {
+  gd="$(git rev-parse --git-dir 2>/dev/null)" || return 1
+  printf '%s/brothersbe-autosave-fallback.log' "$gd"
+}
+
 excl_record() {
   # The exclusion record. Paths and reasons only, never the matched content: a
   # record of what was kept out of a snapshot must not become the place the
   # secret is written down. Owner-only, best effort, never fatal.
-  mkdir -p "$TEL_DIR" 2>/dev/null || return 0
-  if [ ! -f "$EXCL_LOG" ]; then
-    touch_file "$EXCL_LOG" || return 0
-    chmod 600 "$EXCL_LOG" 2>/dev/null
+  if mkdir -p "$TEL_DIR" 2>/dev/null; then
+    if [ ! -f "$EXCL_LOG" ]; then
+      touch_file "$EXCL_LOG" && chmod 600 "$EXCL_LOG" 2>/dev/null
+    fi
+    if [ -f "$EXCL_LOG" ] && printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
+         2>/dev/null >> "$EXCL_LOG"; then
+      return 0
+    fi
   fi
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
-    2>/dev/null >> "$EXCL_LOG" || true
+  # The vault write failed. Falls back so the exclusion reason is not lost
+  # outright; see fallback_log_path above for what this does and does not cover.
+  fb="$(fallback_log_path)" || return 0
+  touch_file "$fb" 2>/dev/null && chmod 600 "$fb" 2>/dev/null
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "(vault unwritable) $1" \
+    2>/dev/null >> "$fb" || true
 }
 
 secret_named() {
@@ -177,9 +213,16 @@ log_line() {
   # error on every single tool call, out of the one primitive the whole file
   # relies on to be quiet. Same ordering defect as the one that made the tick
   # fatal, in the function that was supposed to be the safe way to do it.
-  mkdir -p "$TEL_DIR" 2>/dev/null || return 0
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
-    2>/dev/null >> "$TEL_DIR/autosave.log" || true
+  if mkdir -p "$TEL_DIR" 2>/dev/null &&
+     printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$1" \
+       2>/dev/null >> "$TEL_DIR/autosave.log"; then
+    return 0
+  fi
+  # The vault write failed. Falls back so the reason for a skip is not lost
+  # outright; see fallback_log_path above for what this does and does not cover.
+  fb="$(fallback_log_path)" || return 0
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "(vault unwritable) $1" \
+    2>/dev/null >> "$fb" || true
 }
 
 touch_file() {

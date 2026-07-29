@@ -8,6 +8,62 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe init` now also ensures `.gitignore` carries its own install-receipt line,
+  `.brothersbe/install-receipt.json`, under a one-line comment, because a fresh clone that ran
+  `sbe init --apply` could track a receipt naming this machine's absolute install path with
+  nothing in the way. Appended, not owned: existing `.gitignore` content is left untouched, the
+  mutation compares identical (present means untouched) exactly like every other proposal,
+  dry-run shows it as a proposed diff like every other mutation, and the install receipt's
+  `writtenPaths` and uninstall instructions never include `.gitignore`, because `sbe init` does
+  not delete a file it only appended a line to. Proof: `tools/test_sbe_adopt.py`'s
+  `TestInitGitignoreLine`, calibrated red (three fixtures failed) against the mutation removed
+  from `plan()`, before the fix restored it.
+
+- `sbe doctor` gains an `identity` check: it reads this repository's `git config user.email` and
+  `user.name` and reports a `WARNING`, quoting the value found, for a fixture identity, an
+  `@example.com` email or the literal name `ci`. That shape of identity authored a run of real
+  public commits before anyone noticed it; the check exists to catch the same class earlier, and
+  it never blocks a run by itself: `WARNING` moves neither the exit code nor the `FAIL` count,
+  matching `NO-DATA` and `PASS`, the same never-a-hard-failure rule `doctor` already applies
+  everywhere else. Proof: `tools/test_sbe.py`'s `TestDoctorIdentityCheck`, calibrated red (both
+  leak fixtures failed) against the `WARNING` branch disabled, before the fix restored it.
+
+- `tools/sbe_score.py`'s silent-failure lint named a self-skipped file by
+  name but never counted it: a directory where the walk reached its own
+  source under thirteen of its fourteen names (a hardlink or a case/symlink
+  alias reaches the same inode more than once) printed "1 file(s) scanned
+  under X, clean" with the thirteen listed and no number attached, because
+  the "clean in what was opened, which is not the same as a clean tree"
+  withdrawal only checked the KIND-skip count, never the self-skip one. Both
+  are counted now, and either withdraws the bare "clean". Proof:
+  `tools/test_sbe.py`'s
+  `test_a_directory_mostly_self_skipped_names_the_count_and_withdraws_clean`,
+  planted with thirteen hardlinks of the scorer's own file, calibrated red
+  against the prior sentence before the fix restored it.
+
+- `tools/sbe_autosave.sh` already exits 0 on an unwritable vault (an earlier
+  fix closed that), but the REASON did not: `log_line` and `excl_record`
+  tried to write their explanation into the same vault directory that had
+  just failed to write, so a skipped precompact or tick left no trace
+  anywhere, not in `autosave.log`, not in `autosave-exclusions.log`, not on
+  stderr (kept clean on purpose). Both now fall back to a file beside the
+  repository's own git metadata (`.git/brothersbe-autosave-fallback.log`),
+  which does not depend on the vault at all, when the primary write fails.
+  Proof: `tools/test_sbe.py`'s
+  `test_an_unwritable_vault_still_lands_the_reason_in_a_fallback_log`, which
+  chmods a vault telemetry directory read-only and asserts the reason lands
+  in the fallback log instead of nowhere, with a writable-vault control
+  asserting no fallback file is written when none is needed.
+
+- docs/CLI.md gains a section documenting the telemetry data commands (`data-show`,
+  `data-export`, `data-purge`): where they live (`tools/sbe_telemetry.py`, not `sbe`, because
+  the facade fronts assurance commands run routinely on somebody else's schedule and these
+  three read or delete what BrotherSBE captured about the operator's own sessions, a privacy
+  surface a person runs deliberately, by name, on purpose), what each shows or deletes, the
+  vault location (`BROTHERSBE_VAULT`, default `~/BrotherSBEVault`), and real output quoted
+  from a run against this repository's own vault. Docs-only; the three commands themselves
+  are unchanged.
+
 - The first real run of the CI gates found the hard-gates step grading the
   teaching dossier under docs/for-engineers/examples: its deliberately failing
   APPROVAL broke the build, and its receipts printed PASS lines as if they

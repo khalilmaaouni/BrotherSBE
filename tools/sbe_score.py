@@ -854,9 +854,17 @@ def silent_failure_lints(ctx=None):
                  "those kinds and says nothing about the rest"
                  % (unread_total, root, _first_named(kinds, ", "), " ".join(SCANNABLE)))
     if self_skipped:
-        note += ("; this tool's own source was not scanned (%s), because it declares these "
-                 "patterns as strings and would match itself"
-                 % ", ".join(sorted(self_skipped)))
+        # Named but never COUNTED: a directory where the walk found its own
+        # source under thirteen of its fourteen names (a hardlink or a
+        # symlink alias reaches the same inode more than once) printed "1
+        # file(s) scanned ... clean" with the thirteen listed by name and no
+        # number attached, so the withdrawal two branches down never fired
+        # (it only checked unread_total) and "clean" read as covering all
+        # fourteen. Counted here like every other skip reason, and folded
+        # into the same withdrawal below.
+        note += ("; this tool's own source was not scanned (%d file(s): %s), because it declares "
+                 "these patterns as strings and would match itself"
+                 % (len(self_skipped), ", ".join(sorted(self_skipped))))
     # Evidence the lint was refused access to beats every other verdict: a
     # verdict over the files it could open would read as covering the tree, and
     # one chmod must never turn a FAIL into a PASS or into an absence.
@@ -910,7 +918,7 @@ def silent_failure_lints(ctx=None):
     # in coverage, not evidence of a defect, so this is not a FAIL; failing
     # every polyglot estate would switch the gate off, which is how a gate
     # stops protecting anything.
-    if unread_total:
+    if unread_total or self_skipped:
         return "PASS", ("%d file(s) scanned under %s and clean in what was opened, which is not "
                         "the same as a clean tree%s" % (scanned, root, note))
     return "PASS", "%d file(s) scanned under %s, clean%s" % (scanned, root, note)

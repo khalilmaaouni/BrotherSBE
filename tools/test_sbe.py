@@ -319,6 +319,61 @@ class TestAutosaveCoversTheWorktree(unittest.TestCase):
             self.assertTrue([r for r in refs if r.strip()],
                             "a writable vault took no snapshot at the throttle point")
 
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "needs enforced file modes")
+    def test_an_unwritable_vault_still_lands_the_reason_in_a_fallback_log(self):
+        """review-13a: exit 0 was already the promise being kept (the prior
+        fix covers that), but the REASON was not. log_line's and
+        excl_record's own `mkdir -p "$TEL_DIR"` failed the same way the write
+        it was about to explain failed, so a skipped precompact or tick left
+        no trace anywhere: not in autosave.log, not in
+        autosave-exclusions.log, not on stderr (kept clean on purpose). The
+        fallback lands the same reason beside the repository's own git
+        metadata, which does not depend on the vault at all."""
+        sh = os.path.join(HERE, "sbe_autosave.sh")
+        with tempfile.TemporaryDirectory() as repo:
+            self._repo(repo)
+            io.open(os.path.join(repo, "unlanded.txt"), "w").write("WIP-WORK")
+            vault = tempfile.mkdtemp()
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            os.chmod(tel, 0o555)
+            fb = os.path.join(repo, ".git", "brothersbe-autosave-fallback.log")
+            try:
+                env = dict(os.environ, BROTHERSBE_VAULT=vault)
+                out = subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": repo}),
+                                     text=True, capture_output=True, env=env, timeout=120,
+                                     cwd=repo)
+                self.assertEqual(0, out.returncode,
+                                 "precompact on an unwritable vault exited %d" % out.returncode)
+                self.assertEqual("", out.stderr.strip(),
+                                 "precompact on an unwritable vault printed a raw diagnostic: %r"
+                                 % out.stderr[:160])
+                self.assertTrue(os.path.exists(fb),
+                                "an unwritable vault left no trace anywhere: no fallback log at %s"
+                                % fb)
+                body = io.open(fb).read()
+                self.assertIn("vault unwritable", body)
+                self.assertIn("saved ", body,
+                              "the fallback log exists but does not carry the reason that would "
+                              "otherwise have gone to autosave.log")
+            finally:
+                os.chmod(tel, 0o755)
+            # The control: a writable vault needs no fallback and writes none.
+            good_repo = tempfile.mkdtemp()
+            self._repo(good_repo)
+            io.open(os.path.join(good_repo, "unlanded.txt"), "w").write("WIP-WORK")
+            good_vault = tempfile.mkdtemp()
+            env2 = dict(os.environ, BROTHERSBE_VAULT=good_vault)
+            subprocess.run(["sh", sh, "precompact"], input=json.dumps({"cwd": good_repo}),  # sbe: allow-silent test harness fires the hook; the fallback's absence is asserted below
+                           text=True, env=env2, timeout=120, cwd=good_repo)
+            good_fb = os.path.join(good_repo, ".git", "brothersbe-autosave-fallback.log")
+            self.assertFalse(os.path.exists(good_fb),
+                             "a writable vault still wrote a fallback log nobody needed: %s"
+                             % good_fb)
+            self.assertTrue(os.path.exists(os.path.join(good_vault, "99-System", "telemetry",
+                                                         "autosave.log")),
+                            "the control run did not use the real vault log either")
+
     def test_recover_after_a_rename_names_the_sibling_snapshots(self):
         """The ref id derives from the worktree path, so a moved project
         changes the id and recover looked in a ref that never existed,
@@ -766,6 +821,51 @@ class TestLintSelfSkipThroughSymlink(unittest.TestCase):
             self.assertEqual(outputs[0], outputs[1],
                              "one tree, two verdicts, depending on path spelling: %r" % outputs)
 
+    @unittest.skipIf(os.name != "posix", "needs a hardlink")
+    def test_a_directory_mostly_self_skipped_names_the_count_and_withdraws_clean(self):
+        """review-13a: a directory where the walk reaches its own source under
+        thirteen of its fourteen names (a hardlink or a case/symlink alias
+        reaches the same inode more than once) printed "1 file(s) scanned
+        under X, clean" with the thirteen self-skipped files listed by NAME
+        and no number attached, and the "clean in what was opened, which is
+        not the same as a clean tree" withdrawal only checked unread_total
+        (the KIND-skip reason), never self_skipped, so the bare word "clean"
+        stood over a directory that was thirteen fourteenths unexamined.
+        Reproduced with hardlinks, which share sbe_score.py's own inode
+        without needing a second copy on disk."""
+        with tempfile.TemporaryDirectory() as d:
+            n_links = 13
+            for i in range(n_links):
+                os.link(os.path.join(HERE, "sbe_score.py"),
+                        os.path.join(d, "copy%d.py" % i))
+            io.open(os.path.join(d, "clean.py"), "w").write("def f():\n    return 1\n")
+            r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_score.py")],
+                               env=dict(os.environ, SBE_LINT_ROOT=d, BROTHERSBE_REGISTRIES=""),
+                               capture_output=True, text=True)
+            line = next((l for l in r.stdout.splitlines()
+                         if l.startswith("silent-failure-lints")), "")
+            self.assertIn("PASS", line.split()[:2], "unexpected verdict: %s" % line)
+            self.assertIn("%d file(s)" % n_links, line,
+                          "the self-skipped files are named but never counted: %s" % line)
+            self.assertIn("clean in what was opened, which is not the same as a clean tree", line,
+                          "self-skip alone left the bare word clean standing over a directory "
+                          "that was mostly unexamined: %s" % line)
+            # The control: a directory with nothing self-skipped keeps the
+            # plain "N file(s) scanned under X, clean" sentence, so this is a
+            # disclosure rule and not a new withdrawal fired unconditionally.
+            with tempfile.TemporaryDirectory() as clean_d:
+                io.open(os.path.join(clean_d, "clean.py"), "w").write("def f():\n    return 1\n")
+                r2 = subprocess.run([sys.executable, os.path.join(HERE, "sbe_score.py")],
+                                    env=dict(os.environ, SBE_LINT_ROOT=clean_d,
+                                             BROTHERSBE_REGISTRIES=""),
+                                    capture_output=True, text=True)
+                line2 = next((l for l in r2.stdout.splitlines()
+                             if l.startswith("silent-failure-lints")), "")
+                self.assertIn(", clean", line2)
+                self.assertNotIn("not the same as a clean tree", line2,
+                                 "a tree with nothing skipped lost its plain clean sentence: %s"
+                                 % line2)
+
 
 class TestOneLineNeutralizesTheControlClass(unittest.TestCase):
     def test_no_control_or_format_character_survives_into_a_report_line(self):
@@ -953,6 +1053,90 @@ class TestCliSurface(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertTrue(out.stdout.strip(), "the package imported but reports no version")
+
+
+class TestDoctorIdentityCheck(unittest.TestCase):
+    """THE DEFECT THIS CONTROL EXISTS FOR: a leaked fixture identity, `ci
+    <ci@example.com>`, authored a run of real commits in public history
+    before anyone noticed, because nothing in this project's own tooling
+    ever looked at git's identity config. `doctor` now does, and this class
+    pins the three shapes that check must never blur: a fixture identity is
+    a WARNING (never silently PASS, never a hard FAIL: doctor observes), a
+    real identity PASSes, and an unset identity is NO-DATA rather than
+    either. Real subprocess, real git config, nothing mocked, the same rule
+    `test_sbe_adopt.py` states."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def _doctor(self, isolate_identity=False):
+        """Three values, not two: a two-value return reads as a possible
+        (verdict, evidence) pair to the honesty meta-test, which refuses any
+        such function sitting outside a check registry."""
+        env = dict(os.environ)
+        if isolate_identity:
+            # A repo with no local identity set must not fall through to
+            # this machine's real ~/.gitconfig or /etc/gitconfig, or the
+            # unset-identity case could never be reproduced on a laptop
+            # that already has a name and email configured.
+            env["HOME"] = self.repo
+            env["GIT_CONFIG_NOSYSTEM"] = "1"
+        out = subprocess.run([sys.executable, self.SBE, "doctor"], cwd=self.repo,
+                             capture_output=True, text=True, env=env)
+        return out.returncode, out.stdout, out.stdout + out.stderr
+
+    @staticmethod
+    def _identity_line(stdout):
+        # Three values, not two: a two-value return reads as a possible
+        # (verdict, evidence) pair to the honesty meta-test, which refuses any
+        # such function sitting outside a check registry.
+        m = re.search(r"^identity\s+(\S+)\s+(.*)$", stdout, re.M)
+        return (m.group(1), m.group(2), m.group(0)) if m else (None, None, None)
+
+    def test_a_leaked_example_com_email_is_a_warning_not_a_failure(self):
+        subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=self.repo,
+                       check=True)
+        subprocess.run(["git", "config", "user.name", "Test Bot"], cwd=self.repo, check=True)
+        code, out, text = self._doctor()
+        result, detail, _ = self._identity_line(out)
+        self.assertEqual(result, "WARNING", text)
+        self.assertIn("ci@example.com", detail, "the evidence line must quote the value "
+                                                 "found: %s" % text)
+        self.assertEqual(code, 0, "a WARNING must never trip doctor's exit code: %s" % text)
+
+    def test_a_leaked_name_ci_is_a_warning_not_a_failure(self):
+        subprocess.run(["git", "config", "user.email", "real@realcompany.com"], cwd=self.repo,
+                       check=True)
+        subprocess.run(["git", "config", "user.name", "ci"], cwd=self.repo, check=True)
+        code, out, text = self._doctor()
+        result, detail, _ = self._identity_line(out)
+        self.assertEqual(result, "WARNING", text)
+        self.assertIn("\"ci\"", detail, "the evidence line must quote the value found: %s"
+                      % text)
+        self.assertEqual(code, 0, text)
+
+    def test_a_real_identity_passes(self):
+        subprocess.run(["git", "config", "user.email", "real@realcompany.com"], cwd=self.repo,
+                       check=True)
+        subprocess.run(["git", "config", "user.name", "Real Person"], cwd=self.repo, check=True)
+        code, out, text = self._doctor()
+        result, detail, _ = self._identity_line(out)
+        self.assertEqual(result, "PASS", text)
+        self.assertIn("real@realcompany.com", detail, text)
+        self.assertEqual(code, 0, text)
+
+    def test_an_unset_identity_is_no_data_not_a_silent_pass(self):
+        code, out, text = self._doctor(isolate_identity=True)
+        result, detail, _ = self._identity_line(out)
+        self.assertEqual(result, "NO-DATA", text)
+        self.assertEqual(code, 0, text)
 
 
 class TestNoPrivateNameShips(unittest.TestCase):

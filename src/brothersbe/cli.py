@@ -157,6 +157,35 @@ def _doctor_checks():
                     "working directory is inside a git tree" if inside
                     else "not inside a git tree, so nothing that reads a diff can run here"))
 
+    # WARNING, never FAIL and never a silent PASS: a fixture identity (an
+    # example.com email, or the literal name "ci") authoring real commits is
+    # the class of leak that goes unnoticed until someone reads the log by
+    # hand, which is exactly what doctor exists to surface early instead.
+    try:
+        email_run = subprocess.run(["git", "config", "user.email"], cwd=os.getcwd(),
+                                   capture_output=True, text=True)
+        name_run = subprocess.run(["git", "config", "user.name"], cwd=os.getcwd(),
+                                  capture_output=True, text=True)
+    except OSError as exc:
+        out.append(("identity", "NO-DATA", "git is not runnable here: %s" % exc))
+    else:
+        email = email_run.stdout.strip()
+        name = name_run.stdout.strip()
+        if not email and not name:
+            out.append(("identity", "NO-DATA",
+                        "git config user.email and user.name are both unset here, so the "
+                        "identity that would author a commit cannot be checked"))
+        elif name == "ci" or email.endswith("@example.com"):
+            out.append(("identity", "WARNING",
+                        "git config reports name \"%s\" and email \"%s\"; that shape is a "
+                        "fixture identity, and a fixture identity authoring real commits is "
+                        "a leak, not a passing environment"
+                        % (name or "(unset)", email or "(unset)")))
+        else:
+            out.append(("identity", "PASS",
+                        "git config reports name \"%s\" and email \"%s\""
+                        % (name or "(unset)", email or "(unset)")))
+
     vault = os.environ.get("BROTHERSBE_VAULT", "")
     out.append(("vault", "PASS" if vault else "NO-DATA",
                 vault if vault else "BROTHERSBE_VAULT is unset, so telemetry, session logs "

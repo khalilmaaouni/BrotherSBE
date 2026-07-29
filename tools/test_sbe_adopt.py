@@ -287,6 +287,70 @@ class TestInitReceipt(AdoptFixture):
         self.assertTrue(data2["skippedAsNoop"], text2)
 
 
+class TestInitGitignoreLine(AdoptFixture):
+    """FIXTURE 6b: `sbe init` appends its own `.gitignore` line above a
+    one-line comment, idempotently, and never lists that file in the
+    receipt's uninstall set -- a real incident this hardening exists for:
+    a fresh clone that ran `sbe init --apply` tracked its own
+    machine-specific install receipt because nothing ensured the ignore
+    line existed."""
+
+    def test_apply_creates_gitignore_with_comment_and_line(self):
+        gitignore = os.path.join(self.repo, ".gitignore")
+        self.assertFalse(os.path.exists(gitignore), "fixture repo must start without one")
+        code, data, text = run_sbe("init", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        with io.open(gitignore, encoding="utf-8") as fh:
+            body = fh.read()
+        lines = body.splitlines()
+        self.assertIn(".brothersbe/install-receipt.json", lines, text)
+        line_idx = lines.index(".brothersbe/install-receipt.json")
+        self.assertGreater(line_idx, 0, "the receipt line must sit under a comment: %s" % body)
+        self.assertTrue(lines[line_idx - 1].startswith("#"),
+                        "the line above the ignore entry must be a comment: %s" % body)
+        self.assertIn(".gitignore", data["written"],
+                     "sbe init --apply must report .gitignore among the paths it wrote: %s"
+                     % text)
+
+    def test_apply_appends_below_existing_gitignore_content_untouched(self):
+        write(self.repo, ".gitignore", "*.pyc\nnode_modules/\n")
+        code, data, text = run_sbe("init", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        with io.open(os.path.join(self.repo, ".gitignore"), encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("*.pyc\n", body, body)
+        self.assertIn("node_modules/\n", body, body)
+        self.assertIn(".brothersbe/install-receipt.json", body, body)
+
+    def test_a_gitignore_that_already_carries_the_line_is_untouched(self):
+        """Idempotent: present means the proposal is identical, and a
+        dry-run over an already-compliant repository proposes nothing new
+        for `.gitignore`, matching every other mutation this command makes."""
+        write(self.repo, ".gitignore",
+             "# already tracking the receipt\n.brothersbe/install-receipt.json\n")
+        before = tree_hash(self.repo)
+        code, data, text = run_sbe("init", self.repo, "--dry-run", "--json")
+        after = tree_hash(self.repo)
+        self.assertEqual(code, 0, text)
+        self.assertEqual(before, after, text)
+        gitignore_proposal = [p for p in data["proposals"] if p["path"] == ".gitignore"][0]
+        self.assertTrue(gitignore_proposal["identical"],
+                        "an already-compliant .gitignore must propose nothing new: %s" % text)
+
+    def test_gitignore_is_never_in_the_receipts_uninstall_set(self):
+        code, data, text = run_sbe("init", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        receipt = data["receipt"]
+        self.assertNotIn(".gitignore", receipt["writtenPaths"],
+                         "sbe init only appends a line to .gitignore; it does not own the "
+                         "file and must never list it as something an uninstall would "
+                         "delete: %s" % text)
+        for line in receipt["uninstallInstructions"]:
+            self.assertNotIn(".gitignore", line,
+                             "the uninstall instructions must never touch .gitignore: %s"
+                             % text)
+
+
 class TestInitRefusesOutsideGit(unittest.TestCase):
     """FIXTURE 7: sbe init outside a git repository refuses, and names why,
     rather than writing a config file with nowhere to be versioned."""

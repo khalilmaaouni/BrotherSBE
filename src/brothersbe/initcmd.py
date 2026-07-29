@@ -29,6 +29,12 @@ from . import SCHEMA_VERSION, repo_root, version
 CONFIG_PATH = ".brothersbe/config.json"
 DOSSIER_MARKER = "design/.gitkeep"
 RECEIPT_PATH = ".brothersbe/install-receipt.json"
+GITIGNORE_PATH = ".gitignore"
+#: One line above the ignore entry, explaining why it is there before a
+#: reader has to go looking: the receipt records this machine's absolute
+#: install path, a local, personal fact that has no business being tracked.
+GITIGNORE_COMMENT = ("# sbe init: the install receipt below records this machine's absolute "
+                     "path, so it stays out of git")
 CONSUMER_WORKFLOW_PATH = ".github/workflows/consumer-check.yml"
 CONSUMER_ACTION_PATH = ".github/actions/sbe-consumer/action.yml"
 
@@ -93,12 +99,41 @@ def _read_template(rel):
                       "copy cannot be proposed" % (rel, exc))
 
 
+def _gitignore_content(root):
+    """The full `.gitignore` body this run proposes: whatever is already on
+    disk, untouched, plus the receipt line and its comment appended when
+    that line is not already present.
+
+    Appending rather than owning the file is what makes this proposal
+    compare identical, like every other one, against exactly what is
+    already there: once the line exists this returns the file back
+    unchanged, so a rerun reports it identical instead of proposing a
+    second copy. It is also why `apply()` never lists `.gitignore` in the
+    receipt's own written set -- this command only ever adds one line to a
+    file it does not own, and an uninstall instruction to delete that file
+    would take every other line in it too.
+    """
+    full = os.path.join(root, GITIGNORE_PATH)
+    try:
+        with io.open(full, encoding="utf-8") as fh:
+            existing = fh.read()
+    except (IOError, OSError):
+        existing = None
+    if existing is not None and RECEIPT_PATH in existing.splitlines():
+        return existing
+    prefix = existing or ""
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    return prefix + GITIGNORE_COMMENT + "\n" + RECEIPT_PATH + "\n"
+
+
 def plan(root, with_consumer_ci=False):
     """The mutations `sbe init` would make, each compared against what is
     already on disk. Read-only: never writes, so `--dry-run` can call this
     directly.
     """
-    mutations = [(CONFIG_PATH, _config_content()), (DOSSIER_MARKER, "")]
+    mutations = [(CONFIG_PATH, _config_content()), (DOSSIER_MARKER, ""),
+                (GITIGNORE_PATH, _gitignore_content(root))]
     warnings = []
     if with_consumer_ci:
         for rel, source in ((CONSUMER_WORKFLOW_PATH, _CONSUMER_WORKFLOW_SOURCE),
@@ -148,6 +183,12 @@ def apply(root, with_consumer_ci=False):
     (True when nothing needed writing), `receipt` (the receipt content,
     whether freshly written or the one already on disk), `warnings` (why an
     optional proposal, like the consumer CI copy, could not be made).
+
+    `.gitignore` is written like any other proposal when the receipt line is
+    missing (so it shows up in `written`), but it never enters the receipt's
+    `writtenPaths` or `uninstallInstructions`: this command appended one line
+    to a file it does not own, and telling someone to `rm -f .gitignore`
+    would delete every other line a real project keeps in that file.
     """
     reason = refusal_reason(root)
     if reason:
@@ -173,7 +214,11 @@ def apply(root, with_consumer_ci=False):
 
     prior = _read_receipt(receipt_full) or {}
     prior_paths = list(prior.get("writtenPaths", []))
-    all_written = prior_paths + [p for p in written if p not in prior_paths]
+    # .gitignore is excluded here on purpose: it is a write this call made,
+    # but not a file this installation owns, so it never enters the set an
+    # uninstall instruction is generated from. See the docstring above.
+    receipt_candidates = [p for p in written if p != GITIGNORE_PATH]
+    all_written = prior_paths + [p for p in receipt_candidates if p not in prior_paths]
     # The receipt is itself a written file, so it names itself in the set it
     # records: uninstall instructions that omit the receipt are not exact.
     if RECEIPT_PATH not in all_written:
