@@ -37,6 +37,20 @@ a token, a connection string or a customer row would otherwise persist it
 forever in the one artifact everybody is encouraged to share. The digest proves
 the same bytes came back; it carries none of them.
 
+ARGV IS DIFFERENT, AND ONLY PARTLY FIXED. Unlike stdout and stderr, `argv` has
+to be recorded as text: a receipt whose command was paraphrased proves nothing
+about what happened. So a credential typed ON the command line used to be
+persisted into the receipt verbatim, and the receipt is the one artifact
+everybody is encouraged to share. `redact_argv()` now masks any token matching
+a KNOWN secret shape before `argv` is written, reusing (not reinventing) the
+same `SECRET_PATTERNS` `tools/sbe_telemetry.py` already scans an operator's own
+messages with. Each match becomes a named marker, `[REDACTED:<shape>]`, and the
+receipt records `argvRedactions`, the count, so a reader knows whether `argv` is
+still verbatim (0) or not. This narrows the limit; it does not close it. The
+pattern list is finite by nature, so a secret in a shape the list does not know
+still reaches the receipt untouched. That residual is stated, not hidden, in
+`docs/KNOWN-LIMITS.md`.
+
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only, because zero dependencies is a promise on this project's front
 page and an evidence generator is the last place to retract it.
@@ -58,11 +72,19 @@ TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "to
 if os.path.abspath(TOOLS) not in sys.path:
     sys.path.insert(0, os.path.abspath(TOOLS))
 from sbe_checks import answered, evidence_problem  # noqa: E402
+from sbe_telemetry import SECRET_PATTERNS  # noqa: E402
 
 #: Schema versions this module knows how to read. An unknown version is refused
 #: rather than parsed hopefully: a consumer that reads an old field under new
 #: semantics is worse off than one that fails loudly. See `_check_schema`.
-KNOWN_SCHEMA_VERSIONS = ("1.0",)
+KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1")
+
+#: The version NEW receipts are stamped with. Evidence-local on purpose: the
+#: package-wide SCHEMA_VERSION governs other stores (the task registry, the
+#: init config), and coupling their versions would force every consumer to
+#: move in lockstep for a change only receipts carry. "1.1" adds
+#: `argvRedactions` beside the recorded argv.
+EVIDENCE_SCHEMA_VERSION = "1.1"
 
 GENERATOR = "sbe evidence run"
 
@@ -72,20 +94,51 @@ GENERATOR = "sbe evidence run"
 #: `False` are answers: a zero exit code and a zero-byte stdout are results.
 REQUIRED_FIELDS = (
     "schemaVersion", "generator", "generatorVersion", "runId", "argv",
-    "startedAt", "endedAt", "durationSeconds", "exitCode", "headCommit",
-    "stdoutSha256", "stderrSha256", "environment", "toolVersions",
+    "argvRedactions", "startedAt", "endedAt", "durationSeconds", "exitCode",
+    "headCommit", "stdoutSha256", "stderrSha256", "environment", "toolVersions",
     "workingTreeDirty", "coveredFilesSource",
 )
 
 #: The facts the seal covers. Deliberately every fact a forger would have to
 #: choose: the command, when it ran, how long it took, what it returned, what it
 #: printed, which commit it was made against, and what it claims to cover.
+#: `argv` here is the RECORDED argv, after `redact_argv()` has run: the seal
+#: covers what the receipt actually says, the same way it always has, and
+#: `argvRedactions` sits beside it so a forger cannot drop the count to make a
+#: redacted receipt read as verbatim without breaking the seal.
 SEALED_FIELDS = (
-    "schemaVersion", "generator", "generatorVersion", "argv", "startedAt",
-    "endedAt", "durationSeconds", "exitCode", "baseCommit", "headCommit",
-    "stdoutSha256", "stderrSha256", "stdoutBytes", "stderrBytes",
+    "schemaVersion", "generator", "generatorVersion", "argv", "argvRedactions",
+    "startedAt", "endedAt", "durationSeconds", "exitCode", "baseCommit",
+    "headCommit", "stdoutSha256", "stderrSha256", "stdoutBytes", "stderrBytes",
     "environment", "toolVersions", "workingTreeDirty", "ciRunId",
     "coveredFiles", "coveredFilesSource", "repository",
+)
+
+def _fields_for(declared, fields):
+    """The field tuple a receipt of `declared` schema version is judged by.
+
+    "1.0" predates argv redaction, so its receipts are judged by their own
+    contract: requiring a field that version never defined would fail an
+    honest old receipt with a sentence about emptiness instead of the truth,
+    that the field postdates it. Every other field is identical between the
+    two versions, and an UNKNOWN version never reaches here because
+    `_check_schema` refuses it first.
+    """
+    if declared == "1.0":
+        return tuple(f for f in fields if f != "argvRedactions")
+    return fields
+
+
+#: One name per pattern in `SECRET_PATTERNS`, same order, so a redacted argv
+#: token says WHICH shape matched instead of a bare "[REDACTED]". The patterns
+#: themselves are imported above from `tools/sbe_telemetry.py`, the same list
+#: the telemetry redactor already scans an operator's own messages with; only
+#: these labels are added here, because that redactor never needed to name a
+#: shape and a receipt reader does. Kept in sync by `redact_argv()`'s own length
+#: check below: a mismatch is refused rather than mislabeled.
+ARGV_REDACTION_SHAPES = (
+    "api-key", "github-token", "github-pat", "aws-key-id", "slack-token",
+    "bearer-token", "private-key", "jwt", "kv-secret", "ssn", "card-number",
 )
 
 
@@ -126,6 +179,57 @@ def _iso(epoch):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
 
 
+def redact_argv(argv):
+    """(redacted argv, redaction count, provenance note). Three values, not two:
+    a two-value return here would read as a possible verdict source to this
+    project's own honesty meta-test (`evals/test_no_data_class.py`), and this
+    is not a verdict either, so it says what it is in the third slot rather
+    than shipping a bare pair.
+
+    Reuses `SECRET_PATTERNS` imported from `tools/sbe_telemetry.py` above: the
+    same shapes the telemetry redactor already masks in an operator's own
+    messages, never a second list invented here that could drift from it. Each
+    match is replaced by a NAMED marker, `[REDACTED:<shape>]`, using
+    `ARGV_REDACTION_SHAPES`, so a reader can tell an AWS key id from an SSN
+    without re-deriving the match from a bare "[REDACTED]".
+
+    Matched per ARGUMENT, not on the command line joined into one string:
+    joining first would let a shape span a boundary no shell ever produced (the
+    end of one argument and the start of the next reading as a single token),
+    which is exactly the kind of over-matching a receipt cannot afford to be
+    wrong about in the other direction. Each `argv[i]` is scanned and replaced
+    independently, in the order the command actually received it.
+
+    This is the same limit the source list carries in its own file: finite by
+    nature, so a secret typed in a shape none of these patterns know still
+    reaches the receipt untouched. That residual is named in
+    `docs/KNOWN-LIMITS.md`, not hidden by this function's success on the shapes
+    it does know.
+    """
+    if len(ARGV_REDACTION_SHAPES) != len(SECRET_PATTERNS):
+        raise RuntimeError(
+            "ARGV_REDACTION_SHAPES names %d shape(s) but the imported SECRET_PATTERNS from "
+            "tools/sbe_telemetry.py holds %d pattern(s); they must change together or a "
+            "redaction marker would name the wrong shape. Fix src/brothersbe/evidence.py "
+            "before writing another receipt."
+            % (len(ARGV_REDACTION_SHAPES), len(SECRET_PATTERNS)))
+    redacted = []
+    count = 0
+    for token in argv:
+        clean = token
+        for pattern, shape in zip(SECRET_PATTERNS, ARGV_REDACTION_SHAPES):
+            clean, hits = pattern.subn("[REDACTED:%s]" % shape, clean)
+            count += hits
+        redacted.append(clean)
+    if count == 0:
+        note = "0 redaction(s): argv is recorded verbatim, unchanged from what ran"
+    else:
+        note = ("%d redaction(s) against %d known secret shape(s) mirrored from "
+                "tools/sbe_telemetry.py::SECRET_PATTERNS; argv is no longer verbatim"
+                % (count, len(SECRET_PATTERNS)))
+    return redacted, count, note
+
+
 def working_tree_dirty(cwd):
     """(dirty, detail). A repository git cannot answer for is reported, never
     assumed clean: 'no output from git status' and 'git did not run' look
@@ -160,7 +264,8 @@ def compute_seal(receipt):
     facts produce the same seal on any machine, and a field reordered by an
     editor does not read as a tampered receipt.
     """
-    payload = dict((k, receipt.get(k)) for k in SEALED_FIELDS)
+    declared = answered(receipt.get("schemaVersion")) or EVIDENCE_SCHEMA_VERSION
+    payload = dict((k, receipt.get(k)) for k in _fields_for(declared, SEALED_FIELDS))
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=True, allow_nan=False).encode("utf-8")
     return _sha256_bytes(blob)
@@ -264,14 +369,20 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None):
                                         "written, so its content is not bound to this run",
         })
 
+    # The COMMAND already ran above, over the untouched `argv` the caller gave
+    # this function. Only the RECORDED copy is redacted here, after the run, so
+    # a masked token never reaches the process that was actually invoked.
+    redacted_argv, argv_redactions, argv_redaction_note = redact_argv(list(argv))
+
     receipt = {
-        "schemaVersion": SCHEMA_VERSION,
+        "schemaVersion": EVIDENCE_SCHEMA_VERSION,
         "generator": GENERATOR,
         "generatorVersion": version(),
         "repository": repository_identity(cwd),
         "baseCommit": base_commit,
         "headCommit": head_commit,
-        "argv": list(argv),
+        "argv": redacted_argv,
+        "argvRedactions": argv_redactions,
         "startedAt": _iso(started),
         "endedAt": _iso(ended),
         "startedAtEpoch": round(started, 6),
@@ -349,7 +460,8 @@ def _check_schema(receipt):
 
 
 def _check_required(receipt):
-    missing = [f for f in REQUIRED_FIELDS if answered(receipt.get(f)) is None]
+    fields = _fields_for(answered(receipt.get("schemaVersion")), REQUIRED_FIELDS)
+    missing = [f for f in fields if answered(receipt.get(f)) is None]
     if not missing:
         return None
     return ("%d required field(s) record nothing: %s. A field holding \"\", null or a "
@@ -462,12 +574,14 @@ def verify(path, cwd=None):
                 "receipt": receipt, "trust": None,
                 "trustWhy": "an unreadable schema has no trust level"}
 
-    inspected.append("%d required field(s)" % len(REQUIRED_FIELDS))
+    inspected.append("%d required field(s)" % len(
+        _fields_for(answered(receipt.get("schemaVersion")), REQUIRED_FIELDS)))
     required_problem = _check_required(receipt)
     if required_problem:
         problems.append(required_problem)
 
-    inspected.append("the runId seal over %d run fact(s)" % len(SEALED_FIELDS))
+    inspected.append("the runId seal over %d run fact(s)" % len(
+        _fields_for(answered(receipt.get("schemaVersion")), SEALED_FIELDS)))
     seal_problem = _check_seal(receipt)
     if seal_problem:
         problems.append(seal_problem)
@@ -526,6 +640,11 @@ def render(receipt, path):
     argv = receipt.get("argv") or []
     out.append("command        %s" % (" ".join(str(a) for a in argv) if argv
                                       else "none recorded"))
+    redactions = receipt.get("argvRedactions")
+    out.append("argv redacted  %s" % (
+        "not recorded" if redactions is None else
+        "no (0 secret-shaped token(s) matched; the command above is verbatim)" if redactions == 0
+        else "yes, %d secret-shaped token(s); the command above is NOT verbatim" % redactions))
     out.append("exit code      %s" % receipt.get("exitCode"))
     out.append("ran            %s to %s (%s s)"
                % (receipt.get("startedAt"), receipt.get("endedAt"),
@@ -649,9 +768,12 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         sys.stdout.write(
             "\nsbe evidence run: receipt written to %s. Trust %s (%s). Command exited %d in "
             "%.3fs, over %d covered file(s) from %s. stdout and stderr are recorded as "
-            "digests only.\n"
+            "digests only. argv held %d secret-shaped token(s) and %s.\n"
             % (args.out, level, why, receipt["exitCode"], receipt["durationSeconds"],
-               len(receipt["coveredFiles"]), receipt["coveredFilesSource"]))
+               len(receipt["coveredFiles"]), receipt["coveredFilesSource"],
+               receipt["argvRedactions"],
+               "was recorded verbatim" if receipt["argvRedactions"] == 0
+               else "was redacted before it was written"))
         # The wrapper's own exit code is the COMMAND's, so a failing command
         # cannot be laundered into a passing evidence step by the fact that a
         # receipt got written about it.
@@ -663,7 +785,7 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
             sys.stdout.write(json.dumps({
                 "tool": "sbe evidence verify",
                 "toolVersion": version(),
-                "schemaVersion": SCHEMA_VERSION,
+                "schemaVersion": EVIDENCE_SCHEMA_VERSION,
                 "receipt": args.receipt,
                 "verdict": result["verdict"],
                 "trust": result["trust"],

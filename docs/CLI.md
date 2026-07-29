@@ -145,13 +145,23 @@ it verified. A fabricated duration, exit code, row count or rerun id satisfied t
 gate could PASS on a run nobody's command ever performed, and nothing bound a receipt to a
 commit either, so one written against older code still passed after that code changed.
 
-`run` **executes the command**. There is no flag that accepts a duration, an exit code or an
-output digest; those come from the run or the receipt does not exist. It records repository
-identity, base and head commit, the exact argv, start and end in ISO 8601 UTC, duration, exit
-code, python and `sbe` versions, the platform, whether the tree was dirty, and the files the
-receipt covers with their content digests. Its own exit code is the command's, so a failing
-command cannot be laundered into a passing evidence step by the fact that a receipt got
-written about it.
+`run` **executes the command**, over the real, unredacted argv it was given. There is no flag
+that accepts a duration, an exit code or an output digest; those come from the run or the
+receipt does not exist. It records repository identity, base and head commit, argv, start and
+end in ISO 8601 UTC, duration, exit code, python and `sbe` versions, the platform, whether the
+tree was dirty, and the files the receipt covers with their content digests. Its own exit code
+is the command's, so a failing command cannot be laundered into a passing evidence step by the
+fact that a receipt got written about it.
+
+**The recorded argv is redacted, not raw.** Before the receipt is written, every argv token is
+checked against the same `SECRET_PATTERNS` `tools/sbe_telemetry.py` already uses to redact an
+operator's own messages (imported, not a second list). A match becomes a named marker,
+`[REDACTED:<shape>]` (`[REDACTED:api-key]`, `[REDACTED:aws-key-id]`, and so on), and the receipt
+records `argvRedactions`, the count, so a reader can tell at a glance whether argv is verbatim
+(`0`) or not. The command that RAN is untouched; only the copy written to the receipt is
+masked. This narrows the old limit, it does not close it: the pattern list is finite, so a
+secret in a shape none of these patterns know still reaches the receipt whole. Full statement:
+`docs/KNOWN-LIMITS.md`.
 
 `--covers <path>` is repeatable and names the files this run is evidence for. Without it, the
 files changed between base and head are used. `verify` re-hashes those files, which is how it

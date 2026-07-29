@@ -289,14 +289,26 @@ moved. What that does NOT establish, stated where the behavior is:
   worktree usually does not.
 - Nothing checks that the command was the RIGHT command. `sbe evidence run --
   true` produces a flawless receipt for a run that tested nothing. The receipt
-  records the exact argv so a reader can see that; deciding whether that argv is
-  the work the gate wanted is a person's job, and no field here does it.
-- `argv` is recorded verbatim, on purpose, because a receipt whose command was
-  paraphrased proves nothing about what happened. So a credential passed ON the
-  command line IS persisted in the receipt, and the digests-only policy that
-  covers stdout and stderr does not cover it. Pass secrets through the
-  environment or a file, never as an argument. A fixture pins this so it stays a
-  decision rather than a surprise.
+  records the argv it ran (redaction aside, see below) so a reader can see
+  that; deciding whether that argv is the work the gate wanted is a person's
+  job, and no field here does it.
+- `argv` is recorded as text, on purpose, because a receipt whose command was
+  paraphrased proves nothing about what happened. Before it is written, every
+  token is checked against `SECRET_PATTERNS`, the same list
+  `tools/sbe_telemetry.py` already uses to redact an operator's own messages
+  (imported from there, not a second list kept here). A match becomes a named
+  marker, `[REDACTED:<shape>]`, and the receipt's `argvRedactions` field says
+  how many were found, so a reader never has to guess whether argv is verbatim.
+  This is a NARROWING, not a fix: the pattern list is finite by nature, so a
+  credential typed in a shape none of these patterns recognize (a bespoke
+  internal token format, a password with no recognizable prefix) still reaches
+  the receipt whole, and the digests-only policy that covers stdout and stderr
+  does not cover argv either way. Pass secrets through the environment or a
+  file, never as an argument, when the shape is anything you are not certain
+  the pattern list would catch. Fixtures pin both halves: a planted
+  pattern-matching secret comes out as the marker
+  (`tools/test_sbe_evidence.py::test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim`),
+  and this residual limit stays a decision rather than a surprise.
 - The digests prove the same bytes came back. They carry none of them, so a
   receipt cannot be used to audit what a command printed, only to detect that it
   printed something different.

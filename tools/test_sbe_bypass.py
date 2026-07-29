@@ -23,7 +23,7 @@ neither, so they are named apart.
   A LIMIT fixture proves the bypass WORKS, and carries `_is_a_limit` in its
   name. It exists so that the limit is a decision somebody made rather than a
   surprise somebody finds, exactly as
-  `test_argv_is_recorded_verbatim_which_is_a_limit_not_a_leak_to_ignore` does in
+  `test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim` now does in
   `test_sbe_evidence.py`. A limit fixture asserts the current behaviour AND
   asserts that the sentence the tool prints does not overclaim, because the
   overclaim is the part that would actually mislead somebody. Its scenario is

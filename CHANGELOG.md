@@ -8,6 +8,24 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe evidence run` no longer writes `argv` fully verbatim: every token is now checked against
+  `SECRET_PATTERNS`, imported from `tools/sbe_telemetry.py` rather than reinvented, and a match
+  is replaced by a named marker, `[REDACTED:<shape>]`, before the receipt is written. The
+  command that RUNS still receives the untouched, unredacted argv; only the recorded copy is
+  masked. The receipt gains `argvRedactions`, the count, so a reader can tell whether argv is
+  verbatim (`0`) or not without diffing it by hand, and `argvRedactions` sits in `SEALED_FIELDS`
+  beside `argv` so a redacted receipt seals and verifies exactly like any other. This narrows
+  the argv limit; it does not close it, because the pattern list is finite by nature and a
+  secret in a shape it does not know still reaches the receipt whole, which stays a stated limit
+  in `docs/KNOWN-LIMITS.md`. Proof: `tools/test_sbe_evidence.py`'s
+  `test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim` (a planted `sk-`-shaped
+  token lands in the receipt as the marker, never the secret; this replaces the retired
+  `test_argv_is_recorded_verbatim_which_is_a_limit_not_a_leak_to_ignore`, which pinned the
+  opposite on purpose as a stated limit),
+  `test_a_receipt_with_redactions_still_verifies_pass_on_an_untouched_tree` (a redacted receipt
+  still verifies PASS), `test_zero_redactions_keeps_argv_byte_identical_to_what_ran`, and
+  `TestRedactArgv` for the function directly.
+
 - `sbe init` now also ensures `.gitignore` carries its own install-receipt line,
   `.brothersbe/install-receipt.json`, under a one-line comment, because a fresh clone that ran
   `sbe init --apply` could track a receipt naming this machine's absolute install path with

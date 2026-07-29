@@ -387,11 +387,14 @@ class TestNoRawOutputLeak(EvidenceFixture):
         """A command that prints the secret WITHOUT carrying it in its argv.
 
         The first version of this fixture passed the secret on the command line
-        and failed, correctly: `argv` is recorded verbatim, by design and by the
-        brief, so a secret typed into a command lands in the receipt no matter
-        what the output policy says. That limit is now pinned by its own test
-        below and stated in `docs/KNOWN-LIMITS.md`. This fixture tests the thing
-        the output policy actually promises: what the command PRINTS.
+        and failed, correctly: at the time, `argv` was recorded fully verbatim,
+        so a credential typed into a command landed in the receipt no matter
+        what the output policy said. `redact_argv()` now narrows that (see the
+        fixtures below and `docs/KNOWN-LIMITS.md`), but the narrowing only
+        catches KNOWN secret shapes, so this fixture still keeps its secret out
+        of argv entirely rather than depending on the pattern list catching it.
+        This fixture tests the thing the output policy actually promises: what
+        the command PRINTS.
         """
         holder = write(self.out, "held-secret.txt", self.SECRET)
         return write(self.out, "print_%s.py" % stream,
@@ -429,22 +432,50 @@ class TestNoRawOutputLeak(EvidenceFixture):
                          "an empty stream still gets a digest, so silence and 'not recorded' "
                          "cannot be confused")
 
-    def test_argv_is_recorded_verbatim_which_is_a_limit_not_a_leak_to_ignore(self):
-        """The honest other half. `argv` is the exact command, recorded as run,
-        because a receipt whose command was paraphrased proves nothing about
-        what happened. So a credential passed ON the command line IS persisted.
-        This test exists so that limit is a decision somebody made rather than a
-        surprise somebody finds."""
+    def test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim(self):
+        """FLIPPED (was `test_argv_is_recorded_verbatim_which_is_a_limit_not_a_leak_to_ignore`,
+        which pinned the opposite of this on purpose, as a stated limit). `argv`
+        used to be recorded fully verbatim, so a credential passed ON the
+        command line was persisted whole. `redact_argv()`
+        (`src/brothersbe/evidence.py`) now masks any token matching a shape
+        `tools/sbe_telemetry.py`'s own `SECRET_PATTERNS` already knows, before
+        the receipt is written, and names WHICH shape matched rather than
+        printing a bare "[REDACTED]"."""
         path, _code, _text = self.generate(
-            command=["python3", "-c", "print('token=%s')" % self.SECRET])
+            command=["python3", "-c", "pass", self.SECRET])
         with io.open(path, encoding="utf-8") as fh:
             raw = fh.read()
-        self.assertIn(self.SECRET, raw,
-                      "argv is recorded verbatim; if that ever stops being true the limit in "
-                      "docs/KNOWN-LIMITS.md has to change with it")
-        self.assertEqual(raw.count(self.SECRET), 1,
-                         "the secret is in argv and nowhere else: the printed copy still went "
-                         "to a digest")
+        self.assertNotIn(self.SECRET, raw,
+                         "a secret-shaped argv token reached the receipt: redact_argv did not "
+                         "catch a shape its own mirrored pattern list knows")
+        self.assertIn("[REDACTED:api-key]", raw,
+                      "the marker names the shape that matched, not a bare [REDACTED]")
+        data = self.load(path)
+        self.assertEqual(data["argvRedactions"], 1, data["argv"])
+        self.assertNotIn(self.SECRET, json.dumps(data["argv"]), data["argv"])
+
+    def test_a_receipt_with_redactions_still_verifies_pass_on_an_untouched_tree(self):
+        """Redaction changes what `argv` records; it must not change what the
+        seal covers or what `verify` decides. `argvRedactions` sits in
+        `SEALED_FIELDS` beside `argv` itself, so a redacted receipt seals and
+        verifies exactly like any other."""
+        self.generate(command=["python3", "-c", "pass", self.SECRET])
+        code, data, text = self.verify()
+        self.assertEqual(data["verdict"], "PASS", text)
+        self.assertEqual(code, 0, text)
+
+    def test_zero_redactions_keeps_argv_byte_identical_to_what_ran(self):
+        """The common case: no secret-shaped token anywhere in argv. The recorded
+        `argv` must be byte-identical to what actually ran, not just equal in
+        meaning, and `argvRedactions` names that plainly as 0 rather than
+        leaving a reader to infer verbatim-ness from an empty diff."""
+        command = ["python3", "-c", "print('the suite ran')"]
+        path, _code, _text = self.generate(command=command)
+        data = self.load(path)
+        self.assertEqual(data["argvRedactions"], 0, data["argv"])
+        self.assertEqual(data["argv"], command,
+                         "zero redactions must mean argv is exactly what ran, not merely "
+                         "unmarked")
 
 
 class TestAccessAndTimeout(EvidenceFixture):
@@ -533,12 +564,121 @@ class TestTheInvariant(EvidenceFixture):
         sys.path.insert(0, os.path.join(ROOT, "src"))
         try:
             from brothersbe import evidence as mod
-            for field in ("argv", "exitCode", "durationSeconds", "headCommit",
-                          "stdoutSha256", "coveredFiles", "workingTreeDirty"):
+            for field in ("argv", "argvRedactions", "exitCode", "durationSeconds",
+                          "headCommit", "stdoutSha256", "coveredFiles", "workingTreeDirty"):
                 self.assertIn(field, mod.SEALED_FIELDS,
                               "%s is forgeable without breaking the seal" % field)
         finally:
             sys.path.pop(0)
+
+
+class TestRedactArgv(unittest.TestCase):
+    """Direct, subprocess-free coverage of `redact_argv()`: no git repo needed,
+    because the property under test lives entirely in the function's own
+    input/output, not in anything a run touches."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        from brothersbe import evidence as mod
+        import sbe_telemetry
+        self.mod = mod
+        self.telemetry = sbe_telemetry
+
+    def tearDown(self):
+        sys.path.pop(0)
+        sys.path.pop(0)
+
+    def test_returns_three_values_not_two(self):
+        """Two values here would read as a possible (verdict, evidence) pair to
+        `evals/test_no_data_class.py`, the honesty meta-test, and it is right to
+        refuse that shape from anything not registered as a verdict source."""
+        result = self.mod.redact_argv(["python3"])
+        self.assertEqual(len(result), 3, result)
+        redacted, count, note = result
+        self.assertIsInstance(redacted, list)
+        self.assertIsInstance(count, int)
+        self.assertIsInstance(note, str)
+        self.assertTrue(note, "the third value must say something, not stand in as padding")
+
+    def test_mirrors_the_telemetry_pattern_list_rather_than_a_second_one(self):
+        """Imported, not reinvented: the same list object the telemetry
+        redactor scans an operator's own messages with."""
+        self.assertIs(self.mod.SECRET_PATTERNS, self.telemetry.SECRET_PATTERNS,
+                      "evidence.py holds a copy of the pattern list rather than the imported "
+                      "one; a pattern added to tools/sbe_telemetry.py would silently not apply "
+                      "here")
+        self.assertEqual(len(self.mod.ARGV_REDACTION_SHAPES), len(self.mod.SECRET_PATTERNS),
+                         "one shape name per imported pattern, or a marker would name the "
+                         "wrong shape")
+
+    def test_a_plain_token_with_no_secret_shape_is_untouched(self):
+        redacted, count, _note = self.mod.redact_argv(["pytest", "-q", "tests/"])
+        self.assertEqual(redacted, ["pytest", "-q", "tests/"])
+        self.assertEqual(count, 0)
+
+    def test_each_known_shape_produces_its_own_named_marker(self):
+        planted = {
+            "api-key": "sk-live-DEADBEEFCAFE0123456789",
+            "aws-key-id": "AKIAABCDEFGHIJKLMNOP",
+            "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0",
+        }
+        for shape, token in planted.items():
+            redacted, count, _note = self.mod.redact_argv([token])
+            self.assertEqual(count, 1, "%s: %r" % (shape, redacted))
+            self.assertNotIn(token, redacted[0], "%s: %r" % (shape, redacted))
+            self.assertIn("[REDACTED:%s]" % shape, redacted[0],
+                          "%s matched but not under its own name: %r" % (shape, redacted))
+
+    def test_matches_per_argument_not_across_a_joined_command_line(self):
+        """A shape split across two argv entries by ordinary shell word-splitting
+        must not be reassembled and caught: that would be matching a boundary no
+        shell ever produced. Each half here is, on its own, too short for the
+        api-key pattern (which needs 12+ characters after `sk-`); only their
+        concatenation would satisfy it."""
+        redacted, count, _note = self.mod.redact_argv(["sk-AAAAAA", "AAAAAA"])
+        self.assertEqual(count, 0,
+                         "each half is too short alone to match the shape; a nonzero count "
+                         "would mean the scan joined the two arguments before matching")
+        self.assertEqual(redacted, ["sk-AAAAAA", "AAAAAA"])
+
+
+
+class TestSchemaCompat(EvidenceFixture):
+    """A receipt is judged by its own version's contract.
+
+    Schema "1.0" predates argvRedactions. An honest 1.0 receipt must not FAIL
+    for missing a field its version never defined, and a 1.1 receipt missing
+    it must. The transform below (rewrite the version, drop the one field,
+    reseal) is the entire difference between the versions, which is what makes
+    these fixtures a statement about version handling and nothing else.
+    """
+
+    def _as_v10(self):
+        self.generate()
+        data = self.load()
+        data["schemaVersion"] = "1.0"
+        del data["argvRedactions"]
+        self.save(self.reseal(data))
+
+    def test_a_1_0_receipt_is_not_failed_for_a_field_its_version_never_had(self):
+        self._as_v10()
+        _code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "PASS", text)
+        self.assertNotIn("argvRedactions", text)
+
+    def test_a_1_1_receipt_missing_the_redaction_count_fails_by_name(self):
+        self.generate()
+        data = self.load()
+        del data["argvRedactions"]
+        self.save(self.reseal(data))
+        _code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "FAIL", text)
+        self.assertIn("argvRedactions", text)
+
+    def test_new_receipts_stamp_the_evidence_version(self):
+        self.generate()
+        self.assertEqual(self.load()["schemaVersion"], "1.1")
 
 
 if __name__ == "__main__":
