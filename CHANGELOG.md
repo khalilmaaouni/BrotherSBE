@@ -10,7 +10,9 @@ checklist's own rules.
 
 - PRACTICES.md gains the loop close-out interview: open loops are put to their
   decision owner as per-loop question sets, each question carrying a
-  recommendation, its pros, and its cons. Advice, not a control, and it says so.
+  recommendation, its pros, and its cons, triaged gating-first and run through
+  the harness's native question surface by default rather than as prose. Advice,
+  not a control, and it says so.
 
 - `sbe status`: one truthful, blocker-first answer to "where does this change stand",
   read from state other commands already recorded rather than computed fresh. It never

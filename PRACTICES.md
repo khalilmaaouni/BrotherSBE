@@ -42,12 +42,25 @@ recommendation exports the thinking to the busiest person in the room; a
 recommendation without its cons is advocacy wearing analysis's clothes.
 
 Order the sets so decisions that gate other decisions come first, and say which
-answers unblock which loops. Answers become recorded decisions, in the working
-state, the vault, or an ADR, wherever that class of decision already lives.
-Questions left unanswered stay named open items and are asked again at the next
-close, never silently dropped. This is judgment, not a control: nothing checks
-that a question was asked well, and the interview stands or falls on the honesty
-of its cons.
+answers unblock which loops. Triage before asking: gating decisions first, then
+direction, then technical choices, then process, and within a set the question
+whose answer changes the most other answers leads.
+
+Delivery follows the room. When the harness offers a native question surface
+(selectable options with a marked recommendation), the interview runs there BY
+DEFAULT, a handful of questions per screen in dependency order, never the whole
+backlog at once. The recommended option is marked as such, and the case against
+it rides in that option's own description, because a recommendation whose cons
+are hidden a click away is advocacy again. Prose is reserved for environments
+with no question surface at all, and reaching for it anywhere else is the
+failure this paragraph exists to stop: thirty decisions in a wall of text is how
+half of them go unanswered.
+
+Answers become recorded decisions, in the working state, the vault, or an ADR,
+wherever that class of decision already lives. Questions left unanswered stay
+named open items and are asked again at the next close, never silently dropped.
+This is judgment, not a control: nothing checks that a question was asked well,
+and the interview stands or falls on the honesty of its cons.
 
 ## How a practice becomes a law
 
