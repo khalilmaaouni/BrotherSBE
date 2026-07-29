@@ -8,6 +8,17 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The first real run of the CI gates found the hard-gates step grading the
+  teaching dossier under docs/for-engineers/examples: its deliberately failing
+  APPROVAL broke the build, and its receipts printed PASS lines as if they
+  were this repository's claims. The step now scopes to the live dossier root
+  (design/, declared by this repository's own `sbe init`), where all four
+  gates honestly read NO-DATA today. The consumer workflow's strict flag now
+  applies on pull requests only: a push to main has no proposed change, and
+  grading its empty self-diff under --strict manufactured a failure out of
+  absence. The install receipt is gitignored because it records this
+  machine's absolute path.
+
 - PRACTICES.md gains the loop close-out interview: open loops are put to their
   decision owner as per-loop question sets, each question carrying a
   recommendation, its pros, and its cons, triaged gating-first and run through

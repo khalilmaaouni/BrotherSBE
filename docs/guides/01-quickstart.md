@@ -377,8 +377,18 @@ jobs:
       # keyring at all. Doing neither is legal and honest: approvals then report
       # NO-DATA, instead of a gate that quietly degrades into accepting any
       # signature blob because it could not check one.
+      # Scoped to the LIVE dossier root (design/, declared by `sbe init`), not
+      # the whole checkout. The first real run of this workflow proved why the
+      # wide sweep was wrong twice over: the teaching dossier under
+      # docs/for-engineers/examples carries an APPROVAL that is DESIGNED to
+      # fail (two documents paste that refusal as the lesson), so scanning it
+      # turned pedagogy into a red build, and the same sweep let the examples'
+      # receipts print PASS lines as if they were this repository's own
+      # claims, which is worse than the red. This repository carries no live
+      # dossier today, so all four gates read NO-DATA here, printed in full:
+      # NO-DATA is never a pass, and never a manufactured failure either.
       - name: Hard gates (numbers, migration, approval, ran) block on failure
-        run: python3 tools/sbe_gate.py --strict .
+        run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
       # project stop blocking every unrelated merge, and the exit code cannot tell
       # you one was used, so this step surfaces every WAIVED line as an annotation

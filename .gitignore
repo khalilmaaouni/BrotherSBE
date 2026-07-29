@@ -16,3 +16,7 @@ docs/superpowers/
 # and the tracked copy went stale against it and carried a paragraph of internal
 # development history that the markdown had already been scrubbed of.
 *.docx
+
+# The install receipt records this machine's absolute install path, which is a
+# local fact and a personal one; the receipt is a local record, never shipped.
+.brothersbe/install-receipt.json

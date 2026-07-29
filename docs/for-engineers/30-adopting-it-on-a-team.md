@@ -20,7 +20,7 @@ Seven steps in the shipped workflow. Here is what each one buys and what it cost
 
 | Step | Blocks on | Put it in on day one? |
 |---|---|---|
-| `sbe_gate.py --strict .` | A figure with no re-derivation, an untested migration reverse, an unbound approval, an unrun check | Yes. Absent evidence is `NO-DATA` and does not block, so it taxes nobody. |
+| `sbe_gate.py --strict design` | A figure with no re-derivation, an untested migration reverse, an unbound approval, an unrun check | Yes. Absent evidence is `NO-DATA` and does not block, so it taxes nobody. |
 | `sbe_design.py --strict .` | An incomplete dossier | Only after you have decided where dossiers live. See the trap below. |
 | Surface design waivers | Nothing. It annotates | Yes, if you run the design step. |
 | `sbe_score.py --strict --strict-soft .` | Silent-failure lints | Yes for the gate lint. `--strict-soft` also blocks on the graded telemetry checks, which report `NO-DATA` without a vault, so it is harmless until you have one. |

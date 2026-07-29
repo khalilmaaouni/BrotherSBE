@@ -39,7 +39,13 @@ jobs:
       # inside BrotherSBE's own repository as its own reference example. A
       # client repository that vendors BrotherSBE elsewhere (a submodule, a
       # sparse checkout, a plugin path) points sbe-path there instead.
+      # Strict only where a proposed change exists to grade. On a pull request
+      # the diff is the change and NO-DATA there rightly blocks. A push to main
+      # has no proposal: its self-diff is empty, and grading that emptiness
+      # under --strict manufactures a failure out of absence, which this
+      # project's law forbids in both directions. The first real run of this
+      # workflow failed exactly that way.
       - uses: ./.github/actions/sbe-consumer
         with:
           sbe-path: '.'
-          strict: 'true'
+          strict: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}

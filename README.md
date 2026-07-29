@@ -185,7 +185,7 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
-        run: python3 tools/sbe_gate.py --strict .
+        run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
       # project stop blocking every unrelated merge, and the exit code cannot tell
       # you one was used, so this step surfaces every WAIVED line as an annotation
@@ -321,7 +321,7 @@ To watch one check on a real change:
 ```bash
 python3 tools/sbe_design.py .           # the five design checks, advisory
 python3 tools/sbe_gate.py numbers .     # one hard gate
-python3 tools/sbe_gate.py --strict .    # enforcing: exits nonzero on any FAIL
+python3 tools/sbe_gate.py --strict design    # enforcing: exits nonzero on any FAIL
 ```
 
 ## What this is not

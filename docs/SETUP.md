@@ -68,7 +68,7 @@ One line per real failure class, each caught by the check that owns it, ending "
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory
 python3 tools/sbe_gate.py numbers .    # one class
-python3 tools/sbe_gate.py --strict .   # enforcing: exits nonzero on any FAIL
+python3 tools/sbe_gate.py --strict design   # enforcing: exits nonzero on any FAIL
 ```
 
 ## 5. Turn the gates from advisory into blocking (the real step)
@@ -77,7 +77,7 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
-        run: python3 tools/sbe_gate.py --strict .
+        run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
       # project stop blocking every unrelated merge, and the exit code cannot tell
       # you one was used, so this step surfaces every WAIVED line as an annotation

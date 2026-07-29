@@ -242,7 +242,7 @@ receipt is internally consistent rather than merely present.
 ```bash
 python3 tools/sbe_gate.py .             # all four, advisory
 python3 tools/sbe_gate.py numbers .     # one class
-python3 tools/sbe_gate.py --strict .    # enforcing
+python3 tools/sbe_gate.py --strict design    # enforcing
 ```
 
 Four properties are deliberate. A missing receipt is NO-DATA, so a change with
@@ -289,7 +289,7 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
-        run: python3 tools/sbe_gate.py --strict .
+        run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
       # project stop blocking every unrelated merge, and the exit code cannot tell
       # you one was used, so this step surfaces every WAIVED line as an annotation
