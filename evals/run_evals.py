@@ -4946,6 +4946,24 @@ def dc9(root):
     return tail
 
 
+@case("the-books-terminal-blocks-are-what-the-tools-print", "docs", "consistent")
+def dc9b(root):
+    # The book's own front matter claim, made mechanical the same way dc9
+    # makes guide-05's: evals/replay_book.py walks every docs/book/[0-9][0-9]-*.md
+    # chapter, runs every bash block against the repo it actually lives in,
+    # and diffs each captured stdout against the bare block the chapter shows
+    # underneath. A stale paste fails the gate instead of going stale on the
+    # page; a maintainer repairs it with `python3 evals/replay_book.py
+    # --write`, which pastes the LIVE output, so nobody ever hand-types an
+    # expected block.
+    out = subprocess.run([sys.executable, os.path.join(HERE, "replay_book.py")],
+                         capture_output=True, text=True, timeout=300)
+    tail = out.stdout.strip().splitlines()[-1] if out.stdout.strip() else "(no output)"
+    if out.returncode == 0 and tail.endswith(", 0 differ"):
+        return "consistent"
+    return tail
+
+
 @case("no-copy-ready-ci-block-shows-fewer-steps-than-the-shipped-workflow", "docs", "consistent")
 def dc3(root):
     # A reader who copies a CI fence gets what the fence shows. Three docs showed

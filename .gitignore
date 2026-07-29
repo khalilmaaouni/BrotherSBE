@@ -20,3 +20,12 @@ docs/superpowers/
 # The install receipt records this machine's absolute install path, which is a
 # local fact and a personal one; the receipt is a local record, never shipped.
 .brothersbe/install-receipt.json
+
+# The book's worked estate regenerates these two files on every run; they are
+# outputs, not fixtures, so the source CSV and the aggregated JSON stay out.
+docs/book/estate/orders.csv
+docs/book/estate/daily_totals.json
+
+# The built book is a build product of build_book.py, regenerated from the
+# chapter markdown and the vendored mermaid.js on every run, never a fixture.
+docs/book/BrotherSBE-for-Dummies.html
