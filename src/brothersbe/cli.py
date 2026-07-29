@@ -320,6 +320,35 @@ def _cmd_adopt(args):
     return EXIT_OK
 
 
+def _cmd_status(args):
+    """Blocker-first: where a change stands, read from state other commands
+    already recorded. See `brothersbe.status` for exactly what it reads and
+    the kill criterion that keeps it from becoming a second gate runner.
+    """
+    root = os.path.abspath(args.path)
+    if not os.path.isdir(root):
+        sys.stderr.write("sbe status: '%s' is not a directory. A mistyped path must not read "
+                         "as a clean scan.\n" % root)
+        return EXIT_USAGE
+    from . import status as status_mod
+
+    data = status_mod.build_report(root, base=args.base)
+    if args.json:
+        sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(status_mod.render_text(data))
+        code = EXIT_CONTROL_FAILED if status_mod.any_blocking(data) else EXIT_OK
+        sys.stdout.write(
+            "\nsbe status: exit %d. %s\n"
+            % (code, "at least one of BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS or "
+                     "MISSING EVIDENCE carries an item above." if code else
+                     "none of BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS or MISSING "
+                     "EVIDENCE carries an item. That is not the same claim as everything "
+                     "being inspected: read the NO-DATA lines above for what was not."))
+        return code
+    return EXIT_CONTROL_FAILED if status_mod.any_blocking(data) else EXIT_OK
+
+
 def _cmd_init(args):
     """Install BrotherSBE's local footprint (config, dossier directory,
     optionally a copy of the consumer CI, and a receipt) into a repository.
@@ -438,6 +467,8 @@ COMMANDS = [
                                  "owner, approver or expiry to list.")),
     ("adopt", "inspect a repository for installation readiness, dry run by default",
      _cmd_adopt),
+    ("status", "blocker-first summary of where a change stands, read from recorded state",
+     _cmd_status),
     ("init", "install BrotherSBE's local footprint into a repository, dry run by default",
      _cmd_init),
 ]
@@ -491,6 +522,14 @@ def build_parser():
                                help="overwrite an existing file that differs from the "
                                     "proposal; without it, an existing file is skipped and "
                                     "named")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
+        elif name == "status":
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository to summarize (default: the current one)")
+            child.add_argument("--base", default=None,
+                               help="the commit or ref to diff from for the intake-vs-diff "
+                                    "section; without it the merge base with the default "
+                                    "branch is used, exactly as in `sbe impact`")
             child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name == "init":
             child.add_argument("path", nargs="?", default=".",

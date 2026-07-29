@@ -8,6 +8,37 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe status`: one truthful, blocker-first answer to "where does this change stand",
+  read from state other commands already recorded rather than computed fresh. It never
+  runs the suites itself and never becomes a second gate runner: nothing in it starts a
+  subprocess, and every design/gate/score FAIL it names comes from an EXISTING evidence
+  receipt someone already generated with `sbe evidence run`, never from status invoking a
+  check on its own. Six sections, blocker-first: BROKEN CLAIMS (a receipt failing `sbe
+  evidence verify`, or a disposition bound to a commit that is not HEAD), MERGE BLOCKERS
+  (an intake tier disagreeing with the diff-derived tier with no disposition, an unreadable
+  intake, a task closed `--force`d, or a verified receipt recording a nonzero exit code),
+  ACTIVE CONFLICTS (overlapping open tasks, read by calling `tasks.load_registry`,
+  `tasks.open_tasks` and `tasks.claims_overlap` directly, the same functions `sbe task
+  check` runs, so there is no second copy of wave 5's overlap rule), MISSING EVIDENCE (a
+  design/gate/score kind no verified receipt names, for a tier above T0, each naming the
+  command that would fill it), COMPLETED EVIDENCE (a clean, zero-exit receipt with its
+  trust label), and NEXT ACTION (the first nonempty section's remedy, or "nothing blocking
+  here that this tool can see", plus the scope sentence naming exactly which stores were
+  read). An absent store is NO-DATA with a reason, never clean, and every positive or empty
+  line in text mode names the scope it inspected. Exit 0 means sections 1-4 are empty, not
+  that everything was inspected, and the closing line says so. Proof:
+  `tools/test_sbe_status.py`, 17 fixtures over 10 classes, each calibrated by planting the
+  break, watching the section go red, then restoring the clean state and watching it clear:
+  a stale receipt, a tier disagreement without and then with a disposition, an injected
+  registry overlap and its non-overlapping counterpart, a forced close, missing evidence
+  for a T2 tier against a T0 tier's clean bill, a clean receipt and a failing one, all three
+  NEXT ACTION arrangements, `--json` carrying every section and the scope object, and a
+  guard that greps rendered output (not source) for a scope phrase on every empty-section
+  line. Limits stated beside the behavior in `docs/CLI.md`, including the flat,
+  single-dossier convention this wave reads (`00-intake.json`, `disposition.json` and
+  `.sbe/` at the inspected path itself, not discovered under a nested `design/<change>/`
+  dossier) and the argv-substring heuristic used to recognize a design/gate/score receipt.
+  Maturity: INTERNAL-EVAL.
 - `sbe task`: a write-scope registry with a diff postcondition that survives
   Bash. The fence hook fails open and cannot govern shell writes because shell
   cannot be parsed reliably; `sbe task open` now records who owns what in

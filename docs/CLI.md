@@ -38,6 +38,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `evidence` | generate a receipt by running the command, verify it, or show its trust level |
 | `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
 | `adopt` | inspect a repository for installation readiness, dry run by default |
+| `status` | blocker-first summary of where a change stands, read from recorded state |
 | `init` | install BrotherSBE's local footprint into a repository, dry run by default |
 | `version` | the version and the evidence schema version |
 
@@ -258,6 +259,64 @@ than the refusal this command used to print instead of a result.
 
 Full checklist of what only a human with admin rights can turn on: `docs/ADOPTION.md`. Limits in
 full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+## `sbe status`, and the rule that keeps it from becoming a second gate runner
+
+```bash
+bin/sbe status .                 # blocker-first summary of the current repository
+bin/sbe status . --base main     # diff-derived sections read against a stated base
+bin/sbe status . --json          # the same six sections, machine-readable
+```
+
+One truthful, blocker-first answer to "where does this change stand", read from state
+other commands already recorded. It **never runs the suites itself**: nothing in this
+command starts a subprocess, and nothing in it computes a new verdict over source code.
+It reads `sbe evidence` receipts, the `sbe task` registry, an intake file, a disposition
+file, and the diff (the same way `sbe impact` already reads it, by calling that module
+rather than re-deriving the git plumbing). If a truthful summary could not be produced
+without running the suites or becoming a second `sbe verify`, this command would refuse
+rather than run them; it does not need to, because every finding below is something
+recorded state already answers.
+
+Six sections, blocker-first, and **every positive or empty line names what it inspected**:
+
+1. **BROKEN CLAIMS**: an evidence receipt under `.sbe/evidence/` that fails `sbe evidence
+   verify` (stale, wrong commit, malformed), and a disposition bound to a commit that is
+   not the current HEAD.
+2. **MERGE BLOCKERS**: an intake tier disagreeing with the diff-derived tier `sbe impact`
+   proposes, with no disposition recorded; an intake that cannot be read; a task closed
+   `--force`d; and a receipt that verifies as trustworthy but recorded a nonzero exit
+   code, meaning a check actually ran and failed and evidence of that failure already
+   exists.
+3. **ACTIVE CONFLICTS**: open tasks in `.sbe/tasks.json` with overlapping owned paths,
+   read by calling `tasks.load_registry`, `tasks.open_tasks` and `tasks.claims_overlap`
+   directly, the same functions `sbe task check` itself runs; there is no second copy of
+   the overlap rule here.
+4. **MISSING EVIDENCE**: for a declared tier above T0, a design/gate/score kind no
+   verified receipt's `argv` names, each naming the command that would fill it.
+5. **COMPLETED EVIDENCE**: receipts that verify clean with a zero exit code, printed with
+   their trust label (`LOCAL-ADVISORY` or `PROTECTED-CI`) every time.
+6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
+   plus the scope sentence naming exactly which stores this run read.
+
+Where it looks, and this is a stated limit, not a silent one: `<path>/00-intake.json`,
+`<path>/disposition.json`, `<path>/.sbe/evidence/` (recursively), `<path>/.sbe/tasks.json`.
+These are flat, single-dossier conventions, the same ones `tools/test_sbe_impact.py`'s own
+fixtures write to; a dossier nested under `design/<change>/` is not discovered by this
+wave, and every section reads NO-DATA rather than guessing at a path it was never told.
+
+A design/gate/score FAIL is recognized only from a receipt whose `sbe evidence verify`
+verdict is PASS (sealed, current, every covered file intact): its `argv` is read for the
+substring `design`, `gate` or `score` (`verify` counts as all three, `review` counts as
+gate and score), and a nonzero recorded `exitCode` on such a receipt is the MERGE BLOCKER.
+A receipt whose command names none of the three still counts by its exit code but clears
+no MISSING EVIDENCE entry for a kind it does not name.
+
+Exit codes: `0` when BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS and MISSING EVIDENCE
+are all empty, `1` when any of them carries an item, `2` usage. Exit 0 is never printed as
+a claim that everything was inspected; the closing line and every empty section's NO-DATA
+line say what was not. Limits in full, beside the behavior, live in this section rather
+than `docs/KNOWN-LIMITS.md`, which this wave did not touch. Maturity: **INTERNAL-EVAL**.
 
 ## `sbe init`, and the idempotence it is built on
 
