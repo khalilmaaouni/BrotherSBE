@@ -48,9 +48,13 @@ switched on, and each category is switched on separately:
 | `corrections` | `BROTHERSBE_TELEMETRY_CORRECTIONS=1` | excerpts of your own messages |
 
 With a category off, the tool says so on the line where it would have reported a
-capture, naming the switch. The resume brief is still written with a category
-off, and the section that would have held the text says it was withheld and by
-which switch, so a resumed session finds a document rather than a missing file.
+capture, naming the switch. `transcript` off (the default) means no resume brief
+is written at all, matching `metrics` and `corrections`: the `precompact-brief`
+code path that would have written it names the switch once on stderr instead, so
+an absent file is never mistaken for a quiet session. Flip decision (founder,
+2026-07-29): the resume brief used to be written either way, real content on,
+a `[REDACTED]` placeholder off, which made it the one category still writing a
+file by default.
 
 `metrics` is opt-in as well, even though it stores no message text: the row
 carries the basename of the working directory, and a directory basename can be a

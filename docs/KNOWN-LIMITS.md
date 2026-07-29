@@ -383,6 +383,14 @@ read it:
 - `data-show` and `data-purge` see one vault. Copies made by a backup, a mirror
   or an export you took yourself are outside their reach, and `data-export`
   deliberately creates one such copy.
+- The resume brief flip (founder, 2026-07-29) traded a standing placeholder
+  for silence. `transcript` off used to still write a file naming the switch,
+  so a resumed session read something even with capture off. Off now means no
+  file at all: the switch is named once, on stderr, at the moment the
+  `precompact-brief` hook declines to write. A resumed session's SessionStart
+  hook has nothing on disk to relay, because there is nothing on disk, so
+  anyone who was not watching that stderr line never sees it; SECURITY.md and
+  `data-show` are where they find out afterward.
 Full text: `tools/sbe_telemetry.py` (the capture policy block),
 `tools/sbe_autosave.sh` (the content scan block), `SECURITY.md`,
 `docs/THREAT_MODEL.md`.

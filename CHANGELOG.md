@@ -8,6 +8,27 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The resume brief is now opt-in, matching the `metrics` and `corrections` default wave 6 already
+  set. It was the one capture path still writing a file by default: `BROTHERSBE_TELEMETRY_TRANSCRIPT`
+  off (the default) wrote the brief anyway, with a `[REDACTED]` placeholder in place of every
+  transcript-derived section and a line naming the switch that would fill them in. Flip decision
+  (founder, 2026-07-29): off now means no file at all, and the `precompact-brief` code path that
+  would have written it names the switch once on stderr instead, the same "who kept this off and
+  why" sentence the other two categories already print, so an absent file is never mistaken for a
+  quiet session. The opt-in path (`BROTHERSBE_TELEMETRY_TRANSCRIPT=1`) is unchanged: it still reads
+  the transcript tail and still redacts before writing. `SECURITY.md` and `docs/KNOWN-LIMITS.md` are
+  updated to the new default and its own limit: the stderr line only reaches whoever is watching the
+  hook at the moment of compaction, and a resumed session's `compact-hint` reader has nothing on disk
+  to relay, unlike the old placeholder file. Proof: `tools/test_sbe.py`'s `TestResumeBrief`, rewritten
+  from the test that asserted a file existed by default (its docstring states the old meaning and this
+  decision) into `test_default_writes_no_brief_and_names_the_switch_on_stderr`, plus the new
+  `test_opt_in_writes_the_brief_and_still_redacts` fixture for the opt-in path; three fixtures in
+  `TestCaptureDefaultsAndAutosaveContentScan` (`test_a_default_installation_captures_no_transcript_text_and_no_correction`,
+  `test_each_switch_turns_on_exactly_one_category`, `test_the_organization_override_forces_every_category_off`)
+  updated to the same default. Calibrated red against the pre-flip code (4 fixtures failed, each on a
+  now-missing-file assertion) before the fix restored it, the restore verified byte-identical to the
+  pre-recorded `git hash-object` of the fixed file rather than by `git checkout`.
+
 - `sbe evidence run` no longer writes `argv` fully verbatim: every token is now checked against
   `SECRET_PATTERNS`, imported from `tools/sbe_telemetry.py` rather than reinvented, and a match
   is replaced by a named marker, `[REDACTED:<shape>]`, before the receipt is written. The
@@ -693,3 +714,19 @@ can read a promise into.
   `CHECKSUMS.sha256` against the tracked tree so a stale manifest is a red
   suite. Proven by `a-symlinked-planted-module-fails-the-install-check` and
   `the-tracked-manifest-matches-the-tree-it-ships-with`.
+
+- `tools/sbe_telemetry.py`'s `data-show`, `data-export` and `data-purge` had no help path: their
+  argv scanning only ever matched the flags each already knew, so `data-export --help` fell through
+  unconsumed and ran a real export, and a mistyped flag such as `--catgory` on `data-purge` was
+  silently ignored rather than refused, which would have purged every category instead of the one
+  named. `-h`/`--help` anywhere in a data command's argv now prints that command's usage (what it
+  reads, what it writes, its flags) and exits 0 before anything under the vault is touched; any
+  other unrecognized flag is refused with usage and a nonzero exit instead of running past it.
+  Proof: `tools/test_sbe.py`'s `test_help_on_each_data_command_prints_usage_and_never_creates_the_vault`,
+  `test_help_on_a_populated_vault_reports_and_changes_nothing_in_it` and
+  `test_an_unrecognized_flag_refuses_nonzero_instead_of_running_live`, each hashing the vault
+  directory's listing before and after rather than trusting the command's own claim. Calibrated red
+  against the pre-fix dispatch (all three fixtures failed, one on a real `data-show` run appearing
+  where usage was expected, one on a vault the command was only asked to describe getting created,
+  one on a returncode of 0 for a rejected flag) before the fix restored it, the restore verified
+  byte-identical to the pre-recorded `git hash-object` of the fixed file rather than by `git checkout`.

@@ -28,11 +28,14 @@ Subcommands:
                     death always leaves a forward-looking record (the write-ahead
                     log pattern: log the intent before the action, like a database).
                     The resume brief surfaces the last intent first.
-  precompact-brief  PreCompact hook helper. Reads the hook JSON on stdin, extracts
-                    the TAIL of the dying session's transcript (last instruction,
-                    recent decisions, recent commands) and writes a resume brief to
-                    the vault, so a resumed session recovers the THREAD, not just the
-                    files the git autosave saved. Pure: reads/writes files only.
+  precompact-brief  PreCompact hook helper. Category `transcript`, opt-in like
+                    every other category (BROTHERSBE_TELEMETRY_TRANSCRIPT=1): off
+                    (the default) writes NOTHING and names the switch once on
+                    stderr; on, it reads the TAIL of the dying session's transcript
+                    (last instruction, recent decisions, recent commands) and
+                    writes a resume brief to the vault, so a resumed session
+                    recovers the THREAD, not just the files the git autosave saved.
+                    Pure: reads/writes files only.
   compact-hint      SessionStart(source=compact) helper. Reads the hook JSON on
                     stdin; if the session just resumed from a compaction, prints a
                     one-line pointer to the autosave recovery command. Pure: reads
@@ -46,21 +49,30 @@ Subcommands:
                     delete). Shows the count first; --yes to confirm.
   data-show         Every file this tool can write, by name: what it holds, how
                     many records are in it, its mode, and which capture switch
-                    governs it. Reads; never writes.
+                    governs it. Reads; never writes. -h/--help anywhere in its
+                    argv prints usage and exits 0 instead of running.
   data-export       One JSON bundle of everything stored, owner-only, so the
                     stored data can be read somewhere other than the vault.
+                    -h/--help anywhere in its argv prints usage and exits 0
+                    without touching the vault or writing a bundle.
   data-purge        Deletes what is stored. Shows the inventory first; --yes to
                     confirm; re-checks the filesystem after and reports what
-                    survived. --category narrows it to one category.
+                    survived. --category narrows it to one category. -h/--help
+                    anywhere in its argv prints usage and exits 0 without
+                    deleting anything.
   speed             Wall-clock view for rubric metric 3: last 7d vs prior 7d,
                     span-hours per OUTCOMES line (labeled proxy, never invented).
   dedup             One-time cleanup of duplicate hook flushes (backup + count
                     check; keeps last flush per identical metric set).
 
-Law: this tool NEVER blocks work. Every path exits 0. Numbers are parsed or
-absent; nothing is invented. Token counts are labeled as-flushed (the transcript
-may lag the final turn). Old (schema 1) and new lines are both readable: use
-fld() everywhere.
+Law: this tool NEVER blocks work. Every hook and automatic path exits 0. The
+three data-* commands are the one deliberate exception: a bad flag on one of
+them refuses with usage and a nonzero exit rather than run with the flag
+silently ignored, because a mistyped flag on a command that reads or deletes
+the vault must not be allowed to run as if nothing were wrong. Numbers are
+parsed or absent; nothing is invented. Token counts are labeled as-flushed (the
+transcript may lag the final turn). Old (schema 1) and new lines are both
+readable: use fld() everywhere.
 """
 import json, os, sys, glob, re, stat, datetime, hashlib, time, contextlib
 try:
@@ -1414,8 +1426,9 @@ def _resume_path(cwd):
 
 
 def _brief_header(last_intent):
-    """The part of the brief that carries no transcript text, so both the
-    captured and the withheld brief are the same document."""
+    """The part of the brief that carries no transcript text: the intent log
+    is a separate write-ahead mechanism, not gated by the transcript switch,
+    so it still opens this document whenever the brief is written at all."""
     return ["# Resume brief (auto-written before compaction)",
             "",
             "A compaction just erased the working context. The git autosave holds your",
@@ -1459,22 +1472,20 @@ def cmd_precompact_brief():
     cwd = payload.get("cwd") or os.getcwd()
     if not tp or not os.path.isfile(tp):
         return
-    # THE WITHHELD BRIEF IS STILL A BRIEF. The file is written either way, so a
-    # resumed session finds the same document in the same place and reads, in
-    # the section where the text would have been, that it was withheld and by
-    # which switch. A brief that simply did not exist would read as a hook that
-    # failed, and the operator would go looking for a bug instead of a setting.
+    # OPT-IN, MATCHING WAVE 6. This used to write a brief either way: real
+    # content when the switch was on, a "[REDACTED]" placeholder in its place
+    # when off, so a resumed session always found the same document in the
+    # same spot. That made the resume brief the one capture path still writing
+    # a file by default, unlike metrics and corrections, which write nothing
+    # until switched on. Flip decision (founder, 2026-07-29): off now means no
+    # file at all. An absent file must never read as a quiet session, so the
+    # one thing this path still does when the switch is off is name the switch,
+    # once, on stderr: the same "who kept this off and why" sentence the other
+    # categories print, routed to stderr because PreCompact fires as the
+    # context that would carry a stdout line is being erased.
     why = capture_off_reason("transcript")
     if why:
-        withheld = "[REDACTED] (%s)" % why
-        _write_brief(cwd, _brief_header(redact(_last_intent(cwd))[0]) + [
-            "## The last thing the operator asked", withheld, "",
-            "## What was being done (recent reasoning)", withheld, "",
-            "## Recent actions", withheld, "",
-            "No text was read out of %s. Set %s=1 to capture the thread here, and read"
-            % (os.path.basename(tp), CAPTURE_SWITCH["transcript"]),
-            "SECURITY.md first: what that stores is listed field by field there.",
-            ""])
+        print("sbe_telemetry: no resume brief written: %s" % why, file=sys.stderr)
         return
     last_user = ""
     assistant_text = []   # recent reasoning/decision snippets
@@ -1707,8 +1718,68 @@ def _stored_measure(path):
         return True, 0, 0, "", "could not be measured (%s)" % (e.strerror or e)
 
 
-def cmd_data_show():
+DATA_SHOW_USAGE = (
+    "usage: data-show\n"
+    "  reads: every file this tool can write, under <vault>/99-System/telemetry\n"
+    "    plus the operator-model file, to report what is stored.\n"
+    "  writes: nothing.\n"
+    "  flags:\n"
+    "    -h, --help        print this and exit 0"
+)
+
+DATA_EXPORT_USAGE = (
+    "usage: data-export [--out PATH]\n"
+    "  reads: the same inventory data-show reports, file content included.\n"
+    "  writes: one owner-only JSON bundle (mode 600) holding that content,\n"
+    "    default ./brothersbe-telemetry-export.json, or PATH. Nothing under\n"
+    "    the vault is touched.\n"
+    "  flags:\n"
+    "    --out PATH        write the bundle to PATH instead of the default\n"
+    "    -h, --help        print this and exit 0 without writing a bundle"
+)
+
+DATA_PURGE_USAGE = (
+    "usage: data-purge [--category NAME] [--yes]\n"
+    "  reads: the same inventory data-show reports, to find what exists.\n"
+    "  writes: nothing without --yes; with --yes, deletes the files found.\n"
+    "  flags:\n"
+    "    --category NAME   limit to one category (see data-show for the list)\n"
+    "    --yes             actually delete; omit for a dry run naming what would go\n"
+    "    -h, --help        print this and exit 0 without deleting anything"
+)
+
+
+def _data_flags(subcmd, argv, usage, known):
+    """-h/--help and unknown-flag handling shared by the three data-* commands,
+    run before any of them reads or writes anything under the vault.
+
+    `known` is the set of flags (besides -h/--help) that subcmd accepts. Any
+    other token starting with "-" is refused rather than silently ignored,
+    because an ignored typo on data-export or data-purge is how `--help` ran
+    a real export and how a mistyped `--category` could purge everything
+    instead of the one category the operator named.
+
+    Returns an exit code (0 for --help, 2 for an unrecognized flag) the
+    caller should stop and return right away, or None if argv passed and the
+    caller should carry on with its own parsing.
+    """
+    if "-h" in argv or "--help" in argv:
+        print(usage)
+        return 0
+    for a in argv:
+        if a.startswith("-") and a not in known:
+            print(usage)
+            print("%s: unrecognized flag %r; refusing rather than running past it"
+                  % (subcmd, a))
+            return 2
+    return None
+
+
+def cmd_data_show(argv):
     """Print the capture policy in force and every file it can write."""
+    code = _data_flags("data-show", argv, DATA_SHOW_USAGE, set())
+    if code is not None:
+        return code
     print("BROTHERSBE STORED DATA (vault %s)" % VAULT)
     for category in CAPTURE_CATEGORIES:
         print("  policy: %s" % capture_state_line(category))
@@ -1734,6 +1805,9 @@ def cmd_data_show():
 
 def cmd_data_export(argv):
     """Write one owner-only JSON bundle of everything stored."""
+    code = _data_flags("data-export", argv, DATA_EXPORT_USAGE, {"--out"})
+    if code is not None:
+        return code
     out = "brothersbe-telemetry-export.json"
     it = iter(argv)
     for a in it:
@@ -1780,6 +1854,9 @@ def cmd_data_purge(argv):
     """Delete what is stored. Names it first, deletes on --yes, then re-checks
     the filesystem and reports anything that survived, because a purge that
     reports success from its own intention has proven nothing."""
+    code = _data_flags("data-purge", argv, DATA_PURGE_USAGE, {"--category", "--yes"})
+    if code is not None:
+        return code
     only = ""
     it = iter(argv)
     for a in it:
@@ -1870,11 +1947,11 @@ def main():
         elif cmd == "purge-corrections":
             cmd_purge_corrections(argv)
         elif cmd == "data-show":
-            cmd_data_show()
+            sys.exit(cmd_data_show(argv) or 0)
         elif cmd == "data-export":
-            cmd_data_export(argv)
+            sys.exit(cmd_data_export(argv) or 0)
         elif cmd == "data-purge":
-            cmd_data_purge(argv)
+            sys.exit(cmd_data_purge(argv) or 0)
         elif cmd == "prediction-audit":
             cmd_prediction_audit()
         elif cmd == "speed":

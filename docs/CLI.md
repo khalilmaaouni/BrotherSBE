@@ -414,7 +414,9 @@ Read-only, never writes. Prints the capture policy in force for each category (`
 `metrics`, `transcript`, gated respectively by `BROTHERSBE_TELEMETRY_CORRECTIONS`,
 `BROTHERSBE_TELEMETRY_METRICS`, `BROTHERSBE_TELEMETRY_TRANSCRIPT`, every category off by default),
 then every file the tool can write: category, path, record count, byte size, file mode, and what it
-holds, or "absent, so nothing is stored at this path" for one that does not exist. No flags. Real
+holds, or "absent, so nothing is stored at this path" for one that does not exist. `-h`/`--help`
+anywhere in its argv prints usage and exits 0 instead of running; any other flag is refused
+nonzero rather than ignored. Real
 output against this repository's own vault, paths abbreviated below, capture off:
 
 ```
@@ -441,9 +443,9 @@ file CONTENT for every path in the same inventory `data-show` lists, not just th
 "holds the stored data itself" in the tool's own words, and it says so on every run: "treat as
 sensitive; redaction was applied at capture time and is best effort." This is how a person gets their
 own captured data out of the vault to read somewhere else, not a routine export a script should
-schedule. Note for anyone testing this command: it has no dry-run mode and no real `--help` short
-circuit for its subcommands (an unrecognized flag is simply ignored), so running it writes the file
-for real every time.
+schedule. `-h`/`--help` anywhere in its argv prints usage (what it reads, what it writes, its
+flags) and exits 0 without writing a bundle; any other unrecognized flag is refused with usage and
+a nonzero exit rather than ignored, so a typo can no longer run a real export.
 
 ### `data-purge`
 
@@ -463,12 +465,17 @@ data-purge: no category named 'nope'; categories are autosave, corrections, hous
 ```
 
 A file that fails to remove, or that still exists after `os.remove` reported success, is named on its
-own line rather than folded into a clean exit.
+own line rather than folded into a clean exit. `-h`/`--help` anywhere in its argv prints usage and
+exits 0 without deleting anything; any other unrecognized flag, including a typo of `--category`, is
+refused with usage and a nonzero exit rather than run as if the flag had never been given.
 
 ### The one law that governs all three, and everything else on this tool
 
-`tools/sbe_telemetry.py` never blocks work: every path exits 0, and an unhandled exception is caught
-and printed rather than propagated ("sbe_telemetry: swallowed error (never blocks)"). Numbers are
-parsed or absent; the tool never invents one.
+`tools/sbe_telemetry.py` never blocks work: every hook and automatic path exits 0, and an unhandled
+exception is caught and printed rather than propagated ("sbe_telemetry: swallowed error (never
+blocks)"). The one deliberate exception is the three data-* commands above: a bad flag on one of
+them refuses with usage and a nonzero exit instead of running past it, because a mistyped flag on a
+command that reads or deletes the vault must not run as if nothing were wrong. Numbers are parsed
+or absent; the tool never invents one.
 
 Three commands remain **present and refuse**: `plan`, `policy` and `exceptions`.

@@ -7,7 +7,7 @@ brief that a test would have caught. Each test here guards a claim the project
 makes about itself: secrets are redacted, sensitive files are owner-only, project
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
-import glob, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
+import glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,7 +40,31 @@ class TestRedaction(unittest.TestCase):
 
 
 class TestResumeBrief(unittest.TestCase):
-    def test_brief_redacts_and_is_owner_only(self):
+    def _write_transcript(self, path):
+        msgs = [{"type": "user", "message": {"content": "the prod password is hunter2"}}]
+        msgs += [{"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "using token sk-ant-api03-ABCDEFGHIJKLMNOP"},
+            {"type": "tool_use", "name": "Bash",
+             "input": {"command": "curl -H 'Authorization: Bearer abcdef1234567890xyz' x"}}]}}]
+        io.open(path, "w").write("\n".join(json.dumps(m) for m in msgs))
+        return path
+
+    def test_default_writes_no_brief_and_names_the_switch_on_stderr(self):
+        """Old meaning (before this test was rewritten): the resume brief used
+        to be written UNCONDITIONALLY, real content when transcript capture was
+        on, a "[REDACTED]" placeholder in its place when off, so this test
+        proved that even the placeholder-carrying default file never let a raw
+        secret from the transcript reach disk, and was owner-only. Flip
+        decision (founder, 2026-07-29): the resume brief was the one capture
+        path still writing a file by default, unlike `metrics` and
+        `corrections`, which write nothing until switched on. Flipped to match:
+        `BROTHERSBE_TELEMETRY_TRANSCRIPT` off (the default) now means no file
+        at all, and the code path that would have written it names the switch
+        once on stderr, so an absent file is never mistaken for a quiet
+        session. This test now asserts THAT default: no brief on disk, and the
+        switch named on stderr. The redaction and owner-only guards the old
+        test carried now live in test_opt_in_writes_the_brief_and_still_redacts,
+        which is the only path that still writes real content."""
         with tempfile.TemporaryDirectory() as d:
             os.environ["BROTHERSBE_VAULT"] = os.path.join(d, "vault")
             # rebuild the module's paths against the temp vault
@@ -48,13 +72,35 @@ class TestResumeBrief(unittest.TestCase):
             importlib.reload(bm)
             repo = os.path.join(d, "acme", "backend")
             os.makedirs(repo)
-            tp = os.path.join(d, "t.jsonl")
-            msgs = [{"type": "user", "message": {"content": "the prod password is hunter2"}}]
-            msgs += [{"type": "assistant", "message": {"content": [
-                {"type": "text", "text": "using token sk-ant-api03-ABCDEFGHIJKLMNOP"},
-                {"type": "tool_use", "name": "Bash",
-                 "input": {"command": "curl -H 'Authorization: Bearer abcdef1234567890xyz' x"}}]}}]
-            io.open(tp, "w").write("\n".join(json.dumps(m) for m in msgs))
+            tp = self._write_transcript(os.path.join(d, "t.jsonl"))
+            payload = json.dumps({"transcript_path": tp, "cwd": repo})
+            old_stdin, old_stderr = sys.stdin, sys.stderr
+            sys.stdin, sys.stderr = io.StringIO(payload), io.StringIO()
+            try:
+                bm.cmd_precompact_brief()
+                err = sys.stderr.getvalue()
+            finally:
+                sys.stdin, sys.stderr = old_stdin, old_stderr
+            teldir = os.path.join(os.environ["BROTHERSBE_VAULT"], "99-System", "telemetry")
+            briefs = ([f for f in os.listdir(teldir) if f.startswith("last-resume-")]
+                      if os.path.isdir(teldir) else [])
+            self.assertEqual(briefs, [], "the default resume brief wrote a file: %r" % briefs)
+            self.assertIn("BROTHERSBE_TELEMETRY_TRANSCRIPT", err,
+                          "the withheld path did not name its switch on stderr: %r" % err)
+
+    def test_opt_in_writes_the_brief_and_still_redacts(self):
+        """New fixture (founder, 2026-07-29, the transcript-brief opt-in flip):
+        with BROTHERSBE_TELEMETRY_TRANSCRIPT=1 the brief is written for real,
+        from real transcript content, and the existing redaction and
+        owner-only guards still hold: secrets never reach the file."""
+        with tempfile.TemporaryDirectory() as d:
+            os.environ["BROTHERSBE_VAULT"] = os.path.join(d, "vault")
+            os.environ["BROTHERSBE_TELEMETRY_TRANSCRIPT"] = "1"
+            import importlib
+            importlib.reload(bm)
+            repo = os.path.join(d, "acme", "backend")
+            os.makedirs(repo)
+            tp = self._write_transcript(os.path.join(d, "t.jsonl"))
             payload = json.dumps({"transcript_path": tp, "cwd": repo})
             old = sys.stdin
             sys.stdin = io.StringIO(payload)
@@ -62,9 +108,10 @@ class TestResumeBrief(unittest.TestCase):
                 bm.cmd_precompact_brief()
             finally:
                 sys.stdin = old
+                os.environ.pop("BROTHERSBE_TELEMETRY_TRANSCRIPT", None)
             teldir = os.path.join(os.environ["BROTHERSBE_VAULT"], "99-System", "telemetry")
             briefs = [f for f in os.listdir(teldir) if f.startswith("last-resume-")]
-            self.assertEqual(len(briefs), 1)
+            self.assertEqual(len(briefs), 1, "opt-in must write exactly one resume brief")
             path = os.path.join(teldir, briefs[0])
             body = io.open(path).read()
             for secret in ("hunter2", "sk-ant-api03-ABCDEFGHIJKLMNOP", "abcdef1234567890xyz"):
@@ -1438,11 +1485,33 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         os.makedirs(os.path.join(v, "99-System", "telemetry"))
         return v
 
+    def _snapshot(self, path):
+        """Hash of everything under `path`: its own existence, every file's
+        relative name, mtime and size. "the file I expected is still there"
+        misses a sibling file a run wrote and forgot to check for; hashing the
+        whole listing does not need to know in advance what could change."""
+        if not os.path.exists(path):
+            return "ABSENT"
+        rows = []
+        for root, dirs, files in os.walk(path):
+            dirs.sort()
+            for name in sorted(files):
+                p = os.path.join(root, name)
+                st = os.stat(p)
+                rows.append("%s %d %d" % (os.path.relpath(p, path), st.st_mtime_ns, st.st_size))
+        rows.sort()
+        return hashlib.sha256(("\n".join(rows)).encode()).hexdigest()
+
     def _brief(self, vault):
         tel = os.path.join(vault, "99-System", "telemetry")
         briefs = [f for f in os.listdir(tel) if f.startswith("last-resume-")]
         self.assertEqual(len(briefs), 1, "expected one resume brief, found %r" % briefs)
         return io.open(os.path.join(tel, briefs[0])).read()
+
+    def _no_brief(self, vault, msg):
+        tel = os.path.join(vault, "99-System", "telemetry")
+        briefs = [f for f in os.listdir(tel) if f.startswith("last-resume-")]
+        self.assertEqual(briefs, [], "%s: found %r" % (msg, briefs))
 
     def test_a_default_installation_captures_no_transcript_text_and_no_correction(self):
         vault = self._vault()
@@ -1455,14 +1524,14 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         for var in ("BROTHERSBE_TELEMETRY_METRICS", "BROTHERSBE_TELEMETRY_CORRECTIONS"):
             self.assertIn(var, end.stdout,
                           "the hook recorded nothing without naming %s: %s" % (var, end.stdout))
+        # transcript-brief opt-in flip (founder, 2026-07-29): the default now
+        # writes no brief at all; the switch that would fill it in is named
+        # once on stderr instead of inside a withheld placeholder file.
         pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend")
         self.assertEqual(pre.returncode, 0, pre.stderr)
-        body = self._brief(vault)
-        for leaked in ("staging bucket", "acme migration", "acme-partner", "not what i asked"):
-            self.assertNotIn(leaked, body, "the default resume brief captured %r" % leaked)
-        self.assertIn("[REDACTED]", body)
-        self.assertIn("BROTHERSBE_TELEMETRY_TRANSCRIPT", body,
-                      "the withheld brief does not name the switch that would fill it in")
+        self._no_brief(vault, "a default installation wrote a resume brief")
+        self.assertIn("BROTHERSBE_TELEMETRY_TRANSCRIPT", pre.stderr,
+                      "the withheld path does not name the switch that would have written it")
 
     def test_each_switch_turns_on_exactly_one_category(self):
         cases = (
@@ -1487,10 +1556,13 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
                                 "corrections capture is on and captured nothing: %r" % rows)
             pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **{var: "1"})
             self.assertEqual(pre.returncode, 0, pre.stderr)
-            body = self._brief(vault)
-            self.assertEqual("staging bucket" in body, want_text,
-                             "%s=1 got transcript text in the brief=%s, wanted %s"
-                             % (var, "staging bucket" in body, want_text))
+            if want_text:
+                body = self._brief(vault)
+                self.assertIn("staging bucket", body,
+                              "%s=1 turned on transcript capture but the brief has no text" % var)
+            else:
+                self._no_brief(vault, "%s=1 must not write a resume brief (only %s does)"
+                               % (var, bm.CAPTURE_SWITCH["transcript"]))
 
     def test_the_organization_override_forces_every_category_off(self):
         every_switch = {"BROTHERSBE_TELEMETRY_METRICS": "1",
@@ -1508,8 +1580,10 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
                       "the override fired without naming itself: %s" % end.stdout)
         pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **switches)
         self.assertEqual(pre.returncode, 0, pre.stderr)
-        self.assertNotIn("staging bucket", self._brief(vault),
-                         "a local switch beat the environment override in the resume brief")
+        self._no_brief(vault, "a local switch beat the environment override in the resume brief")
+        self.assertIn("BROTHERSBE_TELEMETRY_DISABLE", pre.stderr,
+                      "the override fired without naming itself in the resume brief path: %s"
+                      % pre.stderr)
         # (b) the policy file, which is the half a local shell cannot unset
         vault = self._vault()
         _tel, ledger, corrections = self._paths(vault)
@@ -1673,6 +1747,93 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         # The export made outside the vault survives, which is the point of
         # having an export at all, and is why the docs call it sensitive.
         self.assertTrue(os.path.exists(out))
+
+    # -- THE DEFECT: `data-export --help` ran a real export --------------------
+    #
+    # The argv scanning for `--out` only ever matched "--out"; any other token,
+    # including "-h" and "--help", fell through unconsumed and the command ran
+    # for real. A mistyped flag was silently ignored the same way, so
+    # `data-purge --catgory work --yes` (typo: catgory) purged every category
+    # instead of refusing. Fixed by one shared check ahead of each command's own
+    # parsing: -h/--help prints usage and exits 0 before anything is read or
+    # written, and any other unrecognized flag refuses with usage and a nonzero
+    # exit instead of running past it.
+
+    def test_help_on_each_data_command_prints_usage_and_never_creates_the_vault(self):
+        """The exact shape of the found defect: point BROTHERSBE_VAULT at a path
+        that does not exist yet and ask for --help. Before the fix this ran a
+        real data-export and wrote a bundle; the vault directory itself was
+        never the thing at risk, but nothing under its parent should exist
+        either, so the parent's own listing is hashed before and after."""
+        parent = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, parent, True)
+        vault = os.path.join(parent, "never-created-vault")
+        before = self._snapshot(parent)
+        for subcmd, flag in (("data-show", "--help"), ("data-export", "--help"),
+                             ("data-export", "-h"), ("data-purge", "--help"),
+                             ("data-purge", "-h")):
+            out = subprocess.run([sys.executable, self.TEL, subcmd, flag],
+                                 capture_output=True, text=True, env=self._env(vault))
+            self.assertEqual(out.returncode, 0, "%s %s: %s" % (subcmd, flag, out.stderr))
+            self.assertIn("usage: %s" % subcmd, out.stdout,
+                          "%s %s printed no usage: %r" % (subcmd, flag, out.stdout))
+            self.assertFalse(os.path.exists(vault),
+                             "%s %s created the vault it was only asked to describe"
+                             % (subcmd, flag))
+        after = self._snapshot(parent)
+        self.assertEqual(before, after,
+                         "--help changed something under %s; it must touch nothing" % parent)
+        self.assertFalse(os.path.exists(os.path.join(os.getcwd(),
+                         "brothersbe-telemetry-export.json")),
+                         "data-export --help wrote a real bundle into the cwd")
+
+    def test_help_on_a_populated_vault_reports_and_changes_nothing_in_it(self):
+        """Same defect, the other direction: a vault that already holds real
+        data must come out of a --help call byte-for-byte and mtime-for-mtime
+        identical, proven by hashing its listing rather than trusting that
+        `data-export --help` merely says it wrote nothing."""
+        vault = self._vault()
+        stored = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                            BROTHERSBE_TELEMETRY_METRICS="1",
+                            BROTHERSBE_TELEMETRY_CORRECTIONS="1")
+        self.assertEqual(stored.returncode, 0, stored.stderr)
+        before = self._snapshot(vault)
+        for subcmd in ("data-show", "data-export", "data-purge"):
+            out = subprocess.run([sys.executable, self.TEL, subcmd, "--help"],
+                                 capture_output=True, text=True, env=self._env(vault))
+            self.assertEqual(out.returncode, 0, "%s --help: %s" % (subcmd, out.stderr))
+            self.assertIn("usage: %s" % subcmd, out.stdout)
+        after = self._snapshot(vault)
+        self.assertEqual(before, after,
+                         "%s --help changed the populated vault" % subcmd)
+
+    def test_an_unrecognized_flag_refuses_nonzero_instead_of_running_live(self):
+        """The second half of the same defect: a flag the command does not
+        know, most dangerously a typo of one it does (`--catgory` for
+        `--category`), must never be silently ignored and run as if the
+        operator had passed nothing. It refuses, names the bad flag, prints
+        usage, and leaves a nonzero exit code for a caller to branch on."""
+        vault = self._vault()
+        stored = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                            BROTHERSBE_TELEMETRY_METRICS="1",
+                            BROTHERSBE_TELEMETRY_CORRECTIONS="1")
+        self.assertEqual(stored.returncode, 0, stored.stderr)
+        before = self._snapshot(vault)
+        cases = [("data-show", ["--bogus"]), ("data-export", ["--catgory"]),
+                 ("data-purge", ["--catgory", "work", "--yes"])]
+        for subcmd, bad_argv in cases:
+            out = subprocess.run([sys.executable, self.TEL, subcmd] + bad_argv,
+                                 capture_output=True, text=True, env=self._env(vault))
+            self.assertNotEqual(out.returncode, 0,
+                                "%s %r ran as if the flag were valid" % (subcmd, bad_argv))
+            self.assertIn("usage: %s" % subcmd, out.stdout,
+                          "%s %r refused without printing usage: %r"
+                          % (subcmd, bad_argv, out.stdout))
+            self.assertIn(bad_argv[0], out.stdout,
+                          "%s %r did not name the flag it refused" % (subcmd, bad_argv))
+        after = self._snapshot(vault)
+        self.assertEqual(before, after,
+                         "an unrecognized flag changed the vault before refusing")
 
 
 class TestMarketplaceManifest(unittest.TestCase):
