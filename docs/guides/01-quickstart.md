@@ -358,6 +358,11 @@ env:
 jobs:
   gates:
     strategy:
+      # fail-fast off: when one platform fails, the other must still report in
+      # full. The first Linux eval failure in this repository's history was
+      # diagnosed blind because fail-fast cancelled the macOS job mid-suite,
+      # leaving half the evidence unread.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
