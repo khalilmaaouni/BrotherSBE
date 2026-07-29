@@ -576,3 +576,33 @@ named as exactly that.
 Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
 `scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
 (`TestMarketplaceManifest`).
+
+## A gate exemption cannot tell a real reason from a well-formed fake one
+
+`tools/sbe_gate.py` now reads `.sbe-exempt` too, close to how `tools/sbe_design.py`
+already does: a directory holding a gate artifact that is not live work (a
+finished project's old receipts, a teaching example) names which of the four
+hard gates it waives and why, and the report prints WAIVED with that reason on
+every run instead of PASS, FAIL or NO-DATA. The mechanical part is real: a file
+naming no gates, a file naming a gate and a blank or whitespace-only reason,
+and `gates: *` are each refused as their own FAIL, by name, and the artifact
+underneath is still checked rather than silently dropped. One check design's
+own exemption has that this one does not: `tools/sbe_design.py::parse_exemption`
+holds its reason to a minimum word and character count so a one-token reason
+cannot pass; this channel checks only that a reason is present, not how short
+it is, so `reason: x` waives a gate here where design would refuse it. What is
+not mechanical either way, stated as plainly as design's own docstring states
+it: no test here can tell a real reason from a well-formed fake one.
+`reason: this is a finished project kept for history` waives a gate whether or
+not that sentence is true; a blank-reason check only proves a reason was
+written, never that it is accurate or long enough to say anything. The control
+this buys is narrower than "the waiver is justified": it is "the waiver is
+visible, names the gate it covers, and is not a blank switch", which is what
+the WAIVED line, the per-gate waiver count, and `--strict-waivers` are for. A
+waiver's only expiry is a human deleting the file or narrowing what it names;
+nothing here reads a date, an owner, or an approver out of `.sbe-exempt`, the
+same limit `tools/sbe_design.py`'s own exemption already carries and this
+channel inherits rather than closes.
+
+Full text: `tools/sbe_gate.py` (`parse_exemption`, `find`), `tools/sbe_design.py`
+(`parse_exemption`), `evals/run_evals.py` (the `gx1`-`gx4` fixtures).

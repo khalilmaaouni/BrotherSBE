@@ -8,6 +8,25 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `tools/sbe_gate.py` now honors `.sbe-exempt`, which it had zero support for until now
+  (the CI workflow comment promised it; a grep of the file found nothing). Mirrors
+  `tools/sbe_design.py::parse_exemption`'s semantics: a `gates: <names>` field naming
+  which of the four hard gates a directory waives, a required `reason:` field, `gates: *`
+  refused BY NAME because a wildcard is not the name of a gate, and a blank or
+  whitespace-only reason refused as its own FAIL naming the file rather than a quiet
+  waiver. An artifact found IN OR UNDER an exempt directory reports WAIVED, quoting the
+  reason, never PASS and never silently skipped; the summary counts waived artifacts per
+  gate. Exit stays 0 under `--strict`
+  alone (a waiver is a visible decision, not a violation); the new `--strict-waivers`
+  flag, matching `sbe_design.py`'s own flag of the same name and wording, makes any
+  WAIVED artifact block a `--strict` run. Proof: `evals/run_evals.py`'s new
+  `an-exempted-approval-reads-waived-with-the-reason-and-strict-exits-clear`,
+  `strict-waivers-blocks-an-exempted-approval-that-strict-alone-does-not`,
+  `a-blank-sbe-exempt-reason-fails-by-name-and-the-artifact-is-still-checked`, and
+  `a-pass-is-impossible-for-an-exempted-artifact`, each calibrated red against a
+  one-line break in the new code and restored to the pre-recorded `git hash-object`
+  of the fixed file before being counted green.
+
 - The resume brief is now opt-in, matching the `metrics` and `corrections` default wave 6 already
   set. It was the one capture path still writing a file by default: `BROTHERSBE_TELEMETRY_TRANSCRIPT`
   off (the default) wrote the brief anyway, with a `[REDACTED]` placeholder in place of every

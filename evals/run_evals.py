@@ -7370,6 +7370,96 @@ def sc3(root):
     return "disclosed"
 
 
+# ---------------------------------------------------------------------------
+# sbe_gate.py's own `.sbe-exempt`: the same waiver channel sbe_design.py's
+# exemption already gives a dossier, now open to the four hard gates. The
+# workflow comment (.github/workflows/brothersbe-gates.yml) promised this for
+# a directory holding gate-artifact-shaped files that are not live work, and
+# grep confirmed sbe_gate.py had no exemption support at all until now.
+# ---------------------------------------------------------------------------
+
+@case("an-exempted-approval-reads-waived-with-the-reason-and-strict-exits-clear",
+      "gaterun", "waived-clear")
+def gx1(root):
+    """`.sbe-exempt` gives sbe_gate.py the waiver channel sbe_design.py's own
+    exemption already has: a directory holding a gate artifact that is not
+    live work names the gate it waives and why, and the report prints WAIVED
+    with that reason on every run instead of PASS, FAIL or NO-DATA, never in
+    silence. --strict alone does not block on a waiver: a waiver is a visible
+    decision, not a violation (gx2 shows what does block one)."""
+    write(root, "APPROVAL", "touches the partner payout path\n")
+    write(root, ".sbe-exempt",
+          "gates: approval\n"
+          "reason: this directory holds a finished engagement's APPROVAL file, kept for "
+          "history and not live design work\n")
+    out = subprocess.run([sys.executable, GATE, "--strict", "approval", root],
+                         capture_output=True, text=True)
+    ok = (out.returncode == 0
+          and re.search(r"(?m)^  >> approval\s+WAIVED\s", out.stdout)
+          and "kept for history and not live design work" in out.stdout)
+    return "waived-clear" if ok else "exit %d: %s" % (out.returncode, out.stdout.strip()[:200])
+
+
+@case("strict-waivers-blocks-an-exempted-approval-that-strict-alone-does-not",
+      "gaterun", "blocked")
+def gx2(root):
+    """--strict-waivers matches sbe_design.py's own flag of the same name and
+    the same wording ("run --strict --strict-waivers to make one block a
+    merge"): it turns every WAIVED artifact into a failure for a team that
+    wants an exemption to expire on contact. gx1's identical fixture is exit 0
+    under --strict alone; this is --strict-waivers' own effect, not
+    --strict's."""
+    write(root, "APPROVAL", "touches the partner payout path\n")
+    write(root, ".sbe-exempt",
+          "gates: approval\n"
+          "reason: this directory holds a finished engagement's APPROVAL file, kept for "
+          "history and not live design work\n")
+    out = subprocess.run([sys.executable, GATE, "--strict", "--strict-waivers", "approval", root],
+                         capture_output=True, text=True)
+    return "blocked" if out.returncode else "clear"
+
+
+@case("a-blank-sbe-exempt-reason-fails-by-name-and-the-artifact-is-still-checked",
+      "gaterun", "named-and-checked")
+def gx3(root):
+    """A `.sbe-exempt` that names a gate but records no reason, or a
+    whitespace-only one, waives nothing: `touch .sbe-exempt` was exactly this
+    shape for sbe_design.py's own exemption before that was fixed, and a
+    waiver earned by a blank file is an off switch wearing an exemption's
+    clothes. The FAIL names the file, and the APPROVAL artifact underneath it
+    is still checked, never silently skipped because its exemption is
+    broken."""
+    write(root, "APPROVAL", "touches the partner payout path\n")
+    write(root, ".sbe-exempt", "gates: approval\nreason:   \n")
+    out = subprocess.run([sys.executable, GATE, "approval", root], capture_output=True, text=True)
+    named = re.search(r"(?m)^  exempt\s+FAIL\s+.*\.sbe-exempt.*no reason is recorded", out.stdout)
+    checked = re.search(r"(?m)^  approval\s+(PASS|FAIL|NO-DATA)\s", out.stdout)
+    return "named-and-checked" if named and checked else out.stdout.strip()[:200]
+
+
+@case("a-pass-is-impossible-for-an-exempted-artifact", "gaterun", "waived-not-passed")
+def gx4(root):
+    """The strongest test of "never PASS": a numbers-manifest that would
+    genuinely reach PASS on its own (unlike approval, which no fixture can
+    reach PASS on at all) is placed under a `.sbe-exempt` naming `numbers`.
+    The verdict line still reads WAIVED, quoting the reason, and no PASS
+    verdict for `numbers` appears anywhere in the report."""
+    write(root, "numbers-manifest.json", {"figures": [{
+        "label": "gmv", "snapshot_id": "snap-2026-07",
+        "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+    write(root, ".sbe-exempt",
+          "gates: numbers\n"
+          "reason: this manifest is a worked historical example kept for reference, not a "
+          "live decision figure\n")
+    out = subprocess.run([sys.executable, GATE, "numbers", root], capture_output=True, text=True)
+    if re.search(r"(?m)^  numbers\s+PASS\s", out.stdout):
+        return "PASS printed for an exempted artifact: %s" % out.stdout.strip()[:200]
+    waived = re.search(r"(?m)^  >> numbers\s+WAIVED\s.*worked historical example", out.stdout)
+    return "waived-not-passed" if waived else out.stdout.strip()[:200]
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

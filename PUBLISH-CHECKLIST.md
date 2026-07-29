@@ -23,8 +23,11 @@ observation to make on the day, not a claim this document makes on its own behal
       moved the problem rather than caught it. The other half stays manual and
       stays on this list: that check reads the tree at HEAD, so it cannot see a
       name that was committed and later deleted. Only a history sweep can.
-- [ ] Green: `python3 tools/test_sbe.py`, `python3 evals/run_evals.py` and
-      `python3 evals/test_no_data_class.py` all pass.
+- [ ] Green: `python3 tools/test_sbe.py`, `python3 evals/run_evals.py`,
+      `python3 evals/test_no_data_class.py` and `python3 tools/sbe_gate.py --strict design`
+      all pass. The gate command was missing from this battery until tonight: its
+      absence is how the first real CI run found a years-of-life defect class nobody
+      had measured on a laptop.
 - [ ] Self-consistent: `python3 tools/sbe_gate.py --strict .`,
       `python3 tools/sbe_design.py --strict .` and `python3 tools/sbe_score.py --strict .`
       all exit 0 (the skill passes its own gates).

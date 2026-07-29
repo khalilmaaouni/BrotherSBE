@@ -74,6 +74,14 @@ Fabricated-receipt defense: presence is necessary but the gate also checks the
 receipt is INTERNALLY CONSISTENT (a run id resolves to a nonzero duration and an
 exit code, a manifest's second query differs textually from the first), because
 the operating record proves pasted receipts get invented.
+
+A directory that holds gate-artifact-shaped files without being live work (a
+finished project's old receipts, a teaching example) carries a `.sbe-exempt`
+file whose contents say why, and the report prints that reason on every run as
+a WAIVER, exactly as sbe_design.py's own `.sbe-exempt` already does for a
+dossier: never PASS, never silently skipped, and never a quiet gate when the
+file itself is broken. See parse_exemption for the format and find() for "in
+or under".
 """
 import json, os, sys, re, subprocess, unicodedata
 
@@ -87,6 +95,7 @@ MANIFEST = "numbers-manifest.json"
 MIGRATION_RECEIPT = "migration-receipt.json"
 APPROVAL_FILE = "APPROVAL"
 RAN_RECEIPT = "ran-receipt.json"
+EXEMPT = ".sbe-exempt"
 
 
 def load_receipt(path):
@@ -141,10 +150,112 @@ def _items(d, key):
     return [], "'%s' is an empty list" % key
 
 
-def find(root, name):
-    """(receipt paths, the sentence every verdict built on them must carry).
+def _read_text(path):
+    """A `.sbe-exempt` file's text, or "" when it is absent or cannot be read.
 
-    The note is the second return value and every caller prints it, because a
+    Scoped to exemption files only: every other piece of free text this tool
+    reads is JSON (load_receipt) or git output (git_trailers). Mirrors
+    sbe_design.py's `read`, which also treats an unreadable exemption the same
+    as an empty one rather than inventing a fourth state nothing downstream
+    asks for: parse_exemption("") is already refused, by name, as "no gates
+    and no reason".
+    """
+    if evidence_problem(path):
+        return ""
+    try:
+        return open(path, errors="replace").read().lstrip("﻿")
+    except OSError:
+        return ""
+
+
+def parse_exemption(text):
+    """(gates waived, reason, problem) for a `.sbe-exempt` file.
+
+    Mirrors tools/sbe_design.py::parse_exemption, one registry swapped for the
+    other (design's five checks become this file's four hard gates). Format:
+
+        gates: approval, numbers
+        reason: this directory holds a finished project's old receipts, kept
+                for history and not live design work.
+
+    Not free text. A file naming no gates and no reason would waive whatever
+    gate artifact sits in or under it by default, which is an off switch and
+    not an exemption, so the gates are named one by one, exactly as design's
+    `checks:` field is. A wildcard is not the name of a gate: `gates: *` is
+    refused BY NAME, the same way design refuses `checks: *`, rather than
+    silently waiving all four. A blank or whitespace-only reason is refused as
+    its own FAIL naming the file, because a waiver nobody can review is not an
+    exemption.
+
+    What this does NOT do, stated as plainly as design's own docstring states
+    it: it cannot tell a real reason from a well-formed fake one. No mechanical
+    test can. That is why a waiver prints as WAIVED, quoting the reason, and
+    never as PASS.
+    """
+    gates, reason_lines, seen_reason = [], [], False
+    for line in (text or "").splitlines():
+        m = re.match(r"(?i)^\s*gates\s*:\s*(.*)$", line)
+        if m and not seen_reason:
+            gates.extend(g.strip() for g in re.split(r"[,\s]+", m.group(1)) if g.strip())
+            continue
+        m = re.match(r"(?i)^\s*reason\s*:\s*(.*)$", line)
+        if m:
+            seen_reason = True
+            reason_lines.append(m.group(1))
+            continue
+        if seen_reason:
+            reason_lines.append(line)
+    reason = " ".join(l.strip() for l in reason_lines if l.strip()).strip()
+    names = ", ".join(sorted(GATES))
+    if not gates and not seen_reason:
+        return [], (text or "").strip(), (
+            "it names no gates and no reason. An exemption states which of the %d hard gates it "
+            "waives and why, as two fields:  gates: %s  and  reason: <why>. A file of free text "
+            "waives whatever gate artifact sits in or under it by default, which is an off switch "
+            "and not an exemption" % (len(GATES), names))
+    if not gates:
+        return [], reason, ("it records a reason but names no gates; list the ones it waives "
+                            "(gates: %s), because an exemption that names nothing waives everything"
+                            % names)
+    unknown = [g for g in gates if g not in GATES]
+    if unknown:
+        return [], reason, ("it waives %s, which %s not a hard gate; the gates are %s"
+                            % (", ".join(unknown), "are" if len(unknown) > 1 else "is", names))
+    if not reason:
+        return [], reason, "no reason is recorded; a waiver a human cannot review is not an exemption"
+    return gates, reason, ""
+
+
+def _covering_exemption(directory, exempt_dirs, gate):
+    """The reason of the exemption covering `directory` for `gate`, or None
+    when nothing covers it. Never a pair: a caller that needs the covering
+    directory too has `exempt_dirs` in hand to look it back up, so this stays
+    a single value rather than a two-element result a verdict-shaped lint
+    would have to be told, by name, is not one.
+
+    "In or under": the exempt directory can be an ancestor of the artifact's
+    own directory, not only the same directory. When more than one covering
+    exemption is nested, the closest one to the artifact wins, because that is
+    the reason a reviewer reads next to the file it names.
+    """
+    best_path, best_reason = None, None
+    target = os.path.abspath(directory)
+    for edir, egates, ereason in exempt_dirs:
+        if gate not in egates:
+            continue
+        e = os.path.abspath(edir)
+        if target == e or target.startswith(e + os.sep):
+            if best_path is None or len(e) > len(best_path):
+                best_path, best_reason = e, ereason
+    return best_reason
+
+
+def find(root, name, gate):
+    """(live receipt paths, [(path, reason)] waived receipts, [(dir, problem)]
+    broken `.sbe-exempt` files, the sentence every verdict built on them must
+    carry).
+
+    The note is the last return value and every caller prints it, because a
     directory this walk refused to enter is a directory the verdict does not
     cover, and "no numbers-manifest found" over a tree that holds one is this
     project's headline defect class wearing the walker's clothes.
@@ -157,16 +268,38 @@ def find(root, name):
     was already tried: a parent holding three change directories, one of them
     with no receipt at all, printed "ran PASS 5 recorded check(s)" over the
     pool, and the silent directory alone printed NO-DATA.
+
+    `gate` is the GATES key this call hunts evidence for. An artifact found IN
+    OR UNDER a directory carrying a `.sbe-exempt` that names this gate is split
+    into `waived` rather than `hits`: nothing opens it, mirroring what
+    sbe_design.py's exemption already means for a design check. `waived` still
+    carries the artifact's own path and the exemption's own reason, because the
+    caller reports it as WAIVED, quoting that reason, and never drops it in
+    silence. `refused` carries every `.sbe-exempt` this walk read that does not
+    exempt anything; the caller reports each one as its own FAIL, once, however
+    many of the four gates rediscover it, because a broken control is broken
+    whether or not a gate artifact happens to sit under it today.
+
+    Exemptions are collected top-down as the walk descends: os.walk visits a
+    directory before any of its children, so a `.sbe-exempt` at a parent is
+    already known by the time a child directory's artifact is tested against
+    it, including the artifact's own directory, tested after its own file is
+    read in the same iteration.
     """
-    hits = []
-    misplaced = []
-    entered = []
+    hits, waived, refused, misplaced, entered = [], [], [], [], []
+    exempt_dirs = []   # [(dir, gates waived, reason)], grows as the walk descends
     pruner = Pruner()
     # onerror: a directory this walk cannot enter must land in the note, not in
     # silence. os.walk swallows the OSError by default, so a chmod 000 directory
     # holding a receipt used to vanish from a sentence that read as complete.
     for dp, dns, fns in os.walk(root, onerror=pruner.onerror):
         entered.append(dp)
+        if EXEMPT in fns:
+            gates, reason, problem = parse_exemption(_read_text(os.path.join(dp, EXEMPT)))
+            if problem:
+                refused.append((dp, problem))
+            else:
+                exempt_dirs.append((dp, gates, reason))
         # Match directory NAMES, not a substring of the path: `.git` as a
         # substring test also hid `.github/`, so the workflow that wires these
         # gates into CI was invisible to every one of them. And then not by name
@@ -178,12 +311,17 @@ def find(root, name):
             misplaced.append(os.path.join(dp, name))
         dns[:] = pruner(dp, dns)
         if name in fns:
-            hits.append(os.path.join(dp, name))
+            path = os.path.join(dp, name)
+            cover_reason = _covering_exemption(dp, exempt_dirs, gate)
+            if cover_reason is not None:
+                waived.append((path, cover_reason))
+            else:
+                hits.append(path)
     note = "; " + scope_note(root, name, hits, entered) + pruner.note(lambda f: f == name)
     if misplaced:
         note += ("; a DIRECTORY named %s sits at %s and was not read, because a receipt "
                  "is a file" % (name, ", ".join(misplaced[:2])))
-    return hits, note
+    return hits, waived, refused, note
 
 
 def _partial(nothing, checked, kind, unit):
@@ -456,8 +594,12 @@ def _names_overlap(a, b):
 
 
 def gate_numbers(root):
-    manifests, scope = find(root, MANIFEST)
+    manifests, waived, _refused, scope = find(root, MANIFEST, "numbers")
     if not manifests:
+        if waived:
+            return "NO-DATA", ("every %s found under %s (%d) is waived by a %s and examined nothing; "
+                               "see the WAIVED line(s) for the reason%s"
+                               % (MANIFEST, root, len(waived), EXEMPT, scope))
         return "NO-DATA", ("no numbers-manifest found; if this change presents no decision figure "
                            "that is correct, else add one%s" % scope)
     problems = []
@@ -619,8 +761,12 @@ def gate_numbers(root):
 
 
 def gate_migration(root):
-    receipts, scope = find(root, MIGRATION_RECEIPT)
+    receipts, waived, _refused, scope = find(root, MIGRATION_RECEIPT, "migration")
     if not receipts:
+        if waived:
+            return "NO-DATA", ("every %s found under %s (%d) is waived by a %s and examined nothing; "
+                               "see the WAIVED line(s) for the reason%s"
+                               % (MIGRATION_RECEIPT, root, len(waived), EXEMPT, scope))
         return "NO-DATA", ("no migration in this change, or no migration-receipt.json%s" % scope)
     problems = []
     unreadable = []
@@ -723,7 +869,7 @@ def gate_migration(root):
 
 
 def gate_approval(root):
-    approvals, scope = find(root, APPROVAL_FILE)
+    approvals, waived, _refused, scope = find(root, APPROVAL_FILE, "approval")
     body, sig, authors, idmeta = git_trailers(root)
     trailer = re.search(r"^Approved-by:\s*(.+)$", body, re.M)
     # The id is whatever the team writes, not one whitespace-free token. `(\S+)$`
@@ -740,6 +886,11 @@ def gate_approval(root):
     # commit carries no approval claim at all, with the id they recorded
     # unmentioned. A recorded id IS a claim, so it flows to its own branch.
     if not approvals and not trailer and not review_id:
+        if waived:
+            return "NO-DATA", ("every %s found under %s (%d) is waived by a %s and examined nothing, "
+                               "and the commit carries no Approved-by or Reviewed-in trailer either; "
+                               "see the WAIVED line(s) for the reason%s"
+                               % (APPROVAL_FILE, root, len(waived), EXEMPT, scope))
         return "NO-DATA", ("no APPROVAL file and no Approved-by trailer; if this change touches no "
                            "money or partner path that is correct%s" % scope)
     # A reordering bidi control makes a line RENDER in a different order than
@@ -1066,8 +1217,12 @@ def gate_approval(root):
 
 
 def gate_ran(root):
-    receipts, scope = find(root, RAN_RECEIPT)
+    receipts, waived, _refused, scope = find(root, RAN_RECEIPT, "ran")
     if not receipts:
+        if waived:
+            return "NO-DATA", ("every %s found under %s (%d) is waived by a %s and examined nothing; "
+                               "see the WAIVED line(s) for the reason%s"
+                               % (RAN_RECEIPT, root, len(waived), EXEMPT, scope))
         return "NO-DATA", ("no ran-receipt.json; a SQL or pipeline change is not done until its "
                            "check executed and left a receipt%s" % scope)
     problems = []
@@ -1186,8 +1341,14 @@ GATES = {
 
 
 def main():
-    argv = [a for a in sys.argv[1:] if a != "--strict"]
+    argv = [a for a in sys.argv[1:] if a not in ("--strict", "--strict-waivers")]
     strict = "--strict" in sys.argv
+    # A waiver is not a pass, so CI must be able to act on one without reading
+    # prose, exactly as sbe_design.py's own --strict-waivers already lets it:
+    # --strict-waivers turns every WAIVED gate artifact into a failure for teams
+    # that want an exemption to expire on contact; without it the run still
+    # exits 0 and the WAIVED line is what a human is shown.
+    strict_waivers = "--strict-waivers" in sys.argv
     root = "."
     roots = []
     which = list(GATES)
@@ -1228,19 +1389,68 @@ def main():
     # passes `.` from the repository root); an empty named directory is
     # NO-DATA for that directory, never a sibling's PASS.
     fails = 0
-    print("BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass)")
+    waivers = 0
+    per_gate_waivers = {}
+    seen_refused = set()
+    print("BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; "
+          "WAIVED is not a pass either)")
     for name in which:
+        check = GATES[name]
+        artifact = check.reads[0]
+        # find() is walked here too, not only inside the gate function, because
+        # a WAIVED artifact must never reach run_guarded: the gate function can
+        # only return PASS, FAIL or NO-DATA (sbe_checks.run_guarded enforces
+        # that), so the decision to skip it in favor of a WAIVED line is made
+        # here, before the gate is called, exactly where sbe_design.py's main
+        # makes the same decision for a waived design check.
+        hits, waived, refused, _scope = find(root, artifact, name)
+        for dp, problem in refused:
+            # Reported once per directory, however many of the four gates
+            # rediscover the same broken `.sbe-exempt`: a broken control is one
+            # defect, not four identical lines about it.
+            if dp in seen_refused:
+                continue
+            seen_refused.add(dp)
+            fails += 1
+            say("  %-9s %-8s %s" % ("exempt", "FAIL", one_line(
+                  "%s carries a %s that does not exempt anything: %s. An artifact under it is "
+                  "checked below, never silently skipped because its exemption is broken"
+                  % (os.path.relpath(dp, root), EXEMPT, problem))))
+        for path, reason in waived:
+            waivers += 1
+            per_gate_waivers[name] = per_gate_waivers.get(name, 0) + 1
+            # ">> " prefixed, exactly as sbe_design.py's own waived lines are,
+            # so a reader (and a log grep) can tell a waiver apart from a
+            # verdict at a glance. Never PASS: this line replaces the check
+            # that would otherwise have opened this artifact's file.
+            say("  %-9s %-8s %s" % (">> " + name, "WAIVED", one_line(
+                  "%s waived by %s: %s" % (os.path.relpath(path, root), EXEMPT,
+                                            " ".join(reason.split())[:200]))))
+        if not hits and waived:
+            # Every instance of this gate's artifact under root is waived, so
+            # nothing is left to check. Calling the gate now would print "no
+            # <artifact> found" underneath a WAIVED line naming one, which is a
+            # false sentence (sbe_design.py's main makes the same call for the
+            # same reason); the WAIVED line(s) above are this gate's report.
+            continue
         # Guarded per gate: a crash inside one gate used to abort the loop, so
         # every gate after it printed nothing at all and advisory mode exited 0.
         # A gate that vanishes is worse than a gate that fails.
-        verdict, ev = run_guarded(name, GATES[name], root)
+        verdict, ev = run_guarded(name, check, root)
         if verdict == "FAIL":
             fails += 1
         # one_line: several evidence strings interpolate receipt-authored values,
         # and a label containing newlines used to write verdict lines for the
         # OTHER gates into this report, which the report's own parsers then read.
         # The artifact under inspection writes nothing outside its own line.
-        say("  %-9s %-8s %s [severity: %s]" % (name, verdict, one_line(ev), GATES[name].severity))
+        say("  %-9s %-8s %s [severity: %s]" % (name, verdict, one_line(ev), check.severity))
+    if waivers:
+        breakdown = ", ".join("%s: %d" % (g, per_gate_waivers[g]) for g in sorted(per_gate_waivers))
+        say("WAIVERS: %d artifact(s) across %d gate(s) were waived by a %s and examined nothing "
+              "(%s). A waiver is not a pass; run `--strict --strict-waivers` to make one block a "
+              "merge." % (waivers, len(per_gate_waivers), EXEMPT, breakdown))
+    if strict_waivers and waivers:
+        fails += waivers
     if strict and fails:
         say("STRICT: %d hard gate(s) failed; exiting nonzero to block the merge." % fails)
         sys.exit(1)

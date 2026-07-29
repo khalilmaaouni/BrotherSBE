@@ -87,3 +87,26 @@ here instead of staying a comment about a hole nobody closed.
 points here. `docs/THREAT_MODEL.md` states who this defends against.
 `INVARIANTS.md` states what must stay true. Where any of them disagrees with a
 fixture, the fixture is right and the prose is stale.
+
+## Post-audit: one scenario closed since the review
+
+The 35 rows above are the audit as reviewed, and stay numbered exactly as
+reviewed. One more scenario changed status the same night, and gets a note
+here instead of a row number.
+
+- **Scenario**: a secret typed on the command line reaching the receipt (the
+  argv path, distinct from the stdout and stderr paths row 5 already covers).
+- **Status**: COVERED, as of tonight.
+- **Proof**: `tools/test_sbe_evidence.py::test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim`.
+  `redact_argv()` masks any token matching a shape `tools/sbe_telemetry.py`'s
+  own `SECRET_PATTERNS` already knows, before the receipt is written. The
+  marker design carries its own proof: it writes `[REDACTED:<shape>]`, naming
+  which pattern matched, rather than a bare `[REDACTED]` that would hide
+  whether the right thing fired.
+- **Residual**: `SECRET_PATTERNS` is a finite, fixed list. A secret shaped like
+  nothing on that list still reaches the receipt verbatim, the same residual
+  every pattern-matched control on this page carries.
+
+A future re-audit is the right place to fold this into the table proper with
+its own row number; until then it stays here so the 35 above stay exactly what
+was reviewed.

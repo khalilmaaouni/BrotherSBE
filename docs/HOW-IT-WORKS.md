@@ -357,6 +357,18 @@ dropped the thing that proves they still work. The seventh surfaces any design
 waiver as an annotation, because a waiver is not a pass and the exit code cannot
 tell you one was used.
 
+The first step, `tools/sbe_gate.py --strict design`, now honors `.sbe-exempt` the
+same way the second step already did: a directory under `design` holding a gate
+artifact (a `numbers-manifest.json`, `migration-receipt.json`, `APPROVAL` or
+`ran-receipt.json`) that is not live work names the gate it waives and why, and
+the run prints WAIVED with that reason instead of PASS, FAIL or NO-DATA, never
+in silence. `--strict` alone still exits 0 on a waiver, the same as the design
+step; the new `--strict-waivers` flag, matching `sbe_design.py`'s own flag of
+the same name, turns a WAIVED artifact into a failure for a team that wants an
+exemption to expire on contact rather than sit unreviewed. This workflow does
+not pass `--strict-waivers` to either step, by choice, not by omission: add it
+to a `run:` line above if you want a waiver to block outright.
+
 `--strict` is not overridable by a session instruction. It changes by a human
 editing this file in a reviewed change, which is the entire mechanism behind "a
 session instruction never waives a hard gate".
