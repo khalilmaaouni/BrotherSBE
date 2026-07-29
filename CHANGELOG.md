@@ -8,6 +8,27 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe task`: a write-scope registry with a diff postcondition that survives
+  Bash. The fence hook fails open and cannot govern shell writes because shell
+  cannot be parsed reliably; `sbe task open` now records who owns what in
+  `.sbe/tasks.json` (one file, atomic rewrite, no lock, concurrent registry
+  writers a stated limit), and `sbe task close` reads the union of
+  `git diff --name-only <base>...HEAD` and `git status --porcelain` and
+  refuses to close a task whose tree changed outside its declaration, naming
+  every violation by path; uncommitted edits count, a rename counts both
+  sides, and an unresolvable base is NO-DATA, never a pass. `open` refuses an
+  owned path overlapping another open task's, using the fence hook's own
+  `paths_overlap` imported rather than re-typed (a fixture fails if that
+  import is ever replaced by a local copy); `check` re-runs the scan so a
+  collision injected into the JSON by hand is caught; `fence` renders the
+  markdown fence view one way, JSON to markdown; `--force` records who and
+  why and marks the close FORCED, never clean; and a reviewer task can
+  neither open owning the evidence store nor close over a touched receipt,
+  even forced. Proof: `tools/test_sbe_tasks.py`, 15 fixtures, every one
+  calibrated by breaking the control and watching it go red. Limits beside
+  the behavior in `docs/CLI.md`, `docs/KNOWN-LIMITS.md` and
+  `docs/HOW-IT-WORKS.md` (the two-layer scope model). Maturity:
+  INTERNAL-EVAL.
 - The two defects the bypass-coverage table recorded rather than fixed are
   closed, and the table and `docs/KNOWN-LIMITS.md` are updated to match.
   `sbe evidence verify` used to open a receipt path with no access check, so a

@@ -469,3 +469,27 @@ check named on the enforcement line and a fixture in `evals/` proving the check
 catches the defect it claims to catch. On a team, that promotion is a reviewed pull
 request into the shared repository and `memory-template/LEARNED.md`. No colleague's
 tool changes behavior silently.
+
+## 12. The two-layer scope model
+
+Write scope is governed twice, by two controls that fail in opposite directions,
+because neither one alone covers the whole surface.
+
+The first layer is `tools/sbe_fence_hook.py`, the advisory PreToolUse control in
+front of the keyboard. It compares an edit against the live fences BEFORE the
+write, and it FAILS OPEN with a stated reason: a broken hook must not brick
+editing, and shell commands cannot be parsed reliably, so a write made through
+Bash walks past it entirely. Both of those are stated limits, not bugs.
+
+The second layer is the task registry, `sbe task` over `.sbe/tasks.json`. A
+writer declares what it owns at `open`, and `close` computes what ACTUALLY
+changed (`git diff` from the declared base plus the uncommitted status) and
+refuses to close a task whose tree changed outside the declaration. The shell
+is never parsed; the diff is simply read, AFTER the fact. What the hook could
+not stop, the postcondition names by path at close.
+
+Neither layer sees an actor who never registers and never triggers the hook.
+The registry narrows who can claim what (one open writer per path, reviewers
+locked out of the evidence store); it does not widen what can be detected
+beyond the diff it reads. Full command surface: `docs/CLI.md`. Limits:
+`docs/KNOWN-LIMITS.md`.

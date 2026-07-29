@@ -36,6 +36,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `impact` | reads the git diff and reconciles it with the declared intake tier |
 | `inspect-change` | alias of `impact`, the name the finalization brief uses |
 | `evidence` | generate a receipt by running the command, verify it, or show its trust level |
+| `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
 | `version` | the version and the evidence schema version |
 
 Four more are **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.
@@ -175,5 +176,53 @@ The `runId` seal is **tamper evidence, not a signature**: it catches a plausible
 produced, and it does not stop somebody who read `src/brothersbe/evidence.py`. That is why a
 local receipt is never more than advisory. Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
 **INTERNAL-EVAL**.
+
+## `sbe task`, and the postcondition that survives Bash
+
+```bash
+bin/sbe task open --id wave5 --agent alpha --role writer \
+  --base $(git rev-parse HEAD) --verify "python3 tools/test_sbe_tasks.py" \
+  --owns src/brothersbe/tasks.py --owns tools/test_sbe_tasks.py
+bin/sbe task list
+bin/sbe task close wave5
+```
+
+The write fence is a PreToolUse hook that fails open and cannot govern Bash, because shell
+cannot be parsed reliably. `sbe task` is the after-the-fact layer: `open` records who owns
+what in `.sbe/tasks.json` (one file, atomic rewrite, no service), and `close` computes what
+actually changed, the union of `git diff --name-only <base>...HEAD` and `git status
+--porcelain`, inside the task's `--worktree` if one was declared, else the shared tree, and
+compares it against the declaration. Uncommitted edits count, and a rename counts both sides.
+The shell is never parsed; the diff is simply read.
+
+- Every changed path outside the owned paths is a **violation, listed by name**: verdict FAIL,
+  exit nonzero, the task stays open. Changed paths inside ownership print as the evidence of
+  scope kept. A declared `--read-only` path that changed is a violation too, flagged as such:
+  read-only means read.
+- A base commit that no longer resolves is **NO-DATA with the reason, never a pass**.
+- `close --force` requires `--who` and `--why`, records that disposition in the record, and
+  marks the close **FORCED**, never silently clean.
+- `open` refuses (exit 2, reason on stderr, colliding task named) when the id is already open,
+  or when any owned path overlaps an owned path of another open task. Overlap is the fence
+  hook's own `paths_overlap`, imported rather than re-typed, including its confirmed
+  case-folding on case-insensitive filesystems; a test fails if that import is ever replaced
+  by a local copy.
+- `check` re-runs the overlap scan across all open tasks, so a collision injected into the
+  JSON by hand is caught the same way `open` would have caught it.
+- `fence` renders the markdown fence view from the registry, one direction only, JSON to
+  markdown, printed for a human to paste into a STATE.md style registry. Nothing reads
+  markdown fences back into the registry, and the hand-written fence flow keeps working
+  untouched.
+- Reviewer separation: a `--role reviewer` task cannot open owning any path under the evidence
+  store (default `.sbe/evidence`, `--evidence-dir` to override), and a reviewer whose diff
+  touches a receipt FAILs at close **even under `--force`**; force may not waive that class.
+  This separates roles inside the registry; it cannot stop an actor who never registers.
+
+The registry file itself (`.sbe/tasks.json`) is exempted by exact name from the comparison,
+because `open` writes it and counting it would make an ordinary single-writer flow unable to
+close clean, which is this control's own kill criterion. `expiry` is informational: nothing
+deletes a task on a clock. Concurrent writers of the registry file are out of scope (atomic
+rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
+**INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
 
 Four commands remain **present and refuse**: `plan`, `policy`, `exceptions` and `adopt`.

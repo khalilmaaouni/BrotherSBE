@@ -413,3 +413,45 @@ the table, now COVERED with that residual stated on the row itself.
 
 Full text: `docs/BYPASS-COVERAGE.md`, `tools/test_sbe_bypass.py`,
 `docs/CLI.md` ("sbe evidence").
+
+## The task registry only governs writers who register
+
+`sbe task close` detects an out-of-scope write after the fact by reading the
+diff, which is exactly why it survives Bash. But the postcondition runs at
+close, and only a task that was OPENED can be closed: an actor who never runs
+`sbe task open` never meets it, and reviewer separation orders roles inside
+the registry only. In front of that actor stands only the fence hook, which
+is advisory and fails open with a stated reason. Full text: `docs/CLI.md`
+("sbe task"), `docs/HOW-IT-WORKS.md` (the two-layer scope model).
+
+## The registry file itself has no lock
+
+`.sbe/tasks.json` is rewritten atomically (write temp, rename), so it is never
+half-written, but two simultaneous `sbe task open` calls are last-write-wins
+and one of the two records can vanish. Concurrent writers of the REGISTRY
+itself are out of scope by design: no service, no daemon, no lock. `sbe task
+check` is the recovery tool, because it re-runs the overlap scan over whatever
+the file now holds.
+
+## The registry exempts its own file from the postcondition
+
+Opening a task writes `.sbe/tasks.json`, so that one path, by exact name, is
+excluded from the changed-path comparison at close; otherwise no single-writer
+flow could ever close clean, which is this control's own kill criterion. The
+exemption is one exact path, not the `.sbe/` directory: receipts under
+`.sbe/evidence` still count, which is what the reviewer-receipt refusal reads.
+
+## Task expiry is informational, and nothing writes "abandoned" yet
+
+`expiry` is a date a human reads in `sbe task list`; nothing deletes or closes
+a task on a clock, so a stale open task keeps refusing overlapping opens until
+somebody closes it (with `--force` and a recorded who and why, if its work is
+gone). "abandoned" is a legal status value in the schema and no command in
+this wave writes it.
+
+## The fence view is one-directional
+
+`sbe task fence` renders markdown FROM the JSON registry for humans reading a
+STATE.md style file. Nothing reads markdown fences back into the registry, so
+a hand-edited fence line and the registry can disagree, and the registry is
+the one the postcondition reads.

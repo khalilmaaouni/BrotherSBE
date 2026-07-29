@@ -248,6 +248,19 @@ def _cmd_evidence(args):
                              exit_usage=EXIT_USAGE)
 
 
+def _cmd_task(args):
+    """The write-scope task registry and its diff postcondition.
+
+    Not a delegation: like `evidence`, there is no tool in `tools/` behind it.
+    The fence hook cannot govern Bash because shell cannot be parsed reliably,
+    so this surface records what a writer declared it owns and, at close, reads
+    the git diff and refuses when the tree changed outside that declaration.
+    """
+    from . import tasks as tasks_mod
+    return tasks_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                          exit_usage=EXIT_USAGE)
+
+
 def _cmd_version(args):
     sys.stdout.write("sbe %s (evidence schema %s, python %d.%d)\n"
                      % (version(), SCHEMA_VERSION, sys.version_info[0], sys.version_info[1]))
@@ -291,6 +304,8 @@ COMMANDS = [
                            "told apart from a control that was never required.")),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
      _cmd_evidence),
+    ("task", "the write-scope registry: open, list, fence, check, and close with the "
+             "diff-against-declaration postcondition", _cmd_task),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",
