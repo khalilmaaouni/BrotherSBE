@@ -63,7 +63,7 @@ cd ~/.claude/skills/brothersbe
 python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "513 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+One line per real failure class, each caught by the check that owns it, ending "516 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory

@@ -1928,5 +1928,259 @@ class TestMarketplaceManifest(unittest.TestCase):
                       "the CLI exited 0 but did not say Validation passed: %s" % result.stdout)
 
 
+class TestDossierBindingScenario23(unittest.TestCase):
+    """SCENARIO 23 (docs/BYPASS-COVERAGE.md row 23): a dossier from a finished
+    change, left in place, reads identically to one written for the change in
+    front of it, because nothing reads a commit. `00-intake.json` may now carry
+    an OPTIONAL "binding": {"head": <commit>, "artifacts": {path: sha256}}.
+    Every fixture here builds a REAL git repository and runs the real
+    `tools/sbe_design.py` against it (matching how `tools/test_sbe_bypass.py`
+    exercises the design checks), because a binding lives at the seam between
+    a commit and a claim about it, and a mocked seam would test the mock.
+    """
+
+    DESIGN = os.path.join(HERE, "sbe_design.py")
+    PURPOSE = ("# Purpose\nProblem: refunds settle late and support cannot say why.\n"
+               "Users: the support desk and the finance close.\n"
+               "Success: every refund reaches a terminal state within one business day.\n"
+               "Non-goals: repricing, partial refunds.\nIf wrong: refunds stall silently.\n")
+    ANSWERS = {"changes_contract": False, "crosses_boundary": True,
+              "reversible_under_hour": True, "touches_sensitive": False, "consumers": "none"}
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.repo = os.path.join(self.dir, "repo")
+        os.makedirs(self.repo)
+        self._git("init", "-q")
+        self._git("config", "user.email", "dana@example.invalid")
+        self._git("config", "user.name", "Dana Author")
+        self._git("config", "commit.gpgsign", "false")
+        self._write("README.md", "base\n")
+        self._git("add", "-A")
+        self._git("commit", "-qm", "base")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _git(self, *args):
+        out = subprocess.run(["git"] + list(args), cwd=self.repo, capture_output=True, text=True)
+        if out.returncode != 0:
+            raise AssertionError("git %s failed in %s: %s" % (" ".join(args), self.repo, out.stderr))
+        return out.stdout.strip()
+
+    def _write(self, rel, body):
+        path = os.path.join(self.repo, rel)
+        directory = os.path.dirname(path)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory)
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        return path
+
+    def _sha256(self, rel):
+        with open(os.path.join(self.repo, rel), "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+
+    def _commit_dossier(self, message="add dossier"):
+        """01-purpose.md plus an unbound 00-intake.json, committed. Returns the
+        new commit's id, which is the "head this dossier was written against"
+        every fixture below binds to."""
+        self._write("01-purpose.md", self.PURPOSE)
+        self._write("00-intake.json", json.dumps({"tier": "T1", "answers": self.ANSWERS},
+                                                 indent=2, sort_keys=True))
+        self._git("add", "-A")
+        self._git("commit", "-qm", message)
+        return self._git("rev-parse", "HEAD")
+
+    def _bind(self, binding):
+        """Rewrites 00-intake.json to add `binding`, left UNCOMMITTED: a binding
+        is the author's own claim about the tree in front of them, and nothing
+        about resolving HEAD or re-hashing a covered file needs it committed."""
+        self._write("00-intake.json", json.dumps({"tier": "T1", "answers": self.ANSWERS,
+                                                  "binding": binding}, indent=2, sort_keys=True))
+
+    def _run_design(self):
+        out = subprocess.run([sys.executable, self.DESIGN, self.repo],
+                             capture_output=True, text=True)
+        return out.stdout + out.stderr
+
+    def _verdict(self, text):
+        # Three values, not two: a two-value return reads as a possible
+        # (verdict, evidence) pair to the honesty meta-test, which refuses any
+        # such function sitting outside a check registry.
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == "artifacts":
+                return parts[1], line, text
+        return None, "NO VERDICT LINE for 'artifacts' in:\n%s" % text, text
+
+    def test_bound_and_current_passes(self):
+        head = self._commit_dossier()
+        self._bind({"head": head, "artifacts": {"01-purpose.md": self._sha256("01-purpose.md")}})
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "PASS", line)
+        self.assertIn(head[:12], line, "a verified binding should say which head it verified: %r" % line)
+
+    def test_bound_then_head_moved_fails_by_name(self):
+        head = self._commit_dossier()
+        self._bind({"head": head, "artifacts": {"01-purpose.md": self._sha256("01-purpose.md")}})
+        # A second, unrelated commit moves HEAD without touching the binding,
+        # which is exactly scenario 23: the dossier now predates the commit in
+        # front of it. The binding edit itself is never committed, matching
+        # every fixture here, so committing "unrelated" is what advances HEAD.
+        self._write("UNRELATED.md", "an unrelated later change\n")
+        self._git("add", "-A")
+        self._git("commit", "-qm", "unrelated later change")
+        new_head = self._git("rev-parse", "HEAD")
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "FAIL", line)
+        self.assertIn(head[:12], line, "the stale bound head should be named: %r" % line)
+        self.assertIn(new_head[:12], line, "the current head should be named: %r" % line)
+        self.assertIn("re-bind deliberately", line)
+
+    def test_artifact_digest_drift_fails_naming_the_file(self):
+        head = self._commit_dossier()
+        self._bind({"head": head, "artifacts": {"01-purpose.md": self._sha256("01-purpose.md")}})
+        # Edited AFTER binding, and left uncommitted, so HEAD stays exactly
+        # where the binding says it is: this isolates a digest mismatch from a
+        # moved HEAD, which is the other, differently-named failure.
+        self._write("01-purpose.md", self.PURPOSE + "Edited after binding, before re-binding.\n")
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "FAIL", line)
+        self.assertIn("01-purpose.md", line)
+        self.assertIn("changed since the dossier was bound", line)
+
+    def test_absent_binding_is_unchanged_behavior(self):
+        head = self._commit_dossier()
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "PASS", line)
+        self.assertNotIn("bound", line.lower(),
+                         "no binding was recorded, so nothing about one should appear: %r" % line)
+
+    def test_an_unresolvable_bound_commit_is_no_data(self):
+        self._commit_dossier()
+        # 40 hex characters, never an object this repository has: no commit was
+        # ever made with this id, and it is not the empty tree either.
+        fake_head = "f" * 40
+        self._bind({"head": fake_head, "artifacts": {"01-purpose.md": self._sha256("01-purpose.md")}})
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "NO-DATA", line)
+        self.assertIn(fake_head[:12], line)
+        self.assertNotEqual(verdict, "PASS", "an unresolvable binding must never pass: %r" % line)
+
+    def test_a_binding_path_that_walks_out_of_the_repo_fails_by_name(self):
+        # The outside file EXISTS and its recorded digest is TRUE, so the only
+        # thing standing between this binding and a PASS is the containment
+        # check itself; a missing-file refusal cannot satisfy this fixture,
+        # which is what calibration demanded (with the check disabled, the
+        # true digest verifies and the run PASSes, which is the red).
+        outside = os.path.join(os.path.dirname(self.repo), "outside.md")
+        with io.open(outside, "w", encoding="utf-8") as fh:
+            fh.write("lives outside the repo on purpose\n")
+        digest = hashlib.sha256(open(outside, "rb").read()).hexdigest()
+        head = self._commit_dossier()
+        self._bind({"head": head, "artifacts": {"../outside.md": digest}})
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "FAIL", line)
+        self.assertIn("resolves outside", line)
+
+    def test_an_unreadable_bound_artifact_fails_naming_the_file(self):
+        head = self._commit_dossier()
+        self._bind({"head": head, "artifacts": {"never-written.md": "0" * 64}})
+        verdict, line, _ = self._verdict(self._run_design())
+        self.assertEqual(verdict, "FAIL", line)
+        self.assertIn("never-written.md", line)
+
+
+class TestRenderSameNormalizesRawText(unittest.TestCase):
+    """could_render_same and name_sets_could_collide were safe only because
+    today's two call sites (tools/sbe_gate.py's approval check, reused by
+    scripts/derive_refusal_table.py) hand them text already run through
+    fold(), which composes via NFKC before either function ever compares a
+    character. Called on RAW text, a composed-versus-decomposed spelling of
+    the SAME rendered identity read as "proven different": a decomposed
+    Hangul jamo run counts more characters than its precomposed syllable and
+    trips the length check, and a precomposed accented letter missing from
+    the curated confusable/Latin-name tables (Greek omega-with-tonos) reads
+    as an unreadable ("opaque") letter that differs by code point from its
+    own NFD form once _unmarked has stripped the mark back to plain omega.
+    Both functions now normalize with plain_text (the same NFKC path
+    fold() itself uses; no second normalizer introduced) at their own entry,
+    so raw text now reads the way pre-folded text already did.
+
+    Loads sbe_checks.py directly, the same pattern
+    TestOneLineNeutralizesTheControlClass above uses, rather than importing
+    it as a package, since this file is run as a script.
+    """
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location(
+            "sbe_checks_norm", os.path.join(HERE, "sbe_checks.py"))
+        self.checks = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.checks)
+
+    def test_raw_nfc_nfd_accent_pair_reads_as_could_render_same(self):
+        import unicodedata
+        # U+038F GREEK CAPITAL LETTER OMEGA WITH TONOS: not ASCII, not East
+        # Asian wide, and absent from both the curated confusable table and
+        # the Latin-name fold (it is Greek, not Latin), so before the guard
+        # it read as an "opaque" letter compared by code point against its
+        # own NFD form (omega plus a combining tonos), which _unmarked
+        # reduces to bare omega, a DIFFERENT code point: a proof of
+        # difference for one letter compared against itself.
+        nfc = "Ώ"
+        nfd = unicodedata.normalize("NFD", nfc)
+        self.assertNotEqual(nfc, nfd, "the fixture must actually be two distinct spellings")
+        self.assertTrue(self.checks.could_render_same(nfc, nfd),
+                        "a precomposed letter and its own NFD decomposition, "
+                        "passed raw, must not read as proven different")
+
+    def test_raw_hangul_syllable_jamo_pair_reads_as_could_render_same(self):
+        import unicodedata
+        # Two precomposed Hangul syllables (2 characters) versus the same
+        # text NFD-decomposed into its choseong/jungseong/jongseong jamo (6
+        # characters, none of them a combining mark _unmarked would strip):
+        # a bare length mismatch before the guard, though the two spellings
+        # render identically.
+        syllables = "안녕"       # 안녕
+        jamo = unicodedata.normalize("NFD", syllables)
+        self.assertNotEqual(len(syllables), len(jamo),
+                            "the fixture must actually differ in raw character count")
+        self.assertTrue(self.checks.could_render_same(syllables, jamo),
+                        "a Hangul syllable spelling and its own jamo decomposition, "
+                        "passed raw, must not read as proven different")
+
+    def test_raw_nfc_nfd_accent_pair_collides_as_name_words(self):
+        import unicodedata
+        nfc = "Ώ"
+        nfd = unicodedata.normalize("NFD", nfc)
+        self.assertTrue(self.checks.name_sets_could_collide([nfc], [nfd]),
+                        "one name word spelled NFC versus the same word spelled NFD "
+                        "must not read as two different identities")
+
+    def test_raw_hangul_syllable_jamo_pair_collides_as_name_words(self):
+        import unicodedata
+        syllables = "안녕"
+        jamo = unicodedata.normalize("NFD", syllables)
+        self.assertTrue(self.checks.name_sets_could_collide([syllables], [jamo]),
+                        "one name word spelled with precomposed Hangul syllables versus "
+                        "the same word spelled with decomposed jamo must not read as "
+                        "two different identities")
+
+    def test_genuinely_different_hangul_syllables_still_prove_different(self):
+        """Control: the guard composes a raw jamo run back to ONE syllable,
+        it does not make every Hangul comparison vacuously true. A DIFFERENT
+        syllable, even compared against a raw jamo run, still differs by
+        code point once both sides are one composed character each."""
+        import unicodedata
+        an = "안"                              # 안
+        a_different_syllable = "녕"             # 녕
+        an_as_jamo = unicodedata.normalize("NFD", an)
+        self.assertFalse(self.checks.could_render_same(an_as_jamo, a_different_syllable),
+                         "two genuinely different Hangul syllables must still "
+                         "prove different, one of them passed as raw jamo")
+        self.assertFalse(self.checks.name_sets_could_collide([an_as_jamo], [a_different_syllable]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

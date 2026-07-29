@@ -150,8 +150,9 @@ def _unproven(a, b, email_a="", email_b=""):
 
 
 def measure():
-    """[(script, pairs, unproven, percent, unproven after the escape)], plus the
-    reading measurement, as (rows, names read as placeholders, names read)."""
+    """[(script, pairs, unproven, percent, unproven after the escape, unproven
+    after a same-mailbox escape)], plus the reading measurement, as (rows,
+    names read as placeholders, names read)."""
     rows, misread, total = [], [], 0
     for script in sorted(POOLS):
         pool_a, pool_b = POOLS[script]
@@ -163,8 +164,22 @@ def measure():
         escaped = [(a, b) for n, (a, b) in enumerate(unproven)
                    if _unproven(a, b, "approver%d@example.org" % n,
                                 "author%d@example.net" % n)]
+        # The caveat the column above cannot show by itself: a DIFFERENT-
+        # LOOKING email is not always a different mailbox. Re-run the same
+        # unproven pairs with the remedy sentence's own words taken literally
+        # ("record an email address that differs from the author's") but
+        # answered with a gmail dot alias of ONE mailbox on each side, and
+        # count how many the gate still correctly declines to certify. This
+        # is why the escape column above must never be read as "any two
+        # distinct-looking addresses close the remainder": on gmail and
+        # googlemail this one does not, by the host's own aliasing, and the
+        # gate is right to keep refusing it.
+        alias_unescaped = [(a, b) for n, (a, b) in enumerate(unproven)
+                           if _unproven(a, b, "dana.author%d@gmail.com" % n,
+                                        "danaauthor%d@gmail.com" % n)]
         rows.append((script, len(pairs), len(unproven),
-                     int(round(100.0 * len(unproven) / len(pairs))), len(escaped)))
+                     int(round(100.0 * len(unproven) / len(pairs))),
+                     len(escaped), len(alias_unescaped)))
         for name in pool_a + pool_b:
             total += 1
             if checks.answered(name) is None:
@@ -181,10 +196,12 @@ def block():
         "no email address recorded. \"Unproven\" means the gate declines to certify",
         "the two are different people and says so; it is never a silent pass.",
         "",
-        "script        pairs  unproven  percent  still unproven with distinct emails",
+        "script        pairs  unproven  percent  still unproven with distinct emails"
+        "  still unproven with a gmail dot-alias",
     ]
-    for script, pairs, unproven, pct, escaped in rows:
-        out.append("%-12s %6d %9d %8d  %34d" % (script, pairs, unproven, pct, escaped))
+    for script, pairs, unproven, pct, escaped, alias_unescaped in rows:
+        out.append("%-12s %6d %9d %8d  %34d  %37d"
+                   % (script, pairs, unproven, pct, escaped, alias_unescaped))
     out += [
         "",
         "Real names read as placeholders by the vacuity backstop: %d of %d names"

@@ -182,8 +182,15 @@ confusable tables fold to ASCII, where a certificate resting on the fold's
 coverage would rest on a table this project's own history proves incomplete.
 Every refused pair passes by recording an email address that differs from the
 author's, which the gate accepts as proof of difference; the refusal sentence
-names that escape, and the last column below exercises it rather than
-asserting it. Full text: `tools/sbe_gate.py` (gate_approval),
+names that escape, and the second-to-last column below exercises it rather
+than asserting it. That escape is HOST-DEPENDENT, not a blanket "any two
+different-looking addresses prove two people": on gmail.com and
+googlemail.com, an address that differs from the author's only by a dot in
+the local part reaches the SAME mailbox by the host's own aliasing, so the
+gate declines to certify it as a second person, and the escape does not
+close those pairs. The last column below exercises that case too, rather
+than asserting it, and it is why the escape column must never be read on
+its own. Full text: `tools/sbe_gate.py` (gate_approval, _canonical_email),
 `tools/sbe_checks.py` (the four character kinds).
 
 The figures below are not typed. They are the output of a script you can run,
@@ -202,19 +209,19 @@ Pools of 10 real names per script, 45 unordered pairs each, name only,
 no email address recorded. "Unproven" means the gate declines to certify
 the two are different people and says so; it is never a silent pass.
 
-script        pairs  unproven  percent  still unproven with distinct emails
-Amharic          45         0        0                                   0
-Arabic           45         0        0                                   0
-Armenian         45         0        0                                   0
-Georgian         45         0        0                                   0
-Greek            45         9       20                                   0
-Hebrew           45         0        0                                   0
-Hindi            45         0        0                                   0
-Japanese         45         0        0                                   0
-Korean           45         0        0                                   0
-Russian          45        13       29                                   0
-Thai             45         0        0                                   0
-Vietnamese       45         0        0                                   0
+script        pairs  unproven  percent  still unproven with distinct emails  still unproven with a gmail dot-alias
+Amharic          45         0        0                                   0                                      0
+Arabic           45         0        0                                   0                                      0
+Armenian         45         0        0                                   0                                      0
+Georgian         45         0        0                                   0                                      0
+Greek            45         9       20                                   0                                      9
+Hebrew           45         0        0                                   0                                      0
+Hindi            45         0        0                                   0                                      0
+Japanese         45         0        0                                   0                                      0
+Korean           45         0        0                                   0                                      0
+Russian          45        13       29                                   0                                     13
+Thai             45         0        0                                   0                                      0
+Vietnamese       45         0        0                                   0                                      0
 
 Real names read as placeholders by the vacuity backstop: 0 of 240 names
 across 12 scripts, two disjoint pools of 10 per script.
@@ -606,3 +613,38 @@ channel inherits rather than closes.
 
 Full text: `tools/sbe_gate.py` (`parse_exemption`, `find`), `tools/sbe_design.py`
 (`parse_exemption`), `evals/run_evals.py` (the `gx1`-`gx4` fixtures).
+
+## A dossier's binding only resolves a commit held as a loose object
+
+`00-intake.json` may carry an OPTIONAL `binding` block: the head commit a
+dossier was written against, plus a sha256 per artifact it covers
+(`docs/BYPASS-COVERAGE.md` row 23). Left out, nothing changes: no commit is
+read, no digest is checked, and the design checks behave exactly as they did
+before this block existed. Recorded, `tools/sbe_design.py::_binding_problem`
+checks it by reading git's own on-disk files directly (`HEAD`, a ref, a loose
+object's path) rather than by running git as a subprocess, which is also why
+`tools/test_sbe_bypass.py::test_the_design_checks_never_read_a_commit_which_is_a_limit`
+still passes unchanged: it pins the absence of a `subprocess` import and of a
+`git log`/`rev-parse` call, and this stays true of a file that resolves a
+commit by reading `.git` itself.
+
+The gap that reading `.git` by hand carries and a real git binary would not:
+confirming a bound commit id names a real object is checked only against
+LOOSE objects under `.git/objects`; a commit folded into a pack by
+housekeeping (`git gc`) is invisible to this check. HEAD itself, and any
+commit still close enough to it that nothing has packed it, resolve
+correctly, which covers the ordinary case a dossier's own author hits: bind
+right after committing, and the bound commit is the loosest object there is.
+A binding naming a commit from far enough back in history to have been
+packed reads NO-DATA here rather than a confirmed FAIL or PASS, the same
+"cannot resolve, so cannot vouch either way" answer this project already
+gives a snapshot id or a rehearsal id it cannot look up. Row 23 stays
+UNCOVERED for exactly this reason: an optional control only a dossier's own
+author opts into is not a covered bypass, and this project does not round a
+partial, honestly-limited check up to COVERED.
+
+Full text: `docs/BYPASS-COVERAGE.md` row 23, `tools/sbe_design.py`
+(`_binding_problem`, `_git_dir`, `_resolve_head`, `_object_exists`),
+`tools/test_sbe.py` (`TestDossierBindingScenario23`).
+
+Two more edges the fixtures pin: a bound artifact that no longer exists or cannot be read FAILs quoting the path (never a silent skip), and a bound path that resolves outside the repository FAILs as a broken claim even when the outside file exists and its digest is true, because a design artifact lives in the tree it binds.

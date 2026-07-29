@@ -8,6 +8,30 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `00-intake.json` may now carry an OPTIONAL `binding` block (row 23 of
+  `docs/BYPASS-COVERAGE.md`, a stale dossier reused for a new change): a head
+  commit plus a sha256 per artifact the dossier covers. Absent, nothing
+  changes, and the absence is what keeps the row UNCOVERED rather than
+  COVERED. Present, `tools/sbe_design.py::_binding_problem` verifies it before
+  letting `check_artifacts` reach its own PASS: a HEAD that moved since
+  binding FAILs naming both commits and says "re-bind deliberately"; an
+  artifact whose digest moved FAILs naming the file; a binding naming a
+  commit this tool cannot resolve is NO-DATA, never a pass. Resolution reads
+  git's own on-disk files directly (`HEAD`, a ref, a loose object's path)
+  rather than shelling out to git, so
+  `tools/test_sbe_bypass.py::test_the_design_checks_never_read_a_commit_which_is_a_limit`
+  is unaffected: it pins the absence of a `subprocess` import and of a
+  `git log`/`rev-parse` call, both still true. Proof: `tools/test_sbe.py`'s
+  new `TestDossierBindingScenario23`, five fixtures (bound-and-current
+  passes; HEAD-moved fails by name; artifact-digest-drift fails naming the
+  file; absent binding is unchanged behavior; an unresolvable bound commit is
+  NO-DATA), each calibrated red against a one-line break and restored to the
+  pre-recorded `git hash-object` of the fixed file before being counted
+  green. `docs/KNOWN-LIMITS.md` states the one gap this resolution carries: a
+  bound commit old enough to have been folded into a pack by housekeeping
+  reads NO-DATA rather than a confirmed verdict, because confirming existence
+  is checked only against loose objects.
+
 - `tools/sbe_gate.py` now honors `.sbe-exempt`, which it had zero support for until now
   (the CI workflow comment promised it; a grep of the file found nothing). Mirrors
   `tools/sbe_design.py::parse_exemption`'s semantics: a `gates: <names>` field naming
@@ -749,3 +773,65 @@ can read a promise into.
   where usage was expected, one on a vault the command was only asked to describe getting created,
   one on a returncode of 0 for a rejected flag) before the fix restored it, the restore verified
   byte-identical to the pre-recorded `git hash-object` of the fixed file rather than by `git checkout`.
+
+- `tools/sbe_gate.py::_canonical_email` folded case and a `+tag` for every
+  approval-identity comparison but never a gmail dot, so an Approved-by trailer
+  of `dana.author@gmail.com` against an author of `danaauthor@gmail.com`, ONE
+  real gmail mailbox, fell through the self-approval check unmatched and
+  reached the approval gate's strongest sentence: PASS, "proven different." The
+  fix folds the local part's dots too, but ONLY for `gmail.com` and
+  `googlemail.com`, because dot-insensitivity is a property of those hosts'
+  own mail routing, not of email addressing in general; folding it everywhere
+  would merge genuinely distinct mailboxes on a host where the dot is
+  significant and turn a real second approver into a false self-approval
+  refusal. A same-mailbox pair now FAILs by name, and the sentence quotes
+  both recorded addresses and says they reach one mailbox under that host's
+  own aliasing, not two identities; a genuinely different dotted pair on a
+  non-gmail host still reaches PASS, "proven different," unchanged. Proof:
+  `evals/run_evals.py`'s `a-gmail-dot-alias-is-not-proven-different` (reads
+  the FAIL sentence itself, not just the verdict), the control
+  `a-different-dotted-pair-on-a-non-gmail-host-stays-proven-different`, and
+  `gmail-plus-tag-and-case-fold-still-collapse-with-the-dot-fold` (the new
+  fold stacked with the two it sits beside on the same address), each
+  calibrated red against the dot fold commented out and restored to the
+  pre-recorded `git hash-object` of the fixed file before being counted
+  green. `scripts/derive_refusal_table.py` now also re-runs every unproven
+  pair with a gmail dot-alias standing in for the refusal sentence's own
+  remedy ("record an email address that differs from the author's"), and
+  publishes how many of those the gate still correctly declines, so the
+  published table's escape column can no longer be read as "any two
+  different-looking addresses close the remainder." `docs/KNOWN-LIMITS.md`
+  states the host-dependence and carries that script's fresh output.
+
+- `tools/sbe_checks.py::could_render_same` and `::name_sets_could_collide`
+  were safe only because their two callers (the approval check in
+  `tools/sbe_gate.py`, reused by `scripts/derive_refusal_table.py`) always
+  hand them text already run through `fold()`, which composes via NFKC
+  before either function compares a single character. Called on raw text,
+  a composed-versus-decomposed spelling of the SAME rendered identity read
+  as "proven different": a decomposed Hangul jamo run counts more
+  characters than its precomposed syllable and trips the length check that
+  earns a certifying PASS its proof, and a precomposed accented letter
+  missing from the curated confusable and Latin-name tables (Greek
+  omega-with-tonos, outside both) reads as an unreadable letter that
+  differs by code point from its own NFD form once the mark-stripping step
+  has reduced that form to bare omega, a genuine proof of difference for
+  one letter compared against itself. Both functions now run `plain_text`
+  (fold()'s own NFKC-composition-and-invisible-strip step, the one
+  normalizer this module has, never a second one) over their arguments at
+  entry, idempotent for the two callers that already pre-normalize, so
+  neither caller's behavior moves. Proof: `tools/test_sbe.py`'s new
+  `TestRenderSameNormalizesRawText`, four fixtures (a raw NFC/NFD accent
+  pair and a raw Hangul syllable/jamo pair, each through both functions
+  directly) plus a control (two genuinely different Hangul syllables, one
+  passed as raw jamo, still prove different), each calibrated red against
+  the two `plain_text` calls removed and restored to the pre-recorded
+  `git hash-object` of the fixed file before being counted green. The
+  existing `sig`-class evals exercising both call sites
+  (`a-homoglyph-does-not-make-a-second-person`,
+  `a-confusable-outside-the-curated-table-is-refused-not-passed`,
+  `a-same-script-lookalike-letter-is-refused-not-passed`,
+  `a-bidi-override-cannot-render-an-approver-as-the-author`,
+  `a-blank-rendering-joiner-does-not-weld-a-second-person`,
+  `a-confusable-email-is-the-authors-own-mailbox`, and the gmail-dot-alias
+  cases above) were re-run and are unchanged.

@@ -428,10 +428,57 @@ def _rendered_identity_parts(text):
     return _parts(text, fold)
 
 
+_GMAIL_HOSTS = frozenset({"gmail.com", "googlemail.com"})
+
+
 def _canonical_email(raw, reduce):
+    """The comparable form of one email address: case-folded (via `reduce`),
+    a `+tag` in the local part dropped, and, ONLY on gmail.com and
+    googlemail.com, every dot in the local part ALSO dropped.
+
+    The dot fold is HOST-SCOPED, not universal, because dot-insensitivity is
+    a property of gmail's own mail routing (dana.author@gmail.com and
+    danaauthor@gmail.com are one inbox there), not a property of email
+    addressing in general. Folding dots on every host would wrongly merge
+    two genuinely distinct mailboxes wherever a dot IS significant to that
+    host (dana.author@ and danaauthor@ are two different people on most
+    other providers), and a comparison that merges two real identities is a
+    false REFUSAL on this gate, the opposite failure from the one this fold
+    exists to close. So: the dot is folded only where the two spellings are
+    PROVABLY the same mailbox by the host's own rule, and nowhere else.
+    """
     e = reduce(raw).strip(" .,;:'\"<>")
     local, _, domain = e.partition("@")
-    return local.split("+")[0] + "@" + domain
+    local = local.split("+")[0]
+    if domain in _GMAIL_HOSTS:
+        local = local.replace(".", "")
+    return local + "@" + domain
+
+
+def _same_mailbox_note(canon, appr_text, who_texts):
+    """A clause naming the two literal recorded addresses when a same-email
+    match in CANON exists only because of gmail's dot fold, not because the
+    two sides typed the identical string; empty for every other match, so an
+    exact-string match keeps the plain self-approval sentence unchanged.
+
+    Printing the canonical (already-folded) form alone reads as one address
+    typed twice; a forged-difference finding is disproved by name, so the
+    two addresses that actually appear in the commit are the ones this
+    clause quotes.
+    """
+    domain = canon.rpartition("@")[2]
+    if domain not in _GMAIL_HOSTS:
+        return ""
+    appr_raw = next((e.strip() for e in _EMAIL.findall(appr_text)
+                      if _canonical_email(e, skeleton) == canon), "")
+    other_raw = next((e.strip() for t in who_texts for e in _EMAIL.findall(t)
+                       if _canonical_email(e, skeleton) == canon), "")
+    if not appr_raw or not other_raw:
+        return ""
+    if skeleton(appr_raw).strip(" .,;:'\"<>").lower() == skeleton(other_raw).strip(" .,;:'\"<>").lower():
+        return ""
+    return (" %s and %s reach one mailbox under %s's own dot-insensitive local part, "
+            "not two identities." % (appr_raw, other_raw, domain))
 
 
 def _is_script_neutral_modifier(ch):
@@ -998,29 +1045,34 @@ def gate_approval(root):
         same_email_a, same_name_a = _same(auth_emails, auth_names)
         same_email_c, same_name_c = _same(comm_emails, comm_names)
         if same_email_a or same_name_a:
+            alias_note = next((n for n in (_same_mailbox_note(c, trailer.group(1), idmeta["author"])
+                                            for c in same_email_a) if n), "")
             return "FAIL", ("the Approved-by identity is the identity that wrote the commit (%s); "
-                            "author and committer are %s. Self-approval is not approval: a "
+                            "author and committer are %s.%s Self-approval is not approval: a "
                             "signature proves a key holder signed, and it cannot prove a second "
                             "party reviewed. A trailing period, a reordered name, an initial, a "
-                            "plus-address or a role suffix does not make a second person. A second "
+                            "plus-address, a gmail dot or a role suffix does not make a second "
+                            "person. A second "
                             "person must review: have them amend and sign with their OWN key and "
                             "record their email in the trailer (the signature's principal is then "
                             "the approver's email, and this gate reads that committer as the "
                             "approver who signed), or record a Reviewed-in id pointing at a review "
                             "somebody else performed"
                             % (", ".join(same_email_a) or same_name_a,
-                               ", ".join(authors) or "unrecorded"))
+                               ", ".join(authors) or "unrecorded", alias_note))
         if (same_email_c or same_name_c) and not cosign:
+            alias_note = next((n for n in (_same_mailbox_note(c, trailer.group(1), idmeta["committer"])
+                                            for c in same_email_c) if n), "")
             return "FAIL", ("the Approved-by identity is the identity recorded as this commit's "
                             "committer (%s), and the signature's principal (%s) is not the "
                             "approver's email, so this host cannot tell that the approver signed "
-                            "rather than merely being named. Have the approver amend and sign with "
+                            "rather than merely being named.%s Have the approver amend and sign with "
                             "their OWN key and record their email in the trailer (the signature's "
                             "principal is then the approver's email, and this gate reads that "
                             "committer as the approver who signed), or record a Reviewed-in id "
                             "pointing at a review somebody else performed"
                             % (", ".join(same_email_c) or same_name_c,
-                               idmeta.get("signer", "").strip() or "unrecorded"))
+                               idmeta.get("signer", "").strip() or "unrecorded", alias_note))
     # An approval was claimed: now it must be bound to a forgery-resistant identity.
     # Only a signature this host verified AGAINST A PRINCIPAL IT TRUSTS counts,
     # and that is %G? = G alone. U means the signature is cryptographically valid

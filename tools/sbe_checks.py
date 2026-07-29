@@ -948,6 +948,23 @@ def _unmarked(text):
 def could_render_same(a, b, trust_fold=False):
     """True when `a` could render as `b` under one-for-one look-alike substitution.
 
+    INVARIANT now enforced at this entry, not assumed of the caller: `a` and
+    `b` are each run through `plain_text` (fold()'s own NFKC composition and
+    invisible-strip, the one normalizer this module has) before anything
+    else. Both call sites today (tools/sbe_gate.py's email and name
+    comparisons) already pass fold()ed text, and plain_text is idempotent, so
+    neither call site's behavior moves. A caller that has NOT pre-normalized
+    is the case this guard is for: a decomposed Hangul syllable (jamo
+    sequence) counted more characters than its precomposed form and read as
+    structurally different by the length check below though it renders
+    identically; a CJK compatibility ideograph is a different code point from
+    its canonical twin and read as a proven difference under the `wide`
+    branch's code-point comparison though the two are one glyph by
+    definition. NFKC composition (Hangul jamo compose algorithmically; a
+    compatibility ideograph folds to its canonical form) resolves both before
+    the character-by-character comparison ever runs, so raw text now reads
+    the same as pre-folded text.
+
     False is a PROOF of difference: the two strings differ in structure
     (length) or at a position where both characters' renderings are decided,
     so no substitution can map one onto the other. Certifying callers use
@@ -961,6 +978,7 @@ def could_render_same(a, b, trust_fold=False):
     vacuity backstop uses this, where the cost of trusting the fold is one
     refused placeholder-shaped value rather than a forged certificate.
     """
+    a, b = plain_text(a), plain_text(b)
     aa = [_char_reading(ch) for ch in _unmarked(a)]
     bb = [_char_reading(ch) for ch in _unmarked(b)]
     return len(aa) == len(bb) and all(_pair_could_render_same(x, y, trust_fold)
@@ -1061,13 +1079,26 @@ def name_sets_could_collide(words_a, words_b):
     """True when one name's words could all render as the other's, so the two
     identities are substitution-compatible and their difference is unproven.
 
+    INVARIANT now enforced at this entry, not assumed of the caller: every
+    word is run through `plain_text` (fold()'s own NFKC composition and
+    invisible-strip) before the containment check, for the same reason and
+    with the same idempotence as could_render_same's own guard, which this
+    function otherwise leans on for its non-initial word pairs. Normalizing
+    here as well, rather than only inside could_render_same, also covers the
+    single-letter "initial" branch of `_word_could_match`, which compares a
+    first character directly and never calls could_render_same at all; a
+    word that is a raw decomposed Hangul jamo run is not one letter until it
+    is composed. Today's callers (tools/sbe_gate.py's approval check and
+    scripts/derive_refusal_table.py, which reads the same gate function)
+    already pass fold()ed words, so their behavior does not move.
+
     Mirrors the containment shape of the sameness comparison (equal sets,
     subsets, initials), because those are the forms one person writes their
     own name in: if every word of one side could render as some word of the
     other side, a look-alike substitution explains the whole difference.
     """
-    a = [w for w in words_a if w]
-    b = [w for w in words_b if w]
+    a = [plain_text(w) for w in words_a if w]
+    b = [plain_text(w) for w in words_b if w]
     if not a or not b:
         return False
 

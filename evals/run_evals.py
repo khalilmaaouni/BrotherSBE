@@ -7460,6 +7460,83 @@ def gx4(root):
     return "waived-not-passed" if waived else out.stdout.strip()[:200]
 
 
+def _approval_verdict_and_reason(root, sig, approver, authors, committers=None, signer=""):
+    """gate_approval's full (verdict, reason), joined as one string on a NUL
+    rather than returned as a 2-tuple: a two-value return reads as a
+    possible (verdict, evidence) pair to the honesty meta-test, which
+    refuses any such function sitting outside the check registry it
+    discovers by that shape. Same monkeypatch shape as
+    `_approval_with_sig`, kept separate because that helper already
+    discards the reason at its own call site and existing cases depend on
+    that discarding; this one exists for the cases below that must read the
+    SENTENCE, not just the verdict.
+    """
+    committers = list(authors) if committers is None else list(committers)
+    who = list(authors) + [c for c in committers if c not in authors]
+    meta = {"author": list(authors), "committer": committers, "signer": signer}
+    original = _gate.git_trailers
+    _gate.git_trailers = lambda r: ("change\n\nApproved-by: %s" % approver, sig, who, meta)
+    try:
+        verdict, why = _gate.gate_approval(root)
+    finally:
+        _gate.git_trailers = original
+    return verdict + "\x00" + why
+
+
+@case("a-gmail-dot-alias-is-not-proven-different", "gaterun", "fail-names-mailbox-alias")
+def r7a(root):
+    """THE DEFECT: `_canonical_email` folded case and a `+tag` but never a
+    gmail dot, so `dana.author@gmail.com` (Approved-by) against
+    `danaauthor@gmail.com` (author), ONE real gmail mailbox, fell through
+    the self-approval check unmatched and reached the certifying PASS as
+    "proven different" for two addresses that deliver to the same inbox:
+    the approval gate's strongest sentence, forged by a self-approver typing
+    their own address with a dot in it. The fix folds the local part's dots
+    for gmail.com and googlemail.com ONLY (`_canonical_email`), so this pair
+    now matches at the self-approval check and FAILs, and the sentence
+    names the two recorded addresses and says they reach one mailbox under
+    gmail's own aliasing, not two identities."""
+    verdict, _, why = _approval_verdict_and_reason(
+        root, "G", "dana.author@gmail.com",
+        ("Dana Author", "danaauthor@gmail.com")).partition("\x00")
+    if verdict != "FAIL":
+        return "verdict is %s, not FAIL: %s" % (verdict, why[:200])
+    if "reach one mailbox" not in why or "dana.author@gmail.com" not in why \
+            or "danaauthor@gmail.com" not in why:
+        return "FAIL sentence does not name the one-mailbox aliasing by address: %s" % why[:300]
+    return "fail-names-mailbox-alias"
+
+
+@case("a-different-dotted-pair-on-a-non-gmail-host-stays-proven-different",
+      "gaterun", "pass-proven-different")
+def r7b(root):
+    """The control the fix must not break: the dot fold is HOST-SCOPED. On a
+    non-gmail host a dot is significant, so `dana.author@example.com` and
+    `danaauthor@example.com` are two genuinely different mailboxes, and this
+    must still reach the certifying PASS naming them proven different, the
+    same as before this fix existed. A universal dot fold would wrongly
+    merge this pair and turn a real second approver into a false
+    self-approval refusal."""
+    verdict, _, why = _approval_verdict_and_reason(
+        root, "G", "dana.author@example.com",
+        ("Dana Author", "danaauthor@example.com")).partition("\x00")
+    if verdict != "PASS":
+        return "verdict is %s, not PASS: %s" % (verdict, why[:200])
+    if "proven different" not in why:
+        return "PASS sentence dropped 'proven different': %s" % why[:300]
+    return "pass-proven-different"
+
+
+@case("gmail-plus-tag-and-case-fold-still-collapse-with-the-dot-fold", "sig", "FAIL")
+def r7c(root):
+    """Regression guard for the new host-scoped fold stacked with the two
+    folds it sits beside: a plus-tag and a mixed case on the SAME gmail
+    address must still canonicalize to the author's own mailbox once the
+    dot is also folded, not just when each fold is exercised alone."""
+    return _approval_with_sig(root, "G", approver="Dana.Author+ops@GMAIL.com",
+                              authors=("Dana Author", "danaauthor@gmail.com"))
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

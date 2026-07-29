@@ -26,7 +26,7 @@ turned a failing dossier into exit 0 while the report printed the sentence
 its absence in the same breath. An exemption states a reviewable reason or it
 does not exempt, and a broken one is its own FAIL rather than a quiet gate.
 """
-import json, os, re, sys
+import hashlib, json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_intake import required_artifacts, compute_tier, read_answers, TIERS, QUESTIONS
@@ -370,6 +370,176 @@ def _reviewability_problem(text, what, min_words=OVERRIDE_MIN_WORDS,
     return ""
 
 
+# SCENARIO 23 (docs/BYPASS-COVERAGE.md): nothing else in this file reads a commit,
+# so a dossier written for a finished change and left in place reads exactly like
+# one written for the change in front of it. `binding` is an OPTIONAL block a
+# dossier's own 00-intake.json may carry, recording the head commit it was written
+# against and a sha256 per artifact it covers. Absent, nothing below runs and
+# behaviour is unchanged. Present, it is checked: the four helpers below resolve
+# git's own on-disk files directly (the HEAD ref, a loose object's existence) so
+# that resolving a commit never needs a subprocess or a git binary on PATH.
+_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _git_dir(path):
+    """The nearest git metadata directory at or above `path`, or None.
+
+    Resolves a linked worktree's gitfile the same way git does, so a dossier
+    checked out inside a worktree still finds the real object store. Walking
+    stops at the filesystem root; nothing above `path` naming a `.git` makes
+    this a directory this function can read a commit from.
+    """
+    cur = os.path.abspath(path)
+    while True:
+        candidate = os.path.join(cur, ".git")
+        if os.path.isdir(candidate):
+            return candidate
+        if os.path.isfile(candidate):
+            try:
+                line = open(candidate, encoding="utf-8", errors="replace").readline()
+            except OSError:
+                return None  # sbe: allow-silent an unreadable git object here is exactly the NO-DATA the binding check then reports by name; nothing is dropped, the absence becomes the verdict
+            if line.startswith("gitdir: "):
+                target = line[len("gitdir: "):].strip()
+                return target if os.path.isabs(target) else os.path.abspath(os.path.join(cur, target))
+            return None
+        up = os.path.dirname(cur)
+        if up == cur:
+            return None
+        cur = up
+
+
+def _resolve_ref(git_dir, ref):
+    """The commit id an on-disk ref names, or None if this ref is not on disk.
+
+    Checked as a loose ref file first and a `packed-refs` line second, the same
+    order git itself resolves a ref in: a loose file always wins over a stale
+    packed entry left behind for the same name.
+    """
+    loose = os.path.join(git_dir, ref)
+    if os.path.isfile(loose):
+        try:
+            sha = open(loose, encoding="utf-8", errors="replace").readline().strip()
+        except OSError:
+            return None  # sbe: allow-silent an unreadable git object here is exactly the NO-DATA the binding check then reports by name; nothing is dropped, the absence becomes the verdict
+        return sha if _SHA1_RE.match(sha) else None
+    packed = os.path.join(git_dir, "packed-refs")
+    if os.path.isfile(packed):
+        try:
+            lines = open(packed, encoding="utf-8", errors="replace").read().splitlines()
+        except OSError:
+            return None  # sbe: allow-silent an unreadable git object here is exactly the NO-DATA the binding check then reports by name; nothing is dropped, the absence becomes the verdict
+        for line in lines:
+            line = line.strip()
+            if not line or line[0] in "#^":
+                continue
+            parts = line.split(" ", 1)
+            if len(parts) == 2 and parts[1] == ref and _SHA1_RE.match(parts[0]):
+                return parts[0]
+    return None
+
+
+def _resolve_head(git_dir):
+    """The commit this repository's HEAD names right now, or None if it could
+    not be read. A symbolic ref (a checked-out branch) is followed one level;
+    a detached HEAD is already a bare id and needs no lookup."""
+    try:
+        content = open(os.path.join(git_dir, "HEAD"),
+                       encoding="utf-8", errors="replace").readline().strip()
+    except OSError:
+        return None  # sbe: allow-silent an unreadable git object here is exactly the NO-DATA the binding check then reports by name; nothing is dropped, the absence becomes the verdict
+    if content.startswith("ref: "):
+        return _resolve_ref(git_dir, content[len("ref: "):].strip())
+    return content if _SHA1_RE.match(content) else None
+
+
+def _object_exists(git_dir, sha):
+    """Whether `sha` names an object this repository holds as a LOOSE file.
+
+    A packed object (one folded into a pack by a housekeeping `gc`) is invisible
+    to this check: confirming existence inside a pack needs its index format
+    parsed, which this file does not do. That gap is named in
+    docs/KNOWN-LIMITS.md rather than overclaimed; it is why a commit old enough
+    to have been packed reads NO-DATA here rather than a confirmed FAIL or PASS.
+    """
+    return _SHA1_RE.match(sha or "") is not None and os.path.isfile(
+        os.path.join(git_dir, "objects", sha[:2], sha[2:]))
+
+
+def _sha256_of(path):
+    """The file's sha256 hex digest, or None if it cannot be opened and read."""
+    try:
+        return hashlib.sha256(open(path, "rb").read()).hexdigest()
+    except OSError:
+        return None  # sbe: allow-silent an unreadable file here becomes the named refusal at the caller: the binding check FAILs quoting the path, so nothing is dropped and the absence becomes the verdict
+
+
+def _binding_problem(root, data):
+    """(verdict, note, label) for the OPTIONAL "binding" block of 00-intake.json.
+
+    verdict is None when there is nothing to report (no binding recorded, or a
+    binding that checked out clean), "FAIL" when the binding proves the dossier
+    stale or malformed, and "NO-DATA" when the binding names a commit this
+    function cannot resolve either way. label is text the caller appends to an
+    otherwise-PASS sentence when a binding was present and verified current, so
+    a verified dossier reads differently from one that was never bound.
+
+    Never registers its own PASS: a clean binding returns verdict None and lets
+    check_artifacts's own PASS stand, because the binding is corroborating
+    evidence for that verdict, not a second check with one of its own.
+    """
+    binding = data.get("binding")
+    if binding is None:
+        return None, "", ""
+    if not isinstance(binding, dict):
+        return "FAIL", "00-intake.json's binding is not a JSON object", ""
+    head = binding.get("head")
+    if not isinstance(head, str) or not _SHA1_RE.match(head):
+        return "FAIL", ("00-intake.json declares a binding but its head (%r) is not a 40-character "
+                        "commit id, so the commit it claims cannot even be named" % (head,)), ""
+    git_dir = _git_dir(root)
+    current = _resolve_head(git_dir) if git_dir else None
+    if current is None:
+        return "NO-DATA", ("00-intake.json binds this dossier to head %s, but the current head "
+                           "could not be read from this tree (no readable git metadata above %s), "
+                           "so the binding could not be checked either way" % (head[:12], root)), ""
+    if head != current:
+        if not _object_exists(git_dir, head):
+            return "NO-DATA", ("00-intake.json binds this dossier to head %s, which does not resolve "
+                               "to a commit this repository has: an unresolvable binding is not "
+                               "evidence, bound or not" % head[:12]), ""
+        return "FAIL", ("00-intake.json binds this dossier to head %s but the current head is %s: the "
+                        "dossier predates the commits it now claims to govern, so it is not fresh "
+                        "evidence for them; re-bind deliberately" % (head[:12], current[:12])), ""
+    artifacts = binding.get("artifacts")
+    if artifacts is None:
+        return None, "", "; bound to %s and verified current" % head[:12]
+    if not isinstance(artifacts, dict):
+        return "FAIL", "00-intake.json's binding.artifacts is not a JSON object", ""
+    checked = 0
+    for rel, expected in sorted(artifacts.items()):
+        if not isinstance(rel, str) or not isinstance(expected, str) or not expected.strip():
+            return "FAIL", ("00-intake.json's binding names %r with no sha256 recorded for it, which "
+                            "is a broken claim, not an absent one" % (rel,)), ""
+        full = os.path.realpath(os.path.join(root, rel))
+        inside = os.path.realpath(root)
+        if full != inside and not full.startswith(inside + os.sep):
+            return "FAIL", ("the binding names %s, which resolves outside this dossier's own "
+                            "repository: a design artifact lives in the tree it binds, and a "
+                            "path that walks out of it is a broken claim, not a reachable "
+                            "file" % rel), ""
+        actual = _sha256_of(full)
+        if actual is None:
+            return "FAIL", ("the binding covers %s but it no longer exists (or cannot be read), so "
+                            "the digest it recorded cannot be confirmed" % rel), ""
+        if actual != expected:
+            return "FAIL", ("the binding recorded %s as sha256 %s but it now hashes to %s: the file "
+                            "changed since the dossier was bound" % (rel, expected[:12], actual[:12])), ""
+        checked += 1
+    return None, "", ("; bound to %s and verified current over %d covered artifact(s)"
+                      % (head[:12], checked))
+
+
 def check_artifacts(root):
     problem = read_problem(root, INTAKE)
     if problem:
@@ -553,11 +723,19 @@ def check_artifacts(root):
         if not why:
             notes.append("%s, which this dossier has nothing else to be coherent with, so that "
                          "was not checked" % n)
+    # The one place an OPTIONAL binding is checked: this is the path that would
+    # otherwise PASS, which is exactly the shape scenario 23 exploits (a stale
+    # dossier still reads complete). Everywhere else in this function already
+    # returns FAIL or NO-DATA for its own reason, and a binding never upgrades
+    # those; it can only downgrade a would-be PASS it disagrees with.
+    bind_verdict, bind_note, bind_label = _binding_problem(root, data)
+    if bind_verdict:
+        return bind_verdict, bind_note
     return "PASS", ("tier %s: every required artifact present, carrying content, and naming subject "
-                    "matter the rest of this dossier also names%s%s"
+                    "matter the rest of this dossier also names%s%s%s"
                     % (tier,
                        "" if not notes else "; except %s" % "; ".join(notes),
-                       label))
+                       label, bind_label))
 
 
 # The marker as the templates actually ship it: inside an HTML comment. Matching
