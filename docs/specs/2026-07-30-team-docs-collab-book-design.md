@@ -33,6 +33,30 @@ coherently for backend, data, and infrastructure work.
 | Install | One script plus a committed team profile |
 | Loop order | L1 book+install, L2 decisions+lineage, L3 docs folder+export, L4 notes+alerts, L5 outbox+execution start, L6 adapters+dogfood; confirmed |
 
+## Founder environment facts, binding on every session (founder correction, 2026-07-30)
+
+His words: "I am already logged in and you keep doing this mistake all the time. Do not
+presume I am not logged in in the future, write it in your spec."
+
+- PRESUME THE FOUNDER IS LOGGED IN. He is authenticated to GitHub in his browser and in
+  GitHub Desktop, which is why Desktop pushes succeed. Never write, imply, or plan around
+  "the founder is logged out".
+- Each tool keeps its OWN credential store. `gh` not having a token says nothing about the
+  founder's login state; it is a fact about that one binary's config directory. When a
+  tool's auth matters, run that tool's own status command and report what the COMMAND said,
+  never a conclusion about the person.
+- Do not ask the founder to perform steps a machine can perform. Drive every app on the
+  machine (GitHub Desktop, Edge, terminals) to completion. The only exceptions are the two
+  the safety floor reserves and cannot trade away: typing a password or a 2FA code, and
+  handling a raw credential or token in plain text. Where one of those is genuinely in the
+  path, prepare everything around it (code on the clipboard, the exact page already open)
+  so his part is a single paste or click, and say plainly why that part is his.
+- The harness adds one wall worth remembering: browsers are granted to computer control in
+  READ mode only, so clicks and typing inside a browser are impossible unless the Claude
+  browser extension is connected. Plan browser work around that or say it is blocked.
+- Installed and verified 2026-07-30 by command: `gh` version 2.96.0 at
+  ~/.local/bin/gh, configured git_protocol=https. Only its token was missing.
+
 ## Feature 1: `sbe docs`, the Documentation folder
 
 New module `src/brothersbe/docsgen.py`, wired as `docs` in the CLI COMMANDS table.
