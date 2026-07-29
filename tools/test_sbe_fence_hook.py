@@ -477,6 +477,50 @@ class TestFailOpen(FenceCase):
 
 
 # ---------------------------------------------------------------------------
+# Case-insensitive filesystems: `paths_overlap` retries a missed comparison
+# case-folded, but only trusts it once the filesystem confirms the fold is
+# real, never on the string match alone.
+# ---------------------------------------------------------------------------
+
+class TestCaseFoldConfirmation(FenceCase):
+
+    def test_a_real_case_collision_overlaps_at_the_unit_level(self):
+        """docs/SETUP.md and docs/setup.md are one file on this machine
+        (asserted by inode, the same proof the bypass fixture uses), so the
+        case-folded retry must fire and `paths_overlap` must say True."""
+        exact = os.path.join(self.root, "docs", "SETUP.md")
+        variant = os.path.join(self.root, "docs", "setup.md")
+        if not os.path.exists(variant):
+            raise unittest.SkipTest(
+                "this filesystem is case-sensitive; docs/setup.md is a different file here")
+        self.assertEqual(os.stat(exact).st_ino, os.stat(variant).st_ino)
+        self.assertTrue(fh.paths_overlap("docs/setup.md", "docs/SETUP.md", self.root),
+                        "a real filesystem collision was not treated as an overlap")
+
+    def test_a_case_folded_string_match_alone_is_never_trusted(self):
+        """The Linux half of the fix: two honestly different files named
+        `a.md` and `A.md` must not false-conflict just because their letters
+        match once lowered. This machine's filesystem cannot construct that
+        pair (case-insensitive by default), so the filesystem confirmation is
+        forced to answer 'not the same entry', exactly what it would answer on
+        a case-sensitive volume, and `paths_overlap` must still say False."""
+        original = fh._same_entry_case_insensitive
+        fh._same_entry_case_insensitive = lambda root, t, c: False
+        try:
+            self.assertFalse(
+                fh.paths_overlap("docs/setup.md", "docs/SETUP.md", self.root),
+                "a case-folded string match was trusted without filesystem confirmation")
+        finally:
+            fh._same_entry_case_insensitive = original
+
+    def test_no_root_skips_the_fold_which_is_this_hooks_fail_open_bias(self):
+        """A caller with no filesystem to confirm against (root=None) gets the
+        exact-spelling answer only, never a guess."""
+        self.assertFalse(fh.paths_overlap("docs/setup.md", "docs/SETUP.md"),
+                         "the case-folded retry ran with nothing to confirm it against")
+
+
+# ---------------------------------------------------------------------------
 # The declared tool surface, including the gap that is declared rather than
 # papered over.
 # ---------------------------------------------------------------------------

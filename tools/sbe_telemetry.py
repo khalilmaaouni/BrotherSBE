@@ -44,6 +44,14 @@ Subcommands:
   purge-corrections Deletes captured correction candidates (excerpts of your own
                     messages, secret-redacted and owner-only, but still yours to
                     delete). Shows the count first; --yes to confirm.
+  data-show         Every file this tool can write, by name: what it holds, how
+                    many records are in it, its mode, and which capture switch
+                    governs it. Reads; never writes.
+  data-export       One JSON bundle of everything stored, owner-only, so the
+                    stored data can be read somewhere other than the vault.
+  data-purge        Deletes what is stored. Shows the inventory first; --yes to
+                    confirm; re-checks the filesystem after and reports what
+                    survived. --category narrows it to one category.
   speed             Wall-clock view for rubric metric 3: last 7d vs prior 7d,
                     span-hours per OUTCOMES line (labeled proxy, never invented).
   dedup             One-time cleanup of duplicate hook flushes (backup + count
@@ -54,7 +62,7 @@ absent; nothing is invented. Token counts are labeled as-flushed (the transcript
 may lag the final turn). Old (schema 1) and new lines are both readable: use
 fld() everywhere.
 """
-import json, os, sys, glob, re, datetime, hashlib, time, contextlib
+import json, os, sys, glob, re, stat, datetime, hashlib, time, contextlib
 try:
     import fcntl
 except ImportError:          # a platform with no fcntl (untested elsewhere anyway)
@@ -84,6 +92,54 @@ CORRECTIONS = os.path.join(TEL_DIR, "corrections.jsonl")
 OPERATOR_MODEL = os.path.join(VAULT, "50-Reference", "operator-model.md")
 SESSIONS_GLOB = os.path.join(VAULT, "10-Projects", "*", "Sessions", "*.md")
 
+# ---------------------------------------------------------------------------
+# CAPTURE POLICY. Nothing here is captured unless a switch for that CATEGORY is
+# set, and a category that is off is named in the output rather than silently
+# skipped.
+#
+# The defect this closes: this tool parsed the session transcript and stored
+# excerpts of the operator's own messages BY DEFAULT, with best-effort redaction
+# standing between a customer name, a partner term or an unreleased design and a
+# file on disk. Best effort is the right engineering for a redactor and the
+# wrong basis for a default: a repository holding customer, partner, security or
+# company-confidential material must be able to install this and have it capture
+# nothing at all until somebody decides otherwise, per category.
+#
+# Three categories, three switches, each independent of the others:
+#   metrics      the per-session row in outcomes.jsonl. Counts, model names,
+#                duration, and the basename of the working directory. No message
+#                text, but a directory basename can itself be a client's name,
+#                which is why this is opt-in too.
+#   transcript   the transcript-derived TEXT in the resume brief: the operator's
+#                last message, recent assistant reasoning, recent tool commands.
+#   corrections  the correction candidates in corrections.jsonl: excerpts of the
+#                operator's own messages.
+#
+# The organization override forces all three off and no local switch can turn
+# one back on. It is read from a policy FILE (default /etc/brothersbe/telemetry-
+# policy.conf, a path an ordinary user cannot write on a managed machine) and
+# from an environment variable. Its honest limit, stated here and in
+# docs/KNOWN-LIMITS.md: this is a policy control on a cooperating machine, not
+# an enforcement boundary. Anyone who can edit that file, or run a patched copy
+# of this script, is past it.
+#
+# A policy file that exists and cannot be read, or that carries a directive this
+# version does not recognize, FAILS CLOSED: capture is off and the reason says
+# which file and which line. A policy nobody could read must never be the reason
+# capture was allowed.
+# ---------------------------------------------------------------------------
+CAPTURE_SWITCH = {
+    "metrics": "BROTHERSBE_TELEMETRY_METRICS",
+    "transcript": "BROTHERSBE_TELEMETRY_TRANSCRIPT",
+    "corrections": "BROTHERSBE_TELEMETRY_CORRECTIONS",
+}
+CAPTURE_CATEGORIES = tuple(sorted(CAPTURE_SWITCH))
+ORG_DISABLE_ENV = "BROTHERSBE_TELEMETRY_DISABLE"
+ORG_POLICY_ENV = "BROTHERSBE_TELEMETRY_POLICY"
+DEFAULT_ORG_POLICY = "/etc/brothersbe/telemetry-policy.conf"
+TRUE_WORDS = ("1", "true", "yes", "on")
+POLICY_KEYS = ("capture", "disable")
+
 MIN_API_MSGS = 5
 MIN_TOOL_CALLS = 1
 STOPWARN_MIN_BYTES = 200_000   # transcript smaller than this = trivial, stay silent
@@ -109,6 +165,83 @@ def fld(rec, keys, default=0):
 
 def now_iso():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _truthy(value):
+    return str(value or "").strip().lower() in TRUE_WORDS
+
+
+def org_override_reason():
+    """One sentence naming the file or variable that forces capture off, or "".
+
+    One value rather than a (bool, why) pair, so the reason and the decision
+    cannot disagree: the sentence IS the decision, and an empty sentence is the
+    only way to say nothing forced anything.
+
+    Reads the policy file first, then the environment override. Either one
+    forcing capture off wins over every local switch; neither one can turn a
+    category ON, because an organization switch exists to withhold capture, not
+    to impose it on a machine whose operator did not ask for it.
+    """
+    path = os.environ.get(ORG_POLICY_ENV) or DEFAULT_ORG_POLICY
+    if os.path.exists(path):
+        try:
+            body = open(path, "r", errors="replace").read()
+        except OSError as e:
+            return ("the organization policy %s exists and could not be read (%s), so "
+                    "capture fails closed" % (path, e.strerror or e))
+        for i, raw in enumerate(body.splitlines(), 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            if "=" not in line:
+                return ("the organization policy %s line %d (%r) is not a key = value "
+                        "directive, so capture fails closed" % (path, i, raw.strip()[:60]))
+            key, value = line.split("=", 1)
+            key, value = key.strip().lower(), value.strip().lower()
+            if key not in POLICY_KEYS:
+                return ("the organization policy %s line %d names %r, which this version "
+                        "does not recognize, so capture fails closed" % (path, i, key))
+            if key == "capture" and value not in ("off", "on"):
+                return ("the organization policy %s line %d sets capture to %r, which is "
+                        "neither on nor off, so capture fails closed" % (path, i, value))
+            if (key == "capture" and value == "off") or (key == "disable" and _truthy(value)):
+                return ("the organization policy %s line %d forces every capture category off"
+                        % (path, i))
+    if _truthy(os.environ.get(ORG_DISABLE_ENV)):
+        return ("%s is set in the environment, which forces every capture category off"
+                % ORG_DISABLE_ENV)
+    return ""
+
+
+def capture_off_reason(category):
+    """One sentence naming what was read to keep this category off, or "".
+
+    Truthy means off, and the truthy value is the reason, so no caller can
+    report that nothing was captured without being able to say why.
+    """
+    var = CAPTURE_SWITCH[category]
+    forced = org_override_reason()
+    if forced:
+        return "%s capture is off: %s" % (category, forced)
+    raw = os.environ.get(var)
+    if _truthy(raw):
+        return ""
+    if raw is None:
+        return ("%s capture is off: %s is not set, and every category is off by default"
+                % (category, var))
+    return ("%s capture is off: %s is set to %r, which is not one of %s"
+            % (category, var, raw, ", ".join(TRUE_WORDS)))
+
+
+def capture_state_line(category):
+    """The one sentence `data-show` and the export print for a category,
+    whichever way it went."""
+    off = capture_off_reason(category)
+    if off:
+        return off
+    return "%s capture is on: %s=%s in the environment" % (
+        category, CAPTURE_SWITCH[category], os.environ.get(CAPTURE_SWITCH[category]))
 
 
 # WRITER SERIALIZATION. There used to be no lock anywhere in this repository,
@@ -327,7 +460,14 @@ def scan_corrections(sid, project, user_texts):
     at the weekly review decides what becomes law; cap 5 per session.
     Dedup guard (interim-score fix 2026-07-23): the SessionEnd hook can fire more
     than once per session; a (session_id, text) already in the file is never
-    re-appended."""
+    re-appended.
+
+    Opt-in guard, second copy on purpose: the caller already refuses to collect
+    the texts this reads, and this function writes the file, so the switch is
+    tested where the write happens as well. A control that lives only in the
+    caller is one refactor away from being no control."""
+    if capture_off_reason("corrections"):
+        return 0
     seen = {(c.get("session_id"), c.get("text")) for c in read_jsonl(CORRECTIONS)}
     found = 0
     for txt in user_texts:
@@ -361,10 +501,20 @@ def cmd_outcomes_append():
     if not tp or not os.path.isfile(tp):
         print("sbe_telemetry: transcript not found; nothing recorded")
         return
-    main = parse_transcript(tp, collect_user_texts=True)
+    # THE TRANSCRIPT IS NOT OPENED UNTIL A CATEGORY THAT NEEDS IT IS ON. Both
+    # off is the default installation, and the default installation must read
+    # nothing out of the session at all, not read it and decline to keep it.
+    metrics_why = capture_off_reason("metrics")
+    corrections_why = capture_off_reason("corrections")
+    metrics_on, corrections_on = not metrics_why, not corrections_why
+    if not metrics_on and not corrections_on:
+        print("sbe_telemetry: nothing captured from %s; %s; %s"
+              % (os.path.basename(tp), metrics_why, corrections_why))
+        return
+    main = parse_transcript(tp, collect_user_texts=corrections_on)
     sub = {"out": 0, "files": 0}
     subroot = os.path.join(os.path.dirname(tp), sid, "subagents")
-    if os.path.isdir(subroot):
+    if metrics_on and os.path.isdir(subroot):
         for sf in glob.glob(os.path.join(subroot, "**", "*.jsonl"), recursive=True):
             sub["files"] += 1
             sa = parse_transcript(sf)
@@ -374,6 +524,14 @@ def cmd_outcomes_append():
               % (main["api_msgs"], main["tool_calls"]))
         return
     project = os.path.basename(cwd) or cwd
+    if not metrics_on:
+        # Corrections only. The row is what carries the project basename and the
+        # per-session counts, so with metrics off no row exists and the sentence
+        # below names the switch rather than reporting a recorded session.
+        ncorr = scan_corrections(sid, project, main["user_texts"])
+        print("sbe_telemetry: %s; %d correction candidate(s) captured from %s"
+              % (metrics_why, ncorr, os.path.basename(tp)))
+        return
     hours = 0.0
     if main["first_ts"] and main["last_ts"]:
         try:
@@ -408,6 +566,8 @@ def cmd_outcomes_append():
     ncorr = scan_corrections(sid, project, main["user_texts"])
     print("sbe_telemetry: recorded %s (%dk out, %d tools, %.1fh, %d correction candidates)"
           % (sid[:8], main["out"] // 1000, main["tool_calls"], hours, ncorr))
+    if not corrections_on:
+        print("sbe_telemetry: %s" % corrections_why)
 
 
 def cmd_migrate():
@@ -1253,6 +1413,36 @@ def _resume_path(cwd):
     return os.path.join(TEL_DIR, "last-resume-%s.md" % _project_of(cwd))
 
 
+def _brief_header(last_intent):
+    """The part of the brief that carries no transcript text, so both the
+    captured and the withheld brief are the same document."""
+    return ["# Resume brief (auto-written before compaction)",
+            "",
+            "A compaction just erased the working context. The git autosave holds your",
+            "files (refs/brothersbe/autosave/, one ref per worktree; `sh tools/sbe_autosave.sh recover`",
+            "prints yours); this holds the THREAD. Read it, re-read",
+            "STATE.md, then continue where this leaves off.",
+            "",
+            "## Next intent (write-ahead: what this session was about to do)",
+            (last_intent or "(no write-ahead intent was logged)"),
+            ""]
+
+
+def _write_brief(cwd, lines):
+    """Write the brief owner-only: this is sensitive recent context, like
+    corrections.jsonl. Same boundary handler this code has always carried."""
+    try:
+        os.makedirs(TEL_DIR, exist_ok=True)
+        rp = _resume_path(cwd)
+        fd = os.open(rp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            _write_all(fd, ("\n".join(lines) + "\n").encode())
+        finally:
+            os.close(fd)
+    except OSError:  # sbe: allow-silent boundary handler in a non-blocking hook; the miss surfaces as absent data, never as a false pass
+        pass
+
+
 def cmd_precompact_brief():
     """Distill the dying session into a forward-looking resume brief. The git
     autosave preserves WHAT you had (files); this preserves WHERE you were and
@@ -1268,6 +1458,23 @@ def cmd_precompact_brief():
     tp = payload.get("transcript_path") or ""
     cwd = payload.get("cwd") or os.getcwd()
     if not tp or not os.path.isfile(tp):
+        return
+    # THE WITHHELD BRIEF IS STILL A BRIEF. The file is written either way, so a
+    # resumed session finds the same document in the same place and reads, in
+    # the section where the text would have been, that it was withheld and by
+    # which switch. A brief that simply did not exist would read as a hook that
+    # failed, and the operator would go looking for a bug instead of a setting.
+    why = capture_off_reason("transcript")
+    if why:
+        withheld = "[REDACTED] (%s)" % why
+        _write_brief(cwd, _brief_header(redact(_last_intent(cwd))[0]) + [
+            "## The last thing the operator asked", withheld, "",
+            "## What was being done (recent reasoning)", withheld, "",
+            "## Recent actions", withheld, "",
+            "No text was read out of %s. Set %s=1 to capture the thread here, and read"
+            % (os.path.basename(tp), CAPTURE_SWITCH["transcript"]),
+            "SECURITY.md first: what that stores is listed field by field there.",
+            ""])
         return
     last_user = ""
     assistant_text = []   # recent reasoning/decision snippets
@@ -1318,20 +1525,11 @@ def cmd_precompact_brief():
     tools = [redact(d)[0] for d in tools[-10:]]
     last_user = redact(last_user)[0]
     last_intent = redact(_last_intent(cwd))[0]
-    lines = ["# Resume brief (auto-written before compaction)",
-             "",
-             "A compaction just erased the working context. The git autosave holds your",
-             "files (refs/brothersbe/autosave/, one ref per worktree; `sh tools/sbe_autosave.sh recover`",
-             "prints yours); this holds the THREAD. Read it, re-read",
-             "STATE.md, then continue where this leaves off.",
-             "",
-             "## Next intent (write-ahead: what this session was about to do)",
-             (last_intent or "(no write-ahead intent was logged)"),
-             "",
-             "## The last thing the operator asked",
-             (last_user[:600] or "(none captured)"),
-             "",
-             "## What was being done (recent reasoning)"]
+    lines = _brief_header(last_intent) + [
+        "## The last thing the operator asked",
+        (last_user[:600] or "(none captured)"),
+        "",
+        "## What was being done (recent reasoning)"]
     for a in assistant_text:
         lines.append("- " + a[:300].replace("\n", " "))
     lines.append("")
@@ -1339,17 +1537,7 @@ def cmd_precompact_brief():
     for d in tools:
         lines.append("- " + d)
     lines.append("")
-    # Owner-only: this is sensitive recent context, like corrections.jsonl.
-    try:
-        os.makedirs(TEL_DIR, exist_ok=True)
-        rp = _resume_path(cwd)
-        fd = os.open(rp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            _write_all(fd, ("\n".join(lines) + "\n").encode())
-        finally:
-            os.close(fd)
-    except OSError:  # sbe: allow-silent boundary handler in a non-blocking hook; the miss surfaces as absent data, never as a false pass
-        pass
+    _write_brief(cwd, lines)
 
 
 def cmd_compact_hint():
@@ -1457,6 +1645,188 @@ def cmd_purge_corrections(argv):
         print("purge-corrections: could not remove (%r)" % (e,))
 
 
+# ---------------------------------------------------------------------------
+# WHAT IS STORED, WHERE, AND HOW TO GET RID OF IT. A capture switch is only half
+# an answer: the other half is being able to see exactly what is on disk, take a
+# copy of it, and delete it. All three read the SAME inventory, so a file that
+# `data-show` lists is a file `data-export` copies and `data-purge` removes, and
+# none of the three can quietly know about a file the others do not.
+# ---------------------------------------------------------------------------
+def stored_inventory():
+    """[(category, path, what that file can hold)] for every file this tool writes.
+
+    Built from this module's own path constants and from a glob of the telemetry
+    directory, rather than from a hand-kept list: a per-project resume brief or
+    intent log is named after the project, so a fixed list would report the two
+    projects somebody remembered and miss the rest.
+    """
+    items = [
+        ("metrics", LEDGER,
+         "one row per recorded session: token counts, message and tool counts, model "
+         "names, duration, end reason, and the basename of the working directory"),
+        ("metrics", RATINGS, "felt-outcome ratings you typed with `rate`: score, task, note"),
+        ("metrics", REVIEWS, "weekly review markers you typed with `review-mark`"),
+        ("corrections", CORRECTIONS,
+         "excerpts of your own messages that matched the correction pattern, capped at "
+         "400 characters and 5 per session, secret-redacted, owner-only"),
+        ("housekeeping", VERSION_MARK, "the git sha of the installed skill at the last check"),
+    ]
+    patterns = (
+        ("transcript", "last-resume-*.md",
+         "resume brief: your last message, recent assistant reasoning and recent tool "
+         "commands, secret-redacted"),
+        ("operator-entered", "intent-*.log", "write-ahead intent lines you typed with `intent`"),
+        ("metrics", "*.unlocked-appends",
+         "timestamp and process id of an append that ran without the writer lock"),
+        ("autosave", "autosave.log", "one line per autosave snapshot, skip or lock event"),
+        ("autosave", "autosave-exclusions.log",
+         "paths the autosave content scan kept out of a snapshot, and why (paths and "
+         "reasons only, never the matched content)"),
+    )
+    for category, pattern, what in patterns:
+        for p in sorted(glob.glob(os.path.join(TEL_DIR, pattern))):
+            items.append((category, p, what))
+    return items
+
+
+def _stored_measure(path):
+    """(exists, bytes, records, mode string, note). Never raises: a file that
+    cannot be measured is reported as unmeasured by name, because an inventory
+    that drops what it could not open is the absent-evidence defect."""
+    if not os.path.exists(path):
+        return False, 0, 0, "", ""
+    try:
+        st = os.stat(path)
+        mode = "%03o" % stat.S_IMODE(st.st_mode)
+        records = 0
+        for line in open(path, errors="replace"):
+            if line.strip():
+                records += 1
+        return True, st.st_size, records, mode, ""
+    except OSError as e:
+        return True, 0, 0, "", "could not be measured (%s)" % (e.strerror or e)
+
+
+def cmd_data_show():
+    """Print the capture policy in force and every file it can write."""
+    print("BROTHERSBE STORED DATA (vault %s)" % VAULT)
+    for category in CAPTURE_CATEGORIES:
+        print("  policy: %s" % capture_state_line(category))
+    read = absent = unmeasured = 0
+    for category, path, what in stored_inventory():
+        exists, size, records, mode, note = _stored_measure(path)
+        if not exists:
+            absent += 1
+            print("  [%s] %s: absent, so nothing is stored at this path" % (category, path))
+            continue
+        if note:
+            unmeasured += 1
+            print("  [%s] %s: %s" % (category, path, note))
+            continue
+        read += 1
+        print("  [%s] %s: %d record(s), %d bytes, mode %s -- %s"
+              % (category, path, records, size, mode, what))
+    print("read %d file(s), %d path(s) absent, %d that could not be measured, under %s."
+          % (read, absent, unmeasured, TEL_DIR))
+    print("This lists this vault only. A backup, a mirror or a sync client may hold copies "
+          "of any of it, and nothing here can see those.")
+
+
+def cmd_data_export(argv):
+    """Write one owner-only JSON bundle of everything stored."""
+    out = "brothersbe-telemetry-export.json"
+    it = iter(argv)
+    for a in it:
+        if a == "--out":
+            out = next(it, out)
+    out = os.path.abspath(out)
+    bundle = {"generated": now_iso(), "vault": VAULT, "telemetryDir": TEL_DIR,
+              "policy": {c: capture_state_line(c) for c in CAPTURE_CATEGORIES},
+              "files": []}
+    read = unread = 0
+    for category, path, what in stored_inventory():
+        exists, size, records, mode, note = _stored_measure(path)
+        entry = {"path": path, "category": category, "holds": what, "exists": exists,
+                 "bytes": size, "records": records, "mode": mode}
+        if not exists:
+            bundle["files"].append(entry)
+            continue
+        try:
+            entry["content"] = open(path, errors="replace").read()
+            read += 1
+        except OSError as e:
+            entry["unreadable"] = e.strerror or str(e)
+            unread += 1
+        bundle["files"].append(entry)
+    try:
+        fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            _write_all(fd, (json.dumps(bundle, indent=2, sort_keys=True) + "\n").encode())
+        finally:
+            os.close(fd)
+    except OSError as e:
+        print("data-export: could not write %s (%s); nothing was exported"
+              % (out, e.strerror or e))
+        return
+    print("data-export: wrote %s (owner-only) from %d file(s) under %s; %d could not be read; "
+          "%d path(s) recorded as absent"
+          % (out, read, TEL_DIR, unread,
+             len([f for f in bundle["files"] if not f["exists"]])))
+    print("data-export: this file holds the stored data itself, so treat it as sensitive; "
+          "redaction was applied at capture time and is best effort.")
+
+
+def cmd_data_purge(argv):
+    """Delete what is stored. Names it first, deletes on --yes, then re-checks
+    the filesystem and reports anything that survived, because a purge that
+    reports success from its own intention has proven nothing."""
+    only = ""
+    it = iter(argv)
+    for a in it:
+        if a == "--category":
+            only = next(it, "")
+    items = [(c, p, w) for (c, p, w) in stored_inventory() if not only or c == only]
+    if only and not items:
+        print("data-purge: no category named %r; categories are %s"
+              % (only, ", ".join(sorted({c for c, _p, _w in stored_inventory()}))))
+        return
+    present = []
+    for category, path, _what in items:
+        exists, size, records, _mode, note = _stored_measure(path)
+        if exists:
+            present.append((category, path, records, size, note))
+    if not present:
+        print("data-purge: nothing to purge; %d path(s) checked under %s and none exist"
+              % (len(items), TEL_DIR))
+        return
+    if "--yes" not in argv:
+        for category, path, records, size, note in present:
+            print("  [%s] %s: %d record(s), %d bytes%s"
+                  % (category, path, records, size, ", " + note if note else ""))
+        print("data-purge: %d file(s) above would be deleted. Re-run with --yes." % len(present))
+        return
+    removed = failed = survived = 0
+    for category, path, records, _size, _note in present:
+        try:
+            os.remove(path)
+        except OSError as e:
+            failed += 1
+            print("  FAILED [%s] %s: %s" % (category, path, e.strerror or e))
+            continue
+        if os.path.exists(path):
+            survived += 1
+            print("  STILL PRESENT [%s] %s: the remove reported success and the file is still "
+                  "on disk" % (category, path))
+            continue
+        removed += 1
+        print("  removed [%s] %s (%d record(s))" % (category, path, records))
+    print("data-purge: %d file(s) removed, %d failed, %d still present, of %d checked under %s."
+          % (removed, failed, survived, len(items), TEL_DIR))
+    if failed or survived:
+        print("data-purge: this run did NOT delete everything it named; the lines above say "
+              "which files and why.")
+
+
 def cmd_prediction_audit():
     c = prediction_counts()
     print("prediction ledger: %d sealed, %d scored, %d hits (%s)"
@@ -1499,6 +1869,12 @@ def main():
             cmd_handoff(argv)
         elif cmd == "purge-corrections":
             cmd_purge_corrections(argv)
+        elif cmd == "data-show":
+            cmd_data_show()
+        elif cmd == "data-export":
+            cmd_data_export(argv)
+        elif cmd == "data-purge":
+            cmd_data_purge(argv)
         elif cmd == "prediction-audit":
             cmd_prediction_audit()
         elif cmd == "speed":

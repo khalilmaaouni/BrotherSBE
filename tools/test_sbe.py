@@ -842,5 +842,746 @@ class TestStrictMode(unittest.TestCase):
                           "the verdict line must print the severity it declared")
 
 
+class TestCliSurface(unittest.TestCase):
+    """`bin/sbe` is a facade: every built subcommand delegates to a tool in
+    tools/ that already carries the behavior and the tests. The failure modes a
+    facade adds are its own, and they are what this class pins: a command that
+    exists in the code and not in --help (or the reverse), an unbuilt command
+    that quietly succeeds at nothing, and an exit code that drifts from what the
+    docstring promises a CI job can rely on."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def _run(self, *argv):
+        return subprocess.run([sys.executable, self.SBE] + list(argv),
+                              capture_output=True, text=True, cwd=self.ROOT)
+
+    def _commands(self):
+        spec = importlib.util.spec_from_file_location(
+            "brothersbe_cli", os.path.join(self.ROOT, "src", "brothersbe", "cli.py"),
+            submodule_search_locations=[os.path.join(self.ROOT, "src", "brothersbe")])
+        sys.path.insert(0, os.path.join(self.ROOT, "src"))
+        try:
+            import brothersbe.cli as cli
+            return cli
+        finally:
+            sys.path.pop(0)
+            del spec
+
+    def test_the_launcher_runs_and_reports_the_one_version_this_project_has(self):
+        out = self._run("--version")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        declared = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        self.assertIn(declared, out.stdout,
+                      "the CLI prints a version that is not the one in VERSION")
+
+    def test_every_advertised_command_has_something_behind_it(self):
+        """Scoped honestly, because the first version of this test was close to
+        tautological: --help is generated from the same list the dispatcher
+        reads, so comparing one to the other proves little. What it pins now is
+        the pair of failures that list cannot prevent by construction: a name
+        advertised in the help text with no callable behind it, and a command
+        whose help line is missing so a reader cannot discover it. Both are
+        reachable by hand-editing the epilog or the table."""
+        cli = self._commands()
+        out = self._run("--help")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        advertised = set(re.findall(r"^  ([a-z][a-z-]+) {2,}", out.stdout, re.M))
+        implemented = set(name for (name, _h, _r) in cli.COMMANDS)
+        self.assertEqual(advertised - implemented, set(),
+                         "advertised in --help with nothing behind it: %s"
+                         % (advertised - implemented))
+        self.assertEqual(implemented - advertised, set(),
+                         "implemented but undiscoverable in --help: %s"
+                         % (implemented - advertised))
+        for name, help_, run in cli.COMMANDS:
+            self.assertTrue(callable(run), "%s has no runner" % name)
+            self.assertTrue(help_.strip(), "%s has no help line" % name)
+
+    def test_an_unbuilt_command_refuses_loudly_and_names_its_wave(self):
+        cli = self._commands()
+        # inspect-change left this list when `sbe impact` shipped, and adopt left
+        # it when wave 9 built the adoption kit: each is now a real command. The
+        # list is the wave-by-wave record of what is still owed, so a name leaves
+        # it only when something stands behind it.
+        unbuilt = ["plan", "policy", "exceptions"]
+        known = [n for (n, _h, _r) in cli.COMMANDS]
+        for name in unbuilt:
+            self.assertIn(name, known, "%s vanished from the command table" % name)
+            out = self._run(name)
+            self.assertEqual(out.returncode, cli.EXIT_NOT_BUILT,
+                             "%s exited %d; an unbuilt command must exit %d rather than "
+                             "printing an empty result and succeeding"
+                             % (name, out.returncode, cli.EXIT_NOT_BUILT))
+            self.assertIn("NOT BUILT", out.stderr + out.stdout)
+            self.assertRegex(out.stderr + out.stdout, r"wave \d",
+                             "%s refuses without saying what will build it" % name)
+
+    def test_the_exit_codes_a_ci_job_would_branch_on(self):
+        cli = self._commands()
+        self.assertEqual(self._run("doctor").returncode, cli.EXIT_OK)
+        self.assertEqual(self._run("bogus-command").returncode, cli.EXIT_USAGE,
+                         "an unknown command must be a usage error, never a silent success")
+        self.assertEqual(self._run("verify", "/nonexistent-path-on-purpose").returncode,
+                         cli.EXIT_USAGE,
+                         "a mistyped path must be a usage error; it must never read as a "
+                         "clean scan")
+
+    def test_verify_never_lets_exit_zero_read_as_a_pass(self):
+        """The aggregating commands exit 0 when nothing FAILED, and a run where
+        every check reported NO-DATA also exits 0. The closing line has to say
+        so, because an exit code cannot."""
+        v = tempfile.mkdtemp()
+        try:
+            out = self._run("verify", v)
+            self.assertEqual(out.returncode, 0)
+            self.assertIn("does not mean a control passed", out.stdout,
+                          "verify exited 0 over an empty directory without saying that no "
+                          "control passed")
+        finally:
+            shutil.rmtree(v, ignore_errors=True)
+
+    def test_the_package_imports_with_nothing_installed(self):
+        """Zero dependencies is a promise this project makes on its front page.
+        A facade that needs a pip install to reach the command line would retract
+        it for anyone on a locked-down machine or in a CI image with no index."""
+        out = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import brothersbe; "
+             "print(brothersbe.__version__)" % os.path.join(self.ROOT, "src")],
+            capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertTrue(out.stdout.strip(), "the package imported but reports no version")
+
+
+class TestNoPrivateNameShips(unittest.TestCase):
+    """This repository is public. The estates it was built on are not, and
+    neither are the clients, employers and projects whose work taught it every
+    threshold it ships. A client name reaching a tracked file cannot be taken
+    back: a public git history is a permanent record, and the fix after the fact
+    is a history rewrite, not an edit.
+
+    The list of names is NOT in this file, for the obvious reason that a
+    blocklist naming the client leaks the client. It is read from outside the
+    repository, and when it is absent this test SKIPS with a message saying it
+    examined nothing, rather than passing. An empty check reporting green is the
+    exact failure mode the rest of this project exists to prevent.
+
+    Set BROTHERSBE_PRIVATE_NAMES to a comma-separated list, or
+    BROTHERSBE_PRIVATE_NAMES_FILE to a path holding one name per line
+    (blank lines and # comments ignored). Keep that file outside this tree.
+
+    One honest narrowing, also stated in PUBLISH-CHECKLIST.md: this scans the
+    tracked tree at HEAD. A name that was committed once and deleted later is
+    still in the history and this test cannot see it. The forensic history sweep
+    stays a manual checklist item for that reason."""
+
+    def _names(self):
+        raw = os.environ.get("BROTHERSBE_PRIVATE_NAMES", "")
+        names = [n.strip() for n in raw.split(",") if n.strip()]
+        path = os.environ.get("BROTHERSBE_PRIVATE_NAMES_FILE", "")
+        if not path:
+            default = os.path.expanduser("~/.brothersbe-private-names")
+            if os.path.exists(default):
+                path = default
+        if path and os.path.exists(path):
+            for line in io.open(path, encoding="utf-8"):
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    names.append(line)
+        return sorted(set(names))
+
+    def test_no_private_name_appears_in_a_tracked_file(self):
+        names = self._names()
+        if not names:
+            self.skipTest(
+                "no private-name list configured, so NOTHING was scanned. This is NO-DATA, "
+                "not a clean result: set BROTHERSBE_PRIVATE_NAMES or "
+                "BROTHERSBE_PRIVATE_NAMES_FILE (a path outside this repository) to make this "
+                "check real.")
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=root,
+                                capture_output=True, text=True)
+        self.assertEqual(listed.returncode, 0,
+                         "git ls-files failed, so the scan set is unknown; refusing to report "
+                         "a clean scan over a file list nobody could build")
+        files = [f for f in listed.stdout.split("\0") if f]
+        self.assertTrue(files, "git tracks no files here; that is not a clean scan either")
+        hits, scanned = [], 0
+        for rel in files:
+            full = os.path.join(root, rel)
+            if not os.path.isfile(full):
+                continue
+            try:
+                body = io.open(full, encoding="utf-8", errors="ignore").read()
+            except (IOError, OSError):
+                continue
+            scanned += 1
+            low = body.lower()
+            for name in names:
+                if name.lower() in low:
+                    # Print the FILE and the name's length, never the name and
+                    # never the surrounding line: a failure message is written
+                    # into CI logs, and a leak-detector that prints the leak has
+                    # moved the problem rather than caught it.
+                    hits.append("%s (private name of %d chars)" % (rel, len(name)))
+        self.assertEqual(hits, [],
+                         "a private name reached %d tracked file(s): %s. Fix before the next "
+                         "push; if it is already pushed, the fix is a history rewrite."
+                         % (len(hits), hits))
+        self.assertGreater(scanned, 0, "scanned zero files, which is NO-DATA and not a pass")
+
+
+class TestPluginSurface(unittest.TestCase):
+    """The plugin packaging and the law it packages are two surfaces that can
+    drift apart in silence: a skill can cite a reference file that was renamed,
+    a hook can point at a tool that moved, the manifest version can wander away
+    from VERSION, and the plugin still loads perfectly in every one of those
+    cases. Loading is not the property worth asserting. These tests assert the
+    ones that are, by reading the claims out of the shipped files rather than
+    hardcoding a second copy of them here."""
+
+    ROOT = os.path.join(HERE, "..")
+
+    def _frontmatter(self, path):
+        """Return the YAML-ish frontmatter block of a skill or agent file as a
+        dict of the top-level scalar keys. Deliberately not a YAML parser: the
+        loader needs name and description, and a hand-rolled reader keeps this
+        suite dependency-free the way the rest of it is.
+
+        Returns the dict alone, not a (dict, body) pair. It used to return the
+        pair, and `evals/test_no_data_class.py` correctly refused it: a function
+        returning a two-tuple whose first element could be a verdict, sitting in
+        no registry, is indistinguishable to that lint from a check nothing can
+        reach. The body was unused by every caller anyway."""
+        body = io.open(path, encoding="utf-8").read()
+        self.assertTrue(body.startswith("---\n"),
+                        "%s does not open with a frontmatter block" % path)
+        end = body.find("\n---\n", 3)
+        self.assertGreater(end, 0, "%s has an unterminated frontmatter block" % path)
+        out = {}
+        for line in body[4:end].split("\n"):
+            m = re.match(r"^([a-zA-Z_]+):\s*(.*)$", line)
+            if m:
+                out[m.group(1)] = m.group(2).strip()
+        return out
+
+    def test_manifest_parses_and_agrees_with_the_version_file(self):
+        manifest = json.load(io.open(os.path.join(self.ROOT, ".claude-plugin", "plugin.json"),
+                                     encoding="utf-8"))
+        self.assertEqual(manifest.get("name"), "brothersbe",
+                         "the plugin name is the skill namespace; changing it renames every "
+                         "/brothersbe: command without warning anyone")
+        version = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        self.assertEqual(manifest.get("version"), version,
+                         "plugin.json says %s and VERSION says %s; `claude plugin tag` "
+                         "validates that they agree, so a release cut from this state fails"
+                         % (manifest.get("version"), version))
+        for field in ("description", "repository", "license"):
+            self.assertTrue(manifest.get(field), "plugin.json is missing %s" % field)
+
+    def test_every_skill_declares_the_frontmatter_the_loader_reads(self):
+        skills = sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+        self.assertGreaterEqual(len(skills), 6,
+                                "expected the six namespaced skills, found %d" % len(skills))
+        for path in skills:
+            front = self._frontmatter(path)
+            directory = os.path.basename(os.path.dirname(path))
+            self.assertEqual(front.get("name"), directory,
+                             "%s declares name '%s' but sits in skills/%s; the loader uses the "
+                             "directory, so the two must not disagree"
+                             % (path, front.get("name"), directory))
+            self.assertTrue(front.get("description"),
+                            "%s has no description; a skill with no description is a skill "
+                            "nothing will ever route to" % path)
+
+    def test_every_agent_declares_itself_and_stays_read_only(self):
+        """The reviewer agents claim to be read-only in their own prose. A claim
+        in prose is not a restriction, but the tools list IS one, so the two are
+        pinned together here: an agent that grows a write tool has to change this
+        test, which is the moment somebody notices. The evidence auditor matters
+        most, because an auditor that can write the evidence it approves is not
+        an auditor."""
+        write_tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+        agents = sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))
+        self.assertGreaterEqual(len(agents), 7,
+                                "expected seven reviewer agents, found %d" % len(agents))
+        for path in agents:
+            front = self._frontmatter(path)
+            stem = os.path.splitext(os.path.basename(path))[0]
+            self.assertEqual(front.get("name"), stem,
+                             "%s declares name '%s'" % (path, front.get("name")))
+            self.assertTrue(front.get("description"), "%s has no description" % path)
+            tools = front.get("tools", "")
+            self.assertTrue(tools, "%s declares no tools list" % path)
+            for banned in write_tools:
+                self.assertNotIn(banned, tools,
+                                 "%s is documented as read-only but declares %s"
+                                 % (path, banned))
+
+    def test_no_frontmatter_value_can_break_the_yaml_parser(self):
+        """Found the hard way, by `claude plugin validate` rather than by this
+        suite: a skill description containing a colon followed by a space is not
+        a valid YAML plain scalar, and the failure is silent at runtime. The
+        skill still loads, with EMPTY metadata, so nothing routes to it and no
+        error is printed anywhere. The first version of this test class read the
+        frontmatter with a regex and happily accepted the broken file, which is
+        why the rule is asserted here directly rather than left to the reader:
+        a value holding ': ' must be quoted. Same for a leading '[', '{', '&',
+        '*' or '!', which start YAML structures rather than prose."""
+        starts_structure = ("[", "{", "&", "*", "!", "%", "@", "`")
+        for path in (sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+                     + sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))):
+            body = io.open(path, encoding="utf-8").read()
+            end = body.find("\n---\n", 3)
+            for line in body[4:end].split("\n"):
+                m = re.match(r"^([a-zA-Z_]+):\s*(.*)$", line)
+                if not m:
+                    continue
+                key, value = m.group(1), m.group(2).strip()
+                if not value:
+                    continue
+                quoted = ((value[0] == '"' and value[-1] == '"')
+                          or (value[0] == "'" and value[-1] == "'"))
+                if quoted:
+                    continue
+                self.assertNotIn(": ", value,
+                                 "%s: the %s value holds a colon and is unquoted, so the YAML "
+                                 "parser drops the whole frontmatter and the skill loads with "
+                                 "no metadata at all" % (path, key))
+                if value[0] in starts_structure and not value.startswith("["):
+                    self.fail("%s: the %s value starts with %r, which YAML reads as structure "
+                              "rather than text; quote it" % (path, key, value[0]))
+
+    def test_every_hook_command_points_at_a_file_that_exists(self):
+        hooks = json.load(io.open(os.path.join(self.ROOT, "hooks", "hooks.json"),
+                                  encoding="utf-8"))
+        commands = []
+        for event, blocks in hooks["hooks"].items():
+            for block in blocks:
+                for hook in block["hooks"]:
+                    commands.append((event, hook["command"]))
+        self.assertTrue(commands, "hooks.json wires nothing")
+        for event, command in commands:
+            for cited in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\"\s]+)", command):
+                self.assertTrue(os.path.exists(os.path.join(self.ROOT, cited)),
+                                "the %s hook runs %s, which does not exist" % (event, cited))
+
+    def test_every_plugin_root_path_cited_by_a_skill_or_agent_resolves(self):
+        """This is the drift check. Six skills and seven agents cite the law
+        files, the tools and the templates by path. Renaming any of them leaves
+        a plugin that still validates and still loads, pointing at nothing."""
+        cited = []
+        for path in (sorted(glob.glob(os.path.join(self.ROOT, "skills", "*", "SKILL.md")))
+                     + sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))):
+            body = io.open(path, encoding="utf-8").read()
+            for ref in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)", body):
+                cited.append((path, ref.rstrip(".,)`")))
+        self.assertTrue(cited, "no skill or agent cites the plugin root at all")
+        missing = [(p, r) for (p, r) in cited
+                   if not os.path.exists(os.path.join(self.ROOT, r))]
+        self.assertEqual(missing, [],
+                         "these citations resolve to nothing: %s" % missing)
+
+
+class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
+    """Two privacy defects an external review found, and the fixtures that hold
+    them closed.
+
+    The first: this tool parsed the session transcript and stored excerpts of
+    the operator's own messages by DEFAULT, with best-effort redaction standing
+    between a customer name and a file on disk. A repository holding customer,
+    partner, security or company-confidential material has to be able to install
+    this and have it capture nothing until somebody says otherwise, per
+    category, with an organization switch that cannot be reversed locally.
+
+    The second: the autosave excluded secret-shaped file NAMES, and a secret in
+    a normally named source file (`src/config.py` holding an API key) matched no
+    name pattern and became a permanent git object. The scan now reads CONTENT
+    before `git add` runs, which is the moment a blob would be created.
+
+    Every fixture here runs the real tools in a temporary vault and a real git
+    repository. The environment is scrubbed of every BROTHERSBE_ variable and
+    the organization policy is pinned at a path that does not exist, so a real
+    policy file or an exported switch on the machine running these cannot decide
+    the result."""
+
+    TEL = os.path.join(HERE, "sbe_telemetry.py")
+    AUTOSAVE = os.path.join(HERE, "sbe_autosave.sh")
+    SECRET_LINE = 'API_KEY = "sk-ant-api03-ABCDEFGHIJKLMNOP"\n'
+    OPERATOR_TEXT = "no, that is not what i asked; always use the acme staging bucket"
+
+    def _env(self, vault, **switches):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BROTHERSBE_")}
+        env["BROTHERSBE_VAULT"] = vault
+        env["BROTHERSBE_TELEMETRY_POLICY"] = os.path.join(vault, "policy-that-does-not-exist")
+        env.update(switches)
+        return env
+
+    def _transcript(self, path):
+        """A session over the activity floor, carrying one correction-shaped
+        operator message and one tool command with a client path in it."""
+        msgs = [{"type": "user", "message": {"content": self.OPERATOR_TEXT}}]
+        for i in range(bm.MIN_API_MSGS):
+            body = [{"type": "text", "text": "planning the acme migration"}]
+            if i == 0:
+                body.append({"type": "tool_use", "name": "Bash",
+                             "input": {"command": "ls /srv/acme-partner"}})
+            msgs.append({"type": "assistant",
+                         "message": {"id": "m%d" % i, "model": "claude-test",
+                                     "usage": {"input_tokens": 10, "output_tokens": 20},
+                                     "content": body}})
+        io.open(path, "w").write("\n".join(json.dumps(m) for m in msgs) + "\n")
+        return path
+
+    def _fire(self, vault, subcommand, cwd, **switches):
+        """Run one hook subcommand against a fresh transcript. Returns the
+        completed process, so its exit code and output are inspectable rather
+        than discarded."""
+        tp = self._transcript(os.path.join(vault, "transcript.jsonl"))
+        payload = json.dumps({"transcript_path": tp, "cwd": cwd, "session_id": "sess-abc123"})
+        return subprocess.run([sys.executable, self.TEL, subcommand], input=payload,
+                              text=True, capture_output=True, env=self._env(vault, **switches))
+
+    def _paths(self, vault):
+        tel = os.path.join(vault, "99-System", "telemetry")
+        return (tel, os.path.join(tel, "outcomes.jsonl"), os.path.join(tel, "corrections.jsonl"))
+
+    def _vault(self):
+        v = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, v, True)
+        os.makedirs(os.path.join(v, "99-System", "telemetry"))
+        return v
+
+    def _brief(self, vault):
+        tel = os.path.join(vault, "99-System", "telemetry")
+        briefs = [f for f in os.listdir(tel) if f.startswith("last-resume-")]
+        self.assertEqual(len(briefs), 1, "expected one resume brief, found %r" % briefs)
+        return io.open(os.path.join(tel, briefs[0])).read()
+
+    def test_a_default_installation_captures_no_transcript_text_and_no_correction(self):
+        vault = self._vault()
+        tel, ledger, corrections = self._paths(vault)
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend")
+        self.assertEqual(end.returncode, 0, end.stderr)
+        self.assertFalse(os.path.exists(corrections),
+                         "a default installation wrote %s" % corrections)
+        self.assertFalse(os.path.exists(ledger), "a default installation wrote %s" % ledger)
+        for var in ("BROTHERSBE_TELEMETRY_METRICS", "BROTHERSBE_TELEMETRY_CORRECTIONS"):
+            self.assertIn(var, end.stdout,
+                          "the hook recorded nothing without naming %s: %s" % (var, end.stdout))
+        pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend")
+        self.assertEqual(pre.returncode, 0, pre.stderr)
+        body = self._brief(vault)
+        for leaked in ("staging bucket", "acme migration", "acme-partner", "not what i asked"):
+            self.assertNotIn(leaked, body, "the default resume brief captured %r" % leaked)
+        self.assertIn("[REDACTED]", body)
+        self.assertIn("BROTHERSBE_TELEMETRY_TRANSCRIPT", body,
+                      "the withheld brief does not name the switch that would fill it in")
+
+    def test_each_switch_turns_on_exactly_one_category(self):
+        cases = (
+            ("BROTHERSBE_TELEMETRY_METRICS", True, False, False),
+            ("BROTHERSBE_TELEMETRY_CORRECTIONS", False, True, False),
+            ("BROTHERSBE_TELEMETRY_TRANSCRIPT", False, False, True),
+        )
+        for var, want_ledger, want_corrections, want_text in cases:
+            vault = self._vault()
+            _tel, ledger, corrections = self._paths(vault)
+            end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **{var: "1"})
+            self.assertEqual(end.returncode, 0, end.stderr)
+            self.assertEqual(os.path.exists(ledger), want_ledger,
+                             "%s=1 got outcomes.jsonl exists=%s, wanted %s (%s)"
+                             % (var, os.path.exists(ledger), want_ledger, end.stdout))
+            self.assertEqual(os.path.exists(corrections), want_corrections,
+                             "%s=1 got corrections.jsonl exists=%s, wanted %s (%s)"
+                             % (var, os.path.exists(corrections), want_corrections, end.stdout))
+            if want_corrections:
+                rows = [json.loads(l) for l in io.open(corrections) if l.strip()]
+                self.assertTrue(any("staging bucket" in r.get("text", "") for r in rows),
+                                "corrections capture is on and captured nothing: %r" % rows)
+            pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **{var: "1"})
+            self.assertEqual(pre.returncode, 0, pre.stderr)
+            body = self._brief(vault)
+            self.assertEqual("staging bucket" in body, want_text,
+                             "%s=1 got transcript text in the brief=%s, wanted %s"
+                             % (var, "staging bucket" in body, want_text))
+
+    def test_the_organization_override_forces_every_category_off(self):
+        every_switch = {"BROTHERSBE_TELEMETRY_METRICS": "1",
+                        "BROTHERSBE_TELEMETRY_CORRECTIONS": "1",
+                        "BROTHERSBE_TELEMETRY_TRANSCRIPT": "1"}
+        # (a) the environment override
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        switches = dict(every_switch, BROTHERSBE_TELEMETRY_DISABLE="1")
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **switches)
+        self.assertFalse(os.path.exists(ledger), "a local switch beat the environment override")
+        self.assertFalse(os.path.exists(corrections),
+                         "a local switch beat the environment override")
+        self.assertIn("BROTHERSBE_TELEMETRY_DISABLE", end.stdout,
+                      "the override fired without naming itself: %s" % end.stdout)
+        pre = self._fire(vault, "precompact-brief", "/tmp/acme-backend", **switches)
+        self.assertEqual(pre.returncode, 0, pre.stderr)
+        self.assertNotIn("staging bucket", self._brief(vault),
+                         "a local switch beat the environment override in the resume brief")
+        # (b) the policy file, which is the half a local shell cannot unset
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        policy = os.path.join(vault, "telemetry-policy.conf")
+        io.open(policy, "w").write("# set by the platform team\ncapture = off\n")
+        switches = dict(every_switch, BROTHERSBE_TELEMETRY_POLICY=policy)
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend", **switches)
+        self.assertFalse(os.path.exists(ledger), "a local switch beat the policy file")
+        self.assertFalse(os.path.exists(corrections), "a local switch beat the policy file")
+        self.assertIn(policy, end.stdout,
+                      "the policy file decided the run without being named: %s" % end.stdout)
+        # (c) a policy file this version cannot read fails CLOSED
+        vault = self._vault()
+        _tel, ledger, corrections = self._paths(vault)
+        broken = os.path.join(vault, "broken-policy.conf")
+        io.open(broken, "w").write("capture = maybe\n")
+        end = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                         **dict(every_switch, BROTHERSBE_TELEMETRY_POLICY=broken))
+        self.assertFalse(os.path.exists(ledger),
+                         "an unreadable policy directive let capture proceed")
+        self.assertIn("fails closed", end.stdout, end.stdout)
+
+    # -- the autosave half -------------------------------------------------
+
+    def _git(self, repo):
+        def git(*a):
+            return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True)
+        return git
+
+    def _repo(self):
+        repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, repo, True)
+        git = self._git(repo)
+        git("init", "-q")
+        git("config", "user.email", "t@t.t")
+        git("config", "user.name", "t")
+        os.makedirs(os.path.join(repo, "src"))
+        io.open(os.path.join(repo, "src", "app.py"), "w").write("def f():\n    return 1\n")
+        git("add", "-A")
+        git("commit", "-qm", "init")
+        return repo
+
+    def test_a_secret_in_a_normally_named_source_file_never_becomes_a_git_object(self):
+        repo = self._repo()
+        git = self._git(repo)
+        vault = self._vault()
+        # A file no name pattern will ever match, holding an API key, beside
+        # real unlanded work that MUST still be saved.
+        io.open(os.path.join(repo, "src", "config.py"), "w").write(self.SECRET_LINE)
+        io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED-WORK")
+        fired = subprocess.run(["sh", self.AUTOSAVE, "precompact"],
+                               input=json.dumps({"cwd": repo}), text=True,
+                               capture_output=True, env=self._env(vault))
+        self.assertEqual(fired.returncode, 0, fired.stderr)
+        refs = git("for-each-ref", "--format=%(refname)", "refs/brothersbe/autosave").stdout.split()
+        self.assertEqual(len(refs), 1, "expected one autosave ref, got %r" % refs)
+        listed = git("ls-tree", "-r", "--name-only", refs[0]).stdout.split()
+        self.assertNotIn("src/config.py", listed,
+                         "the secret-bearing source file entered the snapshot tree")
+        self.assertIn("wip.txt", listed, "the content scan dropped the work it exists to save")
+        # The stronger claim, and the one the brief asks for: no git OBJECT for
+        # that content exists anywhere in the repository, so it was never
+        # written rather than written and then hidden from the tree.
+        sha = git("hash-object", os.path.join(repo, "src", "config.py")).stdout.strip()
+        self.assertTrue(sha, "could not compute the blob id of the planted file")
+        present = git("cat-file", "-e", sha)
+        self.assertNotEqual(present.returncode, 0,
+                            "a blob for the secret-bearing file exists in the object database "
+                            "(%s); the scan ran after git add, not before it" % sha)
+
+    def test_the_exclusion_record_names_what_was_excluded_and_why(self):
+        repo = self._repo()
+        vault = self._vault()
+        io.open(os.path.join(repo, "src", "config.py"), "w").write(self.SECRET_LINE)
+        io.open(os.path.join(repo, "blob.dat"), "wb").write(b"pre\x00post")
+        io.open(os.path.join(repo, "big.txt"), "w").write("x" * 4096)
+        fired = subprocess.run(["sh", self.AUTOSAVE, "precompact"],
+                               input=json.dumps({"cwd": repo}), text=True, capture_output=True,
+                               env=self._env(vault, BROTHERSBE_AUTOSAVE_MAX_BYTES="1024"))
+        self.assertEqual(fired.returncode, 0, fired.stderr)
+        record = os.path.join(vault, "99-System", "telemetry", "autosave-exclusions.log")
+        self.assertTrue(os.path.exists(record), "no exclusion record was written at all")
+        body = io.open(record).read()
+        for path, reason in (("src/config.py", "content matched a secret shape"),
+                             ("blob.dat", "binary content"),
+                             ("big.txt", "past the 1024 byte limit")):
+            self.assertIn(path, body, "%s was dropped without being named" % path)
+            self.assertIn(reason, body, "%s was named without a reason" % path)
+        self.assertNotIn("sk-ant-api03", body,
+                         "the exclusion record wrote down the secret it excluded")
+        self.assertIn("scanned", body, "the record does not say how many files it scanned")
+
+    def test_autosave_is_opt_in_in_a_declared_production_repository(self):
+        repo = self._repo()
+        git = self._git(repo)
+        vault = self._vault()
+        io.open(os.path.join(repo, ".brothersbe-production"), "w").write("")
+        io.open(os.path.join(repo, "wip.txt"), "w").write("UNLANDED-WORK")
+        off = subprocess.run(["sh", self.AUTOSAVE, "precompact"], input=json.dumps({"cwd": repo}),
+                             text=True, capture_output=True, env=self._env(vault))
+        self.assertEqual(off.returncode, 0, off.stderr)
+        self.assertEqual([], git("for-each-ref", "--format=%(refname)",
+                                 "refs/brothersbe/autosave").stdout.split(),
+                         "a production repository was snapshotted without being opted in")
+        log = io.open(os.path.join(vault, "99-System", "telemetry", "autosave.log")).read()
+        self.assertIn("BROTHERSBE_AUTOSAVE_PRODUCTION", log,
+                      "the skip does not name the switch that would enable it: %s" % log)
+        on = subprocess.run(["sh", self.AUTOSAVE, "precompact"], input=json.dumps({"cwd": repo}),
+                            text=True, capture_output=True,
+                            env=self._env(vault, BROTHERSBE_AUTOSAVE_PRODUCTION="1"))
+        self.assertEqual(on.returncode, 0, on.stderr)
+        refs = git("for-each-ref", "--format=%(refname)", "refs/brothersbe/autosave").stdout.split()
+        self.assertEqual(len(refs), 1, "opting in did not produce a snapshot: %r" % refs)
+
+    # -- see it, take it, delete it ----------------------------------------
+
+    def test_show_export_and_purge_do_what_they_claim(self):
+        vault = self._vault()
+        tel, ledger, corrections = self._paths(vault)
+        stored = self._fire(vault, "outcomes-append", "/tmp/acme-backend",
+                            BROTHERSBE_TELEMETRY_METRICS="1",
+                            BROTHERSBE_TELEMETRY_CORRECTIONS="1")
+        self.assertEqual(stored.returncode, 0, stored.stderr)
+        self.assertTrue(os.path.exists(ledger) and os.path.exists(corrections),
+                        "the fixture stored nothing to show, export or purge: %s" % stored.stdout)
+
+        shown = subprocess.run([sys.executable, self.TEL, "data-show"],
+                               capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        for want in (ledger, corrections, "record(s)", "policy:"):
+            self.assertIn(want, shown.stdout, "data-show does not report %r" % want)
+
+        out = os.path.join(vault, "export.json")
+        exported = subprocess.run([sys.executable, self.TEL, "data-export", "--out", out],
+                                  capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertTrue(os.path.exists(out), "data-export wrote nothing: %s" % exported.stdout)
+        bundle = json.loads(io.open(out).read())
+        by_path = {f["path"]: f for f in bundle["files"]}
+        self.assertIn("staging bucket", by_path[corrections]["content"],
+                      "the export does not carry what is stored")
+        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o600,
+                         "the export is not owner-only")
+
+        dry = subprocess.run([sys.executable, self.TEL, "data-purge"],
+                             capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertTrue(os.path.exists(corrections),
+                        "data-purge deleted without --yes")
+        self.assertIn("--yes", dry.stdout)
+
+        purged = subprocess.run([sys.executable, self.TEL, "data-purge", "--yes"],
+                                capture_output=True, text=True, env=self._env(vault))
+        self.assertEqual(purged.returncode, 0, purged.stderr)
+        for path in (ledger, corrections):
+            self.assertFalse(os.path.exists(path),
+                             "data-purge reported success and %s is still on disk: %s"
+                             % (path, purged.stdout))
+            self.assertIn(path, purged.stdout, "%s was removed without being named" % path)
+        self.assertIn("0 failed", purged.stdout)
+        # The export made outside the vault survives, which is the point of
+        # having an export at all, and is why the docs call it sensitive.
+        self.assertTrue(os.path.exists(out))
+
+
+class TestMarketplaceManifest(unittest.TestCase):
+    """Wave 10 packages this plugin for `claude plugin marketplace add`, which
+    means a SECOND file, `.claude-plugin/marketplace.json`, now carries the
+    same version number `.claude-plugin/plugin.json` and `VERSION` already pin
+    against each other (`TestPluginSurface.
+    test_manifest_parses_and_agrees_with_the_version_file`). A marketplace
+    entry that drifts from the plugin it names is the same silent packaging
+    defect that test already guards against, one file further out, so this
+    class extends the same pin rather than starting a second one.
+
+    The shape asserted here was not taken from memory. The installed CLI
+    (`claude --version` reported 2.1.207 when this was written) was asked
+    directly, and its decisive lines were:
+
+        `claude plugin marketplace add --help` prints:
+        "Add a marketplace from a URL, path, or GitHub repo"
+
+        `claude plugin validate --help` prints:
+        "Validate a plugin or marketplace manifest"
+
+    Neither --help prints a JSON schema, so the field shape itself (top-level
+    name/owner/plugins, each plugin entry's name/source/description/version)
+    was cross-checked against real, already-installed marketplace.json files
+    on this machine that ship a single self-hosted plugin the same way this
+    repository does (`~/.claude/plugins/marketplaces/mattpocock` and
+    `.../karpathy-skills`, both using `"source": "./"` to name the repo's own
+    root rather than a second clone URL), and then confirmed the only way
+    that actually counts: running the installed `claude plugin validate`
+    against the exact file this project ships, which the second test below
+    re-runs so a future shape change is caught here rather than only at the
+    next human's release-day run of the same command."""
+
+    ROOT = os.path.join(HERE, "..")
+    MANIFEST = os.path.join(ROOT, ".claude-plugin", "marketplace.json")
+
+    def test_marketplace_manifest_parses_and_pins_every_version_together(self):
+        self.assertTrue(os.path.exists(self.MANIFEST),
+                        "%s does not exist; `claude plugin marketplace add` has nothing to read"
+                        % self.MANIFEST)
+        manifest = json.load(io.open(self.MANIFEST, encoding="utf-8"))
+        self.assertEqual(manifest.get("name"), "brothersbe",
+                         "the marketplace name; changing it changes what a user types after "
+                         "`claude plugin marketplace add`")
+        self.assertIn("owner", manifest, "marketplace.json has no owner")
+
+        plugins = manifest.get("plugins")
+        self.assertTrue(plugins, "marketplace.json declares no plugins")
+        entry = plugins[0]
+        self.assertEqual(entry.get("name"), "brothersbe",
+                         "the plugin entry name must match .claude-plugin/plugin.json's own "
+                         "name or `claude plugin install brothersbe@brothersbe` resolves to "
+                         "the wrong thing")
+        self.assertEqual(entry.get("source"), "./",
+                         "this repository ships the plugin it also markets, so the entry "
+                         "points at its own root, not a second clone URL")
+        self.assertTrue(entry.get("description"), "the plugin entry has no description")
+
+        version = io.open(os.path.join(self.ROOT, "VERSION"), encoding="utf-8").read().strip()
+        plugin_manifest = json.load(io.open(
+            os.path.join(self.ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8"))
+        self.assertEqual(plugin_manifest.get("version"), version,
+                         "plugin.json and VERSION already disagree; that is "
+                         "TestPluginSurface's own pin, so if this line fails, that one is "
+                         "failing too")
+        self.assertEqual(entry.get("version"), version,
+                         "marketplace.json's plugin entry says %s, VERSION says %s; `claude "
+                         "plugin tag` validates that plugin.json and any enclosing marketplace "
+                         "entry agree, so a release cut from this state fails that check"
+                         % (entry.get("version"), version))
+        top_version = (manifest.get("metadata") or {}).get("version")
+        self.assertEqual(top_version, version,
+                         "marketplace.json's own metadata.version says %s, VERSION says %s"
+                         % (top_version, version))
+
+    def test_marketplace_manifest_validates_against_the_installed_cli(self):
+        claude_bin = shutil.which("claude")
+        if not claude_bin:
+            self.skipTest(
+                "the `claude` CLI is not on PATH in this environment, so nothing ran "
+                "`claude plugin validate` here. This is NO-DATA, not a pass: "
+                "test_marketplace_manifest_parses_and_pins_every_version_together above still "
+                "checks the shape by hand, but only a real run of the installed CLI proves the "
+                "CLI itself accepts this file, and that did not happen on this run.")
+        result = subprocess.run([claude_bin, "plugin", "validate", self.MANIFEST],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0,
+                         "`claude plugin validate %s` exited %d:\nSTDOUT:\n%s\nSTDERR:\n%s"
+                         % (self.MANIFEST, result.returncode, result.stdout, result.stderr))
+        self.assertIn("Validation passed", result.stdout,
+                      "the CLI exited 0 but did not say Validation passed: %s" % result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

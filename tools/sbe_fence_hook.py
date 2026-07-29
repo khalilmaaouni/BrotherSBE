@@ -447,19 +447,10 @@ def normalize_claim(pattern):
     return posixpath.normpath(p)
 
 
-def paths_overlap(target, claim):
-    """True when a concrete root-relative target falls inside a declared claim.
-
-    Three ways a claim covers a target, all of them ordinary in a hand-written
-    registry: the same path, a directory prefix ("tools/" covers
-    "tools/sbe_gate.py"), and a glob ("docs/*.md" covers "docs/SETUP.md").
-    fnmatch handles the glob case with an explicit separator guard, because
-    fnmatch's '*' happily crosses '/' and a claim of "docs/*" must not silently
-    swallow "docs/guides/01-quickstart.md" that its author never named."""
-    t = normalize_claim(target)
-    c = normalize_claim(claim)
-    if not t or not c:
-        return False
+def _spelling_overlap(t, c):
+    """The three exact-spelling overlap rules, factored out so the case-folded
+    retry in `paths_overlap` can run the identical logic on lowered strings
+    instead of drifting out of sync with it."""
     if t == c:
         return True
     if t.startswith(c + "/"):
@@ -472,6 +463,84 @@ def paths_overlap(target, claim):
     if any(ch in c for ch in "*?["):
         if fnmatch.fnmatch(t, c) and ("**" in c or c.count("/") == t.count("/")):
             return True
+    return False
+
+
+def _case_insensitive_probe(path):
+    """Does swapping the case of this existing path's own name still find it?
+
+    Case (in)sensitivity is a property of the volume a path lives on, not of
+    any one file on it, so probing one real entry answers the question for
+    every path beneath the same mount. `path` must exist; the probe reads the
+    filesystem and writes nothing. Returns False on anything it cannot
+    confirm, which is this hook's fail-open bias applied to the probe itself:
+    an inconclusive probe must not manufacture a deny that was not there
+    before this fix.
+    """
+    try:
+        parent, name = os.path.split(os.path.realpath(path))
+        swapped = name.swapcase()
+        if not name or swapped == name:
+            # Nothing alphabetic to flip (a name of digits or symbols): this
+            # entry cannot answer the question, so it is not asked.
+            return False
+        candidate = os.path.join(parent, swapped)
+        return os.path.exists(candidate) and os.path.samefile(path, candidate)
+    except OSError:
+        return False
+
+
+def _same_entry_case_insensitive(root, t, c):
+    """True only when the two case-variant spellings `t` and `c` name ONE
+    filesystem entry, confirmed rather than assumed.
+
+    When both spellings exist on disk already, `os.path.samefile` over their
+    real paths is definitive: matching inodes mean one file no matter what the
+    strings say, which is the same proof
+    `test_a_case_variant_of_a_fenced_path_is_allowed_which_is_a_limit` uses on
+    itself before it trusts the fixture. When one or both do not exist yet (a
+    Write about to create the target, or a fence naming a file nobody wrote),
+    there is nothing to samefile, so `root` itself is probed instead: if this
+    project's own volume folds case on lookup, every path under it does too."""
+    full_t = os.path.join(root, t.replace("/", os.sep))
+    full_c = os.path.join(root, c.replace("/", os.sep))
+    try:
+        if os.path.exists(full_t) and os.path.exists(full_c):
+            return os.path.samefile(full_t, full_c)
+    except OSError:
+        return False
+    return _case_insensitive_probe(root)
+
+
+def paths_overlap(target, claim, root=None):
+    """True when a concrete root-relative target falls inside a declared claim.
+
+    Three ways a claim covers a target, all of them ordinary in a hand-written
+    registry: the same path, a directory prefix ("tools/" covers
+    "tools/sbe_gate.py"), and a glob ("docs/*.md" covers "docs/SETUP.md").
+    fnmatch handles the glob case with an explicit separator guard, because
+    fnmatch's '*' happily crosses '/' and a claim of "docs/*" must not silently
+    swallow "docs/guides/01-quickstart.md" that its author never named.
+
+    CASE. The exact-spelling comparison above used to be the only one, so on a
+    case-insensitive filesystem (the macOS default) a fence written for
+    "docs/SETUP.md" let a second writer land on "docs/setup.md": one file, two
+    spellings, and only one of them was compared. When the exact comparison
+    misses, this retries case-folded, but a case-folded MATCH is never trusted
+    on its own, because two honestly different files named "a.md" and "A.md"
+    on a case-sensitive filesystem (the Linux default) must not false-conflict.
+    `root` is what makes the retry a confirmation rather than a guess: without
+    it (a caller that has no filesystem to ask) the fold is skipped and the
+    exact-spelling answer stands, which is this hook's fail-open bias again."""
+    t = normalize_claim(target)
+    c = normalize_claim(claim)
+    if not t or not c:
+        return False
+    if _spelling_overlap(t, c):
+        return True
+    if root and _spelling_overlap(t.lower(), c.lower()) and _same_entry_case_insensitive(
+            root, t, c):
+        return True
     return False
 
 
@@ -778,7 +847,7 @@ def decide(payload):
             for fence in found.fences:
                 if same_session(fence.session, my_session):
                     continue
-                if any(paths_overlap(rel, claim) for claim in fence.files):
+                if any(paths_overlap(rel, claim, root) for claim in fence.files):
                     return Decision(
                         deny_payload(refusal_reason(rel, fence, my_session)), notes)
         return Decision(None, notes)

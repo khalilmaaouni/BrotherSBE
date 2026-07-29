@@ -1,0 +1,347 @@
+# The `sbe` command line
+
+One entry point instead of nine script paths.
+
+```
+bin/sbe doctor
+```
+
+No install step. `bin/sbe` puts `src/` on the path itself and calls the package, because this
+project's promise is that a clone works with nothing else installed, and requiring
+`pip install` to reach the command line would quietly retract that for anyone on a locked-down
+machine or in a CI image with no package index. Put `bin/` on your PATH or call it by path.
+
+## What it is, and what it is not
+
+It is a **facade**. Every built subcommand delegates to the tool in `tools/` that already
+carries the behavior, the evals and the unit tests, and it hands back that tool's exit code.
+Nothing was reimplemented to build this surface, and nothing in `tools/` changed. The old
+invocations still work exactly as documented everywhere else in this repository, and they are
+not deprecated: deprecating a command that 509 evals and a dozen pasted doc examples point at
+is a separate change with its own risk, and it is not being smuggled into a packaging wave.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `doctor` | checks this installation and the environment it will run in |
+| `verify` | design completeness check, then the hard gates, then the scored surface |
+| `review` | the scored surface including soft findings, plus the hard gates |
+| `design` | delegates to `tools/sbe_design.py` |
+| `gate` | delegates to `tools/sbe_gate.py` (a gate name, or a directory for all of them) |
+| `score` | delegates to `tools/sbe_score.py` |
+| `intake` | delegates to `tools/sbe_intake.py` |
+| `decide` | delegates to `tools/sbe_decide.py` |
+| `fences` | prints the live fences the write hook would enforce |
+| `impact` | reads the git diff and reconciles it with the declared intake tier |
+| `inspect-change` | alias of `impact`, the name the finalization brief uses |
+| `evidence` | generate a receipt by running the command, verify it, or show its trust level |
+| `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
+| `adopt` | inspect a repository for installation readiness, dry run by default |
+| `status` | blocker-first summary of where a change stands, read from recorded state |
+| `init` | install BrotherSBE's local footprint into a repository, dry run by default |
+| `version` | the version and the evidence schema version |
+
+Three more are **present and refuse**: `plan`, `policy` and `exceptions`.
+Each names what is missing and which wave builds it, and exits 3.
+They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
+rather than printing an empty result, because a command that succeeds at nothing is the exact
+failure this project exists to stop.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | the command ran and no control FAILED |
+| 1 | a control FAILED, or the underlying tool exited nonzero |
+| 2 | usage error: unknown command, missing argument, bad path |
+| 3 | the command exists and is not built yet |
+
+Read 0 precisely. It means nothing failed. It does **not** mean something passed: a run where
+every check reported NO-DATA also exits 0, because nothing failed and nothing was examined
+either. `verify` and `review` print a closing line saying so, since an exit code cannot.
+
+## Machine-readable output
+
+`doctor --json` emits the tool version and the evidence schema version alongside its checks,
+so a consumer can tell which contract it is reading:
+
+```json
+{
+  "tool": "sbe",
+  "toolVersion": "1.0.0-rc.1",
+  "schemaVersion": "1.0",
+  "command": "doctor",
+  "result": "PASS",
+  "checks": [{"name": "python", "result": "PASS", "detail": "3.9.6 (floor is 3.9)"}]
+}
+```
+
+JSON output on the other commands arrives with the evidence work, not before: emitting a JSON
+envelope around a verdict whose provenance is not yet bound to a commit would dress an
+advisory result as a machine-readable authoritative one.
+
+## `sbe impact`, and the one rule that makes it safe
+
+```bash
+bin/sbe impact . --base main --intake design/my-change/00-intake.json
+```
+
+It converts detector hits into the same five intake answers a person gives, and hands them to
+the intake's own `compute_tier`. One rule, one table, two inputs, so a tier derived from code
+and a tier declared by a human cannot drift apart.
+
+- It may **raise** a declared tier. It may **never lower** one.
+- Disagreements are resolved by a **disposition**, not by an argument: a record naming the
+  detector, the decision, the reason, who decided, and the head commit it was decided against.
+  A disposition written against a different commit resolves nothing, and a disposition with no
+  reason is an off switch rather than a decision.
+- The proposed tier is a **floor**. `consumers` cannot be read from a diff and is assumed at
+  its lowest value; every file no detector covers is listed under `unmeasured` by name.
+- `--strict` makes NO-DATA block too, which is what protected CI wants and what a local run
+  usually does not.
+
+Verdicts: `PASS` (nothing in the diff contradicts the declared tier), `REVIEW-REQUIRED` (the
+diff shows more than was declared, with no current disposition), `FAIL` (the intake is
+malformed or unreadable), `NO-DATA` (no diff, or no intake to compare against).
+
+Limits, in full, beside the behavior: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**, run
+on this repository's fixtures and its own diff, and on no other estate.
+
+## Python floor
+
+3.9, which is the system Python on the machine that maintains this, so it is the floor that is
+actually exercised rather than the one that sounds modern. `doctor` checks it and FAILs below
+it.
+
+## `sbe evidence`, and the rule that makes a receipt mean something
+
+```bash
+bin/sbe evidence run --out evidence/tests.json -- pytest -q
+bin/sbe evidence verify evidence/tests.json
+bin/sbe evidence show evidence/tests.json
+```
+
+The invariant, in one sentence: **a receipt only counts as evidence for the commit it was
+generated against, by a wrapper that ran the command itself.**
+
+Before this, every receipt the gates read could be typed by hand by the same agent whose work
+it verified. A fabricated duration, exit code, row count or rerun id satisfied the schema, so a
+gate could PASS on a run nobody's command ever performed, and nothing bound a receipt to a
+commit either, so one written against older code still passed after that code changed.
+
+`run` **executes the command**. There is no flag that accepts a duration, an exit code or an
+output digest; those come from the run or the receipt does not exist. It records repository
+identity, base and head commit, the exact argv, start and end in ISO 8601 UTC, duration, exit
+code, python and `sbe` versions, the platform, whether the tree was dirty, and the files the
+receipt covers with their content digests. Its own exit code is the command's, so a failing
+command cannot be laundered into a passing evidence step by the fact that a receipt got
+written about it.
+
+`--covers <path>` is repeatable and names the files this run is evidence for. Without it, the
+files changed between base and head are used. `verify` re-hashes those files, which is how it
+tells you the code moved after the evidence was made.
+
+`--timeout SECONDS` bounds the command. Past it, the child is killed and no receipt is written:
+no exit code was ever observed, so there is nothing honest to seal, and `sbe evidence run` exits
+non-zero with the timeout named on stderr instead. **There is no default.** A silent timeout
+would kill a legitimate long-running test suite and hand back nothing to show for it, which is
+the exact false-positive pattern this project's own kill criteria warn against, so a run with no
+`--timeout` can hang exactly as far as the command itself hangs. Pass it explicitly when the
+command is untrusted or has hung before.
+
+`verify` refuses a receipt path it cannot safely open **before** it opens it: a FIFO, a socket, a
+device, or a file with no read permission is named and refused in bounded time, in both text and
+`--json` mode, rather than read directly, which used to block the command forever on a FIFO with
+no verdict printed at all.
+
+**stdout and stderr are recorded as SHA256 digests and byte counts, never as text.** A receipt
+gets committed, pasted into a pull request and handed to whoever asks for evidence, and a
+command that prints a token would otherwise persist it in the one artifact everybody is
+encouraged to share.
+
+`verify` verdicts:
+
+| Verdict | When |
+|---|---|
+| `PASS` | the seal matches, the head commit is current, every covered file still holds the bytes recorded, and the tree was clean at generation time |
+| `FAIL` | the receipt path could not be safely opened (a FIFO, socket, device or unreadable file), the receipt does not parse, its schema version is unknown, a required field records nothing, the seal does not match, the head commit has moved, or a covered file changed or vanished |
+| `NO-DATA` | the receipt is sound but was generated on a dirty tree, or covers no file at all. Advisory is NO-DATA here, never a pass |
+
+`--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
+verdict that does not say what it read is not trustworthy output.
+
+`show` prints the receipt and names its **trust level** every time: `PROTECTED-CI` when
+`SBE_CI_RUN_ID` was set by the environment AND the tree was clean, `LOCAL-ADVISORY` otherwise.
+A CI job over uncommitted edits is a local run wearing a badge, and it is labelled as one.
+
+The `runId` seal is **tamper evidence, not a signature**: it catches a plausible receipt nobody
+produced, and it does not stop somebody who read `src/brothersbe/evidence.py`. That is why a
+local receipt is never more than advisory. Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
+**INTERNAL-EVAL**.
+
+## `sbe task`, and the postcondition that survives Bash
+
+```bash
+bin/sbe task open --id wave5 --agent alpha --role writer \
+  --base $(git rev-parse HEAD) --verify "python3 tools/test_sbe_tasks.py" \
+  --owns src/brothersbe/tasks.py --owns tools/test_sbe_tasks.py
+bin/sbe task list
+bin/sbe task close wave5
+```
+
+The write fence is a PreToolUse hook that fails open and cannot govern Bash, because shell
+cannot be parsed reliably. `sbe task` is the after-the-fact layer: `open` records who owns
+what in `.sbe/tasks.json` (one file, atomic rewrite, no service), and `close` computes what
+actually changed, the union of `git diff --name-only <base>...HEAD` and `git status
+--porcelain`, inside the task's `--worktree` if one was declared, else the shared tree, and
+compares it against the declaration. Uncommitted edits count, and a rename counts both sides.
+The shell is never parsed; the diff is simply read.
+
+- Every changed path outside the owned paths is a **violation, listed by name**: verdict FAIL,
+  exit nonzero, the task stays open. Changed paths inside ownership print as the evidence of
+  scope kept. A declared `--read-only` path that changed is a violation too, flagged as such:
+  read-only means read.
+- A base commit that no longer resolves is **NO-DATA with the reason, never a pass**.
+- `close --force` requires `--who` and `--why`, records that disposition in the record, and
+  marks the close **FORCED**, never silently clean.
+- `open` refuses (exit 2, reason on stderr, colliding task named) when the id is already open,
+  or when any owned path overlaps an owned path of another open task. Overlap is the fence
+  hook's own `paths_overlap`, imported rather than re-typed, including its confirmed
+  case-folding on case-insensitive filesystems; a test fails if that import is ever replaced
+  by a local copy.
+- `check` re-runs the overlap scan across all open tasks, so a collision injected into the
+  JSON by hand is caught the same way `open` would have caught it.
+- `fence` renders the markdown fence view from the registry, one direction only, JSON to
+  markdown, printed for a human to paste into a STATE.md style registry. Nothing reads
+  markdown fences back into the registry, and the hand-written fence flow keeps working
+  untouched.
+- Reviewer separation: a `--role reviewer` task cannot open owning any path under the evidence
+  store (default `.sbe/evidence`, `--evidence-dir` to override), and a reviewer whose diff
+  touches a receipt FAILs at close **even under `--force`**; force may not waive that class.
+  This separates roles inside the registry; it cannot stop an actor who never registers.
+
+The registry file itself (`.sbe/tasks.json`) is exempted by exact name from the comparison,
+because `open` writes it and counting it would make an ordinary single-writer flow unable to
+close clean, which is this control's own kill criterion. `expiry` is informational: nothing
+deletes a task on a clock. Concurrent writers of the registry file are out of scope (atomic
+rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
+**INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
+
+## `sbe adopt`, and the line it will never cross
+
+```bash
+bin/sbe adopt .                 # dry run (the default): every proposal as a unified diff, writes nothing
+bin/sbe adopt . --apply         # writes what was proposed; never overwrites an existing file
+bin/sbe adopt . --apply --force # overwrites an existing file that differs from the proposal
+```
+
+Detects the stack by walking the tree (languages by extension, a migrations directory, dbt
+models, API contract files, existing CI workflows), reusing the SAME path patterns `sbe impact`
+already carries (`brothersbe.impact.DETECTORS`), so a pattern that means "this is an OpenAPI
+document" to one tool means the same thing to the other. From that it proposes a provisional
+`.brothersbe/policy.json` (wave 3's own repository policy schema has not shipped; this is a
+smaller shape built from what `sbe adopt` can detect, and the file says so) and a
+`.github/CODEOWNERS` generated from that same policy, protecting the manifest, the hooks, this
+repository's own policy and config, where the evidence schema is declared, product and consumer
+CI, and release files. Both proposals are **deterministic**, which is what makes a second
+`--apply` a no-op: nothing about them changes between two runs over an unchanged tree.
+
+The adoption report also names three protections that live on GitHub, not on a filesystem:
+branch protection, required status checks, and whether review from a code owner is *required*.
+**None of the three can ever read `PRESENT` from this command.** They report `UNVERIFIABLE-HERE`
+unconditionally, naming what checking them for real would take (a GitHub token with repo scope,
+plus admin rights), because this tool holds no credentials and asks for none. A CODEOWNERS file
+merely *existing* in the tree is a separate, locally-checkable fact under `localFacts`, never
+folded into a claim about GitHub's settings. `tools/test_sbe_adopt.py`'s kill-criterion fixture
+pins exactly this: a report that ever claims one of the three PRESENT from a local read is worse
+than the refusal this command used to print instead of a result.
+
+Full checklist of what only a human with admin rights can turn on: `docs/ADOPTION.md`. Limits in
+full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+## `sbe status`, and the rule that keeps it from becoming a second gate runner
+
+```bash
+bin/sbe status .                 # blocker-first summary of the current repository
+bin/sbe status . --base main     # diff-derived sections read against a stated base
+bin/sbe status . --json          # the same six sections, machine-readable
+```
+
+One truthful, blocker-first answer to "where does this change stand", read from state
+other commands already recorded. It **never runs the suites itself**: nothing in this
+command starts a subprocess, and nothing in it computes a new verdict over source code.
+It reads `sbe evidence` receipts, the `sbe task` registry, an intake file, a disposition
+file, and the diff (the same way `sbe impact` already reads it, by calling that module
+rather than re-deriving the git plumbing). If a truthful summary could not be produced
+without running the suites or becoming a second `sbe verify`, this command would refuse
+rather than run them; it does not need to, because every finding below is something
+recorded state already answers.
+
+Six sections, blocker-first, and **every positive or empty line names what it inspected**:
+
+1. **BROKEN CLAIMS**: an evidence receipt under `.sbe/evidence/` that fails `sbe evidence
+   verify` (stale, wrong commit, malformed), and a disposition bound to a commit that is
+   not the current HEAD.
+2. **MERGE BLOCKERS**: an intake tier disagreeing with the diff-derived tier `sbe impact`
+   proposes, with no disposition recorded; an intake that cannot be read; a task closed
+   `--force`d; and a receipt that verifies as trustworthy but recorded a nonzero exit
+   code, meaning a check actually ran and failed and evidence of that failure already
+   exists.
+3. **ACTIVE CONFLICTS**: open tasks in `.sbe/tasks.json` with overlapping owned paths,
+   read by calling `tasks.load_registry`, `tasks.open_tasks` and `tasks.claims_overlap`
+   directly, the same functions `sbe task check` itself runs; there is no second copy of
+   the overlap rule here.
+4. **MISSING EVIDENCE**: for a declared tier above T0, a design/gate/score kind no
+   verified receipt's `argv` names, each naming the command that would fill it.
+5. **COMPLETED EVIDENCE**: receipts that verify clean with a zero exit code, printed with
+   their trust label (`LOCAL-ADVISORY` or `PROTECTED-CI`) every time.
+6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
+   plus the scope sentence naming exactly which stores this run read.
+
+Where it looks, and this is a stated limit, not a silent one: `<path>/00-intake.json`,
+`<path>/disposition.json`, `<path>/.sbe/evidence/` (recursively), `<path>/.sbe/tasks.json`.
+These are flat, single-dossier conventions, the same ones `tools/test_sbe_impact.py`'s own
+fixtures write to; a dossier nested under `design/<change>/` is not discovered by this
+wave, and every section reads NO-DATA rather than guessing at a path it was never told.
+
+A design/gate/score FAIL is recognized only from a receipt whose `sbe evidence verify`
+verdict is PASS (sealed, current, every covered file intact): its `argv` is read for the
+substring `design`, `gate` or `score` (`verify` counts as all three, `review` counts as
+gate and score), and a nonzero recorded `exitCode` on such a receipt is the MERGE BLOCKER.
+A receipt whose command names none of the three still counts by its exit code but clears
+no MISSING EVIDENCE entry for a kind it does not name.
+
+Exit codes: `0` when BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS and MISSING EVIDENCE
+are all empty, `1` when any of them carries an item, `2` usage. Exit 0 is never printed as
+a claim that everything was inspected; the closing line and every empty section's NO-DATA
+line say what was not. Limits in full, beside the behavior, live in this section rather
+than `docs/KNOWN-LIMITS.md`, which this wave did not touch. Maturity: **INTERNAL-EVAL**.
+
+## `sbe init`, and the idempotence it is built on
+
+```bash
+bin/sbe init .                        # dry run (the default): every mutation as a diff, writes nothing
+bin/sbe init . --apply                # writes: config, dossier directory, install receipt
+bin/sbe init . --apply --with-consumer-ci  # also copies the consumer CI workflow and action, only when asked
+```
+
+Writes `.brothersbe/config.json` (the schema version, tool version, and the dossier root,
+`design/`), a `design/.gitkeep` marker so the dossier directory is trackable before it holds
+anything, and, only with `--with-consumer-ci`, a copy of this installation's own
+`.github/workflows/consumer-check.yml` and `.github/actions/sbe-consumer/action.yml`. Refuses
+outside a git repository, naming the reason: there is nowhere for the config, the dossier
+directory or the receipt to be versioned.
+
+Every proposal is deterministic content, compared byte for byte against what is already on disk,
+which is what makes **running it twice under `--apply` change nothing the second time**: the
+second run finds every proposal already matches and writes nothing, and the install receipt
+(the one file that legitimately carries a timestamp) is left untouched rather than rewritten,
+because nothing happened this run for it to describe. When something IS written, `sbe init`
+writes or refreshes `.brothersbe/install-receipt.json`: the schema and tool version, when it
+ran, every path it has ever written (across this call and any prior one), and exact uninstall
+instructions, `rm -f <path>` for each, printed at the end and saved into the same receipt.
+
+Limits in full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
+
+Three commands remain **present and refuse**: `plan`, `policy` and `exceptions`.

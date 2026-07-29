@@ -102,6 +102,46 @@ Each gate walks the directory it was named (the default is the current directory
 
 What a first run on an unmodified repository tells you, and what it does not. It tells you one thing about your code immediately: the linter scans the tree you point it at and names every place an error is swallowed, with the file, the line and the pattern. Everything else starts empty on purpose. The four gates read receipts that a change has to produce, so on a repository that has never written one they report NO-DATA on all four, which means "no evidence either way" and never "checked and fine". The design checks read a dossier directory that does not exist yet. The graded checks read a telemetry vault and fence registries you have not installed, so their verdicts are about files outside your repository, and the report prints them under a heading that says exactly that. Nothing here infers quality from a repository's shape: a green first run is a report about what was read, and on a fresh install that is the linter and nothing else.
 
+### As a plugin (recommended for teams)
+
+BrotherSBE ships as a Claude Code plugin: one versioned thing to install, upgrade and roll back, with the hooks wired in the package instead of hand-copied into your settings file. Clone it anywhere, then check the package before you trust it:
+
+```bash
+git clone https://github.com/khalilmaaouni/BrotherSBE
+claude plugin validate BrotherSBE
+```
+
+```
+Validating plugin manifest: /path/to/BrotherSBE/.claude-plugin/plugin.json
+
+✔ Validation passed
+```
+
+That gives you six namespaced skills (`/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). Distribution through an internal marketplace pinned to a signed release is not built yet, and is not claimed here.
+
+Either way you install it, there is one command line over the nine script paths:
+
+```bash
+bin/sbe doctor
+```
+
+```
+python           PASS     3.9.6 (floor is 3.9)
+tools            PASS     all present in /path/to/BrotherSBE/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.1, VERSION 1.0.0-rc.1
+git              PASS     working directory is inside a git tree
+vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
+private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
+
+sbe 1.0.0-rc.1, evidence schema 1.0. 6 check(s): 4 PASS, 0 FAIL, 2 NO-DATA.
+```
+
+That block is a real run on a fresh install (no vault exported, no private-name list configured), with only the absolute installation path replaced by `/path/to/BrotherSBE`. The two NO-DATA lines are the point: an unanswered environment question is reported as unanswered, never folded into the passes.
+
+`sbe` is a facade, not a rewrite: every built subcommand delegates to the tool in `tools/` that already carries the behavior and the tests, and the old invocations shown throughout this README still work and are not deprecated. Commands, exit codes, and the six subcommands that are present and deliberately refuse: [docs/CLI.md](docs/CLI.md).
+
+### As a cloned skill (the original way, still supported)
+
 **1. Clone into your skills directory.**
 
 ```bash
@@ -139,7 +179,7 @@ export BROTHERSBE_VAULT="$HOME/BrotherSBEVault"   # put this in your shell profi
 }
 ```
 
-What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). **PreCompact** snapshots the whole worktree (including untracked files) to a private per-worktree git ref under `refs/brothersbe/autosave/` and writes a forward-looking resume brief, so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
+What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** captures nothing by default. Each category is separately opt-in: `BROTHERSBE_TELEMETRY_METRICS` for the idempotent telemetry line, `BROTHERSBE_TELEMETRY_TRANSCRIPT` for anything read from the session transcript, `BROTHERSBE_TELEMETRY_CORRECTIONS` for correction candidates (secret-redacted, owner-only). `BROTHERSBE_TELEMETRY_DISABLE` forces every category off and cannot be overridden locally, which is the switch an organization sets. Every category that stays off says which switch kept it off, so silence is never mistaken for nothing having happened. What each field can hold is in the data dictionary in [SECURITY.md](SECURITY.md). **PreCompact** snapshots the whole worktree (including untracked files) to a private per-worktree git ref under `refs/brothersbe/autosave/` and writes a forward-looking resume brief, so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
 
 **4. Wire the checks into CI.** This is what turns them from advisory into blocking. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 
@@ -189,8 +229,16 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
         run: |
           python3 evals/test_no_data_class.py
           python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave)
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
         run: python3 tools/test_sbe.py
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py
+      - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
+        run: sh scripts/test-install-artifact.sh
+      - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
+        run: sh scripts/test-upgrade-rollback.sh
 ```
 
 The last three matter as much as the first three. The gates are worth what their tests are worth, and a fixture no merge runs is documentation rather than a gate.

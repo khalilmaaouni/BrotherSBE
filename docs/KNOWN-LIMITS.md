@@ -48,6 +48,26 @@ Fence hygiene and budget-vs-tier run only over registries named in
 "agent". Writing the fence, comparing scopes, and resuming after a kill are
 human. Full text: `references/laws-parallel-writers.md` L13, `LAWS-REFERENCE.md`.
 
+## The case-fold confirmation trusts one probe of the project's own volume
+
+`tools/sbe_fence_hook.py::paths_overlap` closes the case-insensitive-filesystem
+escape (`docs/BYPASS-COVERAGE.md` row 21) by retrying a missed comparison
+case-folded and confirming the fold against the filesystem before trusting it,
+never on the string match alone. When both spellings already exist, the
+confirmation is `os.path.samefile`, which is definitive. When one or both do
+not exist yet, there is nothing to `samefile`, so the confirmation instead
+probes whether the PROJECT ROOT's own directory entry answers to a case-swapped
+spelling, on the reasoning that case (in)sensitivity is a property of the
+volume, not of any one file on it. Two edges follow from that reasoning and are
+worth stating rather than assuming away: a root whose own directory name
+carries no letters to swap (all digits or symbols) cannot be probed, and this
+hook's fail-open bias means an inconclusive probe allows the write rather than
+denying it; and a project split across two mounts with different case
+sensitivity (a fenced file reached through a symlink onto a different volume
+than `root`) is answered by `root`'s volume, not the target's. Neither edge is
+fixtured, because neither can be constructed without a filesystem this suite
+does not control.
+
 ## Blast radius revokes nothing (L14)
 
 "No apply rights on production state" is a working rule plus whatever access
@@ -221,3 +241,318 @@ POSIX mode there as a courtesy.
 `tables/`, the RUBRIC baselines, and the lint's own numbers were measured
 where this project was built. Re-measure on yours; NO-DATA is a legal score.
 Full text: `README.md` (What this is not), `RUBRIC.md`, `INVARIANTS.md`.
+
+## The impact scan proposes a floor, and reads paths more than it reads code
+
+`sbe impact` derives the five intake answers from the git diff and runs them
+through the SAME tier table a person's answers go through, so the two can never
+drift apart. What it cannot do, stated where the behavior is:
+
+- Two of the five answers are not derivable from a diff. `consumers` is assumed
+  `none`, and `crosses_boundary` is inferred only from infrastructure-shaped
+  files, so a service call added inside existing code is invisible to it. Both
+  assumptions can only LOWER the proposal. The proposed tier is therefore a
+  FLOOR: it can say a change is bigger than declared, never smaller.
+- A PASS from it means "nothing in the diff contradicts the declared tier". It
+  does not mean the declared tier is right.
+- Detection is mostly path-shaped, with content patterns only for SQL data
+  definition language, destructive operations, and personal-data field names.
+  A payment path in a file named nothing like a payment is not detected.
+- Content patterns read ADDED lines only, so removing a sensitive line is not
+  classified as adding one. The reverse is also true: a deletion that IS the
+  risky change (dropping a column in code rather than in a migration) is not
+  caught by a content pattern.
+- Every changed file no detector covers is reported under `unmeasured`, by name.
+  A clean report over an unsupported language is not available from this tool.
+- Maturity: INTERNAL-EVAL. It has been exercised on this repository's fixtures
+  and on this repository's own diff, and on no other estate.
+Full text: `src/brothersbe/impact.py`, `docs/CLI.md`.
+
+## The evidence wrapper binds a run to a commit, and proves less than that sounds
+
+`sbe evidence run` executes the command itself, so the duration, the exit code
+and the output digests come from a run rather than from a keyboard, and
+`sbe evidence verify` refuses a receipt whose commit or covered files have
+moved. What that does NOT establish, stated where the behavior is:
+
+- The `runId` seal is TAMPER EVIDENCE, not a signature. It catches a plausible
+  receipt typed to satisfy the schema. It does not stop anybody who has read
+  `src/brothersbe/evidence.py`, because the input is the receipt itself and
+  there is no key. A locally generated receipt is therefore never more than
+  LOCAL-ADVISORY, and `show` says so on every receipt rather than leaving it to
+  the reader to remember.
+- `PROTECTED-CI` is only as trustworthy as the environment that set
+  `SBE_CI_RUN_ID`. Nothing here can tell a run id minted by a CI system from one
+  an agent exported into its own shell. The label states where the value came
+  from; it does not authenticate it. What makes it worth having is that a
+  protected CI configuration is a thing a human controls and an agent in a
+  worktree usually does not.
+- Nothing checks that the command was the RIGHT command. `sbe evidence run --
+  true` produces a flawless receipt for a run that tested nothing. The receipt
+  records the exact argv so a reader can see that; deciding whether that argv is
+  the work the gate wanted is a person's job, and no field here does it.
+- `argv` is recorded verbatim, on purpose, because a receipt whose command was
+  paraphrased proves nothing about what happened. So a credential passed ON the
+  command line IS persisted in the receipt, and the digests-only policy that
+  covers stdout and stderr does not cover it. Pass secrets through the
+  environment or a file, never as an argument. A fixture pins this so it stays a
+  decision rather than a surprise.
+- The digests prove the same bytes came back. They carry none of them, so a
+  receipt cannot be used to audit what a command printed, only to detect that it
+  printed something different.
+- Coverage is what the caller named, or the diff between base and head. A change
+  to a file the receipt does not cover is invisible to `verify`, and a receipt
+  covering no file at all is NO-DATA rather than a pass, naming why.
+- The staleness check is deliberately strict in one direction: a covered file
+  written after the run ended FAILs even when its bytes are unchanged, so a
+  checkout or a formatter that rewrites a file identically invalidates the
+  receipt. Regenerating is cheap; a receipt that speaks for a file it did not
+  see is not.
+- `verify` compares against the CURRENT head of the working directory it is
+  given. A receipt made on a branch tip and verified at a merge commit FAILs,
+  correctly and inconveniently: it is evidence for the commit it was made
+  against and for no other.
+- Writing a receipt INTO the repository it covers makes that tree dirty, so the
+  next receipt generated there is advisory. Keep receipts outside the tree, or
+  ignore them, or accept NO-DATA.
+- Maturity: INTERNAL-EVAL. Exercised by 27 fixtures in
+  `tools/test_sbe_evidence.py` that build real git repositories and run real
+  commands, on this repository and on no other estate.
+Full text: `src/brothersbe/evidence.py`, `docs/CLI.md`.
+
+## The privacy controls are defaults and patterns, not guarantees
+
+Capture is off by default per category, an organization switch can force it all
+off, and the autosave reads file CONTENT before any git object is created. What
+none of that does, stated where somebody deciding whether to install this can
+read it:
+
+- A file name exclusion has never prevented secret capture and this page will
+  not say otherwise. A credential lives in a normally named source file at
+  least as often as in a file called `.env`, and this project shipped a comment
+  claiming the name patterns meant "credentials never enter the autosave ref".
+  They never did. The content scan is what addresses that class, and it is
+  pattern matching over the shapes it knows: a secret in a shape it does not
+  know still enters the snapshot.
+- A local git ref is not a private one. `refs/brothersbe/autosave/<id>` never
+  leaves the machine by any action of this tool, and that is a statement about
+  this tool only: a backup, a mirror, a sync client or anything else that copies
+  `.git` carries the snapshot with it, including whatever a snapshot preserved
+  before the content scan existed. Snapshots taken by an earlier version are
+  still in your object database; `git reflog <ref>` lists them.
+- Excluding a file loses work. An excluded file is left out of the snapshot
+  entirely, so an unsaved edit to it is preserved nowhere. The scan is
+  deliberately conservative, so it will sometimes exclude a file holding no
+  secret at all. Both cases are named with their reason in
+  `99-System/telemetry/autosave-exclusions.log`, which is the only reason this
+  trade is visible rather than silent.
+- Three of the scan's reject reasons are limits, not detections: a file past
+  the size limit, a binary file, and a path git could not print literally were
+  never scanned at all. They are excluded and recorded on exactly that basis,
+  because a file the scanner could not read must not be treated as clean.
+- The scan reads every candidate file on every snapshot, and the tick mode
+  snapshots every N tool calls. On a very large worktree that cost is real and
+  nothing here caps it. Past `BROTHERSBE_AUTOSAVE_MAX_EXCLUSIONS` (200) the
+  snapshot is refused outright rather than truncated, because a `git add` whose
+  argument list is too long produces an empty tree that would then be committed
+  as though it were the work.
+- Content already committed is not the autosave's doing and not its to withhold.
+  The snapshot index is seeded from HEAD so tracked work is never dropped, so a
+  secret that is already in a commit rides along in the snapshot tree. The
+  control here is about what a snapshot ADDS to the object database.
+- The organization telemetry override is a policy control on a cooperating
+  machine. Root can put the file where an ordinary user cannot write it, and a
+  user who runs a patched copy of the script is past it regardless. It fails
+  closed on an unreadable or unrecognized policy, which is the strongest thing
+  it can honestly do.
+- Redaction is unchanged and still best effort. What changed is that nothing is
+  read out of a transcript until a switch says so, which means the redactor is
+  no longer the only thing between a session and a file on disk.
+- `data-show` and `data-purge` see one vault. Copies made by a backup, a mirror
+  or an export you took yourself are outside their reach, and `data-export`
+  deliberately creates one such copy.
+Full text: `tools/sbe_telemetry.py` (the capture policy block),
+`tools/sbe_autosave.sh` (the content scan block), `SECURITY.md`,
+`docs/THREAT_MODEL.md`.
+
+## A green bypass suite covers the scenarios it covers
+
+An external review listed 35 ways a person or an agent could get past these
+controls. `docs/BYPASS-COVERAGE.md` is the table: one row per scenario, each row
+COVERED (with the fixture named), UNREACHABLE HERE (with the missing thing
+named: a GitHub token, branch protection, a warehouse, a real second estate) or
+UNCOVERED (with what covering it would take). As this file is written, 18 rows
+are COVERED, 6 are UNREACHABLE HERE and 11 are UNCOVERED.
+
+So: a green `python3 tools/test_sbe_bypass.py` means the COVERED scenarios were
+tested. It is not a statement about the other 17, and it is not a claim that the
+list of 35 is the whole space of bypasses. Some fixtures in that file pin a
+bypass that WORKS, and carry `_is_a_limit` in their names for exactly that
+reason; a limit fixture is a tripwire on this documentation, not coverage.
+
+Two holes found while writing that table were fixed in a later wave, both in
+`src/brothersbe/evidence.py`. `sbe evidence verify` used to open the receipt
+path with no access check, so a FIFO where a receipt was expected hung the
+command forever with no verdict in either mode; it now runs the same
+`evidence_problem` access check the hard gates use before opening, and refuses
+a FIFO, socket, device or unreadable file by name in bounded time instead
+(`tools/test_sbe_evidence.py::TestAccessAndTimeout`). The evidence wrapper's
+`subprocess.run` used to carry no timeout at all, so a command that hung, hung
+the wrapper; `sbe evidence run` now takes an optional `--timeout SECONDS` that
+kills the child and writes no receipt rather than one that could later verify
+PASS. It has NO DEFAULT, on purpose: a silent one would kill a legitimate
+long-running test suite, which is the exact false-positive shape this
+project's own kill criteria warn against, so a command run with no `--timeout`
+can still hang the wrapper forever, precisely as before. One more limit,
+measured rather than assumed (a `sh -c "sleep 60 & sleep 60"` run under
+`timeout=2` returned in 2.00 seconds and left both sleeps alive): expiry kills
+the CHILD, not its descendants, because nothing here kills a process group. The
+refusal comes back at the bound, and a grandchild the command spawned may keep
+running, detached, after the wrapper has already said no. Both were row 35 of
+the table, now COVERED with that residual stated on the row itself.
+
+Full text: `docs/BYPASS-COVERAGE.md`, `tools/test_sbe_bypass.py`,
+`docs/CLI.md` ("sbe evidence").
+
+## The task registry only governs writers who register
+
+`sbe task close` detects an out-of-scope write after the fact by reading the
+diff, which is exactly why it survives Bash. But the postcondition runs at
+close, and only a task that was OPENED can be closed: an actor who never runs
+`sbe task open` never meets it, and reviewer separation orders roles inside
+the registry only. In front of that actor stands only the fence hook, which
+is advisory and fails open with a stated reason. Full text: `docs/CLI.md`
+("sbe task"), `docs/HOW-IT-WORKS.md` (the two-layer scope model).
+
+## The registry file itself has no lock
+
+`.sbe/tasks.json` is rewritten atomically (write temp, rename), so it is never
+half-written, but two simultaneous `sbe task open` calls are last-write-wins
+and one of the two records can vanish. Concurrent writers of the REGISTRY
+itself are out of scope by design: no service, no daemon, no lock. `sbe task
+check` is the recovery tool, because it re-runs the overlap scan over whatever
+the file now holds.
+
+## The registry exempts its own file from the postcondition
+
+Opening a task writes `.sbe/tasks.json`, so that one path, by exact name, is
+excluded from the changed-path comparison at close; otherwise no single-writer
+flow could ever close clean, which is this control's own kill criterion. The
+exemption is one exact path, not the `.sbe/` directory: receipts under
+`.sbe/evidence` still count, which is what the reviewer-receipt refusal reads.
+
+## Task expiry is informational, and nothing writes "abandoned" yet
+
+`expiry` is a date a human reads in `sbe task list`; nothing deletes or closes
+a task on a clock, so a stale open task keeps refusing overlapping opens until
+somebody closes it (with `--force` and a recorded who and why, if its work is
+gone). "abandoned" is a legal status value in the schema and no command in
+this wave writes it.
+
+## The fence view is one-directional
+
+`sbe task fence` renders markdown FROM the JSON registry for humans reading a
+STATE.md style file. Nothing reads markdown fences back into the registry, so
+a hand-edited fence line and the registry can disagree, and the registry is
+the one the postcondition reads.
+## The adoption kit proposes, and verifies only what a filesystem can answer
+
+`sbe adopt` detects a repository's stack and proposes a policy file and a CODEOWNERS example;
+`sbe init` installs BrotherSBE's own local footprint. What neither does, stated where the
+behavior is:
+
+- `sbe adopt`'s report names three protections that live on GitHub's code review platform, not
+  on a filesystem: branch protection, required status checks, and whether review from a code
+  owner is REQUIRED. None of the three can ever read PRESENT here. They report
+  UNVERIFIABLE-HERE unconditionally, naming what checking them for real would take (a GitHub
+  token with repo scope, plus admin rights on the repository), because this tool holds no
+  GitHub credentials and asks for none. This is the kill criterion the plugin conversion plan
+  states for this wave, made into a fixture:
+  `tools/test_sbe_adopt.py::TestAdoptionReportNeverClaimsPresent`.
+- A CODEOWNERS file merely existing in the tree IS a fact this tool can read, and it is reported
+  separately, under `localFacts`, so it is never folded into a claim about whether GitHub
+  actually requires that review. The file existing and GitHub requiring it are two different
+  facts, one local and one not, and only one of them is checkable from a clone.
+- The repository policy `sbe adopt` proposes (`.brothersbe/policy.json`) is NOT wave 3's
+  eventual policy file and JSON schema, which had not shipped as this wave was written. It is a
+  smaller, provisional shape built from what stack detection can already see, and the file says
+  so on its own `note` field. Replacing it once wave 3 ships its schema is expected, not a
+  regression.
+- Stack detection walks the tree pruning conventional vendor and build directories by name
+  (`.git`, `node_modules`, `vendor`, `venv`, `.venv`, `dist`, `build`, `__pycache__`, `.tox`,
+  `.mypy_cache`, `.pytest_cache`, `target`), never by content. A project keeping first-party
+  source inside a directory with one of those names is under-detected, and a very large
+  unconventionally-named vendor directory is walked in full, which costs real time on a large
+  repository with nothing here to cap it.
+- Detection of a contract, migration or dbt-shaped path reuses the SAME path patterns
+  `sbe impact` runs against a diff (`brothersbe.impact.DETECTORS`), applied here to a full tree
+  walk instead. The same limits `sbe impact` already states about those patterns being
+  path-shaped rather than content-read apply here too: a migrations directory named something
+  this project's patterns do not recognize is not detected.
+- The CODEOWNERS example this proposes carries the placeholder `@REPLACE-ME` on every line.
+  Neither `sbe adopt` nor anything else in this project has repository membership to read a
+  real username or team from, and a placeholder left in place protects nothing: GitHub will not
+  resolve it to an owner. `docs/ADOPTION.md` says so before the checklist of what to click.
+- `sbe init --with-consumer-ci` copies this INSTALLATION's own shipped
+  `.github/workflows/consumer-check.yml` and `.github/actions/sbe-consumer/action.yml`. When
+  those files cannot be read from the installation running the command, the copy is skipped and
+  named under a warning rather than writing a partial or empty file in their place.
+- Both `sbe adopt` and `sbe init` propose deterministic content (no timestamp, no run id) so a
+  second `--apply` can recognize nothing changed. The one exception is `sbe init`'s own install
+  receipt, which legitimately carries an install timestamp; it is written or refreshed only when
+  something else was actually written this run, and left untouched on a no-op run, which is what
+  keeps "running it twice changes nothing" true even though the receipt itself is not
+  deterministic content.
+- Maturity: INTERNAL-EVAL. Exercised by `tools/test_sbe_adopt.py` against real temporary git
+  repositories built by the test itself, and against this repository's own diff, and on no other
+  estate.
+Full text: `src/brothersbe/adopt.py`, `src/brothersbe/initcmd.py`, `docs/ADOPTION.md`,
+`docs/CLI.md`.
+
+## The release candidate ships packaging, not a release
+
+Wave 10 adds `.claude-plugin/marketplace.json` (so `claude plugin marketplace
+add` has something to read), an install-artifact test, and an
+upgrade-rollback test. None of that is a release. Four things stay blocked,
+named here in this tool's own voice rather than left for a reader to infer
+from what is absent:
+
+- **Signed release.** No tag this project produces is signed. A signed
+  release is blocked on a key the founder holds, not on anything this code
+  could compute for itself, and nothing here claims otherwise. `git tag -a`
+  (`docs/RELEASE.md`, `docs/ROLLOUT.md`) makes an annotated tag, which
+  records who ran the command and when; it is not a signature, and this file
+  does not call it one.
+- **Branch protection.** Unchanged from the limit already stated above under
+  "The adoption kit proposes, and verifies only what a filesystem can
+  answer": branch protection, required status checks, and required code-owner
+  review are GitHub platform settings, never `PRESENT` from a local read,
+  always `UNVERIFIABLE-HERE`. Shipping a marketplace manifest changes nothing
+  about that; there is still no GitHub token anywhere in this project.
+- **`gh auth`.** Nothing in this wave runs `gh auth login`, stores a GitHub
+  token, or automates a GitHub-side action on anyone's behalf. Every
+  GitHub-side step `docs/ROLLOUT.md` and `PUBLISH-CHECKLIST.md` describe
+  (opening a repository, protecting a branch, pushing a tag) is a human
+  authorizing it in the GUI.
+- **Real-estate maturity claims.** The install-artifact test and the
+  upgrade-rollback test are exercised against THIS repository's own git
+  history (`tools/test_sbe.py`'s new `TestMarketplaceManifest` class checks
+  the manifest shape and re-runs the installed CLI's own validator; the two
+  shell scripts are calibrated by breaking each fixture and watching it go
+  red, then restoring it and watching it go green, against this
+  repository and a disposable clone of it). None of that is evidence from a
+  second, independent estate. Maturity: INTERNAL-EVAL, same word this file
+  uses everywhere else, meaning the same thing everywhere else: proven here,
+  claimed nowhere beyond here.
+
+The upgrade-rollback script carries one limit of its own, stated where the
+behavior is rather than only here: as of this wave, this repository has cut
+no tag (`docs/RELEASE.md`), so `scripts/test-upgrade-rollback.sh` finds no
+previous release to upgrade FROM and reports NO-DATA rather than PASSED,
+every time it runs, until the first tag exists. A NO-DATA verdict here is not
+a weaker pass; it is the honest absence of the one fixture the script needs,
+named as exactly that.
+
+Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
+`scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
+(`TestMarketplaceManifest`).

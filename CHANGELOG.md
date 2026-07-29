@@ -8,6 +8,373 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- PRACTICES.md gains the loop close-out interview: open loops are put to their
+  decision owner as per-loop question sets, each question carrying a
+  recommendation, its pros, and its cons, triaged gating-first and run through
+  the harness's native question surface by default rather than as prose. Advice,
+  not a control, and it says so.
+
+- `sbe status`: one truthful, blocker-first answer to "where does this change stand",
+  read from state other commands already recorded rather than computed fresh. It never
+  runs the suites itself and never becomes a second gate runner: nothing in it starts a
+  subprocess, and every design/gate/score FAIL it names comes from an EXISTING evidence
+  receipt someone already generated with `sbe evidence run`, never from status invoking a
+  check on its own. Six sections, blocker-first: BROKEN CLAIMS (a receipt failing `sbe
+  evidence verify`, or a disposition bound to a commit that is not HEAD), MERGE BLOCKERS
+  (an intake tier disagreeing with the diff-derived tier with no disposition, an unreadable
+  intake, a task closed `--force`d, or a verified receipt recording a nonzero exit code),
+  ACTIVE CONFLICTS (overlapping open tasks, read by calling `tasks.load_registry`,
+  `tasks.open_tasks` and `tasks.claims_overlap` directly, the same functions `sbe task
+  check` runs, so there is no second copy of wave 5's overlap rule), MISSING EVIDENCE (a
+  design/gate/score kind no verified receipt names, for a tier above T0, each naming the
+  command that would fill it), COMPLETED EVIDENCE (a clean, zero-exit receipt with its
+  trust label), and NEXT ACTION (the first nonempty section's remedy, or "nothing blocking
+  here that this tool can see", plus the scope sentence naming exactly which stores were
+  read). An absent store is NO-DATA with a reason, never clean, and every positive or empty
+  line in text mode names the scope it inspected. Exit 0 means sections 1-4 are empty, not
+  that everything was inspected, and the closing line says so. Proof:
+  `tools/test_sbe_status.py`, 17 fixtures over 10 classes, each calibrated by planting the
+  break, watching the section go red, then restoring the clean state and watching it clear:
+  a stale receipt, a tier disagreement without and then with a disposition, an injected
+  registry overlap and its non-overlapping counterpart, a forced close, missing evidence
+  for a T2 tier against a T0 tier's clean bill, a clean receipt and a failing one, all three
+  NEXT ACTION arrangements, `--json` carrying every section and the scope object, and a
+  guard that greps rendered output (not source) for a scope phrase on every empty-section
+  line. Limits stated beside the behavior in `docs/CLI.md`, including the flat,
+  single-dossier convention this wave reads (`00-intake.json`, `disposition.json` and
+  `.sbe/` at the inspected path itself, not discovered under a nested `design/<change>/`
+  dossier) and the argv-substring heuristic used to recognize a design/gate/score receipt.
+  Maturity: INTERNAL-EVAL.
+- Release-candidate packaging: `.claude-plugin/marketplace.json` names the
+  plugin, the repository, and the version, in the shape `claude plugin
+  marketplace add` and `claude plugin validate` (installed CLI 2.1.207)
+  accept; `tools/test_sbe.py`'s new `TestMarketplaceManifest` class pins its
+  version against `VERSION` and `.claude-plugin/plugin.json` (a four-way pin,
+  extending the pin `TestPluginSurface` already held) and re-runs the
+  installed CLI's own validator as a subprocess, skipping honestly (not
+  passing) when `claude` is not on PATH. `scripts/test-install-artifact.sh`
+  proves a plain `git archive HEAD` extracts into an empty directory and
+  verifies clean there (`scripts/verify-install.sh`, `bin/sbe doctor`),
+  nothing written outside that directory, the kill criterion this wave was
+  cut against. `scripts/test-upgrade-rollback.sh` proves the same for a
+  previous-tag-to-HEAD-to-rollback cycle when a previous tag exists, and
+  reports NO-DATA honestly (exit 0, no claim of a tested upgrade) today,
+  because this repository has cut no tag yet; both scripts were calibrated
+  by breaking each fixture in a disposable clone of this repository and
+  watching it go red, then restoring it and watching it go green, on both
+  branches of the upgrade-rollback script. Both new steps are wired into
+  `.github/workflows/brothersbe-gates.yml`. `docs/ROLLOUT.md` is new: a
+  staged rollout for an adopting organization (shadow mode, then a
+  founder-gated move to enforced, then the adoption kit), a support and
+  ownership model with no invented SLA, the upgrade and rollback procedure,
+  and the blocked list verbatim (signed release, branch protection, `gh
+  auth`, real-estate maturity claims). `docs/KNOWN-LIMITS.md` gets a matching
+  section naming the same four blocks in this project's own voice. No
+  control was weakened; the pre-existing suite counts only rose (`sbe`: 47 to
+  49). Maturity: INTERNAL-EVAL, proven against this repository and a
+  disposable clone of it, and no other estate, exactly as `docs/ROLLOUT.md`
+  states plainly rather than implies.
+- `sbe task`: a write-scope registry with a diff postcondition that survives
+  Bash. The fence hook fails open and cannot govern shell writes because shell
+  cannot be parsed reliably; `sbe task open` now records who owns what in
+  `.sbe/tasks.json` (one file, atomic rewrite, no lock, concurrent registry
+  writers a stated limit), and `sbe task close` reads the union of
+  `git diff --name-only <base>...HEAD` and `git status --porcelain` and
+  refuses to close a task whose tree changed outside its declaration, naming
+  every violation by path; uncommitted edits count, a rename counts both
+  sides, and an unresolvable base is NO-DATA, never a pass. `open` refuses an
+  owned path overlapping another open task's, using the fence hook's own
+  `paths_overlap` imported rather than re-typed (a fixture fails if that
+  import is ever replaced by a local copy); `check` re-runs the scan so a
+  collision injected into the JSON by hand is caught; `fence` renders the
+  markdown fence view one way, JSON to markdown; `--force` records who and
+  why and marks the close FORCED, never clean; and a reviewer task can
+  neither open owning the evidence store nor close over a touched receipt,
+  even forced. Proof: `tools/test_sbe_tasks.py`, 15 fixtures, every one
+  calibrated by breaking the control and watching it go red. Limits beside
+  the behavior in `docs/CLI.md`, `docs/KNOWN-LIMITS.md` and
+  `docs/HOW-IT-WORKS.md` (the two-layer scope model). Maturity:
+  INTERNAL-EVAL.
+- `sbe adopt` and `sbe init` are built, closing the refusal `cli.py` used to print for `adopt`
+  ("the adoption doctor cannot yet tell a protected repository from an unprotected one, and a
+  readiness report that omits that is worse than none"). `sbe adopt` detects a repository's
+  stack by walking the tree (languages, a migrations directory, dbt models, API contract files,
+  existing CI workflows), reusing the SAME path patterns `sbe impact` already carries
+  (`brothersbe.impact.DETECTORS`) rather than a second copy of them, and proposes a provisional
+  `.brothersbe/policy.json` (wave 3's own policy file and JSON schema had not shipped when this
+  was written; the file's own `note` field says so) plus a `.github/CODEOWNERS` generated from
+  that same policy, protecting the manifest, hooks, this repository's own policy and config,
+  where the evidence schema is declared, product and consumer CI, and release files. THE KILL
+  CRITERION THIS WAVE WAS BUILT AROUND: the adoption report never claims a GitHub-side
+  protection (branch protection, required status checks, review from a code owner being
+  REQUIRED) is PRESENT, because nothing here holds a GitHub token or asks for one; all three
+  report UNVERIFIABLE-HERE unconditionally, naming what checking them for real would take, and
+  `tools/test_sbe_adopt.py::TestAdoptionReportNeverClaimsPresent` pins exactly that. A
+  CODEOWNERS file merely existing in the tree is reported separately, under `localFacts`, so it
+  is never read as proof GitHub actually requires that review. Both proposals are deterministic
+  (no timestamp, no run id), which is what lets a second `--apply` recognize nothing changed and
+  write nothing; an existing file that differs is never overwritten without `--force`.
+  `sbe init` installs BrotherSBE's own local footprint (`.brothersbe/config.json`, a
+  `design/.gitkeep` dossier marker, and, only with `--with-consumer-ci`, a copy of this
+  installation's own consumer CI workflow and composite action), refuses outside a git
+  repository naming the reason, and writes or refreshes an install receipt
+  (`.brothersbe/install-receipt.json`) naming every path it has written and the exact `rm -f`
+  uninstall line for each, only when something was actually written that run; a no-op run leaves
+  the receipt, timestamp included, untouched. `.github/workflows/brothersbe-gates.yml` gained
+  the missing `push` (to `main`) trigger beside `pull_request`, and a new
+  `.github/workflows/consumer-check.yml` plus `.github/actions/sbe-consumer/action.yml` give a
+  client repository something to copy or call that runs ONLY `sbe impact`, `sbe evidence
+  verify` (when receipts exist), `sbe status` (wave 8; guarded by a file-exists check and
+  skipped honestly until that wave lands), and the design checks in strict mode when a dossier
+  is declared, and never BrotherSBE's own test files; both new workflow files carry the same
+  honest header the product workflow already does, that a workflow file guards nothing on its
+  own until branch protection requires it (`docs/KNOWN-LIMITS.md` L16). Eleven fixtures across
+  17 test methods in `tools/test_sbe_adopt.py` build real temporary git repositories and run the
+  real command: dry-run writes nothing (proved by hashing the whole tree, not by checking the
+  paths this module happens to propose today), apply-then-reapply is a no-op, an existing file
+  is never overwritten without `--force`, the kill criterion itself, stack detection shifting
+  the proposed policy for a planted dbt project and a planted migrations directory, the init
+  receipt and its uninstall instructions, `sbe init` refusing outside a git repository, and the
+  two shipped workflow files' triggers and scope, read as text and grepped the same
+  line-oriented way `evals/run_evals.py` already reads `brothersbe-gates.yml` (this project
+  ships no YAML parser). Calibrated by neutralizing each control in turn and confirming the
+  matching fixture goes red before trusting the green: the dry-run guard, apply idempotence, the
+  force guard, the kill criterion itself, each stack-detection shift, the receipt's uninstall
+  match, the git-repository refusal, and both workflow-file assertions, eight breaks, eight red.
+  One pre-existing test could not be updated in this change and is a known, expected regression
+  rather than a silently accepted one: `tools/test_sbe.py::TestCliSurface::
+  test_an_unbuilt_command_refuses_loudly_and_names_its_wave` hardcodes `adopt` in its list of
+  commands still expected to refuse and exit 3; building `adopt` this wave makes that one line
+  false, and the one-line fix (removing `"adopt"` from that list) touches a file this wave was
+  not allowed to edit. Limits in full in `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
+- The two defects the bypass-coverage table recorded rather than fixed are
+  closed, and the table and `docs/KNOWN-LIMITS.md` are updated to match.
+  `sbe evidence verify` used to open a receipt path with no access check, so a
+  FIFO where a receipt was expected hung the command forever with no verdict
+  in either mode; it now runs the same `sbe_checks.evidence_problem` access
+  check the hard gates use before opening, and refuses a FIFO, socket, device
+  or unreadable file by name in bounded time instead, in both text and
+  `--json` mode (`tools/test_sbe_evidence.py::TestAccessAndTimeout`, two
+  fixtures). `sbe evidence run` gained an optional `--timeout SECONDS`: past
+  it, the child is killed and no receipt is written, so nothing can later
+  verify PASS for a run whose exit code was never observed. There is
+  deliberately no default, because a silent one would kill a legitimate
+  long-running suite, the exact false-positive shape this project's own kill
+  criteria warn against, so a command run with no `--timeout` can still hang
+  the wrapper as before; that residual is stated on row 35 of
+  `docs/BYPASS-COVERAGE.md` rather than left implicit. Separately,
+  `tools/sbe_fence_hook.py::paths_overlap` closed the case-insensitive-
+  filesystem escape (row 21): a fence written for `docs/SETUP.md` used to let
+  a second writer land on `docs/setup.md` because the comparison was
+  case-sensitive on a filesystem that is not. A missed comparison is now
+  retried case-folded and the fold is confirmed against the filesystem
+  (`os.path.samefile` when both spellings exist, a volume-level probe when
+  one does not) before it is trusted, so two honestly different files named
+  `a.md` and `A.md` on a case-sensitive filesystem still do not conflict.
+  `tools/test_sbe_bypass.py::test_a_case_variant_of_a_fenced_path_is_refused`
+  moved from a LIMIT fixture to a COVERAGE fixture, and
+  `tools/test_sbe_fence_hook.py::TestCaseFoldConfirmation` pins the
+  confirmation itself. Bypass-coverage totals move from 16 COVERED / 6
+  UNREACHABLE HERE / 13 UNCOVERED to 18 / 6 / 11.
+- The 35 bypasses an external review listed are now answered one by one, in
+  `docs/BYPASS-COVERAGE.md`, and the answer for each is exactly one of three:
+  COVERED with the fixture named, UNREACHABLE HERE with the missing thing named
+  (a GitHub token, branch protection, a warehouse, a real second estate), or
+  UNCOVERED with what covering it would take. Sixteen are COVERED, twelve of
+  them by suites that already existed and four by the new
+  `tools/test_sbe_bypass.py`: an invented review id is a pointer and never an
+  approval, an approval stops counting at the next commit, an exemption naming a
+  wildcard waives nothing, and a monorepo package carrying no receipt is named
+  in its neighbour's PASS line. Six are UNREACHABLE HERE and thirteen are
+  UNCOVERED, and the table says so rather than quietly dropping them, because
+  the honesty of that count is the deliverable and the fixture count is not.
+  Fixtures that pin a bypass WORKING carry `_is_a_limit` in their names (an
+  alias-only second derivation passes, a rehearsal against an empty database
+  passes on zero equals zero, a case variant escapes a fence on a
+  case-insensitive filesystem), so each hole is a decision somebody made rather
+  than a surprise somebody finds. Every fixture was calibrated by breaking the
+  control it targets and watching it go red: 21 breaks, 21 red. Two holes found
+  in the writing are recorded in `docs/KNOWN-LIMITS.md` and not fixed here,
+  because fixing them changes code this wave was not allowed to touch:
+  `sbe evidence verify` hangs forever on a FIFO receipt (no access check before
+  the open), and the evidence wrapper runs the operator's command with no
+  timeout.
+- Two privacy defects an external review found are closed, and both were
+  defaults rather than bugs. FIRST: this tool parsed the session transcript and
+  stored excerpts of the operator's own messages by default, with best-effort
+  redaction standing between a customer name, a partner term or an unreleased
+  design and a file on disk. Best effort is the right engineering for a redactor
+  and the wrong basis for a default. Capture is now OFF unless switched on, per
+  category and independently: `BROTHERSBE_TELEMETRY_METRICS` for the per-session
+  row in `outcomes.jsonl`, `BROTHERSBE_TELEMETRY_TRANSCRIPT` for the transcript
+  text in the resume brief, `BROTHERSBE_TELEMETRY_CORRECTIONS` for the excerpts
+  in `corrections.jsonl`. The invariant, and the fixture that holds it: a
+  default installation captures no transcript text and no correction excerpt,
+  and nothing is read out of a transcript until a category that needs it is on.
+  `metrics` is opt-in too, because its row carries the working directory
+  basename and a basename can be a client's name. An organization override
+  (`BROTHERSBE_TELEMETRY_DISABLE`, or `capture = off` in
+  `/etc/brothersbe/telemetry-policy.conf`) forces all three off and no local
+  switch reverses it; a policy file that cannot be read, or that carries a
+  directive this version does not recognize, FAILS CLOSED and names the file and
+  the line. Three new subcommands make the stored data visible, portable and
+  removable from one shared inventory: `data-show`, `data-export` and
+  `data-purge`, the last re-checking the filesystem after each removal and
+  reporting anything that survived rather than reporting success from its own
+  intention. Every field that can be stored is now published field by field in
+  `SECURITY.md`. SECOND: the autosave excluded secret-shaped file NAMES, and a
+  secret in a normally named source file (`src/config.py` holding an API key)
+  matched no pattern and became a permanent git object; the documentation said
+  the name patterns meant "credentials never enter the autosave ref", which was
+  never true. Every candidate file's CONTENT is now read BEFORE `git add` runs,
+  which is the moment a blob would be created, so a rejected file never becomes
+  a git object at all. Files past `BROTHERSBE_AUTOSAVE_MAX_BYTES` (1 MiB) and
+  binary files are excluded as UNSCANNED rather than assumed clean, as is a path
+  git cannot print literally. Every exclusion is recorded in
+  `99-System/telemetry/autosave-exclusions.log` with its reason, as a path and a
+  reason only, and `recover` points at that record because what a snapshot does
+  NOT hold matters at recovery time. In a repository declared production
+  (`BROTHERSBE_REPO_CLASS=production` or a `.brothersbe-production` file)
+  autosave is opt-in and snapshots nothing until `BROTHERSBE_AUTOSAVE_PRODUCTION`
+  is set. Seven fixtures in `tools/test_sbe.py`
+  (`TestCaptureDefaultsAndAutosaveContentScan`) run the real tools in temporary
+  vaults and real git repositories, and the secret-in-a-source-file fixture
+  asserts that no git OBJECT for that content exists anywhere, not merely that
+  the tree omits it. Calibrated by breaking each control in turn and confirming
+  the matching fixtures fail: capture default (2 fixtures), organization
+  override (1), content scan (2), exclusion record (1), production opt-in (1),
+  purge removal (1). `docs/THREAT_MODEL.md` is new and covers fifteen threats,
+  including the ones nothing here stops: a direct push, a deleted workflow, a
+  compromised CI runner, and prompt injection from repository content. What
+  these controls do NOT stop is in `docs/KNOWN-LIMITS.md`, including the two
+  sentences that matter most: a path exclusion never prevented secret capture,
+  and a local git ref can still be carried off the machine by a backup or a
+  mirror.
+- `sbe evidence` closes the hole under every gate in this project: a receipt
+  could be typed by hand by the same agent whose work it verified, so a
+  fabricated duration, exit code, row count or rerun id satisfied the schema and
+  a gate could PASS on a run nobody's command ever performed, and nothing bound
+  a receipt to a commit either, so one written against older code still passed
+  after that code changed. The invariant now: a receipt only counts as evidence
+  for the commit it was generated against, by a wrapper that ran the command
+  itself. `sbe evidence run --out r.json -- <command...>` EXECUTES the command
+  through subprocess and records what it observed (repository identity, base and
+  head commit, the exact argv, start and end in ISO 8601 UTC, duration, exit
+  code, python and sbe versions, platform, tree dirtiness, and the covered files
+  with their content digests); there is no flag that accepts a duration or an
+  exit code, and the wrapper's own exit code is the command's, so a failing
+  command cannot be laundered into a passing evidence step. `sbe evidence
+  verify` FAILs on an unknown schema version, a vacuous required field (through
+  the same `answered()` every other receipt field goes through), a broken
+  `runId` seal, a head commit that has moved, or a covered file that changed,
+  vanished or was written after the run ended; it returns NO-DATA rather than
+  PASS for a receipt generated on a dirty tree or covering no file, because
+  advisory is not a pass; and every verdict line names what it inspected.
+  `sbe evidence show` prints the trust level unconditionally: PROTECTED-CI only
+  when `SBE_CI_RUN_ID` was set by the environment AND the tree was clean,
+  LOCAL-ADVISORY otherwise, since a CI job over uncommitted edits is a local run
+  wearing a badge. stdout and stderr are recorded as SHA256 digests and byte
+  counts, never as text, because a receipt is the one artifact everybody is
+  encouraged to share and a command that prints a token would otherwise persist
+  it there forever. The `runId` seal is stated as tamper evidence rather than a
+  signature, in the module, in `docs/CLI.md` and in `docs/KNOWN-LIMITS.md`: it
+  catches a receipt nobody's command produced and it does not stop somebody who
+  read the source, which is exactly why a local receipt is never more than
+  advisory. Twenty-seven fixtures in `tools/test_sbe_evidence.py` build real git
+  repositories and run real commands: the defect (three hand-authored and
+  doctored receipts), the sound case, a stale commit, a stale file, a deleted
+  covered file, a dirty tree, malformed and unknown-schema receipts, vacuous
+  required fields, and the assertion that a secret printed by the command
+  reaches the receipt only as a digest. Calibrated by neutralizing each of the
+  four controls in turn and confirming the matching fixtures fail (commit
+  binding 1, seal 2, dirty-tree NO-DATA 2, covered-file staleness 2) before
+  trusting the green. One limit the fixtures found and now pin: `argv` is
+  recorded verbatim, so a credential passed on the command line IS persisted.
+  Limits in full in `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
+- `sbe impact` closes the oldest hole in this project: the tier was computed
+  from five answers and nothing ever read the code, so a change rewriting an API
+  contract could be classified T0 by answering "no" five times, and every gate
+  downstream then agreed the change owed no evidence. The scan derives those
+  same five answers from the git diff and runs them through
+  `sbe_intake.compute_tier`, the SAME table a person's answers go through: one
+  rule, one place, two inputs, so a derived tier and a declared tier cannot drift
+  apart. It may raise a declared tier and may never lower one. A disagreement is
+  resolved only by a disposition naming the detector, the decision, the reason,
+  the author and the head commit it was decided against; a disposition from
+  another commit resolves nothing and one with no reason is an off switch rather
+  than a decision. The proposed tier is a FLOOR, not a ceiling: `consumers`
+  cannot be read from a diff and is assumed at its lowest value, and every
+  changed file no detector covers is listed by name under `unmeasured` rather
+  than folded into a clean result. Verdicts are PASS, REVIEW-REQUIRED, FAIL and
+  NO-DATA, and `--strict` makes NO-DATA block for protected CI. Twenty-two
+  detectors ship (OpenAPI, AsyncAPI, protobuf, Avro, GraphQL, event schemas,
+  migrations, SQL data definition language, dbt models, ORM models, destructive
+  operations, payment paths, partner paths, personal data paths and field names,
+  authorization paths, production configuration, secret material,
+  infrastructure, CI pipelines, queue configuration). Sixteen fixtures in
+  `tools/test_sbe_impact.py` build real git repositories and run the real
+  command: the defect, the sound case, hollow and malformed intakes, an
+  unsupported language reported as unmeasured, four bypass attempts (deleting
+  the intake, a stale disposition, an unreasoned disposition, a deletion
+  misread as an addition), and the invariant that a declared tier is never
+  lowered. Calibrated by neutralizing the control and confirming five of the
+  sixteen fail before trusting the green. Limits stated beside the behavior in
+  `docs/KNOWN-LIMITS.md`; maturity INTERNAL-EVAL.
+- Two suites that existed and ran on nobody's merge path now run in CI: the
+  fence hook tests and the impact fixtures. The workflow's own comment already
+  said it: a fixture no merge runs cannot stop anything.
+
+- One command line, `bin/sbe`, over the nine script paths, plus an importable
+  `src/brothersbe/` package. It is a facade and says so: every built subcommand
+  delegates to the tool in `tools/` that already carries the behavior and the
+  tests, and returns that tool's exit code. Nothing in `tools/` changed, and the
+  old invocations are NOT deprecated in this change: deprecating commands that
+  509 evals and a dozen pasted doc examples point at is its own change with its
+  own risk, and it is not being smuggled into a packaging wave. No install step
+  either, because zero dependencies is a promise on the front page and
+  `pip install` would retract it for anyone in a CI image with no package index.
+  Six subcommands the finalization brief calls for (`inspect-change`, `plan`,
+  `evidence`, `policy`, `exceptions`, `adopt`) are PRESENT and REFUSE: each names
+  what is missing, names the wave that builds it, and exits 3 rather than
+  printing an empty result. Exit codes are fixed at 0 no control failed, 1 a
+  control failed, 2 usage, 3 not built, and `verify` and `review` close with a
+  line saying that exit 0 is not a pass, because a run where every check reported
+  NO-DATA also exits 0 and an exit code cannot tell those apart. Documented in
+  `docs/CLI.md`. Six new tests in `tools/test_sbe.py` pin the surface: the
+  launcher reports the one version in `VERSION`, no command is advertised without
+  a runner or implemented without a help line, an unbuilt command exits 3 and
+  names its wave, the four exit codes a CI job would branch on hold, `verify`
+  cannot exit 0 over an empty directory without saying no control passed, and the
+  package imports with nothing installed. Two of them were calibrated by
+  injecting the defect (an unbuilt command made to succeed, and a command
+  advertised with nothing behind it) and confirming they fail before trusting the
+  green.
+
+- BrotherSBE is now a Claude Code plugin, and nothing was moved to make that
+  true. `.claude-plugin/plugin.json` declares it, `skills/` holds six thin
+  namespaced skills (`kickoff`, `design`, `verify`, `review`, `learn`, `adopt`)
+  that route into the existing law rather than restating it, `agents/` holds
+  seven read-only reviewer agents, and `hooks/hooks.json` ships the four hooks
+  with self-resolving `${CLAUDE_PLUGIN_ROOT}` paths so no engineer hand-edits a
+  shared settings file. `SKILL.md`, `references/`, `tools/`, `tables/`,
+  `templates/` and every law citation stay exactly where they were: the
+  conversion was constrained to add a surface, never to move the law. Proven by
+  `claude plugin validate .` (passes) and by five new tests in
+  `tools/test_sbe.py` that pin the manifest to the `VERSION` file, require the
+  frontmatter each skill and agent loader reads, forbid a write tool in an agent
+  documented as read-only, and resolve every `${CLAUDE_PLUGIN_ROOT}` path cited
+  by a skill, an agent or a hook. The frontmatter test exists because
+  `claude plugin validate` caught a defect this suite's first version accepted:
+  an unquoted colon in a description makes the YAML parse fail, and the skill
+  then loads with empty metadata in silence. That test was calibrated by
+  re-injecting the defect and watching it fail. Rationale, the three rejected
+  alternatives and the flip condition: `docs/adr/2026-07-28-plugin-conversion.md`.
+  What the conversion does NOT fix is unchanged and still listed in
+  `docs/KNOWN-LIMITS.md`: evidence can still be hand-authored, the tier is still
+  computed from answers rather than from the diff, approvals are still not
+  resolved against a review platform, and the write fence still fails open and
+  does not gate Bash.
+
 - An onboarding set for engineers who have never seen this tool ships at
   `docs/for-engineers/`: eight pages (install and first run, one per role for
   backend, data, infrastructure and ETL, the limits page, and the adoption page)

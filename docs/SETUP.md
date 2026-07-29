@@ -51,7 +51,7 @@ Into `~/.claude/settings.json`, or a project `.claude/settings.json`. The harnes
 }
 ```
 
-What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd appends one idempotent telemetry line and scans your short messages for correction candidates (secret-redacted, owner-only). PreCompact does two things: it snapshots the whole worktree to a private git ref so a token-death is recoverable, and it writes the brief that survives the compaction. Both commands are in the block above; a setup carrying only the first loses the brief. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
+What each does: SessionStart injects the active-laws digest plus mechanical nags. SessionEnd captures nothing by default: each category is separately opt-in through `BROTHERSBE_TELEMETRY_METRICS`, `BROTHERSBE_TELEMETRY_TRANSCRIPT` and `BROTHERSBE_TELEMETRY_CORRECTIONS`, and `BROTHERSBE_TELEMETRY_DISABLE` forces all of them off for an organization that wants no choice in the matter. A category that stays off names the switch that kept it off. The data dictionary is in [SECURITY.md](../SECURITY.md). PreCompact does two things: it snapshots the whole worktree to a private git ref so a token-death is recoverable, and it writes the brief that survives the compaction. Both commands are in the block above; a setup carrying only the first loses the brief. Every hook exits 0 and never blocks a session. Opt-outs are in [SECURITY.md](../SECURITY.md).
 
 ## 4. Prove it works, in 60 seconds
 
@@ -121,8 +121,16 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
         run: |
           python3 evals/test_no_data_class.py
           python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave)
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
         run: python3 tools/test_sbe.py
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py
+      - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
+        run: sh scripts/test-install-artifact.sh
+      - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
+        run: sh scripts/test-upgrade-rollback.sh
 ```
 
 Seven steps, not three. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The waiver step (third of the seven) surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
