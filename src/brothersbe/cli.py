@@ -301,6 +301,19 @@ def _cmd_work(args):
     from . import work as work_mod
     return work_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                          exit_usage=EXIT_USAGE)
+def _cmd_pr(args):
+    """Pull-request surfaces, `verify` first. Not a delegation: like `evidence`,
+    `task` and `work`, there is no tool in `tools/` behind it. The read-only
+    GitHub client and the four-verdict report live in `brothersbe.prverify`;
+    this wrapper only routes and keeps the exit-code table in one place. No
+    closing caveat is printed here: the report's FINAL line is the last word,
+    and a credentials-absent run must not carry any other verdict word after it.
+    """
+    from . import prverify as prverify_mod
+    return prverify_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                             exit_usage=EXIT_USAGE)
+
+
 def _cmd_adopt(args):
     """Inspect a repository for BrotherSBE readiness. Dry run by default:
     prints every proposal as a unified diff and writes nothing. `--apply`
@@ -503,6 +516,8 @@ COMMANDS = [
              "diff-against-declaration postcondition", _cmd_task),
     ("work", "isolated implementation for one plan task: start, check, finish, remove, "
              "and never a merge", _cmd_work),
+    ("pr", "pull-request surfaces: pr verify <number> --repo owner/name checks live "
+           "GitHub approval evidence, bound to the head commit", _cmd_pr),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",

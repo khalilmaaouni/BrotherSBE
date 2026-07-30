@@ -8,6 +8,31 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe pr verify` (`src/brothersbe/prverify.py`) binds a PASS/FAIL verdict to
+  a pull request's live head commit on GitHub: PR existence, approval bound
+  to the current head sha, no self-approval, no dismissed or bot-only
+  approval, no changes-requested left standing, CODEOWNERS coverage, and
+  required checks on the head sha. Every control that cannot be checked
+  reports UNVERIFIABLE, a taxonomy that exists only at this report level
+  (a 401 or 403 with a token present, a race between fetch and force-push
+  naming both shas) and never a stand-in for PASS
+  (`test_403_with_a_token_present_is_unverifiable_never_pass`,
+  `test_a_force_pushed_head_between_first_and_last_fetch_is_unverifiable`).
+  Missing GitHub credentials on this machine are NO-DATA, never PASS: with no
+  GITHUB_TOKEN, no GH_TOKEN, and no `gh auth token`, every network-dependent
+  control reports NO-DATA with a one-line remedy and the process exits
+  nonzero (`test_no_token_no_gh_is_no_data_everywhere_with_remedy_and_nonzero_exit`).
+  The token, when one is found, is held in memory only: it is never printed,
+  never written to a report or receipt, and the canary fixtures plant a
+  distinctive token value and grep every line of output to prove it never
+  surfaces, in a full canned run and in a no-token CLI run
+  (`test_the_canary_token_never_appears_in_a_full_canned_run`,
+  `test_the_canary_token_never_appears_in_a_no_token_cli_run`). The GitHub
+  client is read-only by construction: a source level fixture inspects every
+  constructed request and fails if any method but GET appears anywhere
+  (`test_every_request_construction_is_get_no_mutating_method_anywhere`).
+  Proof: `tools/test_sbe_prverify.py`.
+
 - `sbe work` (`src/brothersbe/work.py`) gives a plan task an isolated
   lifecycle: `start` validates the plan with the landed `sbe plan` checks,
   refuses an incomplete or force closed dependency by naming it, refuses

@@ -709,3 +709,24 @@ confine what either writer's code can do while it runs.
 
 Full text: `docs/specs/2026-07-30-sbe-work-lifecycle.md`,
 `src/brothersbe/work.py`, `tools/test_sbe_work.py`.
+
+## pr verify reads GitHub, it does not police it
+
+There is no GitHub token on the reference machine, so `sbe pr verify`'s live
+path is opt-in, not the default: without GITHUB_TOKEN, GH_TOKEN, or a working
+`gh auth token`, every control that needs the network reports NO-DATA with a
+remedy, never PASS, and the exit is nonzero
+(`test_no_token_no_gh_is_no_data_everywhere_with_remedy_and_nonzero_exit`).
+Branch protection and required checks are read from the GitHub API on that
+call or reported UNVERIFIABLE; this tool never infers protection state from
+local git config, hooks, or history, because a local guess is not the same
+fact as what GitHub currently enforces. Approval state is re-fetched from the
+API on every run and never cached across runs or within one, so the verdict
+always reflects the request that just went out, not a stale copy. Because of
+that, a force-push landing between the first fetch and the last one in the
+same run is UNVERIFIABLE rather than a guess in either direction, naming both
+shas the check saw, and the remedy is the same command again
+(`test_a_force_pushed_head_between_first_and_last_fetch_is_unverifiable`).
+
+Full text: `docs/specs/2026-07-30-sbe-pr-verify.md`,
+`src/brothersbe/prverify.py`, `tools/test_sbe_prverify.py`.
