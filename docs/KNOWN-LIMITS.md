@@ -745,7 +745,9 @@ ARCHITECTURE compares declared component names against new top-level
 directories and everything deeper (technology choices, dependencies,
 infrastructure, recovery) is NO-DATA by design: intent is not readable from
 a diff. Scope compares path names against plan ownership and dossier-named
-paths; it does not read file contents. A FINAL PASS therefore means "nothing
+paths; it does not read file contents, and a changed file that is neither
+source-shaped nor detector-matched is named unmeasured rather than counted
+clean or flagged as unplanned noise. A FINAL PASS therefore means "nothing
 this tool can read contradicts the dossier", and its own output names every
 dimension that had nothing to read.
 
@@ -763,4 +765,6 @@ ids are per-change (every derived plan starts at T01) while the task
 registry is one global table, so records are attributed to changes
 best-effort by id, conflicts are computed globally over all open records so
 no collision can hide, and two changes cannot hold an open task with the
-same id at the same time.
+same id at the same time. A team-profile designRoots entry that resolves
+outside the repository is refused by name and never walked; discovery stays
+inside the tree it was asked about.

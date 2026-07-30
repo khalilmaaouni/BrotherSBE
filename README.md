@@ -313,7 +313,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-30 checks discovered from 4 registries in 19 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).
+30 checks discovered from 4 registries in 24 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:
