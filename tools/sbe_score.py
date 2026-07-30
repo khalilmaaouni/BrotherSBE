@@ -604,14 +604,14 @@ def check_review_cadence(ctx):
 # at the statement's semicolon so that a legitimate `ON CONFLICT ... DO UPDATE`
 # in the same file is not swept in with it.
 LINT_PATTERNS = [
-    (re.compile(r"except\s*:"), "bare except (catches everything, hides the real error)"),
-    (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*pass", re.M), "except-then-pass (swallows the error)"),
+    (re.compile(r"except\s*:"), "bare except (catches everything, hides the real error)", None),
+    (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*pass", re.M), "except-then-pass (swallows the error)", None),
     # The swallow shape that actually destroyed data in this repository:
     # `except X:` then `continue` or `return None` dropped ledger lines from a
     # REWRITER, and the two patterns above could not see it. Legal only in a
     # reader that never rewrites, which is what the inline waiver must say.
     (re.compile(r"except\s+\w[\w.]*\s*:\s*(#.*)?$\s*(?:continue|return\s+None)\b", re.M),
-     "except-then-continue/return-None (drops the record, hides the error)"),
+     "except-then-continue/return-None (drops the record, hides the error)", None),
     # Two patterns for one class, because the single pattern that shipped needed a
     # Python `.execute(` on the same line, and `.sql` is the FIRST non-Python
     # extension L11 says this lint scans. The one lint aimed at warehouse work
@@ -623,7 +623,7 @@ LINT_PATTERNS = [
     # 300 characters, so one long INSERT ... ON CONFLICT ... DO NOTHING statement
     # was reported clean while the law said the pattern "stops at the statement's
     # semicolon". `[^;]` already stops there, which is the whole bound this needs.
-    (re.compile(r"(?is)\bon\s+conflict\b[^;]*?\bdo\s+nothing\b"), "conflict-skipping upsert without a logged skip count"),
+    (re.compile(r"(?is)\bon\s+conflict\b[^;]*?\bdo\s+nothing\b"), "conflict-skipping upsert without a logged skip count", None),
     # Fire-and-forget subprocess only: the call starts a statement (result discarded)
     # and carries no check=True. An assigned result (out = subprocess.run(...)) can be
     # inspected, so it is not a silent swallow and is not flagged.
@@ -636,8 +636,17 @@ LINT_PATTERNS = [
     # is the honest answer to that, in the diff where a reader sees it.
     (re.compile(r"^[ \t]*subprocess\.(run|call|Popen)\("
                 r"(?!(?:[^()]|\((?:[^()]|\([^()]*\))*\))*check\s*=\s*True)", re.M),
-     "discarded subprocess result without check=True (exit code is swallowed)"),
-    (re.compile(r"try\s*!"), "force-try (Swift try! discards the error)"),
+     "discarded subprocess result without check=True (exit code is swallowed)", None),
+    # SCOPED TO .swift, and the scope is the fix. `try!` is Swift syntax and
+    # cannot occur in Python, SQL, Ruby, JavaScript, TypeScript or Go source. Run
+    # unscoped, this pattern matched the ENGLISH WORD in ordinary prose: the
+    # docstring line "Give it a try!" in a pure-Python file was reported as a
+    # discarded error, at gate severity, which under --strict blocks a merge.
+    # Found 2026-07-31 by running this lint against pallets/click, whose
+    # examples/colors/colors.py carries exactly that sentence. This file already
+    # records the same lesson twice, about the subprocess and ON CONFLICT
+    # patterns: a lint firing on correct code is how a gate gets switched off.
+    (re.compile(r"try\s*!"), "force-try (Swift try! discards the error)", (".swift",)),
 ]
 
 SCANNABLE = (".py", ".sql", ".swift", ".rb", ".js", ".ts", ".go")
@@ -791,7 +800,13 @@ def silent_failure_lints(ctx=None):
                 empty_files += 1
                 empties.append(os.path.relpath(path, root))
             file_hits, file_exempt = 0, 0
-            for pat, desc in LINT_PATTERNS:
+            file_ext = os.path.splitext(path)[1].lower()
+            for pat, desc, only_exts in LINT_PATTERNS:
+                # A pattern that names a language is never run against another
+                # one. `only_exts` of None means the shape is language-
+                # independent and every scannable extension is read.
+                if only_exts is not None and file_ext not in only_exts:
+                    continue
                 for m in pat.finditer(src):
                     first = src[:m.start()].count("\n")
                     last = first + src[m.start():m.end()].count("\n")

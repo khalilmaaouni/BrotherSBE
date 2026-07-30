@@ -868,6 +868,51 @@ class TestLintSelfSkipThroughSymlink(unittest.TestCase):
             self.assertEqual(outputs[0], outputs[1],
                              "one tree, two verdicts, depending on path spelling: %r" % outputs)
 
+    def test_a_language_scoped_pattern_never_fires_on_another_language(self):
+        """`try!` is Swift syntax that cannot occur in Python, and the pattern
+        for it used to run against every scannable extension. It therefore
+        matched the ENGLISH WORD in ordinary prose: a pure-Python file whose
+        docstring reads "Give it a try!" was reported as a discarded error at
+        gate severity, which under --strict blocks a merge. Found 2026-07-31 by
+        running this lint against pallets/click, whose examples/colors/colors.py
+        carries exactly that sentence.
+
+        Calibrated in BOTH directions on purpose, because a test written only
+        from the fix would pass just as well if the pattern had been deleted:
+        the prose file must come back clean AND a real Swift `try!` must still
+        FAIL. Deleting the pattern satisfies the first assertion and breaks the
+        second."""
+        def lint_line(root):
+            r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_score.py")],
+                               env=dict(os.environ, SBE_LINT_ROOT=root,
+                                        BROTHERSBE_REGISTRIES=""),
+                               capture_output=True, text=True)
+            return next((l for l in r.stdout.splitlines()
+                         if l.startswith("silent-failure-lints")), "")
+
+        with tempfile.TemporaryDirectory() as d:
+            prose = os.path.join(d, "prose")
+            os.makedirs(prose)
+            io.open(os.path.join(prose, "harmless.py"), "w").write(
+                '"""A module with no error handling at all.\n\n'
+                'Give it a try! This sentence is prose in a docstring.\n"""\n\n\n'
+                "def add(a, b):\n    return a + b\n")
+            line = lint_line(prose)
+            self.assertIn("PASS", line.split()[:2],
+                          "the English word in a docstring was read as Swift "
+                          "syntax: %s" % line)
+            self.assertNotIn("force-try", line, line)
+
+            swift = os.path.join(d, "swift")
+            os.makedirs(swift)
+            io.open(os.path.join(swift, "Real.swift"), "w").write(
+                "func load() {\n    try! risky()\n}\n")
+            line = lint_line(swift)
+            self.assertIn("FAIL", line.split()[:2],
+                          "a real Swift force-try stopped being caught, so the "
+                          "scope removed the rule instead of aiming it: %s" % line)
+            self.assertIn("force-try", line, line)
+
     @unittest.skipIf(os.name != "posix", "needs a hardlink")
     def test_a_directory_mostly_self_skipped_names_the_count_and_withdraws_clean(self):
         """review-13a: a directory where the walk reaches its own source under

@@ -8,6 +8,21 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The silent-failure lint no longer reads English as Swift. Every pattern now
+  carries an explicit language scope, and `try!` is scoped to `.swift`, where it
+  is syntax; unscoped, it matched the ordinary word in prose, so a pure-Python
+  file whose docstring reads "Give it a try!" was reported as a discarded error
+  at GATE severity, which under `--strict` blocks a merge. Found by running this
+  lint against a real outside tree (pallets/click, whose
+  examples/colors/colors.py carries exactly that sentence), which is also the
+  first time this project's headline check has been exercised on code it did not
+  write. Held by
+  `TestLintSelfSkipThroughSymlink::test_a_language_scoped_pattern_never_fires_on_another_language`,
+  calibrated in both directions by reinjecting the unscoped pattern and watching
+  exactly that test go red, then restoring it: the prose file must come back
+  clean AND a real Swift force-try must still FAIL, so deleting the rule cannot
+  pass the test
+
 - The five first-rank commands were audited against their own specs and the
   nine confirmed defects fixed, each with the test that now holds the fix.
   `sbe pr verify` validates `--repo` against an anchored `owner/name` shape
