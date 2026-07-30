@@ -2852,7 +2852,31 @@ def find_dossiers(root):
             pruner.note(lambda f: f == INTAKE or f in set(ARTIFACT_FILES.values())))
 
 
+DESIGN_USAGE = (
+    "usage: sbe_design.py [check-name] [directory] [--strict] [--strict-waivers]\n"
+    "  reads: the dossier files under the directory (default .).\n"
+    "  writes: nothing.\n"
+    "  checks (pass one name for a single check): %s\n"
+    "  flags:\n"
+    "    --strict          make a FAIL block the exit code\n"
+    "    --strict-waivers  make a WAIVED directory block as well\n"
+    "    -h, --help        print this and exit 0 without examining anything"
+)
+
+
 def main():
+    # Flags used to be stripped wholesale (every leading-dash token dropped),
+    # so `-h` ran a real scan instead of printing help, and a mistyped flag
+    # was silently ignored rather than refused: the same defect class that let
+    # sbe_telemetry's `data-export --help` run a real export.
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(DESIGN_USAGE % ", ".join(CHECKS))
+        sys.exit(0)
+    for a in sys.argv[1:]:
+        if a.startswith("-") and a not in ("--strict", "--strict-waivers"):
+            print(DESIGN_USAGE % ", ".join(CHECKS))
+            say("sbe_design: unrecognized flag %r; refusing rather than running past it" % a)
+            sys.exit(2)
     strict = "--strict" in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("-")]
     root = "."

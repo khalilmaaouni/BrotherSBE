@@ -1392,7 +1392,24 @@ GATES = {
 }
 
 
+GATE_USAGE = (
+    "usage: sbe_gate.py [gate-name] [directory] [--strict] [--strict-waivers]\n"
+    "  reads: the receipts and dossier files under the directory (default .).\n"
+    "  writes: nothing.\n"
+    "  gates (pass one name for a single gate): %s\n"
+    "  flags:\n"
+    "    --strict          make a FAIL block the exit code\n"
+    "    --strict-waivers  make a WAIVED gate artifact block as well\n"
+    "    -h, --help        print this and exit 0 without examining anything"
+)
+
+
 def main():
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        # Help is not an error. -h used to be read as "neither a gate name nor
+        # a directory" and refused with exit 1.
+        print(GATE_USAGE % ", ".join(GATES))
+        sys.exit(0)
     argv = [a for a in sys.argv[1:] if a not in ("--strict", "--strict-waivers")]
     strict = "--strict" in sys.argv
     # A waiver is not a pass, so CI must be able to act on one without reading
@@ -1414,6 +1431,13 @@ def main():
             sys.exit(1)
         if a in GATES:
             which = [a]
+        elif a.startswith("-"):
+            # A mistyped flag is a usage error (exit 2, matching the CLI's
+            # documented table), not a failed control: exit 1 here taught CI
+            # to read a typo as a gate that FAILED.
+            print(GATE_USAGE % ", ".join(GATES))
+            say("sbe_gate: unrecognized flag %r; refusing rather than running past it" % a)
+            sys.exit(2)
         elif os.path.isdir(a):
             roots.append(a)
             root = a

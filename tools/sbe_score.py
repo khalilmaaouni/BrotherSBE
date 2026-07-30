@@ -1287,7 +1287,31 @@ def _reads_this_tree(check, here):
     return False
 
 
+SCORE_USAGE = (
+    "usage: sbe_score.py [directory] [--strict] [--strict-soft]\n"
+    "  reads: the registries, receipts and source tree the checks name; a\n"
+    "    directory argument sets the lint root (SBE_LINT_ROOT overrides).\n"
+    "  writes: nothing.\n"
+    "  flags:\n"
+    "    --strict          make a gate-severity FAIL block the exit code\n"
+    "    --strict-soft     make graded (soft) FAILs block as well; implies --strict\n"
+    "    -h, --help        print this and exit 0 without examining anything"
+)
+
+
 def main():
+    # Flags used to be skipped wholesale wherever argv was read, so `-h` ran a
+    # real scan instead of printing help, and a mistyped flag was silently
+    # ignored rather than refused: the same defect class that let
+    # sbe_telemetry's `data-export --help` run a real export.
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(SCORE_USAGE)
+        sys.exit(0)
+    for a in sys.argv[1:]:
+        if a.startswith("-") and a not in ("--strict", "--strict-soft"):
+            print(SCORE_USAGE)
+            say("sbe_score: unrecognized flag %r; refusing rather than running past it" % a)
+            sys.exit(2)
     # Building the context is itself guarded. It used to sit outside run_guarded,
     # so a context that could not be built took every check with it. A check whose
     # context cannot be built is a FAILED check, one line each, and the checks that

@@ -161,7 +161,29 @@ DEFAULT_TABLE_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "tables", "architecture.json")
 
 
+DECIDE_USAGE = (
+    "usage: sbe_decide.py [table-name | table-file.json [table-name]] [key=value ...]\n"
+    "  reads: the named decision table (default: tables/architecture.json,\n"
+    "    table 'shape'); key=value arguments answer criteria without the\n"
+    "    interview, and unanswered criteria are asked interactively.\n"
+    "  writes: nothing.\n"
+    "  flags:\n"
+    "    -h, --help        print this and exit 0 without reading a table"
+)
+
+
 def main():
+    # Help is not an error, and a flag is not a table name: `-h` used to be
+    # read as a table called '-h' and refused with exit 1, in a tool whose law
+    # is about not silently misreading an input.
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(DECIDE_USAGE)
+        sys.exit(0)
+    for a in sys.argv[1:]:
+        if a.startswith("-"):
+            print(DECIDE_USAGE)
+            say("sbe_decide: unrecognized flag %r; refusing rather than running past it" % a)
+            sys.exit(2)
     # `sbe_decide.py architecture` is how SKILL.md L12's sentence reads, and the
     # first argument was treated as a file path unconditionally, so that invocation
     # printed "cannot read table file architecture: No such file or directory" and

@@ -77,6 +77,16 @@ Open, named, and owned by a next session:
    list (sbe design owns that gate); an advisory line is worth adding.
 8. MINOR: subcommand help (-h) prints correct help but exits 2 across several
    tools; the known help-exit sweep item, still open.
+   CLOSED in the follow-up session, same day, and the sweep found it was
+   never "several tools": every one of the 23 subcommands exited 2 on an
+   explicit -h, and run standalone, sbe_design.py and sbe_score.py silently
+   stripped -h and ran a REAL scan. Now -h/--help exits 0 with the owning
+   surface's usage on every subcommand, and an unrecognized flag is refused
+   with exit 2 rather than ignored. Pinned by
+   TestHelpMeansHelpOnEveryCommand in tools/test_sbe.py plus a
+   TestHelpMeansHelp class in each of the six owning suites (17 fixtures),
+   each round shown red against the reinjected defect before being counted
+   green, restores verified against pre-recorded git hash-object values.
 
 False blockers observed: two, both from defect 1 and both gone with it.
 Frictions a paying engineer would name: -h behavior, sbe intake being

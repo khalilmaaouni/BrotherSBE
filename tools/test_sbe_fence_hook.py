@@ -688,5 +688,49 @@ class TestShippedFileHygiene(unittest.TestCase):
                 "runs in front of every edit")
 
 
+class TestHelpMeansHelp(unittest.TestCase):
+    """`-h` used to start with a dash, miss the command table, and fall into
+    HOOK mode: the tool sat reading stdin for a JSON payload nobody was going
+    to send, then failed open, and `fences --bogus` was read as a directory
+    named --bogus and reported "no fence is enforceable", exit 0. Help is not
+    an error and a flag is not a directory. The bare hook invocation is
+    untouched: it still fails open on an empty stdin, because a hook must
+    never block a session. Calibrated by reinjecting the missing help branch:
+    the help fixture failed (usage absent, hook fail-open text present)
+    before the fix was restored, the restore verified against the
+    pre-recorded `git hash-object` of the fixed file."""
+
+    def _run(self, *argv):
+        out = subprocess.run([sys.executable, HOOK_PATH] + list(argv),
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        return out.returncode, out.stdout, out.stderr
+
+    def test_help_exits_0_with_usage_on_stderr_and_a_clean_stdout(self):
+        """Usage goes to stderr because stdout is the hook's decision channel:
+        a usage text on stdout would corrupt the protocol if this ever ran in
+        the hook slot with a stray flag."""
+        for argv in (("-h",), ("--help",), ("fences", "-h")):
+            code, stdout, stderr = self._run(*argv)
+            self.assertEqual(code, 0, "%s exited %d: %s"
+                             % (" ".join(argv), code, stdout + stderr))
+            self.assertIn("usage: sbe_fence_hook.py", stderr,
+                          "%s printed no usage on stderr: %r" % (" ".join(argv), stderr))
+            self.assertEqual(stdout, "",
+                             "%s wrote to stdout, the decision channel" % " ".join(argv))
+
+    def test_a_bad_flag_on_fences_exits_2_instead_of_reading_it_as_a_directory(self):
+        code, stdout, stderr = self._run("fences", "--bogus")
+        self.assertEqual(code, 2, "fences --bogus exited %d: %s" % (code, stdout + stderr))
+        self.assertIn("unrecognized flag", stderr)
+        self.assertEqual(stdout, "", "the refusal leaked onto the decision channel")
+
+    def test_the_bare_hook_invocation_still_fails_open(self):
+        code, stdout, stderr = self._run()
+        self.assertEqual(code, 0,
+                         "the bare hook invocation must never block a session; it "
+                         "exited %d: %s" % (code, stderr))
+        self.assertIn("FAILING OPEN", stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

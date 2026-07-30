@@ -65,6 +65,16 @@ Read 0 precisely. It means nothing failed. It does **not** mean something passed
 every check reported NO-DATA also exits 0, because nothing failed and nothing was examined
 either. `verify` and `review` print a closing line saying so, since an exit code cannot.
 
+Help means help, on every subcommand: `-h`/`--help` prints the owning surface's usage and
+exits 0 before anything is read, scanned or written. For the passthrough commands (design,
+gate, score, intake, decide, fences, plan, evidence, task, work, pr) the whole argv,
+including `-h`, goes to the tool or module that owns the parsing, so the usage you see is
+that surface's own; for everything else the CLI answers directly. A flag a surface does not
+know is refused with usage and exit 2, never silently ignored: a typo must not run as if
+nothing were wrong. The one deliberate exception is `tools/sbe_fence_hook.py`'s bare hook
+invocation, which stays fail-open by law; its explicit `-h` still exits 0, with usage on
+stderr because that tool's stdout is the hook decision channel.
+
 ## Machine-readable output
 
 `doctor --json` emits the tool version and the evidence schema version alongside its checks,

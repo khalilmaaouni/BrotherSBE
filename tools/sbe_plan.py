@@ -1063,8 +1063,30 @@ def build_plan(dossier_dir, repo_root):
 # Command line
 # ---------------------------------------------------------------------------
 
+PLAN_USAGE = (
+    "usage: sbe_plan.py <dossier-dir> [check-name] [--write] [--json] [--strict] "
+    "[--cwd <repo>]\n"
+    "  reads: 08-plan.json in the dossier directory, plus the dossier artifacts\n"
+    "    each check cites.\n"
+    "  writes: nothing without --write; with it, derives and writes 08-plan.json\n"
+    "    before validating what was written.\n"
+    "  checks (pass one name for a single advisory check): %s\n"
+    "  flags:\n"
+    "    --write           derive the plan from the dossier, then validate it\n"
+    "    --json            machine-readable output\n"
+    "    --strict          make FAIL block the exit code\n"
+    "    --cwd <repo>      the repository the plan is measured against\n"
+    "    -h, --help        print this and exit 0"
+)
+
+
 def main():
     argv = sys.argv[1:]
+    if any(a in ("-h", "--help") for a in argv):
+        # Help is not an error. This used to fall through to the unknown-flag
+        # refusal, so an explicit help request printed usage and exited 2.
+        print(PLAN_USAGE % ", ".join(PLAN_CHECKS))
+        return 0
     strict = "--strict" in argv
     write = "--write" in argv
     as_json = "--json" in argv

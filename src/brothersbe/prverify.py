@@ -657,6 +657,11 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
     reads clean; every other final verdict, including credentials-absent
     NO-DATA, exits nonzero."""
     rest = list(rest)
+    if rest and rest[0] in ("-h", "--help"):
+        # Help is not an error: `sbe pr -h` prints the one subcommand's usage
+        # and exits 0, rather than being refused as a missing 'verify'.
+        _parser().print_help(sys.stdout)
+        return exit_ok
     if not rest or rest[0] != "verify":
         sys.stderr.write("sbe pr: the first positional is 'verify' "
                          "(sbe pr verify <number> --repo owner/name); got %s\n"
@@ -665,8 +670,11 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
     parser = _parser()
     try:
         args = parser.parse_args(rest[1:])
-    except SystemExit:
-        return exit_usage
+    except SystemExit as exc:
+        # argparse already answered: -h/--help printed the usage the caller
+        # asked for and raised 0, and help is not an error. Anything nonzero
+        # is a refused flag or argument.
+        return exit_ok if exc.code in (0, None) else exit_usage
     if not valid_repo_shape(args.repo):
         sys.stderr.write(
             "sbe pr verify: --repo must look like owner/name, where owner and name "

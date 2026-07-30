@@ -278,5 +278,41 @@ class TestTheOneOverlapRule(TaskFixture):
             sys.path.pop(0)
 
 
+class TestHelpMeansHelp(unittest.TestCase):
+    """`sbe task open -h` printed the right usage and exited 2: the module
+    caught argparse's SystemExit(0) for help and folded it into exit_usage,
+    and a LEADING `-h` (`sbe task -h`) never reached this module at all,
+    refused by the top-level parser. Help is not an error. Calibrated by
+    reinjecting the bare `except SystemExit: return exit_usage` and the
+    argparse-first dispatch in cli.py: each fixture failed on a returncode of
+    2 where 0 was asserted, before the fix was restored, the restore verified
+    against the pre-recorded `git hash-object` of the fixed files."""
+
+    def run_sbe(self, *argv):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        out = subprocess.run([sys.executable, SBE, "task"] + list(argv),
+                             capture_output=True, text=True, cwd=tmp)
+        return out.returncode, out.stdout + out.stderr, tmp
+
+    def test_help_exits_0_with_usage_and_opens_nothing(self):
+        for argv in (("-h",), ("--help",), ("open", "-h"), ("close", "-h"),
+                     ("list", "-h"), ("fence", "-h"), ("check", "-h")):
+            code, text, tmp = self.run_sbe(*argv)
+            self.assertEqual(code, 0, "sbe task %s exited %d: %s"
+                             % (" ".join(argv), code, text))
+            self.assertIn("usage", text.lower(),
+                          "sbe task %s printed no usage: %r" % (" ".join(argv), text))
+            self.assertFalse(os.path.exists(os.path.join(tmp, ".sbe")),
+                             "sbe task %s created a registry it was only asked to "
+                             "describe" % " ".join(argv))
+
+    def test_a_genuinely_bad_flag_still_exits_2(self):
+        for argv in (("--bogus",), ("open", "--bogus")):
+            code, text, _tmp = self.run_sbe(*argv)
+            self.assertEqual(code, 2, "sbe task %s exited %d, not the usage error 2: %s"
+                             % (" ".join(argv), code, text))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

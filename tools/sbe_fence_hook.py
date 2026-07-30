@@ -921,6 +921,14 @@ def cmd_fences(argv):
     Everything on stderr and nothing on stdout, because stdout is the decision
     channel and a diagnostic there would corrupt the protocol if anyone wired
     this subcommand into the hook slot by mistake."""
+    if argv and argv[0].startswith("-"):
+        # A flag is not a directory: `fences --bogus` used to be read as a
+        # directory named --bogus and reported "no fence is enforceable",
+        # exit 0, which is a silent misread of the invocation.
+        _warn(FENCE_HOOK_USAGE)
+        _warn("sbe_fence_hook fences: unrecognized flag %r; refusing rather than "
+              "reading it as a directory" % argv[0])
+        return 2
     cwd = argv[0] if argv else os.getcwd()
     _warn("registry patterns: %s" % ", ".join(registry_patterns(cwd)))
     try:
@@ -944,9 +952,26 @@ _COMMANDS = {
     "fences": cmd_fences,
 }
 
+FENCE_HOOK_USAGE = (
+    "usage: sbe_fence_hook.py [hook|fences [directory]]\n"
+    "  hook (or no subcommand): the Claude Code PreToolUse hook; reads one JSON\n"
+    "    payload from stdin, prints its decision to stdout, and FAILS OPEN.\n"
+    "  fences [directory]: diagnostics on stderr, the live fences enforceable\n"
+    "    from the directory (default: the current one).\n"
+    "  flags:\n"
+    "    -h, --help        print this and exit 0 without reading stdin"
+)
+
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if any(a in ("-h", "--help") for a in argv):
+        # Help is not an error and exits 0 without reading stdin. It goes to
+        # stderr like every other diagnostic here, because stdout is the
+        # decision channel and a usage text there would corrupt the protocol
+        # if this ever ran in the hook slot with a stray flag.
+        _warn(FENCE_HOOK_USAGE)
+        return 0
     if argv and argv[0] in _COMMANDS:
         return _COMMANDS[argv[0]](argv[1:])
     if argv and not argv[0].startswith("-"):

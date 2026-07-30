@@ -730,8 +730,12 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         return exit_usage
     try:
         args = parser.parse_args(ours)
-    except SystemExit:
-        return exit_usage
+    except SystemExit as exc:
+        # argparse already answered: -h/--help printed the usage the caller
+        # asked for and raised 0, and help is not an error. Anything nonzero
+        # is a refused flag or argument. Folding both into exit_usage made
+        # every explicit help request on this surface exit 2.
+        return exit_ok if exc.code in (0, None) else exit_usage
     if not getattr(args, "sub", None):
         parser.print_help(sys.stderr)
         return exit_usage

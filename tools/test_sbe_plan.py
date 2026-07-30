@@ -506,5 +506,38 @@ class TestExternalProofRepairs(unittest.TestCase):
         finally:
             _sh.rmtree(tmp, ignore_errors=True)
 
+
+class TestHelpMeansHelp(unittest.TestCase):
+    """`sbe plan -h` exited 2 twice over: the top-level parser refused the
+    leading `-h` before it could reach this tool, and the tool itself read
+    `-h` as an unknown flag and refused it with usage and exit 2. Help is not
+    an error. Calibrated by reinjecting the missing help branch in
+    sbe_plan.py's main and the argparse-first dispatch in cli.py: each fixture
+    failed on a returncode of 2 where 0 was asserted, before the fix was
+    restored, the restore verified against the pre-recorded `git hash-object`
+    of the fixed files."""
+
+    def test_help_exits_0_with_usage_and_derives_nothing(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        for argv in (("plan", "-h"), ("plan", "--help"), ("plan", "-h", "--write")):
+            import subprocess as _sp
+            out = _sp.run([sys.executable, SBE] + list(argv), capture_output=True,
+                          text=True, stdin=_sp.DEVNULL, cwd=tmp, timeout=120)
+            self.assertEqual(out.returncode, 0, "sbe %s exited %d: %s"
+                             % (" ".join(argv), out.returncode, out.stdout + out.stderr))
+            self.assertIn("usage: sbe_plan.py", out.stdout,
+                          "sbe %s printed no usage: %r" % (" ".join(argv), out.stdout))
+            self.assertEqual(os.listdir(tmp), [],
+                             "sbe %s wrote into the directory it was only asked to "
+                             "describe itself from" % " ".join(argv))
+
+    def test_a_genuinely_bad_flag_still_exits_2(self):
+        code, text, _err = _run_sbe("plan", "--bogus")
+        self.assertEqual(code, 2, "sbe plan --bogus exited %d, not the usage error 2: %s"
+                         % (code, text))
+        self.assertIn("unknown flag", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

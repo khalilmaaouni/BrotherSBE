@@ -563,6 +563,20 @@ COMMANDS = [
 ]
 
 
+#: Commands whose whole argv belongs to the surface behind them: the tool in
+#: `tools/` or the package module that owns the parsing, the help text and the
+#: refusals. These are dispatched BY HAND in `main`, before argparse sees their
+#: arguments, because argparse's REMAINDER drops a LEADING flag: `sbe intake -h`
+#: never reached the tool that could answer it, the top parser refused it as a
+#: usage error, and every one of these commands exited 2 for an explicit help
+#: request. Help is not an error: `-h` on these commands now reaches the owning
+#: parser, which prints its own usage and exits 0, and a genuinely bad flag is
+#: refused by that same parser with a nonzero exit.
+PASSTHROUGH = frozenset((
+    "design", "gate", "score", "intake", "decide", "fences", "plan",
+    "evidence", "task", "work", "pr"))
+
+
 def build_parser():
     epilog = "commands:\n" + "".join(
         "  %-15s %s\n" % (name, help_) for (name, help_, _) in COMMANDS)
@@ -575,7 +589,11 @@ def build_parser():
     parser.add_argument("--version", action="store_true", help="print the version and exit")
     sub = parser.add_subparsers(dest="command")
     for name, help_, _ in COMMANDS:
-        child = sub.add_parser(name, help=help_, add_help=False)
+        # A passthrough child keeps add_help=False because its arguments,
+        # including -h, belong to the surface behind it (main dispatches those
+        # by hand). Every other child lets argparse answer -h itself: print
+        # that command's usage and exit 0, which is what help means.
+        child = sub.add_parser(name, help=help_, add_help=name not in PASSTHROUGH)
         if name == "doctor":
             child.add_argument("--json", action="store_true",
                                help="machine-readable output carrying the tool and schema "
@@ -662,6 +680,10 @@ def main(argv=None):
     if not argv:
         parser.print_help()
         return EXIT_USAGE
+    if argv[0] in PASSTHROUGH:
+        for name, _help, run in COMMANDS:
+            if name == argv[0]:
+                return run(argparse.Namespace(command=name, rest=argv[1:]))
     args = parser.parse_args(argv)
     if getattr(args, "version", False):
         return _cmd_version(args)

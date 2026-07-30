@@ -681,5 +681,51 @@ class TestSchemaCompat(EvidenceFixture):
         self.assertEqual(self.load()["schemaVersion"], "1.1")
 
 
+class TestHelpMeansHelp(unittest.TestCase):
+    """`sbe evidence ... -h` printed the right usage and exited 2: the module
+    caught argparse's SystemExit(0) for help and folded it into exit_usage,
+    and a LEADING `-h` (`sbe evidence -h`) never even reached this module,
+    refused by the top-level parser instead. Help is not an error. Calibrated
+    by reinjecting the bare `except SystemExit: return exit_usage` and the
+    argparse-first dispatch in cli.py: each fixture here failed on a
+    returncode of 2 where 0 was asserted, before the fix was restored,
+    the restore verified against the pre-recorded `git hash-object` of the
+    fixed files."""
+
+    def run_sbe(self, *argv):
+        out = subprocess.run([sys.executable, SBE] + list(argv),
+                             capture_output=True, text=True,
+                             cwd=tempfile.gettempdir())
+        return out.returncode, out.stdout, out.stderr
+
+    def test_help_exits_0_with_usage_on_every_evidence_surface(self):
+        for argv in (("evidence", "-h"), ("evidence", "--help"),
+                     ("evidence", "run", "-h"), ("evidence", "verify", "-h"),
+                     ("evidence", "show", "-h")):
+            code, stdout, stderr = self.run_sbe(*argv)
+            self.assertEqual(code, 0, "sbe %s exited %d: %s"
+                             % (" ".join(argv), code, stdout + stderr))
+            self.assertIn("usage", (stdout + stderr).lower(),
+                          "sbe %s printed no usage: %r" % (" ".join(argv), stdout + stderr))
+
+    def test_help_on_run_writes_no_receipt(self):
+        """`evidence run -h` must answer and stop; before anything, no receipt
+        file may appear where --out points."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        receipt = os.path.join(tmp, "receipt.json")
+        code, stdout, stderr = self.run_sbe("evidence", "run", "--out", receipt, "-h")
+        self.assertEqual(code, 0, stdout + stderr)
+        self.assertFalse(os.path.exists(receipt),
+                         "evidence run -h wrote the receipt it was only asked to describe")
+
+    def test_a_genuinely_bad_flag_still_exits_2(self):
+        for argv in (("evidence", "--bogus"), ("evidence", "run", "--bogus"),
+                     ("evidence", "verify", "--bogus")):
+            code, stdout, stderr = self.run_sbe(*argv)
+            self.assertEqual(code, 2, "sbe %s exited %d, not the usage error 2: %s"
+                             % (" ".join(argv), code, stdout + stderr))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

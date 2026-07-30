@@ -1186,6 +1186,84 @@ class TestCliSurface(unittest.TestCase):
         self.assertTrue(out.stdout.strip(), "the package imported but reports no version")
 
 
+class TestHelpMeansHelpOnEveryCommand(unittest.TestCase):
+    """The whole-surface sweep of the defect class 117744f fixed on the three
+    data commands: an explicit help request exited 2 on EVERY subcommand.
+    Two mechanisms, both pinned here. The top-level parser built every child
+    with add_help=False and argparse's REMAINDER drops a LEADING flag, so
+    `sbe intake -h` was refused as a usage error by a parser that had no help
+    to give; and the tools behind `design`, `score` and `fences` stripped
+    flags wholesale, so run directly, `-h` silently ran a REAL scan instead
+    of printing help, the same shape as `data-export --help` running a real
+    export. Help is not an error, and a flag a surface does not know is
+    refused with exit 2, never silently dropped. Calibrated by reinjecting
+    add_help=False plus the argparse-first dispatch in cli.py and the missing
+    help branches in the tools: every fixture here went red (a returncode of
+    2 or a real scan where usage was asserted) before the fix was restored,
+    the restore verified against the pre-recorded `git hash-object` of each
+    fixed file."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def _run(self, *argv, **kwargs):
+        return subprocess.run([sys.executable, self.SBE] + list(argv),
+                              capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL,
+                              cwd=kwargs.get("cwd") or self.ROOT)
+
+    def _commands(self):
+        sys.path.insert(0, os.path.join(self.ROOT, "src"))
+        try:
+            import brothersbe.cli as cli
+            return cli
+        finally:
+            sys.path.pop(0)
+
+    def test_dash_h_and_dash_dash_help_exit_0_on_every_command(self):
+        """Every name in cli.COMMANDS, both spellings, so a command added
+        later cannot rejoin the defect class unnoticed."""
+        cli = self._commands()
+        for name, _help, _run in cli.COMMANDS:
+            for flag in ("-h", "--help"):
+                out = self._run(name, flag)
+                self.assertEqual(out.returncode, 0,
+                                 "sbe %s %s exited %d; an explicit help request is "
+                                 "not an error: %s"
+                                 % (name, flag, out.returncode, out.stdout + out.stderr))
+                self.assertIn("usage", (out.stdout + out.stderr).lower(),
+                              "sbe %s %s exited 0 but printed no usage: %r"
+                              % (name, flag, out.stdout + out.stderr))
+
+    def test_help_on_the_scanning_tools_examines_nothing(self):
+        """Run from an empty directory, `-h` on the tools that scan a tree
+        must print usage and stop: no report header, no verdict line. Before
+        the fix, sbe_design.py and sbe_score.py stripped `-h` and scanned for
+        real, and their exit 0 was a scan result, not an answered question."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        for name in ("design", "score", "gate", "plan", "decide", "intake"):
+            out = self._run(name, "-h", cwd=tmp)
+            self.assertEqual(out.returncode, 0, "sbe %s -h: %s"
+                             % (name, out.stdout + out.stderr))
+            self.assertNotIn("BROTHERSBE", out.stdout,
+                             "sbe %s -h printed a report header, so it ran a real "
+                             "scan instead of answering the help request" % name)
+            self.assertEqual(os.listdir(tmp), [],
+                             "sbe %s -h wrote into the directory it ran from" % name)
+
+    def test_an_unrecognized_flag_refuses_with_exit_2_on_every_command(self):
+        cli = self._commands()
+        for name, _help, _run in cli.COMMANDS:
+            out = self._run(name, "--no-such-flag-on-purpose")
+            self.assertEqual(out.returncode, cli.EXIT_USAGE,
+                             "sbe %s --no-such-flag-on-purpose exited %d, not the "
+                             "usage error %d; a flag a surface does not know must be "
+                             "refused, never silently dropped: %s"
+                             % (name, out.returncode, cli.EXIT_USAGE,
+                                out.stdout + out.stderr))
+
+
 class TestDoctorIdentityCheck(unittest.TestCase):
     """THE DEFECT THIS CONTROL EXISTS FOR: a leaked fixture identity, `ci
     <ci@example.com>`, authored a run of real commits in public history

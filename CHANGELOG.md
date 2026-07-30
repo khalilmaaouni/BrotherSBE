@@ -8,6 +8,38 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- Help means help on EVERY `sbe` subcommand, closing external-proof open item 8: the
+  whole-surface sweep of the defect class fixed on the three telemetry data commands in
+  the entry further down ("make help mean help on the data commands"). Two mechanisms
+  produced the same wrong answer, exit 2 for an explicit `-h`/`--help`, on all 23
+  subcommands: the top-level parser built every child with add_help=False while
+  argparse's REMAINDER drops a LEADING flag, so `sbe intake -h` was refused by a parser
+  with no help to give and never reached the tool that had one; and the package modules
+  behind `evidence`, `task`, `work` and `pr` caught argparse's SystemExit(0) for help
+  and folded it into exit_usage, so `sbe evidence run -h` printed the RIGHT usage and
+  still exited 2. Run standalone, three tools were worse than a wrong exit code:
+  `sbe_design.py -h` and `sbe_score.py -h` stripped flags wholesale and ran a REAL scan
+  (the `data-export --help` shape again), `sbe_fence_hook.py -h` fell into hook mode and
+  sat reading stdin, and `sbe_decide.py -h` was read as a table named '-h'. Now the
+  passthrough commands (design, gate, score, intake, decide, fences, plan, evidence,
+  task, work, pr) are dispatched by hand in `src/brothersbe/cli.py` before argparse sees
+  their argv, every other child parser answers `-h` itself, each owning surface prints
+  its own usage and exits 0 before touching anything, and a flag a surface does not know
+  is refused with usage and exit 2, never silently dropped (`sbe_intake.py`'s refusal
+  was exit 1, now 2, matching the CLI's documented table). The bare hook invocation of
+  `sbe_fence_hook.py` is untouched and still fails open, and its usage prints on stderr
+  because stdout is that tool's decision channel. Proof: `TestHelpMeansHelpOnEveryCommand`
+  in `tools/test_sbe.py` (every command in cli.COMMANDS, both help spellings, plus the
+  scanning tools examining nothing on -h and the whole-surface bad-flag refusal) and a
+  `TestHelpMeansHelp` class in each owning suite: `test_sbe_evidence.py`,
+  `test_sbe_tasks.py`, `test_sbe_work.py`, `test_sbe_prverify.py`, `test_sbe_plan.py`,
+  `test_sbe_fence_hook.py`, 17 fixtures in all. Calibrated red in three rounds by
+  reinjecting add_help=False plus the argparse-first dispatch, the SystemExit fold in
+  each module, and each tool's missing help branch: every help fixture failed (a
+  returncode of 2, or a real scan where usage was asserted) before the fix was restored,
+  each restore verified byte-identical against the pre-recorded `git hash-object` of the
+  fixed file rather than by `git checkout`.
+
 - External proof round one: three public estates (a FastAPI application, a dbt
   project, an infrastructure deployment) ran the whole assurance path with
   attack rounds, and four defects they surfaced are fixed with calibrated

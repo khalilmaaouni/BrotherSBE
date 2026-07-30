@@ -690,5 +690,37 @@ class TestReadOnlyLaw(unittest.TestCase):
                          + "\n  ".join(findings))
 
 
+class TestHelpMeansHelp(unittest.TestCase):
+    """`sbe pr verify -h` printed the right usage and exited 2 (the module
+    folded argparse's SystemExit(0) for help into exit_usage), and `sbe pr -h`
+    was refused as a missing 'verify' positional. Help is not an error, and a
+    help request opens no network connection. Calibrated by reinjecting the
+    bare `except SystemExit: return exit_usage` and the missing leading-help
+    branch: each fixture failed on a returncode of 2 where 0 was asserted,
+    before the fix was restored, the restore verified against the
+    pre-recorded `git hash-object` of the fixed files."""
+
+    def run_sbe(self, *argv):
+        out = subprocess.run([sys.executable, SBE, "pr"] + list(argv),
+                             capture_output=True, text=True,
+                             cwd=tempfile.gettempdir())
+        return out.returncode, out.stdout, out.stderr
+
+    def test_help_exits_0_with_usage(self):
+        for argv in (("-h",), ("--help",), ("verify", "-h"), ("verify", "--help")):
+            code, stdout, stderr = self.run_sbe(*argv)
+            self.assertEqual(code, 0, "sbe pr %s exited %d: %s"
+                             % (" ".join(argv), code, stdout + stderr))
+            self.assertIn("usage", (stdout + stderr).lower(),
+                          "sbe pr %s printed no usage: %r"
+                          % (" ".join(argv), stdout + stderr))
+
+    def test_a_genuinely_bad_flag_still_exits_2(self):
+        for argv in (("--bogus",), ("verify", "12", "--repo", "octo/repo", "--bogus")):
+            code, stdout, stderr = self.run_sbe(*argv)
+            self.assertEqual(code, 2, "sbe pr %s exited %d, not the usage error 2: %s"
+                             % (" ".join(argv), code, stdout + stderr))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

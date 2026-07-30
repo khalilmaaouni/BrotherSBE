@@ -164,8 +164,10 @@ def main():
         sys.exit(0)
     flags = [a for a in argv if a.startswith("-")]
     if flags:
+        # A mistyped flag is a usage error, exit 2 to match the CLI's
+        # documented table (0 ran, 1 a control failed, 2 usage).
         print("sbe_intake: %s is not an option.\n\n%s" % (", ".join(flags), USAGE))
-        sys.exit(1)
+        sys.exit(2)
     if len(argv) > 1:
         print("sbe_intake: one directory at a time, got %d (%s).\n\n%s"
               % (len(argv), ", ".join(argv), USAGE))
