@@ -8,6 +8,32 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe work` (`src/brothersbe/work.py`) gives a plan task an isolated
+  lifecycle: `start` validates the plan with the landed `sbe plan` checks,
+  refuses an incomplete or force closed dependency by naming it, refuses
+  every branch, worktree, or open registry collision by name, then opens a
+  dedicated git branch and worktree and a registry record through the
+  existing `sbe task` machinery. `check` reports scope, dependency, and
+  verification state without mutating anything. `finish` closes a task only
+  when the registry postcondition is clean AND a verification receipt bound
+  to the worktree's current commit exists in the evidence store; an agent
+  saying it ran the command is not evidence, so an absent receipt refuses
+  closure as NO-DATA prose naming the command
+  (`TestFinishRefusals::test_finish_refuses_as_no_data_when_the_verification_receipt_is_absent`).
+  One writer owns one branch and one worktree, never shared. A forced close
+  (`finish --force`) is visible and loud in `check` and in the record, and it
+  never satisfies a dependent task
+  (`TestForceFinish::test_finish_force_closes_marks_forced_visible_in_check_and_never_satisfies_a_dependent`).
+  There is no merge, no rebase onto the default branch, no push, and no
+  deploy code path anywhere in this module, held by a source level fixture
+  that greps the file for those verbs
+  (`TestNoMergeLaw::test_work_module_never_constructs_a_merge_rebase_or_push_argv`).
+  `remove` deletes a CLOSED task's worktree and leaves the branch in place, because branch deletion is not one of this module's allowed git mutations, and a dirty worktree
+  refuses removal until a human gives `--override-dirty` with a nonempty
+  reason, recorded permanently on the registry record
+  (`TestRemove::test_remove_with_override_dirty_succeeds_and_records_the_reason`).
+  Proof: `tools/test_sbe_work.py`.
+
 - `sbe plan` (`tools/sbe_plan.py`) derives a task plan mechanically from a dossier: no LLM
   anywhere in derivation, only parsing and the rules the spec names. An empty
   dossier never yields a success verdict (`TestEmptyDossier`), a task citing a

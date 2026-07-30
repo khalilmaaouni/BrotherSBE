@@ -67,7 +67,7 @@ NOT CLOSABLE with the reasons. Exit 0 when closable, 1 when not.
 
 ## remove
 
-Deletes the worktree and branch for a CLOSED task. A dirty worktree
+Deletes the worktree for a CLOSED task; the branch is left in place and says so, because branch deletion is not one of this module's allowed git mutations (worktree add and remove, branch creation), and deleting history is the human's call. A dirty worktree
 (uncommitted changes) refuses removal unless --override-dirty with a nonempty
 reason is given; the override is recorded on the registry record
 (overrideDirty: reason) so the human decision is permanent, visible history.

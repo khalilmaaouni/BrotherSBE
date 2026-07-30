@@ -677,3 +677,35 @@ but an edit that happens to keep the file's bytes identical is invisible to
 this check, because a digest cannot see past its own bytes. Full text:
 `docs/specs/2026-07-30-sbe-plan-derivation.md` (What this deliberately does
 not do), `tools/sbe_plan.py`, `tools/test_sbe_plan.py`.
+
+## sbe work isolates, it does not merge
+
+`sbe work` gives a task its own branch and its own git worktree, and closes it
+only on a postcondition plus a bound receipt, but nothing in this module ever
+merges, rebases onto the default branch, pushes, or touches a production
+system; that boundary is a source level fixture, not a policy note
+(`TestNoMergeLaw::test_work_module_never_constructs_a_merge_rebase_or_push_argv`).
+Landing a task's branch onto the default branch, deploying it, and applying
+anything to production state stay human decisions this tool never automates,
+the same [human] line the rest of this page already draws around merge,
+deploy, and apply.
+
+`check`'s scope comparison reads the diff between the worktree's current
+state and the task's recorded base, the same postcondition machinery
+`sbe task close` already runs. A change made and then reverted inside the
+worktree, before `check` or `finish` ever run, therefore leaves no diff to
+read: it is invisible to scope checking precisely because scope checking
+only ever sees the diff, never a history of edits. This is the same shape of
+limit stated above for the task registry's own postcondition, applied here
+to a worktree instead of a shared tree.
+
+Worktree isolation is a filesystem convenience, `git worktree add` giving one
+task its own directory and branch, not a sandbox. Nothing here restricts
+network access, process execution, environment variables, or reads and
+writes outside the worktree's own path: an agent working inside a task's
+worktree can still read or write anywhere its own OS permissions allow. The
+worktree keeps two writers from colliding on the same files; it does not
+confine what either writer's code can do while it runs.
+
+Full text: `docs/specs/2026-07-30-sbe-work-lifecycle.md`,
+`src/brothersbe/work.py`, `tools/test_sbe_work.py`.

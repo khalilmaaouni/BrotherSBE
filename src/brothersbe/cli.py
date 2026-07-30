@@ -288,6 +288,19 @@ def _cmd_task(args):
     from . import tasks as tasks_mod
     return tasks_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                           exit_usage=EXIT_USAGE)
+
+
+def _cmd_work(args):
+    """Isolated implementation for one plan task, with no autonomous merge rights.
+
+    Not a delegation: like `evidence` and `task`, there is no tool in `tools/`
+    behind it. `start` opens a dedicated branch, worktree and registry record
+    from a validated plan; `finish` closes only on the diff postcondition AND a
+    commit-bound receipt from the evidence store.
+    """
+    from . import work as work_mod
+    return work_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                         exit_usage=EXIT_USAGE)
 def _cmd_adopt(args):
     """Inspect a repository for BrotherSBE readiness. Dry run by default:
     prints every proposal as a unified diff and writes nothing. `--apply`
@@ -488,6 +501,8 @@ COMMANDS = [
      _cmd_evidence),
     ("task", "the write-scope registry: open, list, fence, check, and close with the "
              "diff-against-declaration postcondition", _cmd_task),
+    ("work", "isolated implementation for one plan task: start, check, finish, remove, "
+             "and never a merge", _cmd_work),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",
