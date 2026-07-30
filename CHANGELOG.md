@@ -8,6 +8,18 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- External proof round one: three public estates (a FastAPI application, a dbt
+  project, an infrastructure deployment) ran the whole assurance path with
+  attack rounds, and four defects they surfaced are fixed with calibrated
+  tests in the same train: receipt matching is shlex-canonical in converge
+  AND work, so a quoted verification command finally binds its own receipt;
+  detector kinds honor content patterns, so a SELECT-only model is no longer
+  ordered to produce a data model; a markdown-escaped pipe survives the
+  07-verification table; and the migration triplet fires only on
+  migration-shaped paths. docs/EXTERNAL-PROOF-2026-07-31.md carries the whole
+  account: what the tools caught on foreign trees, what broke, what stays
+  open by name, and what this round does not prove.
+
 - The update notifier's state file is namespaced to this tool. PARITY.md names
   the notifier as a mechanism this skill shares with BrotherModeUp, and both kept
   "which commit did the operator last see" under the SAME basename in
