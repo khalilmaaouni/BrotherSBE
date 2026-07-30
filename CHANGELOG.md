@@ -8,6 +8,21 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe score` reports on the directory you asked about, not the one you happen
+  to be standing in. The split that opens the report groups checks by whether
+  they opened a file inside the directory being reported on, and that directory
+  was read from the WORKING directory. Running the tool from its own checkout
+  against another tree therefore inverted the entire report: `citation-inventory`,
+  reading THIS repository's own docs, was filed under "these verdicts are about
+  the code here", while `silent-failure-lints`, which had just read the caller's
+  tree, was filed under "a verdict here is not a statement about the code in this
+  directory". The one line the reader came for sat beneath the heading that
+  disowned it, which is the exact failure the split was added to prevent. The
+  anchor is now SBE_LINT_ROOT, then the positional directory, then the working
+  directory, matching `_resolved_sources`. Found while scanning three outside
+  repositories. Held by `TestReportIsAboutTheScannedTree`, calibrated by
+  restoring the working-directory anchor and watching both of its tests go red
+
 - Help means help on EVERY `sbe` subcommand, closing external-proof open item 8: the
   whole-surface sweep of the defect class fixed on the three telemetry data commands in
   the entry further down ("make help mean help on the data commands"). Two mechanisms

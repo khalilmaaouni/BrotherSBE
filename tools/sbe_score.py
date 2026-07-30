@@ -1273,6 +1273,26 @@ def _resolved_sources(check):
     return [p for p in out if p]
 
 
+def scanned_root():
+    """The directory this run is REPORTING ON, which is not always the one it
+    is RUN FROM. The split below groups checks by whether they opened a file
+    inside it, so anchoring it on the working directory silently inverted the
+    whole report whenever somebody ran this tool from its own checkout against
+    another tree: the citation check, reading THIS repository's docs, was filed
+    under "these verdicts are about the code here", while the lint that had just
+    read the caller's tree was filed under "not a statement about the code in
+    this directory". The one line the reader came for sat beneath the heading
+    that disowned it. Precedence matches `_resolved_sources`: SBE_LINT_ROOT
+    first, then the positional directory, then the working directory."""
+    env = os.environ.get("SBE_LINT_ROOT")
+    if env and os.path.isdir(env):
+        return os.path.abspath(env)
+    for a in sys.argv[1:]:
+        if not a.startswith("-") and os.path.isdir(a):
+            return os.path.abspath(a)
+    return os.path.abspath(os.getcwd())
+
+
 def _reads_this_tree(check, here):
     """True when at least one of this check's sources exists inside `here`."""
     for p in _resolved_sources(check):
@@ -1349,7 +1369,7 @@ def main():
     # opened a file in THIS directory, the heading says which is which, and a
     # group that examined nothing here says so before its first line. Nothing
     # about the verdicts changes: no aggregation, no score, no new PASS.
-    here = os.path.abspath(os.getcwd())
+    here = scanned_root()
     mine = [r for r in results if _reads_this_tree(CHECKS[r[0]], here)]
     elsewhere = [r for r in results if r not in mine]
 

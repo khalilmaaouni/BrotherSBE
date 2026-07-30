@@ -2392,6 +2392,57 @@ class TestRenderSameNormalizesRawText(unittest.TestCase):
         self.assertFalse(self.checks.name_sets_could_collide([an_as_jamo], [a_different_syllable]))
 
 
+class TestReportIsAboutTheScannedTree(unittest.TestCase):
+    """The split that opens the report groups checks by whether they opened a
+    file inside the directory being reported on. That directory was read from
+    the WORKING directory, not from the one the caller asked about, so running
+    this tool from its own checkout against somebody else's tree inverted the
+    whole report: the citation check, reading THIS repository's own docs, was
+    filed under "these verdicts are about the code here", while the lint that
+    had just read the caller's tree was filed under "not a statement about the
+    code in this directory". The one line the reader came for sat beneath the
+    heading that disowned it, which is the exact failure the split exists to
+    prevent. Found 2026-07-31 while scanning three outside repositories."""
+
+    def _report(self, target):
+        r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_score.py"), target],
+                           cwd=os.path.dirname(HERE),
+                           env=dict(os.environ, BROTHERSBE_REGISTRIES=""),
+                           capture_output=True, text=True)
+        return r.stdout
+
+    def test_the_heading_names_the_directory_the_caller_asked_about(self):
+        with tempfile.TemporaryDirectory() as d:
+            with io.open(os.path.join(d, "clean.py"), "w") as f:
+                f.write("def f():\n    return 1\n")
+            out = self._report(d)
+            head = next((l for l in out.splitlines()
+                         if l.startswith("CHECKS THAT OPENED A FILE IN")), "")
+            self.assertIn(os.path.realpath(d), os.path.realpath(head.split(" IN ")[-1].split(" (")[0]),
+                          "the report anchored on the working directory, not the "
+                          "scanned one: %s" % head)
+
+    def test_the_check_that_read_the_target_is_on_the_about_your_code_side(self):
+        """The calibration that matters: the lint READ the caller's tree, so it
+        must sit above the second heading, not below it."""
+        with tempfile.TemporaryDirectory() as d:
+            with io.open(os.path.join(d, "clean.py"), "w") as f:
+                f.write("def f():\n    return 1\n")
+            lines = self._report(d).splitlines()
+            def index_of(pred):
+                return next((i for i, l in enumerate(lines) if pred(l)), -1)
+            first = index_of(lambda l: l.startswith("CHECKS THAT OPENED A FILE IN"))
+            second = index_of(lambda l: l.startswith("CHECKS FED BY A VAULT OR REGISTRY"))
+            lint = index_of(lambda l: l.startswith("silent-failure-lints"))
+            self.assertNotEqual(-1, first, "no first heading in the report")
+            self.assertNotEqual(-1, second, "no second heading in the report")
+            self.assertNotEqual(-1, lint, "no lint line in the report")
+            self.assertTrue(first < lint < second,
+                            "the check that actually read the scanned tree was filed "
+                            "under the heading saying it is NOT about that code "
+                            "(first=%d lint=%d second=%d)" % (first, lint, second))
+
+
 class TestVersionMark(unittest.TestCase):
     """The update notifier's state file must belong to exactly one tool.
 
