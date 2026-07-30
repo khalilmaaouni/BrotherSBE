@@ -8,6 +8,20 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The update notifier's state file is namespaced to this tool. PARITY.md names
+  the notifier as a mechanism this skill shares with BrotherModeUp, and both kept
+  "which commit did the operator last see" under the SAME basename in
+  `<vault>/99-System/telemetry`. The vault path is the operator's own choice and
+  nothing reserves it, so pointing both tools at one vault is a supported setup:
+  under the shared name each overwrote the other's stamp every session, and both
+  then reported a version change on every following start, forever, reading the
+  sibling's commit hash as their own drift. The mechanism meant to catch a real
+  change became a permanent false alarm. Observed on a real machine 2026-07-31,
+  the day both vaults were pointed at one directory. Held by `TestVersionMark`,
+  whose sibling comparison reads BrotherModeUp's real source when it is installed
+  and reports NO-DATA rather than passing when it is not, and calibrated by
+  restoring the shared name and watching both of its tests go red
+
 - The silent-failure lint no longer reads English as Swift. Every pattern now
   carries an explicit language scope, and `try!` is scoped to `.swift`, where it
   is syntax; unscoped, it matched the ordinary word in prose, so a pure-Python

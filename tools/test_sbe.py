@@ -2314,5 +2314,49 @@ class TestRenderSameNormalizesRawText(unittest.TestCase):
         self.assertFalse(self.checks.name_sets_could_collide([an_as_jamo], [a_different_syllable]))
 
 
+class TestVersionMark(unittest.TestCase):
+    """The update notifier's state file must belong to exactly one tool.
+
+    PARITY.md names the mechanisms this skill shares with BrotherModeUp, and the
+    update notifier is one of them: both keep "which commit did the operator last
+    see" in <vault>/99-System/telemetry. The vault path is the operator's own
+    choice and nothing reserves it, so pointing BOTH tools at one vault is a
+    supported setup. Under a shared basename each tool overwrites the other's
+    stamp every session and both then report a version change forever, reading
+    the sibling's commit hash as their own drift. Observed on a real machine
+    2026-07-31, the day both vaults were pointed at one directory."""
+
+    SIBLING = os.path.expanduser("~/.claude/skills/brothermode/tools/bm_telemetry.py")
+
+    def test_the_marker_basename_is_owned_by_this_tool(self):
+        base = os.path.basename(bm.VERSION_MARK)
+        self.assertIn("brothersbe", base,
+                      "the update marker %r does not name the tool that owns it, "
+                      "so any sibling writing the same basename into a shared "
+                      "vault silently overwrites it" % base)
+
+    def test_the_version_marker_is_not_shared_with_the_sibling_skill(self):
+        """Reads the sibling's real source when it is installed. When it is not,
+        this reports that it examined nothing rather than passing: an absent
+        sibling is no evidence that the two names differ."""
+        if not os.path.isfile(self.SIBLING):
+            self.skipTest("NO-DATA: the sibling BrotherModeUp is not installed at "
+                          "%s, so its marker name could not be read and nothing "
+                          "here was compared" % self.SIBLING)
+        with io.open(self.SIBLING, encoding="utf-8", errors="replace") as f:
+            sibling_src = f.read()
+        m = re.search(r'VERSION_MARK\s*=\s*os\.path\.join\(\s*TEL_DIR\s*,\s*"([^"]+)"',
+                      sibling_src)
+        if not m:
+            self.skipTest("NO-DATA: the sibling is installed but its VERSION_MARK "
+                          "could not be read from %s, so the two names were not "
+                          "compared" % self.SIBLING)
+        self.assertNotEqual(os.path.basename(bm.VERSION_MARK), m.group(1),
+                            "this tool and BrotherModeUp both write %r into "
+                            "<vault>/99-System/telemetry; sharing one vault makes "
+                            "each overwrite the other's stamp and both cry "
+                            "'the skill changed' forever" % m.group(1))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -58,7 +58,7 @@ BROTHERSBE STORED DATA (vault /tmp/sbe-book-ch10-repo/no-such-vault)
   [metrics] /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry/ratings.jsonl: absent, so nothing is stored at this path
   [metrics] /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry/reviews.jsonl: absent, so nothing is stored at this path
   [corrections] /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry/corrections.jsonl: absent, so nothing is stored at this path
-  [housekeeping] /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry/installed-skill-version: absent, so nothing is stored at this path
+  [housekeeping] /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry/installed-skill-version-brothersbe: absent, so nothing is stored at this path
 read 0 file(s), 5 path(s) absent, 0 that could not be measured, under /tmp/sbe-book-ch10-repo/no-such-vault/99-System/telemetry.
 This lists this vault only. A backup, a mirror or a sync client may hold copies of any of it, and nothing here can see those.
 ```

@@ -432,7 +432,7 @@ BROTHERSBE STORED DATA (vault ~/BrotherSBEVault)
   [metrics] .../telemetry/ratings.jsonl: absent, so nothing is stored at this path
   [metrics] .../telemetry/reviews.jsonl: absent, so nothing is stored at this path
   [corrections] .../telemetry/corrections.jsonl: absent, so nothing is stored at this path
-  [housekeeping] .../telemetry/installed-skill-version: 1 record(s), 41 bytes, mode 644 -- the git sha of the installed skill at the last check
+  [housekeeping] .../telemetry/installed-skill-version-brothersbe: 1 record(s), 41 bytes, mode 644 -- the git sha of the installed skill at the last check
   [autosave] .../telemetry/autosave.log: 5 record(s), 1408 bytes, mode 644 -- one line per autosave snapshot, skip or lock event
   [autosave] .../telemetry/autosave-exclusions.log: 5 record(s), 487 bytes, mode 600 -- paths the autosave content scan kept out of a snapshot, and why (paths and reasons only, never the matched content)
 read 3 file(s), 4 path(s) absent, 0 that could not be measured, under .../telemetry.

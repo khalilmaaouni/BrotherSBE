@@ -144,7 +144,8 @@ line. Every one of those is secret-redacted before it is written.
 Written by explicit commands rather than by capture: `ratings.jsonl` (the score,
 task and note you typed), `reviews.jsonl` (a timestamp and note), and
 `intent-<project>-<hash>.log` (the intent lines you typed, one per line).
-`installed-skill-version` holds one git sha. `autosave.log` and
+`installed-skill-version-brothersbe` holds one git sha (namespaced so a
+sibling skill sharing the vault cannot overwrite it). `autosave.log` and
 `autosave-exclusions.log` hold snapshot events and excluded PATHS with reasons,
 never excluded content.
 
