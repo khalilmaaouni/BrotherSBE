@@ -112,7 +112,7 @@ def _command_tokens(command):
     sides canonicalize through shlex before comparison."""
     try:
         return shlex.split(command)
-    except ValueError:
+    except ValueError:  # sbe: allow-silent this module reads and reports and never rewrites a record, and a ValueError here carries no fact beyond "this string is not shell-splittable" (an unbalanced quote); the ONE caller tests for None and falls back to the raw-text comparison this function was added to SUPPLEMENT, so no receipt is dropped, nothing is counted as matched, and the unparseable command is still compared the way it was before this function existed
         return None
 
 
