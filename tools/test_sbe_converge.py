@@ -211,6 +211,26 @@ class TestScope(ConvergeScenario):
         self.assertEqual(report["head"], head)
 
 
+class TestScopeUnmeasured(ConvergeScenario):
+    """F8: an unmeasured file type is a category distinct from unplanned. A
+    changed, unowned, undossiered file that matches no impact detector and
+    whose extension is outside the tracked source-text set must surface as
+    unmeasured (named), never as unplanned REVIEW-REQUIRED noise, and never
+    silently folded into a clean PASS."""
+
+    def test_an_opaque_changed_file_is_unmeasured_not_unplanned_review_required(self):
+        base = self._seed()
+        self._write("artifacts/build.sha256", "deadbeef  build.tar\n")
+        head = self._head("add an opaque checksum artifact")
+        self._receipt()
+        code, text, _ = self._converge(base, head)
+        self.assertEqual(code, 0, text)
+        self.assertIn("FINAL PASS", text)
+        self.assertIn("unmeasured", text.lower())
+        self.assertIn("artifacts/build.sha256", text)
+        self.assertNotIn("REVIEW-REQUIRED", text)
+
+
 class TestContracts(ConvergeScenario):
     def test_an_undocumented_removed_operation_is_fail_naming_it(self):
         base = self._seed()

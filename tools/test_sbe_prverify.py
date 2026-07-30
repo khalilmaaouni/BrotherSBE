@@ -108,9 +108,11 @@ SHA_B = "b" * 40
 # only the fields a control actually reads.
 # ---------------------------------------------------------------------------
 
-def pr_body(number=7, sha=SHA_A, author="author-user", author_type="User", state="open"):
+def pr_body(number=7, sha=SHA_A, author="author-user", author_type="User", state="open",
+           base_ref="main"):
     return {"number": number, "state": state, "head": {"sha": sha},
-            "user": {"login": author, "type": author_type}}
+            "user": {"login": author, "type": author_type},
+            "base": {"ref": base_ref}}
 
 
 def review(login, state, sha=SHA_A, submitted_at="2026-07-30T12:00:00Z",
@@ -121,6 +123,15 @@ def review(login, state, sha=SHA_A, submitted_at="2026-07-30T12:00:00Z",
 
 def check_runs(conclusion="success", name="ci/build"):
     return {"check_runs": [{"name": name, "status": "completed", "conclusion": conclusion}]}
+
+
+def protection(required_contexts=None, require_code_owner=False):
+    """A canned branches/<base>/protection body: only the two fields F6+F7
+    actually read, required_status_checks.contexts and required_pull_request_
+    reviews.require_code_owner_reviews."""
+    return {"required_status_checks": {"contexts": list(required_contexts or [])},
+            "required_pull_request_reviews":
+                {"require_code_owner_reviews": bool(require_code_owner)}}
 
 
 class FakeFetch(object):
@@ -165,11 +176,14 @@ class FakeFetch(object):
 
 
 def baseline_routes():
-    """Sane defaults a scenario can override: an empty, successful check-run
-    set and no CODEOWNERS file. Every scenario below replaces only the routes
-    it is actually testing."""
+    """Sane defaults a scenario can override: one successful check run, and
+    branch protection that requires no status checks and no code owner
+    review (so REQUIRED CHECKS reads PASS "nothing required" and CODEOWNERS
+    reads NO-DATA "no applicable rule" unless a scenario overrides
+    "/protection" to test F6+F7 directly). Every scenario below replaces
+    only the routes it is actually testing."""
     return {"/check-runs": (200, check_runs("success"), None),
-            "CODEOWNERS": (404, None, None)}
+            "/protection": (200, protection(), None)}
 
 
 def all_report_text(mod, report):
@@ -378,7 +392,7 @@ class TestFailedRequiredCheck(PrverifyCase):
     def test_a_failed_required_check_on_the_head_sha_fails_required_checks(self):
         fetch = FakeFetch(
             routes={"/check-runs": (200, check_runs("failure", name="ci/unit"), None),
-                   "CODEOWNERS": (404, None, None),
+                   "/protection": (200, protection(required_contexts=["ci/unit"]), None),
                    "/pulls/7/reviews": (200, [], None)},
             sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
                                     (200, pr_body(sha=SHA_A), None)]})
@@ -388,11 +402,39 @@ class TestFailedRequiredCheck(PrverifyCase):
         self.assertIn("ci/unit", control["detail"], control)
 
 
+class TestRequiredCheckMissing(PrverifyCase):
+    def test_a_required_context_absent_from_the_check_runs_fails_naming_it(self):
+        """Branch protection requires "ci/lint", but no check run by that
+        name exists at all on the head sha (only an unrelated one ran)."""
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success", name="ci/build"), None),
+                   "/protection": (200, protection(required_contexts=["ci/lint"]), None),
+                   "/pulls/7/reviews": (200, [], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        control = self.control(report, "REQUIRED CHECKS")
+        self.assertEqual(control["verdict"], "FAIL", control)
+        self.assertIn("ci/lint", control["detail"], control)
+
+
+class TestRequiredChecksEmptyIsPass(PrverifyCase):
+    def test_an_empty_required_contexts_list_is_pass_with_nothing_required_prose(self):
+        fetch = FakeFetch(
+            routes=dict(baseline_routes(), **{"/pulls/7/reviews": (200, [], None)}),
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        control = self.control(report, "REQUIRED CHECKS")
+        self.assertEqual(control["verdict"], "PASS", control)
+        self.assertIn("nothing required", control["detail"], control)
+
+
 class TestForbiddenWithToken(PrverifyCase):
     def test_403_with_a_token_present_is_unverifiable_never_pass(self):
         fetch = FakeFetch(
             routes={"/check-runs": (403, None, None),
-                   "CODEOWNERS": (404, None, None),
+                   "/protection": (200, protection(required_contexts=["ci/build"]), None),
                    "/pulls/7/reviews": (200, [], None)},
             sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
                                     (200, pr_body(sha=SHA_A), None)]})
@@ -400,6 +442,121 @@ class TestForbiddenWithToken(PrverifyCase):
         control = self.control(report, "REQUIRED CHECKS")
         self.assertEqual(control["verdict"], "UNVERIFIABLE", control)
         self.assertNotEqual(report["final"], "PASS", report)
+
+
+class TestBranchProtectionForbidden(PrverifyCase):
+    def test_403_on_the_protection_endpoint_makes_both_controls_unverifiable_naming_it(self):
+        """The protection endpoint itself is forbidden to this token. Neither
+        REQUIRED CHECKS nor CODEOWNERS may fall back to a guess from the
+        check-runs scan or a raw CODEOWNERS file: both must read UNVERIFIABLE
+        and name the protection endpoint."""
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success"), None),
+                   "/protection": (403, None, None),
+                   "/pulls/7/reviews": (200, [review("carol", "APPROVED", sha=SHA_A)], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        required = self.control(report, "REQUIRED CHECKS")
+        codeowners = self.control(report, "CODEOWNERS")
+        self.assertEqual(required["verdict"], "UNVERIFIABLE", required)
+        self.assertEqual(codeowners["verdict"], "UNVERIFIABLE", codeowners)
+        self.assertIn("protection", required["detail"].lower(), required)
+        self.assertIn("protection", codeowners["detail"].lower(), codeowners)
+        self.assertNotEqual(report["final"], "PASS", report)
+
+    def test_404_on_the_protection_endpoint_makes_both_controls_unverifiable(self):
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success"), None),
+                   "/protection": (404, None, None),
+                   "/pulls/7/reviews": (200, [], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        required = self.control(report, "REQUIRED CHECKS")
+        codeowners = self.control(report, "CODEOWNERS")
+        self.assertEqual(required["verdict"], "UNVERIFIABLE", required)
+        self.assertEqual(codeowners["verdict"], "UNVERIFIABLE", codeowners)
+
+
+class TestCodeownersRequiredWithApproval(PrverifyCase):
+    def test_required_code_owner_review_satisfied_by_a_live_approval_is_pass(self):
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success"), None),
+                   "/protection": (200, protection(require_code_owner=True), None),
+                   "/pulls/7/reviews": (200, [review("carol", "APPROVED", sha=SHA_A)], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        control = self.control(report, "CODEOWNERS")
+        self.assertEqual(control["verdict"], "PASS", control)
+        self.assertIn("carol", control["detail"], control)
+
+
+class TestCodeownersRequiredWithoutApproval(PrverifyCase):
+    def test_required_code_owner_review_with_no_live_approval_fails(self):
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success"), None),
+                   "/protection": (200, protection(require_code_owner=True), None),
+                   "/pulls/7/reviews": (200, [], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        control = self.control(report, "CODEOWNERS")
+        self.assertEqual(control["verdict"], "FAIL", control)
+        self.assertNotEqual(report["final"], "PASS", report)
+
+
+class TestCodeownersRequiredButReviewsUnreadable(PrverifyCase):
+    def test_required_code_owner_review_with_unreadable_reviews_is_unverifiable(self):
+        """Branch protection is readable and requires a code owner review,
+        but the reviews endpoint itself is forbidden: CODEOWNERS cannot tell
+        whether the requirement is satisfied, so it must not guess PASS or
+        FAIL either way."""
+        fetch = FakeFetch(
+            routes={"/check-runs": (200, check_runs("success"), None),
+                   "/protection": (200, protection(require_code_owner=True), None),
+                   "/pulls/7/reviews": (403, None, None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A), None),
+                                    (200, pr_body(sha=SHA_A), None)]})
+        report = self.evaluate(fetch)
+        control = self.control(report, "CODEOWNERS")
+        self.assertEqual(control["verdict"], "UNVERIFIABLE", control)
+
+
+class TestRepoShapeValidation(PrverifyCase):
+    """M2: --repo must be owner/name, each side [A-Za-z0-9_.-]+, checked
+    before token discovery and before any fetch. A path-traversal payload
+    like foo/bar/../../x carries extra slashes the shape regex rejects."""
+
+    def test_path_traversal_repo_is_refused_before_any_fetch(self):
+        calls = []
+
+        def spy(method, url, token):
+            calls.append((method, url))
+            return (404, None, None)
+
+        original = self.mod._real_fetch
+        self.mod._real_fetch = spy
+        out, err = io.StringIO(), io.StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = out, err
+        try:
+            exit_code = self.mod.main(["verify", "7", "--repo", "foo/bar/../../x"])
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+            self.mod._real_fetch = original
+        self.assertEqual(exit_code, 2, (exit_code, out.getvalue(), err.getvalue()))
+        self.assertEqual(calls, [], "a malformed --repo must be refused before any "
+                                    "fetch is ever made: %r" % calls)
+        self.assertIn("owner/name", err.getvalue(), err.getvalue())
+
+    def test_valid_repo_shape_accepts_owner_name_and_rejects_traversal(self):
+        self.assertTrue(self.mod.valid_repo_shape("octo/demo"))
+        self.assertFalse(self.mod.valid_repo_shape("foo/bar/../../x"))
+        self.assertFalse(self.mod.valid_repo_shape("/etc/passwd"))
+        self.assertFalse(self.mod.valid_repo_shape(""))
+        self.assertFalse(self.mod.valid_repo_shape(None))
 
 
 class TestForcePushMidRun(PrverifyCase):

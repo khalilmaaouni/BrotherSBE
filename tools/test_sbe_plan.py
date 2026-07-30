@@ -382,12 +382,15 @@ class TestRegistryIntegration(PlanFixture):
         self.assertTrue(plan.get("tasks"), plan)
         first = plan["tasks"][0]
         verify_cmds = first.get("verificationCommands") or []
+        expected_base = plan.get("baseCommit") or self.base
+        expected_verify = verify_cmds[0] if verify_cmds else ""
+        expected_owns = list(first.get("owns") or [])
         argv = ["task", "open",
                 "--id", first["id"],
                 "--agent", "plan-fixture",
                 "--role", first["role"],
-                "--base", plan.get("baseCommit") or self.base,
-                "--verify", verify_cmds[0] if verify_cmds else "",
+                "--base", expected_base,
+                "--verify", expected_verify,
                 "--cwd", self.repo]
         for p in first.get("owns") or []:
             argv += ["--owns", p]
@@ -395,6 +398,44 @@ class TestRegistryIntegration(PlanFixture):
             argv += ["--read-only", p]
         code, out, err = self.sbe(*argv)
         self.assertEqual(code, 0, out)
+
+        # The exit code alone only proves `task open` accepted the call, not
+        # that the registry record it wrote actually carries what the plan's
+        # first task supplied. Read the single source of task state back and
+        # compare it field by field.
+        registry_path = os.path.join(self.repo, ".sbe", "tasks.json")
+        with io.open(registry_path, encoding="utf-8") as fh:
+            registry = json.load(fh)
+        record = None
+        for t in registry.get("tasks") or []:
+            if t.get("id") == first["id"]:
+                record = t
+                break
+        self.assertIsNotNone(record,
+                             "no task %r found open in %s: %s"
+                             % (first["id"], registry_path, registry))
+
+        # Calibration: prove the field comparisons below actually bite,
+        # rather than passing vacuously (e.g. because a prior refactor left
+        # them comparing something to itself), by asserting a deliberately
+        # wrong expectation first and confirming that it fails.
+        with self.assertRaises(AssertionError):
+            self.assertEqual(record.get("baseCommit"), "0" * 40,
+                             "calibration: a mutated wrong expectation must fail here")
+
+        self.assertEqual(record.get("id"), first["id"],
+                         "registry record id does not match the plan task: %s" % record)
+        self.assertEqual(record.get("role"), first["role"],
+                         "registry record role does not match the plan task: %s" % record)
+        self.assertEqual(record.get("ownedPaths"), expected_owns,
+                         "registry record ownedPaths does not match what the plan task "
+                         "supplied: %s" % record)
+        self.assertEqual(record.get("baseCommit"), expected_base,
+                         "registry record baseCommit does not match what the plan task "
+                         "supplied: %s" % record)
+        self.assertEqual(record.get("verifyCommand"), expected_verify,
+                         "registry record verifyCommand does not match what the plan "
+                         "task supplied: %s" % record)
 
 
 if __name__ == "__main__":

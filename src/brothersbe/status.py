@@ -65,6 +65,7 @@ from . import SCHEMA_VERSION, version
 from . import evidence as evidence_mod
 from . import impact as impact_mod
 from . import tasks as tasks_mod
+from . import work as work_mod
 from .impact import DiffUnavailable, _git  # noqa: E402  (the same private helper evidence.py reuses)
 
 #: The three checks `sbe verify` runs, and the command line that would record
@@ -186,6 +187,9 @@ def _scan_evidence(root, evidence_dir):
                                               trust),
                 "remedy": "fix the underlying failure and re-run to produce a new passing "
                          "receipt; see %s" % rel,
+                "path": rel,
+                "coveredFiles": [cf.get("path") for cf in (receipt.get("coveredFiles") or [])
+                                if isinstance(cf, dict) and cf.get("path")],
             })
     note = (("%d receipt(s) found under %s" % (len(paths), evidence_dir)) if paths
            else "evidence store %s exists and holds no receipt" % evidence_dir)
@@ -472,23 +476,42 @@ def _finding(change, severity, verdict, evidence, commit, owner, next_action, ba
 
 
 def _design_roots(root):
+    """(roots, refusals). `roots` is every directory (relative to `root`) safe
+    to walk for dossiers: the default "design" plus any designRoots entry from
+    .sbe/team-profile.json that resolves INSIDE the repository root. An entry
+    that would resolve outside the root (a ".." escape, or an absolute path
+    elsewhere on disk) is never added to `roots` and never walked; it comes
+    back in `refusals`, by its own literal spelling, so the caller can surface
+    a visible refusal instead of a silent skip or a directory traversal."""
     roots = ["design"]
+    refusals = []
     profile = os.path.join(root, ".sbe", "team-profile.json")
     if os.path.isfile(profile):
         try:
             extra = json.loads(io.open(profile, encoding="utf-8").read())
-            for entry in extra.get("designRoots", []) or []:
-                if isinstance(entry, str) and entry not in roots:
-                    roots.append(entry)
         except (ValueError, OSError):
-            pass  # sbe: allow-silent  (not silent: the profile is optional config;
-            #        a broken one leaves the default root and discovery still runs)
-    return roots
+            extra = None  # sbe: allow-silent  (not silent: the profile is optional
+            #        config; a broken one leaves the default root and discovery
+            #        still runs, and is not itself a containment problem)
+        root_abs = os.path.abspath(root)
+        for entry in ((extra.get("designRoots", []) or []) if extra else []):
+            if not isinstance(entry, str) or not entry.strip():
+                continue
+            candidate = os.path.abspath(os.path.join(root, entry))
+            if candidate == root_abs or candidate.startswith(root_abs + os.sep):
+                if entry not in roots:
+                    roots.append(entry)
+            else:
+                refusals.append(entry)
+    return roots, refusals
 
 
 def _team_changes(root):
+    """([(name, dossier path)], refusals): every dossier discovered under a
+    safe root, plus any designRoots entry `_design_roots` refused."""
     changes = []
-    for rel in _design_roots(root):
+    roots, refusals = _design_roots(root)
+    for rel in roots:
         base_dir = os.path.join(root, rel)
         if not os.path.isdir(base_dir):
             continue
@@ -496,7 +519,7 @@ def _team_changes(root):
             doss = os.path.join(base_dir, name)
             if os.path.isfile(os.path.join(doss, "00-intake.json")):
                 changes.append((name, doss))
-    return changes
+    return changes, refusals
 
 
 def _read_json_or_none(path):
@@ -506,17 +529,35 @@ def _read_json_or_none(path):
         return None
 
 
+def _closed_clean(records):
+    """True when at least one record for a task id is closed, and not FORCED.
+    A FORCED close records a disposition, never a completion; see
+    `work._dependency_problem`, whose rule this mirrors rather than retypes."""
+    return any(r.get("status") == "closed" and not r.get("forced") for r in records)
+
+
 def build_team_report(path):
     """{"root", "headCommit", "changes": [names], "findings": [...]}, findings
     sorted most severe first, deterministically."""
     root = os.path.abspath(path)
     head = _git_head(root)
     findings = []
-    changes = _team_changes(root)
+    changes, root_refusals = _team_changes(root)
 
-    registry_tasks, registry_problem = [], None
+    for entry in root_refusals:
+        findings.append(_finding(
+            "(team-profile.json)", 3, "FAIL", entry, head, None,
+            "point designRoots entry %r in .sbe/team-profile.json at a directory "
+            "inside this repository, or remove the entry" % entry,
+            "unavailable",
+            "designRoots entry %r resolves outside the repository root and was "
+            "REFUSED: it is not walked for dossiers, and no dossier under it is "
+            "discovered" % entry))
+
+    registry_tasks, registry_problem, registry_data = [], None, None
     try:
-        registry_tasks = tasks_mod.load_registry(root).get("tasks", [])
+        registry_data = tasks_mod.load_registry(root)
+        registry_tasks = registry_data.get("tasks", [])
     except tasks_mod.RegistryUnusable as exc:
         registry_problem = str(exc)
 
@@ -524,14 +565,21 @@ def build_team_report(path):
     ev = _scan_evidence(root, evidence_dir)
 
     open_by_change = {}
+    plan_owns_by_change = {}
     for name, doss in changes:
+        change_start = len(findings)
         plan = _read_json_or_none(os.path.join(doss, "08-plan.json"))
         plan_ids = set()
+        plan_owns = set()
         commands = 0
         if plan:
             for task in plan.get("tasks", []):
                 plan_ids.add(task.get("id"))
                 commands += len(task.get("verificationCommands", []))
+                for p in task.get("owns") or []:
+                    if isinstance(p, str) and p.strip():
+                        plan_owns.add(p)
+        plan_owns_by_change[name] = plan_owns
 
         if registry_problem:
             findings.append(_finding(
@@ -563,13 +611,52 @@ def build_team_report(path):
                 "finish or check the task with sbe work", "observed",
                 "task %s is open, held by %s" % (rec.get("id"), rec.get("agent"))))
 
+            # Severity 2: a receipt-free MERGE BLOCKER this run can actually
+            # see for itself, an open task whose tree already violates its own
+            # declaration, read by the SAME postcondition `sbe task close`
+            # would refuse against; no second copy of that rule lives here.
+            base_commit = rec.get("baseCommit")
+            if not base_commit:
+                findings.append(_finding(
+                    name, 2, "NO-DATA", "task %s" % rec.get("id"), head, rec.get("agent"),
+                    "record a baseCommit on task %s so its declared scope can be "
+                    "checked against what actually changed" % rec.get("id"),
+                    "unavailable",
+                    "task %s carries no baseCommit, so its postcondition against "
+                    "declared ownership cannot be computed" % rec.get("id")))
+            else:
+                try:
+                    post = tasks_mod.postcondition(root, rec, evidence_dir)
+                except tasks_mod.DiffUnavailable as exc:
+                    findings.append(_finding(
+                        name, 2, "NO-DATA", "task %s" % rec.get("id"), head,
+                        rec.get("agent"),
+                        "restore the declared worktree or base commit for task %s so "
+                        "its scope can be checked" % rec.get("id"),
+                        "unavailable",
+                        "the postcondition for task %s could not be computed: %s"
+                        % (rec.get("id"), exc)))
+                else:
+                    bad = list(post["violations"]) + list(post.get("receiptViolations")
+                                                          or [])
+                    if bad:
+                        findings.append(_finding(
+                            name, 2, "FAIL", "task %s" % rec.get("id"), head,
+                            rec.get("agent"),
+                            "task %s changed %s outside its declared ownership; narrow "
+                            "the change or widen the declaration before closing"
+                            % (rec.get("id"), ", ".join(bad)),
+                            "observed",
+                            "task %s's tree carries change(s) outside its declared "
+                            "ownedPaths: %s" % (rec.get("id"), ", ".join(bad))))
+
         if not plan:
             findings.append(_finding(
                 name, 8, "NO-DATA", os.path.join(doss, "08-plan.json"), head, None,
                 "run sbe plan %s --write to derive the task graph" % doss,
                 "observed",
-                "no plan exists for this change yet, which is a starting state, not "
-                "an error"))
+                "no plan exists for this change yet, so there are no tasks to ready: "
+                "a starting state to move past, not a ready task and not an error"))
         else:
             conv = _read_json_or_none(os.path.join(doss, "09-convergence.json"))
             if conv is None:
@@ -628,11 +715,87 @@ def build_team_report(path):
                     "%d verification command(s) planned and no receipt exists yet"
                     % commands))
 
+            # Severities 8 and 9 need the registry to be readable to mean
+            # anything; when it is not, the severity-3 unavailable finding
+            # above already says so, and neither "ready" nor "completed" is
+            # guessed at from data this run could not read.
+            if not registry_problem:
+                plan_tasks = plan.get("tasks", [])
+                records_by_id = {}
+                for r in records:
+                    records_by_id.setdefault(r.get("id"), []).append(r)
+
+                for task in plan_tasks:
+                    tid = task.get("id")
+                    task_records = records_by_id.get(tid, [])
+                    if task_records:
+                        continue  # already started or done: not a "ready" candidate
+                    deps = [d for d in (task.get("dependsOn") or []) if isinstance(d, str)]
+                    blockers = [work_mod._dependency_problem(registry_data, d)
+                               for d in deps]
+                    blockers = [b for b in blockers if b]
+                    if not blockers:
+                        findings.append(_finding(
+                            name, 8, "NO-DATA", "task %s" % tid, head, None,
+                            "run sbe work start %s --plan %s to begin it"
+                            % (tid, os.path.join(doss, "08-plan.json")),
+                            "derived",
+                            "task %s's dependencies are all closed clean and it carries "
+                            "no registry record yet: ready to start" % tid))
+
+                if plan_tasks and all(_closed_clean(records_by_id.get(t.get("id"), []))
+                                      for t in plan_tasks):
+                    findings.append(_finding(
+                        name, 9, "PASS", os.path.join(doss, "08-plan.json"), head, None,
+                        "nothing left to do for this change; open a PR and run sbe pr "
+                        "verify",
+                        "derived",
+                        "every task in the plan is closed clean in the registry"))
+
+        # Severity 10: exactly one next action per change, always, derived
+        # from that change's own highest-severity finding recorded above (the
+        # lowest severity number is the most severe). A change with nothing
+        # recorded above still gets one, so the rule never has an exception.
+        this_change = findings[change_start:]
+        if this_change:
+            # Tie-break exactly like the report's own final sort (severity,
+            # evidence, detail), so "highest severity" means the same finding
+            # a human reading the rendered output would see first, not
+            # whichever happened to be appended first during collection.
+            top = min(this_change,
+                      key=lambda f: (f["severity"], f["evidence"] or "", f["detail"]))
+            findings.append(_finding(
+                name, 10, top["verdict"], top["evidence"], top["commit"], top["owner"],
+                top["nextAction"], "derived",
+                "next action for %s, derived from its highest-severity finding "
+                "(severity %d, %s): %s"
+                % (name, top["severity"], TEAM_SEVERITIES[top["severity"]],
+                   top["nextAction"])))
+        else:
+            findings.append(_finding(
+                name, 10, "NO-DATA", None, head, None,
+                "nothing is recorded for this change yet", "derived",
+                "no finding was recorded for %s at any severity, so there is nothing "
+                "to derive a next action from" % name))
+
     for item in ev["broken"]:
         findings.append(_finding(
             "(shared evidence store)", 1, "FAIL", item.get("finding", "receipt"),
             head, None, item.get("remedy", "regenerate the receipt"), "observed",
             item.get("finding", "a receipt failed verification")))
+
+    for item in ev["failing"]:
+        covered = set(item.get("coveredFiles") or [])
+        attributed = None
+        for name, _doss in changes:
+            if covered & plan_owns_by_change.get(name, set()):
+                attributed = name
+                break
+        findings.append(_finding(
+            attributed or "(shared evidence store)", 2, "FAIL",
+            item.get("path", "receipt"), head, None,
+            item.get("remedy", "regenerate the receipt"), "observed",
+            item.get("finding", "a receipt recorded a nonzero exit code")))
 
     names = [n for n, _d in changes]
     # Scope conflicts are computed over ALL open registry records, pairwise,
@@ -657,7 +820,8 @@ def build_team_report(path):
                     % (ra.get("id"), ra.get("agent"), rb.get("id"),
                        rb.get("agent"), pth)))
 
-    findings.sort(key=lambda f: (f["severity"], f["change"], f["evidence"], f["detail"]))
+    findings.sort(key=lambda f: (f["severity"], f["change"], f["evidence"] or "",
+                                 f["detail"]))
     return {"tool": "sbe status --team", "root": root, "headCommit": head,
             "changes": names, "findings": findings,
             "basisLegend": "observed: read this run; derived: computed from observed "

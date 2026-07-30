@@ -45,6 +45,27 @@ _MIGRATION_KINDS = ("db-migration", "sql-ddl", "destructive-migration")
 
 _HTTP_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 
+#: A small named source-text set (spec: SCOPE). A changed, unowned,
+#: undossiered file whose path matches no impact detector AND whose extension
+#: is outside this set is not source this tool can call "unplanned but
+#: potentially legitimate": it is a DISTINCT category, unmeasured, because
+#: "nobody reviewed it" and "this tool cannot even read what kind of file it
+#: is" are different sentences and only the detector/extension check tells
+#: them apart.
+_SOURCE_EXTENSIONS = (".py", ".sql", ".md", ".sh", ".js", ".ts", ".go", ".rb",
+                     ".java", ".kt", ".json", ".yaml", ".yml", ".toml", ".cfg",
+                     ".ini", ".txt")
+
+
+def _is_source_shaped(rel):
+    """True when an impact detector recognizes this path, or its extension is
+    in the tracked source-text set. False means SCOPE cannot even name what
+    kind of file this is (a checksum, a binary, an opaque artifact) and it
+    belongs in the unmeasured category, not the unplanned one."""
+    if _detector_kinds(rel):
+        return True
+    return os.path.splitext(rel)[1].lower() in _SOURCE_EXTENSIONS
+
 
 def _resolve(cwd, ref):
     code, out, err = _git(["rev-parse", "--verify", "%s^{commit}" % ref], cwd)
@@ -212,19 +233,28 @@ def evaluate(dossier_dir, cwd, base, head):
 
     # SCOPE ------------------------------------------------------------
     scope_findings = []
-    in_scope, unplanned = [], []
+    in_scope, unplanned, unmeasured = [], [], []
     for rel in changed:
         if rel.startswith(rel_dossier + os.sep) or rel.startswith(".sbe/"):
             continue  # design artifacts and stores are not implementation scope
         if rel in owned or rel in dossier_named:
             in_scope.append(rel)
-        else:
+        elif _is_source_shaped(rel):
             unplanned.append(rel)
+        else:
+            unmeasured.append(rel)
     for rel in unplanned:
         scope_findings.append({"verdict": "REVIEW-REQUIRED",
                                "detail": "%s changed but no plan task owns it and no dossier "
                                          "artifact names it: unplanned but potentially "
                                          "legitimate" % rel,
+                               "evidence": rel})
+    for rel in unmeasured:
+        scope_findings.append({"verdict": "PASS",
+                               "detail": "%s changed but matches no impact detector and its "
+                                         "extension is outside the tracked source-text set: "
+                                         "unmeasured, a category distinct from unplanned, "
+                                         "never silently counted as clean" % rel,
                                "evidence": rel})
     if not plan and not dossier_named:
         scope_verdict = "NO-DATA"
@@ -236,9 +266,12 @@ def evaluate(dossier_dir, cwd, base, head):
         scope_verdict = "REVIEW-REQUIRED"
     else:
         scope_verdict = "PASS"
-        scope_findings.append({"verdict": "PASS",
-                               "detail": "%d changed file(s), every one owned by a plan task "
-                                         "or named by the dossier" % len(in_scope),
+        detail = ("%d changed file(s), every one owned by a plan task or named by "
+                 "the dossier" % len(in_scope))
+        if unmeasured:
+            detail += ("; %d unmeasured file(s) named above, not silently counted "
+                      "as clean" % len(unmeasured))
+        scope_findings.append({"verdict": "PASS", "detail": detail,
                                "evidence": ", ".join(in_scope) or "no changes"})
 
     # CONTRACTS --------------------------------------------------------

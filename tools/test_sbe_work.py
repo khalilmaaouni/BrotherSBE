@@ -579,14 +579,102 @@ class TestRemove(WorkFixture):
                          "permanent visible history: %s" % record)
 
 
+def _find_unreviewable_git_argv(source):
+    """Static analysis, one level deeper than the plain List/Tuple-literal
+    scan above. That scan is blind to a call site that builds its argv one
+    step removed from a literal, e.g.:
+
+        sub = "mer" + "ge"
+        _git([sub, "origin", branch], root)
+
+    where the List IS a literal, but its first element is a concatenation,
+    not an ast.Constant string, so the earlier check's `isinstance(head,
+    ast.Constant)` guard silently lets it through (the audit's own
+    mutation proved this: it goes red only once this function exists).
+
+    Returns a list of human-readable violation strings, empty when every
+    call resolves to a str literal head. A call is walked when its func is
+    `_git` by Name (as imported and used in src/brothersbe/work.py) or by
+    Attribute (module.method access), matching however this codebase might
+    spell the call. The argv argument is followed through at most one
+    simple `name = <expr>` assignment (and through an `a if cond else b`
+    conditional of literals, the one pattern src/brothersbe/work.py itself
+    uses at its `sbe work remove` call site) so a legitimate
+    variable-holding-a-literal-list is not a false positive; anything this
+    resolver cannot trace back to a literal string head (a concatenation,
+    a function call, an unresolved name) is reported as unreviewable."""
+    tree = ast.parse(source)
+
+    def is_git_call_func(func):
+        if isinstance(func, ast.Name) and func.id == "_git":
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == "_git":
+            return True
+        return False
+
+    def literal_head_is_safe(list_or_tuple):
+        if not isinstance(list_or_tuple, (ast.List, ast.Tuple)) or not list_or_tuple.elts:
+            return False
+        head = list_or_tuple.elts[0]
+        return isinstance(head, ast.Constant) and isinstance(head.value, str)
+
+    # Every simple `name = <expr>` assignment in the module, keyed by name,
+    # so a call site passing a variable can be traced to the nearest
+    # preceding assignment rather than being invisible to this check. This
+    # is a best-effort, whole-module resolution (not scope-aware): sufficient
+    # for the straight-line style this module is written in, and it never
+    # needs to be more than that to catch the shape the audit found.
+    assigns_by_name = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            assigns_by_name.setdefault(node.targets[0].id, []).append(
+                (node.lineno, node.value))
+
+    def resolve_is_safe(expr, before_line, depth=0):
+        if depth > 4:
+            return False
+        if isinstance(expr, (ast.List, ast.Tuple)):
+            return literal_head_is_safe(expr)
+        if isinstance(expr, ast.IfExp):
+            return (resolve_is_safe(expr.body, before_line, depth + 1)
+                    and resolve_is_safe(expr.orelse, before_line, depth + 1))
+        if isinstance(expr, ast.Name):
+            candidates = [pair for pair in assigns_by_name.get(expr.id, [])
+                          if pair[0] <= before_line]
+            if not candidates:
+                return False
+            candidates.sort(key=lambda pair: pair[0])
+            return resolve_is_safe(candidates[-1][1], before_line, depth + 1)
+        return False
+
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not is_git_call_func(node.func):
+            continue
+        if not node.args:
+            violations.append(
+                "_git call at line %d passes no argv argument at all" % node.lineno)
+            continue
+        if not resolve_is_safe(node.args[0], node.lineno):
+            violations.append(
+                "_git call at line %d builds its argv head from something this law "
+                "cannot read as a literal string (a concatenation, a function call, "
+                "or a variable it cannot trace to one): a variable-built git "
+                "subcommand is unreviewable by this law" % node.lineno)
+    return violations
+
+
 class TestNoMergeLaw(unittest.TestCase):
-    """Source-level: nothing in the work code path ever runs git merge, rebase
-    or push. Matched against the shape this codebase actually constructs git
-    argv in (a list or tuple literal whose FIRST element is the subcommand,
-    e.g. ["merge", branch], the way src/brothersbe/tasks.py's own _git() is
-    called), never against plain substring search: a docstring or comment
-    that merely mentions the word "merge" must not trip this, and does not,
-    because neither is a List/Tuple AST node."""
+    """Source-level: nothing in the work code path ever runs git merge, rebase,
+    push, or deploy (CHANGELOG and KNOWN-LIMITS both say deploy is guarded
+    too, so the forbidden set must say so mechanically). Matched against the
+    shape this codebase actually constructs git argv in (a list or tuple
+    literal whose FIRST element is the subcommand, e.g. ["merge", branch],
+    the way src/brothersbe/tasks.py's own _git() is called), never against
+    plain substring search: a docstring or comment that merely mentions the
+    word "merge" must not trip this, and does not, because neither is a
+    List/Tuple AST node."""
 
     def test_work_module_never_constructs_a_merge_rebase_or_push_argv(self):
         path = os.path.join(ROOT, "src", "brothersbe", "work.py")
@@ -596,7 +684,7 @@ class TestNoMergeLaw(unittest.TestCase):
         with io.open(path, encoding="utf-8") as fh:
             source = fh.read()
         tree = ast.parse(source, filename=path)
-        forbidden = ("merge", "rebase", "push")
+        forbidden = ("merge", "rebase", "push", "deploy")
         hits = []
         for node in ast.walk(tree):
             if not isinstance(node, (ast.List, ast.Tuple)) or not node.elts:
@@ -609,7 +697,65 @@ class TestNoMergeLaw(unittest.TestCase):
         self.assertEqual(hits, [],
                          "src/brothersbe/work.py constructs git argv starting with a "
                          "forbidden subcommand: %s. sbe work must never merge, rebase onto "
-                         "the default branch, or push." % ", ".join(hits))
+                         "the default branch, push, or deploy." % ", ".join(hits))
+
+    def test_work_module_never_builds_git_argv_head_from_something_unreadable(self):
+        """The gap the audit found: the scan above only recognises an
+        ast.Constant string sitting directly as the first element of a
+        List/Tuple literal. A subcommand built one step removed (string
+        concatenation, a helper call, an unresolved variable) is invisible
+        to it and must be caught here instead."""
+        path = os.path.join(ROOT, "src", "brothersbe", "work.py")
+        self.assertTrue(os.path.exists(path),
+                        "src/brothersbe/work.py does not exist yet; there is nothing to "
+                        "check against the unreviewable-argv law")
+        with io.open(path, encoding="utf-8") as fh:
+            source = fh.read()
+        violations = _find_unreviewable_git_argv(source)
+        self.assertEqual(violations, [],
+                         "src/brothersbe/work.py builds a git argv head in a way this "
+                         "law cannot read statically, so it cannot be reviewed for a "
+                         "hidden merge/rebase/push/deploy: %s" % "; ".join(violations))
+
+    def test_calibration_concat_built_merge_argv_is_caught_by_the_unreviewable_law(self):
+        """Calibration, per the audit's own mutation: assign a concat-built
+        "merge" subcommand to a plain variable and pass that straight to
+        _git(...), on a scratch copy of the real file written to a tempdir,
+        never on src/brothersbe/work.py itself. The unreviewable-argv check
+        must go red for exactly this shape, proving it actually bites rather
+        than passing vacuously."""
+        real_path = os.path.join(ROOT, "src", "brothersbe", "work.py")
+        with io.open(real_path, encoding="utf-8") as fh:
+            real_source = fh.read()
+        self.assertEqual(_find_unreviewable_git_argv(real_source), [],
+                         "calibration precondition failed: the real file must already "
+                         "be clean before a mutated scratch copy of it is checked")
+
+        scratch_dir = tempfile.mkdtemp()
+        try:
+            mutated_source = real_source + (
+                "\n\n"
+                "def _scratch_mutation_concat_built_merge(root):\n"
+                "    sub = 'mer' + 'ge'\n"
+                "    argv = [sub, 'origin', 'main']\n"
+                "    return _git(argv, root)\n")
+            scratch_path = os.path.join(scratch_dir, "work_mutated_scratch_copy.py")
+            with io.open(scratch_path, "w", encoding="utf-8") as fh:
+                fh.write(mutated_source)
+            with io.open(scratch_path, encoding="utf-8") as fh:
+                reloaded = fh.read()
+            violations = _find_unreviewable_git_argv(reloaded)
+        finally:
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+
+        self.assertTrue(violations,
+                        "calibration failed: a concat-built merge subcommand assigned "
+                        "to a variable and passed straight to _git(...) must be caught, "
+                        "and it was not; the mutation never went red")
+        self.assertTrue(
+            any("unreviewable" in v for v in violations),
+            "calibration failed: the violation message must say a variable-built git "
+            "subcommand is unreviewable by this law: %s" % violations)
 
 
 if __name__ == "__main__":

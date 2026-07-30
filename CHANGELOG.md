@@ -8,6 +8,35 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The five first-rank commands were audited against their own specs and the
+  nine confirmed defects fixed, each with the test that now holds the fix.
+  `sbe pr verify` validates `--repo` against an anchored `owner/name` shape
+  before token discovery and before any fetch, so a hostile value never
+  reaches URL composition (`REPO_SHAPE_RE`, `valid_repo_shape`); it reads
+  REQUIRED CHECKS and CODEOWNERS from the one authoritative source, the base
+  branch's protection endpoint, instead of inferring CODEOWNERS from the
+  presence of a file and REQUIRED CHECKS from an unfiltered check-run scan,
+  and the scan survives only as prose labeled ADVISORY inside the detail line;
+  an unreadable reviews endpoint is now carried as an explicit unavailability
+  so "no satisfying approval" and "could not check" stop collapsing into one
+  verdict. `sbe converge` splits SCOPE's leftovers in two: a changed file that
+  no impact detector recognizes and whose extension is outside the tracked
+  source-text set is reported as `unmeasured`, a category distinct from
+  `unplanned`, and it is named in the PASS detail rather than absorbed into
+  it. `sbe status --team` refuses a `designRoots` entry that resolves outside
+  the repository root, by its literal spelling and as a visible severity-3
+  FAIL rather than a silent skip; it computes each open task's postcondition
+  against its declared ownership through the same `tasks.postcondition` that
+  `sbe task close` refuses against, so a merge blocker this run can see for
+  itself is reported at severity 2 with `basis: observed`; and it fills the
+  two empty severity slots, ready-to-start tasks (8) and a fully closed plan
+  (9), both `derived` and both suppressed when the registry was unreadable, so
+  neither is ever guessed from data the run could not read. Held by
+  `tools/test_sbe_prverify.py`, `tools/test_sbe_converge.py`,
+  `tools/test_sbe_status_team.py`, `tools/test_sbe_work.py` and
+  `tools/test_sbe_plan.py`, all passing, with the eval bed at 517 passed, 0
+  regressions
+
 - `sbe status --team` reads every active change under `design/` (plus any
   `designRoots` a team profile adds) into one blocker-first report over ten
   severities, broken claims first, next actions last, with zero network by

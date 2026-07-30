@@ -35,6 +35,7 @@ Python floor is 3.9, standard library only.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -44,6 +45,19 @@ import urllib.request
 API_ROOT = "https://api.github.com"
 TIMEOUT_SECONDS = 10
 GOOD_CONCLUSIONS = ("success", "neutral", "skipped")
+
+#: owner/name, each side [A-Za-z0-9_.-]+ and NOTHING else: no extra slashes,
+#: no path-traversal segments (".." never matches on its own because the
+#: pattern is anchored end to end and a stray "/" inside either side breaks
+#: the match), so a hostile --repo never reaches URL composition.
+REPO_SHAPE_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def valid_repo_shape(repo):
+    """True when `repo` is exactly owner/name in the shape above. Called
+    before token discovery and before any fetch, so a malformed --repo is
+    refused as a usage error and never turns into a URL."""
+    return bool(repo) and bool(REPO_SHAPE_RE.match(repo))
 
 #: The one-line remedy the spec requires next to every credential-shaped
 #: NO-DATA. Worded without the other two verdict names on purpose: a
@@ -249,12 +263,14 @@ def evaluate(repo, number, token, fetch=None, cwd=None, head=None, policy=None,
     first_sha = None
     author_login = None
     author_type = None
+    base_ref = None
     downstream = None  # (verdict, detail) when the PR itself did not resolve
     if status == 200 and isinstance(body, dict):
         first_sha = (body.get("head") or {}).get("sha")
         user = body.get("user") or {}
         author_login = user.get("login")
         author_type = user.get("type")
+        base_ref = (body.get("base") or {}).get("ref")
         state = body.get("state")
         if not first_sha:
             control("PR EXISTS", "UNVERIFIABLE",
@@ -339,16 +355,25 @@ def evaluate(repo, number, token, fetch=None, cwd=None, head=None, policy=None,
                 "the author does not resolve to a live account (login %r)"
                 % author_login)
 
-    # Reviews feed three controls.
+    # Reviews feed three controls, plus CODEOWNERS below needs to know
+    # whether a live, non-stale, non-self approval exists at all. `live_
+    # approvals` is None when the reviews were never readable (permission,
+    # network, or a bad body) -- that is the signal CODEOWNERS below uses to
+    # tell "no satisfying approval" apart from "could not check".
+    live_approvals = None
+    valid_approvals = None
+    reviews_unavailable = None
     if first_sha is None:
         for name in ("INDEPENDENT APPROVAL", "BOT APPROVAL", "REVIEW THREADS"):
             control(name, downstream[0], downstream[1])
+        reviews_unavailable = downstream[1]
     else:
         r_status, r_body, r_err = fetch("GET", pr_url + "/reviews", token)
         if r_status == 200 and isinstance(r_body, list):
             latest = _latest_by_reviewer(r_body)
             approvals = [rev for rev in latest.values()
                          if (rev.get("state") or "").upper() == "APPROVED"]
+            live_approvals = approvals
             valid, reasons = [], []
             for rev in approvals:
                 login = (rev.get("user") or {}).get("login")
@@ -403,93 +428,139 @@ def evaluate(repo, number, token, fetch=None, cwd=None, head=None, policy=None,
             else:
                 control("REVIEW THREADS", "PASS",
                         "no reviewer's latest live state is CHANGES_REQUESTED")
+            valid_approvals = valid
         elif r_status in (401, 403):
+            reviews_unavailable = ("the token lacks permission to read the reviews "
+                                   "(HTTP %d)" % r_status)
             for name in ("INDEPENDENT APPROVAL", "BOT APPROVAL", "REVIEW THREADS"):
-                control(name, "UNVERIFIABLE",
-                        "the token lacks permission to read the reviews (HTTP %d)"
-                        % r_status)
+                control(name, "UNVERIFIABLE", reviews_unavailable)
         elif r_status is None:
+            reviews_unavailable = ("the network did not answer for the reviews: %s"
+                                   % (r_err or "no reason recorded"))
             for name in ("INDEPENDENT APPROVAL", "BOT APPROVAL", "REVIEW THREADS"):
-                control(name, "NO-DATA",
-                        "the network did not answer for the reviews: %s"
-                        % (r_err or "no reason recorded"))
+                control(name, "NO-DATA", reviews_unavailable)
         else:
+            reviews_unavailable = ("the reviews endpoint answered HTTP %s with an "
+                                   "unusable body" % r_status)
             for name in ("INDEPENDENT APPROVAL", "BOT APPROVAL", "REVIEW THREADS"):
-                control(name, "UNVERIFIABLE",
-                        "the reviews endpoint answered HTTP %s with an unusable body"
-                        % r_status)
+                control(name, "UNVERIFIABLE", reviews_unavailable)
 
-    # CODEOWNERS.
-    if first_sha is None:
-        control("CODEOWNERS", downstream[0], downstream[1])
-    else:
-        c_url = "%s/repos/%s/contents/.github/CODEOWNERS" % (API_ROOT, repo)
-        c_status, _c_body, c_err = fetch("GET", c_url, token)
-        if c_status == 404:
-            control("CODEOWNERS", "NO-DATA",
-                    "no CODEOWNERS file resolved for this repository (HTTP 404); "
-                    "no applicable rule found, and that is reported as nothing "
-                    "examined, never as a clean verdict")
-        elif c_status == 200:
-            control("CODEOWNERS", "NO-DATA",
-                    "a CODEOWNERS file exists, but this client does not read "
-                    "required reviewers from branch protection, so which rule "
-                    "applies to this change is undetermined")
-        elif c_status in (401, 403):
-            control("CODEOWNERS", "UNVERIFIABLE",
-                    "the token lacks permission to read CODEOWNERS (HTTP %d)"
-                    % c_status)
-        elif c_status is None:
-            control("CODEOWNERS", "NO-DATA",
-                    "the network did not answer for CODEOWNERS: %s"
-                    % (c_err or "no reason recorded"))
-        else:
-            control("CODEOWNERS", "UNVERIFIABLE",
-                    "the CODEOWNERS endpoint answered HTTP %s" % c_status)
-
-    # REQUIRED CHECKS on the head sha.
+    # Branch protection: the ONE authoritative source for REQUIRED CHECKS and
+    # CODEOWNERS (F6+F7). required_status_checks.contexts drives REQUIRED
+    # CHECKS; required_pull_request_reviews.require_code_owner_reviews drives
+    # CODEOWNERS. Neither is ever inferred from the check-runs scan or a raw
+    # CODEOWNERS file alone; a 403/404 on this ONE endpoint makes both
+    # UNVERIFIABLE, naming the endpoint, rather than falling back to a guess.
     if first_sha is None:
         control("REQUIRED CHECKS", downstream[0], downstream[1])
+        control("CODEOWNERS", downstream[0], downstream[1])
+    elif not base_ref:
+        msg = ("the pull request resolved but named no base branch, so branch "
+              "protection could not be looked up to drive either control")
+        control("REQUIRED CHECKS", "UNVERIFIABLE", msg)
+        control("CODEOWNERS", "UNVERIFIABLE", msg)
     else:
+        p_url = "%s/repos/%s/branches/%s/protection" % (API_ROOT, repo, base_ref)
+        p_status, p_body, p_err = fetch("GET", p_url, token)
+
+        # The check-runs scan survives ONLY as ADVISORY prose folded into
+        # REQUIRED CHECKS' detail; it never decides a verdict by itself, and
+        # `run_by_name` is the one piece of it REQUIRED CHECKS actually uses,
+        # to test each required context named by branch protection.
         k_url = "%s/repos/%s/commits/%s/check-runs" % (API_ROOT, repo, first_sha)
         k_status, k_body, k_err = fetch("GET", k_url, token)
         runs = k_body.get("check_runs") if isinstance(k_body, dict) else None
+        run_by_name = {}
         if k_status == 200 and isinstance(runs, list):
-            if not runs:
-                control("REQUIRED CHECKS", "NO-DATA",
-                        "no check runs are reported on %s; an empty set is not "
-                        "evidence of success" % first_sha)
+            for r in runs:
+                if isinstance(r, dict) and r.get("name"):
+                    run_by_name[r["name"]] = r
+            if runs:
+                advisory = "ADVISORY (not verdict-determining), every check run on %s: %s" % (
+                    first_sha, ", ".join(
+                        "%s=%s" % (r.get("name") or "(unnamed)",
+                                  r.get("conclusion") or r.get("status") or "pending")
+                        for r in runs if isinstance(r, dict)))
             else:
-                bad = [r.get("name") or "(unnamed)" for r in runs
-                       if isinstance(r, dict) and r.get("status") == "completed"
-                       and r.get("conclusion") not in GOOD_CONCLUSIONS]
-                pending = [r.get("name") or "(unnamed)" for r in runs
-                           if isinstance(r, dict) and r.get("status") != "completed"]
-                if bad:
-                    control("REQUIRED CHECKS", "FAIL",
-                            "check run(s) on %s did not succeed: %s"
-                            % (first_sha, ", ".join(bad)))
-                elif pending:
-                    control("REQUIRED CHECKS", "UNVERIFIABLE",
-                            "check run(s) on %s have not completed: %s"
-                            % (first_sha, ", ".join(pending)))
+                advisory = "ADVISORY (not verdict-determining): no check runs are reported on %s" % first_sha
+        elif k_status in (401, 403):
+            advisory = ("ADVISORY (not verdict-determining): the token lacks permission "
+                       "to read check runs (HTTP %d)" % k_status)
+        elif k_status is None:
+            advisory = ("ADVISORY (not verdict-determining): the network did not answer "
+                       "for check runs: %s" % (k_err or "no reason recorded"))
+        else:
+            advisory = ("ADVISORY (not verdict-determining): the check-runs endpoint "
+                       "answered HTTP %s" % k_status)
+
+        if p_status in (403, 404):
+            msg = ("branch protection for %s is not readable by this token (HTTP %d at "
+                  "%s); REQUIRED CHECKS and CODEOWNERS are never guessed from the "
+                  "check-runs scan or a raw CODEOWNERS file alone" % (base_ref, p_status, p_url))
+            control("REQUIRED CHECKS", "UNVERIFIABLE", msg)
+            control("CODEOWNERS", "UNVERIFIABLE", msg)
+        elif p_status == 200 and isinstance(p_body, dict):
+            required = ((p_body.get("required_status_checks") or {}).get("contexts")) or []
+            checkruns_readable = k_status == 200 and isinstance(runs, list)
+            if not required:
+                control("REQUIRED CHECKS", "PASS",
+                        "branch protection for %s requires no status checks (nothing "
+                        "required); %s" % (base_ref, advisory))
+            elif not checkruns_readable:
+                control("REQUIRED CHECKS", "UNVERIFIABLE",
+                        "branch protection for %s requires context(s) %s, but their "
+                        "status on %s could not be read: %s"
+                        % (base_ref, ", ".join(required), first_sha, advisory))
+            else:
+                missing = [name for name in required if name not in run_by_name]
+                failing = [name for name in required if name in run_by_name
+                          and (run_by_name[name].get("status") != "completed"
+                               or run_by_name[name].get("conclusion") not in GOOD_CONCLUSIONS)]
+                if missing or failing:
+                    reasons = []
+                    if missing:
+                        reasons.append("required context(s) missing on %s: %s"
+                                      % (first_sha, ", ".join(missing)))
+                    if failing:
+                        reasons.append("required context(s) not passing on %s: %s"
+                                      % (first_sha, ", ".join(failing)))
+                    reasons.append(advisory)
+                    control("REQUIRED CHECKS", "FAIL", "; ".join(reasons))
                 else:
                     control("REQUIRED CHECKS", "PASS",
-                            "all %d check run(s) on %s completed with a clean "
-                            "conclusion" % (len(runs), first_sha))
-        elif k_status in (401, 403):
-            control("REQUIRED CHECKS", "UNVERIFIABLE",
-                    "the token lacks permission to read the checks on %s (HTTP %d); "
-                    "the required set is never inferred from local files"
-                    % (first_sha, k_status))
-        elif k_status is None:
-            control("REQUIRED CHECKS", "NO-DATA",
-                    "the network did not answer for the check runs: %s"
-                    % (k_err or "no reason recorded"))
+                            "all %d required context(s) for %s passed on %s; %s"
+                            % (len(required), base_ref, first_sha, advisory))
+
+            reviews_policy = p_body.get("required_pull_request_reviews") or {}
+            require_code_owner = bool(reviews_policy.get("require_code_owner_reviews"))
+            if not require_code_owner:
+                control("CODEOWNERS", "NO-DATA",
+                        "branch protection for %s does not require code owner reviews; "
+                        "no applicable rule found" % base_ref)
+            elif live_approvals is None:
+                control("CODEOWNERS", "UNVERIFIABLE",
+                        "branch protection for %s requires code owner reviews, but the "
+                        "reviews needed to check that were not readable: %s"
+                        % (base_ref, reviews_unavailable))
+            elif valid_approvals:
+                control("CODEOWNERS", "PASS",
+                        "branch protection for %s requires code owner reviews, and a "
+                        "live approval by %s satisfies it"
+                        % (base_ref, ", ".join(valid_approvals)))
+            else:
+                control("CODEOWNERS", "FAIL",
+                        "branch protection for %s requires code owner reviews, and no "
+                        "live approval satisfies it" % base_ref)
+        elif p_status is None:
+            msg = ("the network did not answer for branch protection: %s"
+                  % (p_err or "no reason recorded"))
+            control("REQUIRED CHECKS", "NO-DATA", msg)
+            control("CODEOWNERS", "NO-DATA", msg)
         else:
-            control("REQUIRED CHECKS", "UNVERIFIABLE",
-                    "the check-runs endpoint answered HTTP %s with an unusable body"
-                    % k_status)
+            msg = ("the branch protection endpoint answered HTTP %s with an unusable "
+                  "body" % p_status)
+            control("REQUIRED CHECKS", "UNVERIFIABLE", msg)
+            control("CODEOWNERS", "UNVERIFIABLE", msg)
 
     # EVIDENCE FRESHNESS, only when the caller named a local evidence store.
     if store:
@@ -596,9 +667,11 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         args = parser.parse_args(rest[1:])
     except SystemExit:
         return exit_usage
-    if "/" not in args.repo:
-        sys.stderr.write("sbe pr verify: --repo must be owner/name, got %r\n"
-                         % args.repo)
+    if not valid_repo_shape(args.repo):
+        sys.stderr.write(
+            "sbe pr verify: --repo must look like owner/name, where owner and name "
+            "each match [A-Za-z0-9_.-]+ and nothing else (no extra slashes, no path "
+            "traversal); got %r\n" % args.repo)
         return exit_usage
 
     token, source, _detail = discover_token()

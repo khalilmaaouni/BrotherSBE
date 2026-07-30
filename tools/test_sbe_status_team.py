@@ -99,7 +99,7 @@ class TeamScenario(unittest.TestCase):
         self.assertEqual(code, 0, "plan --write for %s: %s" % (name, text))
         return doss
 
-    def _open_record(self, task_id, owns, agent="alice"):
+    def _open_record(self, task_id, owns, agent="alice", base_commit=None):
         """Seed an open registry record directly, the same technique the
         registry's own suite uses for states only real runs could otherwise
         produce."""
@@ -112,10 +112,33 @@ class TeamScenario(unittest.TestCase):
             data = json.loads(io.open(reg).read())
         data["tasks"].append({
             "id": task_id, "agent": agent, "role": "writer", "worktree": None,
-            "ownedPaths": owns, "readOnlyPaths": [], "baseCommit": None,
+            "ownedPaths": owns, "readOnlyPaths": [], "baseCommit": base_commit,
             "expiry": None, "status": "open", "verifyCommand": "python3 -c pass",
             "evidenceId": None, "openedAt": "2026-07-30T00:00:00Z", "closedAt": None,
         })
+        io.open(reg, "w").write(json.dumps(data, indent=2))
+
+    def _closed_record(self, task_id, owns, agent="alice", base_commit=None,
+                       forced=False):
+        """A CLOSED (clean, unless forced) registry record for a task id, the
+        completed-task counterpart to `_open_record`."""
+        reg_dir = os.path.join(self.repo, ".sbe")
+        if not os.path.isdir(reg_dir):
+            os.makedirs(reg_dir)
+        reg = os.path.join(reg_dir, "tasks.json")
+        data = {"schemaVersion": "1.0", "tasks": []}
+        if os.path.exists(reg):
+            data = json.loads(io.open(reg).read())
+        record = {
+            "id": task_id, "agent": agent, "role": "writer", "worktree": None,
+            "ownedPaths": owns, "readOnlyPaths": [], "baseCommit": base_commit,
+            "expiry": None, "status": "closed", "verifyCommand": "python3 -c pass",
+            "evidenceId": None, "openedAt": "2026-07-30T00:00:00Z",
+            "closedAt": "2026-07-30T01:00:00Z",
+        }
+        if forced:
+            record["forced"] = {"who": "bob", "why": "test"}
+        data["tasks"].append(record)
         io.open(reg, "w").write(json.dumps(data, indent=2))
 
     def _forced_record(self, task_id):
@@ -161,6 +184,50 @@ class TestDiscoveryAndOrdering(TeamScenario):
         self.assertEqual(code, 0, text)
         self.assertIn("sbe plan", text)
 
+    def test_designRoots_profile_adds_a_second_directory_of_dossiers(self):
+        # F2: a second, in-repo directory named by .sbe/team-profile.json
+        # holds its own dossier, and both changes are discovered together.
+        self._change("chg-a", "src/a.py")
+        alt_root = os.path.join(self.repo, "other-designs")
+        doss = os.path.join(alt_root, "chg-alt")
+        os.makedirs(doss)
+        io.open(os.path.join(doss, "00-intake.json"), "w").write(
+            json.dumps(INTAKE, indent=2))
+        sbe_dir = os.path.join(self.repo, ".sbe")
+        if not os.path.isdir(sbe_dir):
+            os.makedirs(sbe_dir)
+        io.open(os.path.join(sbe_dir, "team-profile.json"), "w").write(
+            json.dumps({"designRoots": ["other-designs"]}))
+        code, text, _ = self.team()
+        self.assertIn("chg-a", text)
+        self.assertIn("chg-alt", text, "a designRoots entry must be discovered too: %s"
+                                       % text)
+
+    def test_a_designRoots_entry_escaping_the_repo_is_refused_and_not_walked(self):
+        # M3: containment. An entry resolving outside the repository root
+        # (here via ..) is REFUSED by name and its dossier never surfaces.
+        self._change("chg-a", "src/a.py")
+        outside = os.path.join(self.tmp, "outside")
+        doss = os.path.join(outside, "chg-outside")
+        os.makedirs(doss)
+        io.open(os.path.join(doss, "00-intake.json"), "w").write(
+            json.dumps(INTAKE, indent=2))
+        sbe_dir = os.path.join(self.repo, ".sbe")
+        if not os.path.isdir(sbe_dir):
+            os.makedirs(sbe_dir)
+        io.open(os.path.join(sbe_dir, "team-profile.json"), "w").write(
+            json.dumps({"designRoots": ["../outside"]}))
+        code, text, err = self.team("--json")
+        self.assertNotIn("chg-outside", text,
+                         "an escaping designRoots entry must never be walked: %s" % text)
+        data = json.loads(text[text.index("{"):])
+        refusals = [f for f in data["findings"]
+                   if f["basis"] == "unavailable" and "../outside" in f["evidence"]]
+        self.assertTrue(refusals, "the escaping entry must be REFUSED by name, not "
+                                 "silently dropped: %s" % text)
+        self.assertIn("chg-a", data["changes"])
+        self.assertNotIn("chg-outside", data["changes"])
+
 
 class TestConflictsAndForced(TeamScenario):
     def test_overlapping_open_tasks_across_changes_is_a_scope_conflict_naming_both(self):
@@ -181,6 +248,107 @@ class TestConflictsAndForced(TeamScenario):
         self.assertIn("FORCED", text)
 
 
+class TestFullSeveritySet(TeamScenario):
+    """F9: severities 2 (merge blockers), 8 (ready tasks), 9 (completed
+    changes) and 10 (next action, always exactly one per change)."""
+
+    def test_an_open_tasks_scope_violation_is_a_severity_two_merge_blocker(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        head = self.git("rev-parse", "HEAD").strip()
+        self._open_record("T01", ["src/a.py"], agent="alice", base_commit=head)
+        io.open(os.path.join(self.repo, "src", "extra.py"), "w").write("y = 2\n")
+        code, text, _ = self.team("--json")
+        self.assertEqual(code, 1, text)
+        data = json.loads(text[text.index("{"):])
+        hits = [f for f in data["findings"]
+               if f["change"] == "chg-a" and f["severity"] == 2
+               and "src/extra.py" in f["detail"]]
+        self.assertTrue(hits, "an out-of-scope change on an open task must surface as a "
+                              "severity 2 merge blocker naming the path: %s" % text)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits[0])
+        self.assertEqual(hits[0]["basis"], "observed", hits[0])
+
+    def test_a_failing_evidence_receipt_is_a_severity_two_merge_blocker_attributed(self):
+        self._change("chg-a", "src/a.py")
+        # A receipt generated over a dirty tree is only ever NO-DATA (advisory)
+        # per evidence.verify(); commit first so the exit code can be trusted.
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        out = os.path.join(self.repo, ".sbe", "evidence", "fail.json")
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo, "--covers", "src/a.py",
+            "--", sys.executable, "-c", "import sys; sys.exit(1)")
+        self.assertEqual(code, 1, "the fixture command must fail to earn a failing "
+                                  "receipt: %s" % text)
+        code, text, _ = self.team("--json")
+        self.assertEqual(code, 1, text)
+        data = json.loads(text[text.index("{"):])
+        hits = [f for f in data["findings"] if f["severity"] == 2
+               and "fail.json" in f["evidence"]]
+        self.assertTrue(hits, "a failing receipt must surface as a severity 2 merge "
+                              "blocker: %s" % text)
+        self.assertEqual(hits[0]["change"], "chg-a",
+                         "a receipt covering src/a.py must attribute to the change whose "
+                         "plan owns src/a.py, not the shared bucket: %s" % text)
+
+    def test_a_fresh_plan_lists_its_tasks_as_ready_with_no_open_record(self):
+        self._change("chg-a", "src/a.py")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        ready = [f for f in data["findings"]
+                if f["change"] == "chg-a" and f["severity"] == 8]
+        self.assertTrue(ready, "a fresh plan's tasks with no registry record must list "
+                              "as ready: %s" % text)
+        ids = {f["evidence"] for f in ready}
+        self.assertIn("task T01", ids, text)
+
+    def test_every_plan_task_closed_clean_is_a_completed_change(self):
+        self._change("chg-a", "src/a.py")
+        self._closed_record("T01", ["src/a.py"], agent="alice")
+        self._closed_record("T02", [], agent="alice")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        completed = [f for f in data["findings"]
+                    if f["change"] == "chg-a" and f["severity"] == 9]
+        self.assertTrue(completed, "every plan task closed clean must surface as a "
+                                  "completed change: %s" % text)
+        self.assertEqual(completed[0]["verdict"], "PASS", completed[0])
+        ready = [f for f in data["findings"]
+                if f["change"] == "chg-a" and f["severity"] == 8]
+        self.assertFalse(ready, "a task with a closed record is not a ready task: %s"
+                                % text)
+
+    def test_a_forced_close_never_counts_as_completed(self):
+        self._change("chg-a", "src/a.py")
+        self._closed_record("T01", ["src/a.py"], agent="alice", forced=True)
+        self._closed_record("T02", [], agent="alice")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        completed = [f for f in data["findings"]
+                    if f["change"] == "chg-a" and f["severity"] == 9]
+        self.assertFalse(completed, "a FORCED close never satisfies completion: %s" % text)
+
+    def test_every_change_carries_exactly_one_severity_ten_next_action(self):
+        self._change("chg-a", "src/a.py")
+        self._change("chg-b", "src/b.py")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        for name in ("chg-a", "chg-b"):
+            own = [f for f in data["findings"] if f["change"] == name]
+            tens = [f for f in own if f["severity"] == 10]
+            self.assertEqual(len(tens), 1,
+                             "exactly one severity-10 next action per change: %s" % text)
+            self.assertEqual(tens[0]["basis"], "derived", tens[0])
+            lower = [f for f in own if f["severity"] < 10]
+            top = min(lower, key=lambda f: f["severity"])
+            self.assertEqual(tens[0]["nextAction"], top["nextAction"],
+                             "the severity-10 finding must actually be derived from %s's "
+                             "own highest-severity finding, not a generic filler: %s"
+                             % (name, text))
+
+
 class TestEvidenceAndConvergence(TeamScenario):
     def test_a_plan_with_no_convergence_report_is_no_data_at_severity_six_not_pass(self):
         self._change("chg-a", "src/a.py")
@@ -188,6 +356,17 @@ class TestEvidenceAndConvergence(TeamScenario):
         self.assertEqual(code, 1, "an unexamined convergence must block: %s" % text)
         self.assertIn("sbe converge", text)
         self.assertNotIn("convergence PASS", text)
+        # F3: the audit found a mutation that folds this finding's severity
+        # from 6 down to 2 without any test noticing; assert the exact number.
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        conv = [f for f in data["findings"]
+               if f["change"] == "chg-a" and "09-convergence.json" in (f["evidence"] or "")]
+        self.assertTrue(conv, "expected a convergence finding naming 09-convergence.json "
+                              "for chg-a: %s" % text)
+        self.assertEqual(conv[0]["severity"], 6,
+                         "an unexamined convergence report must be severity 6, not folded "
+                         "into another slot: %s" % text)
 
     def test_a_stale_approval_report_is_derived_not_observed(self):
         doss = self._change("chg-a", "src/a.py")
