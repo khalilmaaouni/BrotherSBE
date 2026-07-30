@@ -48,15 +48,18 @@ evidence this change owes, written to `00-intake.json`, nothing more.
 Before a single artifact gets written, `sbe impact` checks the declared tier
 against what the diff actually shows, using the same detectors and the same
 `compute_tier` rule the intake step used, so the two can never silently
-disagree about what a T2 even means. Run against this repository's own
-current diff, with the T2 intake just written:
+disagree about what a T2 even means. The range here is pinned to two commits
+from this repository's own history, for the same reason every receipt in this
+product binds to a commit: a pinned range gives the same answer on any clone
+on any day, where "the current diff" would change under this page every time
+the repository moves. Run with the T2 intake just written:
 
 ```bash
-bin/sbe impact . --intake /tmp/sbe-book-ch05-dossier/00-intake.json
+bin/sbe impact . --base 47422a88df57 --head f924538 --intake /tmp/sbe-book-ch05-dossier/00-intake.json
 ```
 
 ```
-git diff 47422a88df57..HEAD over 2 changed file(s)
+git diff 47422a88df57..f924538 over 2 changed file(s)
   UNMEASURED CHECKSUMS.sha256: no detector covers .sha256 files; this tool did not read it and is not reporting it as clean
   UNMEASURED consumers: how many downstream things break if this is wrong cannot be read from a diff. Assumed 'none', which can only lower the proposal, never raise it.
 

@@ -79,6 +79,14 @@ NEXT ACTION: nothing blocking here that this tool can see. scope: intake absent;
 sbe status: exit 0. none of BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS or MISSING EVIDENCE carries an item. That is not the same claim as everything being inspected: read the NO-DATA lines above for what was not.
 ```
 
+One line in that output is live by design: `git diff <sha>..HEAD over N
+changed file(s)` names the commit your repository is actually at, so the sha
+and the count on your machine will differ from the ones printed here, and
+they move again after every commit. The book's own replay check knows this:
+it treats exactly that substring as declared volatile and compares every
+other byte of the block literally, because freezing a live reading onto a
+printed page would be the kind of quiet lie this product exists to catch.
+
 ## Reading this specific report
 
 Every section above reads NO-DATA except MERGE BLOCKERS, which reads

@@ -1208,6 +1208,30 @@ class TestNoPrivateNameShips(unittest.TestCase):
     still in the history and this test cannot see it. The forensic history sweep
     stays a manual checklist item for that reason."""
 
+    # Vendored minified code is the one place a short name can appear by pure
+    # collision: a four-character name is a near-certain substring of SOME
+    # generated identifier in two megabytes of minified JavaScript (the real
+    # event: the client name sat inside mermaid's own "mbPxRBl..." motion-blur
+    # identifier, flanked by letters on both sides). For exactly these files,
+    # a hit counts only when the name stands alone, not flanked by a letter or
+    # digit, so a genuinely planted name is still caught while a substring of
+    # someone else's identifier is not. Every other file keeps the plain
+    # substring rule: prose, code and configs we author have no such
+    # collision excuse.
+    VENDORED_MINIFIED = frozenset({"docs/book/assets/mermaid.min.js"})
+
+    @staticmethod
+    def _standalone_hit(body_low, name_low):
+        i = body_low.find(name_low)
+        while i >= 0:
+            before = body_low[i - 1] if i > 0 else ""
+            after_i = i + len(name_low)
+            after = body_low[after_i] if after_i < len(body_low) else ""
+            if not before.isalnum() and not after.isalnum():
+                return True
+            i = body_low.find(name_low, i + 1)
+        return False
+
     def _names(self):
         raw = os.environ.get("BROTHERSBE_PRIVATE_NAMES", "")
         names = [n.strip() for n in raw.split(",") if n.strip()]
@@ -1250,8 +1274,12 @@ class TestNoPrivateNameShips(unittest.TestCase):
                 continue
             scanned += 1
             low = body.lower()
+            boundary_only = rel in self.VENDORED_MINIFIED
             for name in names:
-                if name.lower() in low:
+                name_low = name.lower()
+                hit = (self._standalone_hit(low, name_low) if boundary_only
+                       else name_low in low)
+                if hit:
                     # Print the FILE and the name's length, never the name and
                     # never the surrounding line: a failure message is written
                     # into CI logs, and a leak-detector that prints the leak has
@@ -1262,6 +1290,26 @@ class TestNoPrivateNameShips(unittest.TestCase):
                          "push; if it is already pushed, the fix is a history rewrite."
                          % (len(hits), hits))
         self.assertGreater(scanned, 0, "scanned zero files, which is NO-DATA and not a pass")
+
+    def test_the_boundary_rule_still_catches_a_planted_standalone_name(self):
+        """Calibration, with a synthetic name (the real list never appears in
+        a fixture): the vendored-file narrowing must NOT excuse a name that
+        stands alone in minified bytes. Only letter-flanked substrings of a
+        longer identifier are excused."""
+        body = 'var a=1;const zqv4="x";b.motionBlur=2;'.lower()
+        self.assertTrue(self._standalone_hit(body, "zqv4"))
+
+    def test_the_boundary_rule_excuses_only_a_flanked_substring(self):
+        body = "n.mbpxrblzqv4red=1,n.clearing=2;".lower()
+        self.assertFalse(self._standalone_hit(body, "zqv4"))
+
+    def test_non_vendored_files_keep_the_plain_substring_rule(self):
+        """The narrowing is scoped to the vendored list by construction: the
+        scan chooses the matcher from VENDORED_MINIFIED membership, so this
+        pins that list to exactly one file. Widening it is a decision, not a
+        drive-by."""
+        self.assertEqual(sorted(self.VENDORED_MINIFIED),
+                         ["docs/book/assets/mermaid.min.js"])
 
 
 class TestPluginSurface(unittest.TestCase):

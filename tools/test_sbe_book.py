@@ -75,5 +75,41 @@ class TestInlineCodeSpans(unittest.TestCase):
                          "a literal backtick survived into rendered prose")
 
 
+class TestDeclaredVolatileLine(unittest.TestCase):
+    """The replay harness masks exactly one substring: the live merge-base
+    diff line the status and impact tools print, which moves with every
+    commit. These fixtures pin the mask to that substring and nothing else,
+    calibrated both ways: a volatile-only difference must pass, and any
+    other difference must still fail. Without the second half, the mask
+    could silently widen and eat real drift."""
+
+    def _stable(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "replay_book", os.path.join(ROOT, "evals", "replay_book.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.stable
+
+    def test_a_volatile_only_difference_compares_equal(self):
+        stable = self._stable()
+        book = "clean. git diff 47422a88df57..HEAD over 2 changed file(s)\nrest\n"
+        live = "clean. git diff 5be26b2068da..HEAD over 0 changed file(s)\nrest\n"
+        self.assertEqual(stable(book), stable(live))
+
+    def test_any_other_difference_still_differs(self):
+        stable = self._stable()
+        book = "verdict: PASS\ngit diff 47422a88df57..HEAD over 2 changed file(s)\n"
+        live = "verdict: NO-DATA\ngit diff 47422a88df57..HEAD over 2 changed file(s)\n"
+        self.assertNotEqual(stable(book), stable(live))
+
+    def test_a_pinned_range_is_not_masked(self):
+        stable = self._stable()
+        pinned = "git diff 47422a88df57..f924538 over 2 changed file(s)\n"
+        self.assertEqual(stable(pinned), pinned,
+                         "a range pinned to two commits is deterministic and "
+                         "must stay byte-compared")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

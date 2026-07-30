@@ -648,3 +648,15 @@ Full text: `docs/BYPASS-COVERAGE.md` row 23, `tools/sbe_design.py`
 `tools/test_sbe.py` (`TestDossierBindingScenario23`).
 
 Two more edges the fixtures pin: a bound artifact that no longer exists or cannot be read FAILs quoting the path (never a silent skip), and a bound path that resolves outside the repository FAILs as a broken claim even when the outside file exists and its digest is true, because a design artifact lives in the tree it binds.
+
+## Two honest narrowings from the baseline repair (2026-07-30)
+
+The book's replay check masks one declared-volatile substring, the live
+merge-base diff line, in chapter 03's status block; every other byte of every
+excerpt is still compared literally, and the calibration in
+`tools/test_sbe_book.py::TestDeclaredVolatileLine` proves the mask cannot
+widen silently. The private-name scan applies a stands-alone rule to exactly
+one vendored minified file; a name planted standalone in that file is still
+caught, and a letter-flanked substring of a generated identifier is not. Both
+narrowings exist because the alternative was a control that cried wolf, and a
+control that cries wolf gets ignored, which is worse than a narrow one.

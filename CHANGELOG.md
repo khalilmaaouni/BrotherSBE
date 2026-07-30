@@ -8,6 +8,27 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The book's replay harness (`evals/replay_book.py`) now declares exactly one
+  substring volatile: the live merge-base diff line the status and impact
+  tools print (`git diff <sha>..HEAD over N changed file(s)`), whose sha and
+  count move with every commit and push, which is how the published pages
+  went stale within hours of `5be26b2` landing. Chapter 03 says so in prose
+  beside the block; chapter 05 stops using a live range at all and pins
+  `--base 47422a88df57 --head f924538`, which is deterministic on any clone.
+  Proof: `tools/test_sbe_book.py::TestDeclaredVolatileLine`, calibrated both
+  ways (a volatile-only difference passes, any other difference still fails,
+  and a pinned range is never masked).
+- The private-name scan (`tools/test_sbe.py::TestNoPrivateNameShips`) counts
+  a hit inside vendored minified code (`docs/book/assets/mermaid.min.js`,
+  the only file on that list) only when the name stands alone rather than
+  flanked by letters or digits: a short name is a near-certain substring of
+  SOME generated identifier in two megabytes of minified JavaScript, and the
+  first false positive (the name inside mermaid's own motion-blur
+  identifier) turned the whole baseline red. Every file this project authors
+  keeps the plain substring rule. Proof: three new calibration fixtures with
+  a synthetic name, including one pinning the vendored list to exactly one
+  file so widening it is a decision rather than a drive-by.
+
 - `00-intake.json` may now carry an OPTIONAL `binding` block (row 23 of
   `docs/BYPASS-COVERAGE.md`, a stale dossier reused for a new change): a head
   commit plus a sha256 per artifact the dossier covers. Absent, nothing

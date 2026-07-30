@@ -45,6 +45,22 @@ BOOK_DIR = os.path.join(REPO, "docs", "book")
 WRITE = "--write" in sys.argv
 TIMEOUT_PER_CHAPTER = 60
 
+# One line of live output is repository-state-dependent by design: the status
+# and impact tools print the merge-base diff line ("git diff <sha>..HEAD over
+# N changed file(s)"), and the sha and the count move with every commit and
+# every push. A book page cannot freeze that line without lying the moment the
+# repository moves, so the pages that show it say so in prose, and this
+# comparison treats exactly that substring, and nothing else, as declared
+# volatile. Every other byte of every block is still compared literally.
+VOLATILE_LINE = re.compile(
+    r"git diff [0-9a-f]{7,40}\.\.HEAD over \d+ changed file\(s\)")
+
+
+def stable(text):
+    """Mask the declared-volatile diff line before comparison. Idempotent."""
+    return VOLATILE_LINE.sub(
+        "git diff <live-base>..HEAD over <live-count> changed file(s)", text)
+
 
 def chapters():
     return sorted(n for n in os.listdir(BOOK_DIR) if re.match(r"^\d{2}-.*\.md$", n))
@@ -123,7 +139,7 @@ def replay_chapter(name):
     fails, patches = 0, []
     for i, mk in compare:
         want, got = blocks[i]["text"], caps.get(mk, "<NO CAPTURE>")
-        if want != got:
+        if stable(want) != stable(got):
             fails += 1
             print("=== %s BLOCK %d (lines %d-%d) DIFFERS ===" % (name, i, blocks[i]["a"], blocks[i]["b"]))
             for line in difflib.unified_diff(want.splitlines(), got.splitlines(),
