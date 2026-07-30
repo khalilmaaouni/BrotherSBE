@@ -1288,7 +1288,22 @@ def cmd_fence_lint(argv):
 # ---------------------------------------------------------------------------
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STALE_AFTER_DAYS = 30
-VERSION_MARK = os.path.join(TEL_DIR, "installed-skill-version")
+#: NAMESPACED TO THIS TOOL, and the name is the whole point. This file records
+#: which commit of THIS skill the operator last saw, so the next run can say
+#: "your installed law changed, read the diff". The bare name
+#: "installed-skill-version" is not unique to this tool: the sibling
+#: BrotherModeUp keeps the same state, under the same basename, in the same
+#: <vault>/99-System/telemetry directory (PARITY.md names the mechanisms the two
+#: share). The vault path is the operator's own choice and nothing here reserves
+#: it, so pointing both tools at ONE vault is a supported setup, not a misuse.
+#: Under the bare name each tool then overwrites the other's stamp every session,
+#: and both report a version change on the next start, forever, reading the other
+#: tool's commit hash as their own drift. The one mechanism meant to catch a real
+#: change becomes a permanent false alarm, which is how a reader learns to ignore
+#: it. Observed on a real machine 2026-07-31, the day both vaults were pointed at
+#: one directory. Held by
+#: TestVersionMark::test_the_version_marker_is_not_shared_with_the_sibling_skill.
+VERSION_MARK = os.path.join(TEL_DIR, "installed-skill-version-brothersbe")
 
 
 def _read_first_line(path):
