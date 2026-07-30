@@ -232,6 +232,16 @@ def skip_reason(parent, name):
         return "a tool cache (it carries CACHEDIR.TAG)"
     if {"HEAD", "objects", "refs"} <= entries:
         return "a version-control object store (it carries HEAD, objects and refs)"
+    if ".git" in entries:
+        # A NESTED CHECKOUT: a directory carrying its own .git (a linked
+        # worktree's gitdir file, or a full clone) is another repository's
+        # surface, not this one's. The real event behind this branch: a
+        # concurrent session's worktree under .claude/worktrees/ put a stale
+        # copy of this very tool through the unwaivable lint gate, which then
+        # failed the repository for defects that live only in the copy. The
+        # scan ROOT itself never reaches this function, so scanning a
+        # repository from its own top level is unaffected.
+        return "a nested git checkout (it carries its own .git entry)"
     if entries and all(e.endswith((".pyc", ".pyo")) for e in entries):
         return "compiled bytecode only (every entry is a .pyc or .pyo)"
     if name == "node_modules" and entries:

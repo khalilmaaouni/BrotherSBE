@@ -943,6 +943,45 @@ class TestOneLineNeutralizesTheControlClass(unittest.TestCase):
         self.assertIn("\\u202e", checks.one_line("rtl‮forged"))
 
 
+class TestNestedCheckoutPrune(unittest.TestCase):
+    """A directory carrying its own .git entry is another repository's surface.
+
+    The real event: a concurrent session's linked worktree under
+    .claude/worktrees/ put a STALE COPY of sbe_score.py through the unwaivable
+    lint gate, which then failed this repository for defects that exist only
+    in the copy. The prune must skip the nested checkout AND say so, and the
+    defects inside it must still be findable when the nested tree itself is
+    the scan root, or the prune would be a blindfold rather than a boundary."""
+
+    def test_a_nested_checkout_is_pruned_by_name_and_scanned_when_targeted(self):
+        import subprocess as sp
+        d = tempfile.mkdtemp()
+        try:
+            io.open(os.path.join(d, "clean.py"), "w").write("def f():\n    return 1\n")
+            nested = os.path.join(d, "wt")
+            os.makedirs(nested)
+            io.open(os.path.join(nested, ".git"), "w").write("gitdir: /elsewhere\n")
+            io.open(os.path.join(nested, "bad.py"), "w").write(
+                "def g():\n    try:\n        x = 1\n    exc" + "ept:\n        pass\n")
+            out = sp.run([sys.executable, os.path.join(HERE, "sbe_score.py"), d],
+                         capture_output=True, text=True)
+            line = [l for l in out.stdout.splitlines()
+                    if l.startswith("silent-failure-lints")][0]
+            self.assertIn("PASS", line.split()[1],
+                          "the root scan must not be failed by the nested checkout: %s" % line)
+            self.assertIn("nested git checkout", out.stdout,
+                          "the prune must be named, never silent")
+            out2 = sp.run([sys.executable, os.path.join(HERE, "sbe_score.py"), nested],
+                          capture_output=True, text=True)
+            line2 = [l for l in out2.stdout.splitlines()
+                     if l.startswith("silent-failure-lints")][0]
+            self.assertIn("FAIL", line2,
+                          "scanning the nested tree directly must still find its "
+                          "defect; the prune is a boundary, not a blindfold: %s" % line2)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 class TestStrictMode(unittest.TestCase):
     def test_severity_decides_what_a_strict_run_blocks_on(self):
         """The severity each check declares at write time is what a FAIL does to

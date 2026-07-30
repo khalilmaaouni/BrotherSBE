@@ -128,6 +128,8 @@ find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -path "$TARGET/.git/*" \
     ! -path '*/__pycache__/*' \
     ! -path "$TARGET/.superpowers/*" \
+    ! -path "$TARGET/.claude/*" \
+    ! -path "$TARGET/.brothermode/*" \
     ! -path "$TARGET/docs/superpowers/*" \
     ! -name '.DS_Store' \
     ! -name '*.pyc' \
@@ -194,6 +196,8 @@ find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -path "$TARGET/.git/*" \
     \( -path '*/__pycache__/*' \
        -o -path "$TARGET/.superpowers/*" \
+       -o -path "$TARGET/.claude/*" \
+       -o -path "$TARGET/.brothermode/*" \
        -o -path "$TARGET/docs/superpowers/*" \
        -o -name '.DS_Store' \
        -o -name '*.pyc' \
