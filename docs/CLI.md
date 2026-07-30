@@ -38,11 +38,15 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `evidence` | generate a receipt by running the command, verify it, or show its trust level |
 | `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
 | `adopt` | inspect a repository for installation readiness, dry run by default |
-| `status` | blocker-first summary of where a change stands, read from recorded state |
+| `status` | blocker-first summary of where a change stands, read from recorded state; `--team` reads every change under `design/` into one ten-severity view with a `basis` honesty field per finding |
 | `init` | install BrotherSBE's local footprint into a repository, dry run by default |
 | `version` | the version and the evidence schema version |
+| `plan` | derive `08-plan.json` from a dossier mechanically and validate it; an empty plan never exits 0 (delegates to `tools/sbe_plan.py`) |
+| `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove` |
+| `pr` | `pr verify <number> --repo owner/name`: live GitHub approval evidence bound to the head sha; no credentials is NO-DATA with a remedy, never PASS |
+| `converge` | does base..head still match the approved dossier: scope, contracts, data, architecture, verification; no force flag exists |
 
-Three more are **present and refuse**: `plan`, `policy` and `exceptions`.
+Two more are **present and refuse**: `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.
 They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
 rather than printing an empty result, because a command that succeeds at nothing is the exact
@@ -478,4 +482,4 @@ them refuses with usage and a nonzero exit instead of running past it, because a
 command that reads or deletes the vault must not run as if nothing were wrong. Numbers are parsed
 or absent; the tool never invents one.
 
-Three commands remain **present and refuse**: `plan`, `policy` and `exceptions`.
+Two commands remain **present and refuse**: `policy` and `exceptions`.
