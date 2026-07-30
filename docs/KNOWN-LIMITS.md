@@ -660,3 +660,20 @@ one vendored minified file; a name planted standalone in that file is still
 caught, and a letter-flanked substring of a generated identifier is not. Both
 narrowings exist because the alternative was a control that cried wolf, and a
 control that cries wolf gets ignored, which is worse than a narrow one.
+
+## sbe plan derives structures, not intent
+
+There is no LLM anywhere in `tools/sbe_plan.py`'s derivation or validation:
+every task, citation and verdict comes from parsing a dossier and applying
+the rules the spec names, never from reading intent prose beyond those
+structures. That has a direct consequence at the point where a dossier's own
+decision names no paths: the plan it derives has a first task that owns
+nothing, the ownership check FAILs that task by id, and the remedy is a
+better dossier, not a guess, because nothing here can infer ownership the
+dossier never stated. Freshness is checked the same mechanical way: recorded
+dossier digests are compared against the dossier files on disk, so a dossier
+edited after planning in a way that changes its digest is caught and named,
+but an edit that happens to keep the file's bytes identical is invisible to
+this check, because a digest cannot see past its own bytes. Full text:
+`docs/specs/2026-07-30-sbe-plan-derivation.md` (What this deliberately does
+not do), `tools/sbe_plan.py`, `tools/test_sbe_plan.py`.

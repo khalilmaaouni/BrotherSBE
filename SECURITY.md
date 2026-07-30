@@ -11,8 +11,8 @@ details and ask for a private channel first.
 BrotherSBE makes no network calls. It has no analytics, no account, and no
 server. Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
-yourself; the tools are standard-library Python and shell: 16,149 lines measured
-2026-07-29 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather than
+yourself; the tools are standard-library Python and shell: 19,039 lines measured
+2026-07-30 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather than
 left for you to discover, and a test in `tools/test_sbe.py` fails if it drifts
 more than 15 percent, so the auditability claim degrades loudly instead of
 quietly. This finds every network call:

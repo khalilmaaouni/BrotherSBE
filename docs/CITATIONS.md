@@ -114,6 +114,12 @@ captured.
 - date: current repository
 - limit: self-reference to a sibling project, carries no evidence weight
 
+## https://api.github.com
+- claim: the REST endpoint the sbe pr verify spec names as its only transport, GET requests with a bearer token held in memory
+- population: one URL, the API root the specced client builds its requests against; no live call is made by any doc or test on this machine without a token
+- date: spec written July 2026 against the GitHub REST API as published at that time
+- limit: an endpoint reference rather than a measured fact; API shapes drift, and the spec's fixtures pin canned response shapes, not the live service
+
 ## https://github.com/khalilmaaouni/BrotherSBE
 - claim: this repository's own clone location, which the publish checklist expects to return HTTP 200 once published
 - population: one URL, a repository link rather than a measurement; the checklist checks availability with its own curl command

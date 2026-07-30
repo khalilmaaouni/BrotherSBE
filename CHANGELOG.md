@@ -8,6 +8,20 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe plan` (`tools/sbe_plan.py`) derives a task plan mechanically from a dossier: no LLM
+  anywhere in derivation, only parsing and the rules the spec names. An empty
+  dossier never yields a success verdict (`TestEmptyDossier`), a task citing a
+  dossier source that does not resolve is FAIL by task id because that is the
+  planner-inventing-work case (`TestPlannerNeverInvents`), and a migration
+  task written without its stated reversal task FAILs
+  (`TestMigrationWithoutRow`). Ownership, citations, acceptance criteria, the
+  dependency graph, and freshness against recorded dossier digests are each
+  checked and each FAILs by naming the offending id or file
+  (`TestValidationFailures`, `TestCompatibilityGap`). A derived plan's first
+  task also opens through `bin/sbe task open` with fields read mechanically
+  from the JSON, proving the registry accepts it without reinterpretation
+  (`TestRegistryIntegration`). Proof: `tools/test_sbe_plan.py`, 14 tests, `OK`.
+
 - The book's replay harness (`evals/replay_book.py`) now declares exactly one
   substring volatile: the live merge-base diff line the status and impact
   tools print (`git diff <sha>..HEAD over N changed file(s)`), whose sha and

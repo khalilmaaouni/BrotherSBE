@@ -1052,7 +1052,7 @@ class TestCliSurface(unittest.TestCase):
         # it when wave 9 built the adoption kit: each is now a real command. The
         # list is the wave-by-wave record of what is still owed, so a name leaves
         # it only when something stands behind it.
-        unbuilt = ["plan", "policy", "exceptions"]
+        unbuilt = ["policy", "exceptions"]
         known = [n for (n, _h, _r) in cli.COMMANDS]
         for name in unbuilt:
             self.assertIn(name, known, "%s vanished from the command table" % name)

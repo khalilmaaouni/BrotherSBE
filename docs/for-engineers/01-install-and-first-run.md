@@ -137,7 +137,7 @@ $ python3 evals/test_no_data_class.py
 Real last line:
 
 ```
-21 checks discovered from 3 registries in 7 module(s), 1920 scenarios run, 2 waived by declared exemption, 0 failure(s).
+30 checks discovered from 4 registries in 19 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 Exit code 0. The two waivers are printed above that line with their stated

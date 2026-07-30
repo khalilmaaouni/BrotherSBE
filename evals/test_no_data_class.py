@@ -961,6 +961,7 @@ ADAPTERS = {
     ("sbe_design.py", "CHECKS"): DirTool("sbe_design.py", env={"SBE_DOSSIER_ROOT": ""},
                                          has_fallback=True),
     ("sbe_score.py", "CHECKS"): ScoreTool("sbe_score.py"),
+    ("sbe_plan.py", "PLAN_CHECKS"): DirTool("sbe_plan.py"),
 }
 
 

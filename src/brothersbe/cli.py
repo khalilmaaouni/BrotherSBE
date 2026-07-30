@@ -482,9 +482,8 @@ COMMANDS = [
     ("version", "print the version and the evidence schema version", _cmd_version),
     ("impact", "read the git diff and reconcile it with the declared intake tier", _cmd_impact),
     ("inspect-change", "alias of impact, the name the finalization brief uses", _cmd_impact),
-    ("plan", "generate the control plan for the detected change",
-     _not_built("plan", 3, "Applicability is not computed yet, so a missing control cannot be "
-                           "told apart from a control that was never required.")),
+    ("plan", "derive the task plan from a dossier and validate it (delegates to sbe_plan.py)",
+     lambda a: _delegate("sbe_plan.py", a.rest)),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
      _cmd_evidence),
     ("task", "the write-scope registry: open, list, fence, check, and close with the "
