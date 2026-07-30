@@ -408,6 +408,14 @@ def _cmd_status(args):
         return EXIT_USAGE
     from . import status as status_mod
 
+    if args.team:
+        data = status_mod.build_team_report(root)
+        if args.json:
+            sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+        else:
+            sys.stdout.write(status_mod.render_team(data))
+        return EXIT_CONTROL_FAILED if status_mod.team_blocking(data) else EXIT_OK
+
     data = status_mod.build_report(root, base=args.base)
     if args.json:
         sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
@@ -618,6 +626,10 @@ def build_parser():
         elif name == "status":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to summarize (default: the current one)")
+            child.add_argument("--team", action="store_true",
+                               help="one blocker-first view across every active change "
+                                    "under design/, zero network, findings labeled "
+                                    "observed, derived or unavailable")
             child.add_argument("--base", default=None,
                                help="the commit or ref to diff from for the intake-vs-diff "
                                     "section; without it the merge base with the default "

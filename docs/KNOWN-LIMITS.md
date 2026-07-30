@@ -748,3 +748,19 @@ a diff. Scope compares path names against plan ownership and dossier-named
 paths; it does not read file contents. A FINAL PASS therefore means "nothing
 this tool can read contradicts the dossier", and its own output names every
 dimension that had nothing to read.
+
+
+## status --team reads the estate, it does not phone anyone
+
+Approval facts in the team view are only as fresh as the saved report; the
+view never calls GitHub, so a review dismissed a minute ago still reads PASS
+until `sbe pr verify` runs again, and the staleness line it CAN compute (a
+report bound to a commit that is no longer head) is labeled derived. An
+unreadable source is a visible unavailable finding, never a silent gap. One
+repository per invocation: cross-repository estates are out of scope. And a
+structural fact this view had to design around rather than fix: plan task
+ids are per-change (every derived plan starts at T01) while the task
+registry is one global table, so records are attributed to changes
+best-effort by id, conflicts are computed globally over all open records so
+no collision can hide, and two changes cannot hold an open task with the
+same id at the same time.

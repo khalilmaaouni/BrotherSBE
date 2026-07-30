@@ -56,6 +56,8 @@ Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. Maturity: INTERNAL-EVAL, exercised on this repository's
 fixtures and on no other estate.
 """
+import io
+import json
 import os
 import time
 
@@ -441,4 +443,248 @@ def render_text(data):
             out.append("  %s" % empty_note)
     out.append("")
     out.append("NEXT ACTION: %s" % data["nextAction"])
+    return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# The team view: every active change in one blocker-first report.
+# Spec: docs/specs/2026-07-30-sbe-status-team.md. Zero network by design:
+# approval facts come only from a saved 10-approval.json, and their staleness
+# against the current head is DERIVED and labeled so. Findings carry a
+# `basis` honesty field: observed (read this run), derived (computed from
+# observed values), unavailable (a source that could not be read, which keeps
+# its severity slot visible instead of vanishing).
+# ---------------------------------------------------------------------------
+
+TEAM_SEVERITIES = {
+    1: "broken claims", 2: "merge blockers", 3: "scope conflicts",
+    4: "stale evidence", 5: "missing approvals", 6: "convergence failures",
+    7: "active tasks", 8: "ready tasks", 9: "completed changes",
+    10: "next action",
+}
+
+
+def _finding(change, severity, verdict, evidence, commit, owner, next_action, basis,
+             detail):
+    return {"change": change, "severity": severity, "verdict": verdict,
+            "evidence": evidence, "commit": commit, "owner": owner,
+            "nextAction": next_action, "basis": basis, "detail": detail}
+
+
+def _design_roots(root):
+    roots = ["design"]
+    profile = os.path.join(root, ".sbe", "team-profile.json")
+    if os.path.isfile(profile):
+        try:
+            extra = json.loads(io.open(profile, encoding="utf-8").read())
+            for entry in extra.get("designRoots", []) or []:
+                if isinstance(entry, str) and entry not in roots:
+                    roots.append(entry)
+        except (ValueError, OSError):
+            pass  # sbe: allow-silent  (not silent: the profile is optional config;
+            #        a broken one leaves the default root and discovery still runs)
+    return roots
+
+
+def _team_changes(root):
+    changes = []
+    for rel in _design_roots(root):
+        base_dir = os.path.join(root, rel)
+        if not os.path.isdir(base_dir):
+            continue
+        for name in sorted(os.listdir(base_dir)):
+            doss = os.path.join(base_dir, name)
+            if os.path.isfile(os.path.join(doss, "00-intake.json")):
+                changes.append((name, doss))
+    return changes
+
+
+def _read_json_or_none(path):
+    try:
+        return json.loads(io.open(path, encoding="utf-8").read())
+    except (ValueError, OSError):
+        return None
+
+
+def build_team_report(path):
+    """{"root", "headCommit", "changes": [names], "findings": [...]}, findings
+    sorted most severe first, deterministically."""
+    root = os.path.abspath(path)
+    head = _git_head(root)
+    findings = []
+    changes = _team_changes(root)
+
+    registry_tasks, registry_problem = [], None
+    try:
+        registry_tasks = tasks_mod.load_registry(root).get("tasks", [])
+    except tasks_mod.RegistryUnusable as exc:
+        registry_problem = str(exc)
+
+    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    ev = _scan_evidence(root, evidence_dir)
+
+    open_by_change = {}
+    for name, doss in changes:
+        plan = _read_json_or_none(os.path.join(doss, "08-plan.json"))
+        plan_ids = set()
+        commands = 0
+        if plan:
+            for task in plan.get("tasks", []):
+                plan_ids.add(task.get("id"))
+                commands += len(task.get("verificationCommands", []))
+
+        if registry_problem:
+            findings.append(_finding(
+                name, 3, "NO-DATA", tasks_mod.registry_path(root), head, None,
+                "restore the registry file; its contents still record open fences",
+                "unavailable",
+                "the task registry could not be read (%s), so scope conflicts for this "
+                "change are unknowable and this slot stays visible" % registry_problem))
+            records = []
+        else:
+            records = [r for r in registry_tasks if r.get("id") in plan_ids] if plan else []
+        open_records = [r for r in records if r.get("status") == "open"]
+        open_by_change[name] = open_records
+
+        for rec in records:
+            if "forced" in str(rec.get("status", "")) or rec.get("forced"):
+                findings.append(_finding(
+                    name, 7, "FAIL", "task %s" % rec.get("id"), head,
+                    rec.get("agent"),
+                    "a FORCED close never satisfies a dependent; redo the task cleanly "
+                    "or record why it stands",
+                    "observed",
+                    "task %s was closed FORCED by %s and stays loud everywhere it "
+                    "appears" % (rec.get("id"), rec.get("agent"))))
+
+        for rec in open_records:
+            findings.append(_finding(
+                name, 7, "NO-DATA", "task %s" % rec.get("id"), head, rec.get("agent"),
+                "finish or check the task with sbe work", "observed",
+                "task %s is open, held by %s" % (rec.get("id"), rec.get("agent"))))
+
+        if not plan:
+            findings.append(_finding(
+                name, 8, "NO-DATA", os.path.join(doss, "08-plan.json"), head, None,
+                "run sbe plan %s --write to derive the task graph" % doss,
+                "observed",
+                "no plan exists for this change yet, which is a starting state, not "
+                "an error"))
+        else:
+            conv = _read_json_or_none(os.path.join(doss, "09-convergence.json"))
+            if conv is None:
+                findings.append(_finding(
+                    name, 6, "NO-DATA", os.path.join(doss, "09-convergence.json"),
+                    head, None,
+                    "run sbe converge %s --base <sha> --head <sha>" % doss,
+                    "observed",
+                    "a plan exists and no convergence report does; unexamined is not "
+                    "PASS"))
+            else:
+                final = conv.get("final")
+                bound = conv.get("head")
+                if head and bound and bound != head:
+                    findings.append(_finding(
+                        name, 4, "FAIL", "09-convergence.json", bound, None,
+                        "re-run sbe converge against the current head", "derived",
+                        "the convergence report binds to %s but the repository head is "
+                        "%s: stale" % (bound[:12], head[:12])))
+                elif final in ("FAIL", "REVIEW-REQUIRED"):
+                    findings.append(_finding(
+                        name, 6, final, "09-convergence.json", bound, None,
+                        "amend the dossier or the implementation, then regenerate plan, "
+                        "evidence and convergence", "observed",
+                        "convergence recorded %s" % final))
+
+            approval = _read_json_or_none(os.path.join(doss, "10-approval.json"))
+            if approval is None:
+                findings.append(_finding(
+                    name, 5, "NO-DATA", os.path.join(doss, "10-approval.json"), head,
+                    None,
+                    "run sbe pr verify and save its --json output as 10-approval.json",
+                    "observed",
+                    "no approval report is saved for this change; absence is a fact, "
+                    "not an accusation"))
+            else:
+                bound = approval.get("headSha")
+                if head and bound and bound != head:
+                    findings.append(_finding(
+                        name, 4, "FAIL", "10-approval.json", bound, None,
+                        "re-run sbe pr verify against the current head", "derived",
+                        "the approval report binds to %s but the repository head is %s: "
+                        "stale approval" % (bound[:12], head[:12])))
+                elif approval.get("final") != "PASS":
+                    findings.append(_finding(
+                        name, 5, str(approval.get("final")), "10-approval.json", bound,
+                        None, "resolve the failing controls on the pull request",
+                        "observed",
+                        "the saved approval report's FINAL is %s" % approval.get("final")))
+
+            if commands and not ev["clean"] and not ev["broken"]:
+                findings.append(_finding(
+                    name, 5, "NO-DATA", evidence_dir, head, None,
+                    "run the plan's verification commands under sbe evidence run",
+                    "observed",
+                    "%d verification command(s) planned and no receipt exists yet"
+                    % commands))
+
+    for item in ev["broken"]:
+        findings.append(_finding(
+            "(shared evidence store)", 1, "FAIL", item.get("finding", "receipt"),
+            head, None, item.get("remedy", "regenerate the receipt"), "observed",
+            item.get("finding", "a receipt failed verification")))
+
+    names = [n for n, _d in changes]
+    # Scope conflicts are computed over ALL open registry records, pairwise,
+    # because the registry is one global fence table while plan task ids are
+    # per-change (every derived plan starts at T01): attributing first and
+    # comparing after would let two changes' fences collide invisibly.
+    open_all = [] if registry_problem else [r for r in registry_tasks
+                                            if r.get("status") == "open"]
+    for i, ra in enumerate(open_all):
+        for rb in open_all[i + 1:]:
+            shared = sorted(set(ra.get("ownedPaths", []))
+                            & set(rb.get("ownedPaths", [])))
+            holders = {n for n, recs in open_by_change.items()
+                       for r in recs if r is ra or r is rb}
+            change_label = ", ".join(sorted(holders)) or "(registry)"
+            for pth in shared:
+                findings.append(_finding(
+                    change_label, 3, "FAIL", pth, head,
+                    "%s and %s" % (ra.get("agent"), rb.get("agent")),
+                    "serialize the two tasks or split the path", "observed",
+                    "open task %s (%s) and open task %s (%s) both own %s"
+                    % (ra.get("id"), ra.get("agent"), rb.get("id"),
+                       rb.get("agent"), pth)))
+
+    findings.sort(key=lambda f: (f["severity"], f["change"], f["evidence"], f["detail"]))
+    return {"tool": "sbe status --team", "root": root, "headCommit": head,
+            "changes": names, "findings": findings,
+            "basisLegend": "observed: read this run; derived: computed from observed "
+                           "values; unavailable: a source that could not be read and "
+                           "stays visible"}
+
+
+def team_blocking(data):
+    return any(1 <= f["severity"] <= 6 for f in data["findings"])
+
+
+def render_team(data):
+    out = ["sbe status --team: %s" % data["root"],
+           "head %s, %d change(s): %s"
+           % ((data["headCommit"] or "unresolved")[:12], len(data["changes"]),
+              ", ".join(data["changes"]) or "none discovered under design/")]
+    current = None
+    for f in data["findings"]:
+        if f["severity"] != current:
+            current = f["severity"]
+            out.append("")
+            out.append("%d. %s" % (current, TEAM_SEVERITIES[current].upper()))
+        owner = (" [%s]" % f["owner"]) if f["owner"] else ""
+        out.append("  %-10s %-16s %s%s" % (f["change"][:10], f["verdict"], f["detail"],
+                                           owner))
+        out.append("             next action: %s" % f["nextAction"])
+    if not data["findings"]:
+        out.append("")
+        out.append("no findings: no dossier under design/ has anything recorded to read")
     return "\n".join(out) + "\n"

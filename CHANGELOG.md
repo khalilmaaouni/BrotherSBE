@@ -8,6 +8,31 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe status --team` reads every active change under `design/` (plus any
+  `designRoots` a team profile adds) into one blocker-first report over ten
+  severities, broken claims first, next actions last, with zero network by
+  construction: approval facts come only from a saved `10-approval.json`, and
+  staleness against the current head is computed and labeled `derived`, never
+  presented as observed
+  (`TestEvidenceAndConvergence::test_a_stale_approval_report_is_derived_not_observed`,
+  calibrated by disabling exactly that control and watching exactly that test
+  go red, restored hash-verified). Every finding carries the honesty field
+  `basis` (observed, derived, unavailable), and an unreadable task registry
+  keeps its severity slot visible as `unavailable` with a nonzero exit
+  instead of vanishing
+  (`TestJsonContractAndExit::test_an_unreadable_registry_is_an_unavailable_finding_and_a_nonzero_exit`).
+  Scope conflicts are computed pairwise over ALL open registry records rather
+  than per change, because plan task ids are per-change (every derived plan
+  starts at T01) while the registry is one global fence table; the fixture
+  that forced this design names two agents holding the same path from two
+  changes
+  (`TestConflictsAndForced::test_overlapping_open_tasks_across_changes_is_a_scope_conflict_naming_both`).
+  A plan with no convergence report is NO-DATA at the convergence severity
+  and blocks, because unexamined is not PASS; a change with no plan is a
+  starting state whose next action names `sbe plan`, not an error. The human
+  view is deterministic, no timestamps. Proof: `tools/test_sbe_status_team.py`,
+  11 tests, `OK`.
+
 - `sbe converge` (`src/brothersbe/converge.py`) answers whether the code between
   two pinned commits still matches the approved dossier, in five dimensions,
   every hard verdict grounded in a citable fact and never in a judgment: an
