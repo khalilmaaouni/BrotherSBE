@@ -1408,7 +1408,8 @@ def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         # Help is not an error. -h used to be read as "neither a gate name nor
         # a directory" and refused with exit 1.
-        print(GATE_USAGE % ", ".join(GATES))
+        for usage_line in (GATE_USAGE % ", ".join(GATES)).splitlines():
+            say(usage_line)
         sys.exit(0)
     argv = [a for a in sys.argv[1:] if a not in ("--strict", "--strict-waivers")]
     strict = "--strict" in sys.argv
@@ -1435,7 +1436,8 @@ def main():
             # A mistyped flag is a usage error (exit 2, matching the CLI's
             # documented table), not a failed control: exit 1 here taught CI
             # to read a typo as a gate that FAILED.
-            print(GATE_USAGE % ", ".join(GATES))
+            for usage_line in (GATE_USAGE % ", ".join(GATES)).splitlines():
+                say(usage_line)
             say("sbe_gate: unrecognized flag %r; refusing rather than running past it" % a)
             sys.exit(2)
         elif os.path.isdir(a):

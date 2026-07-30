@@ -177,11 +177,13 @@ def main():
     # read as a table called '-h' and refused with exit 1, in a tool whose law
     # is about not silently misreading an input.
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
-        print(DECIDE_USAGE)
+        for usage_line in DECIDE_USAGE.splitlines():
+            say(usage_line)
         sys.exit(0)
     for a in sys.argv[1:]:
         if a.startswith("-"):
-            print(DECIDE_USAGE)
+            for usage_line in DECIDE_USAGE.splitlines():
+                say(usage_line)
             say("sbe_decide: unrecognized flag %r; refusing rather than running past it" % a)
             sys.exit(2)
     # `sbe_decide.py architecture` is how SKILL.md L12's sentence reads, and the

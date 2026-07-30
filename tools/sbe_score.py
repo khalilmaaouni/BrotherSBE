@@ -1305,11 +1305,13 @@ def main():
     # ignored rather than refused: the same defect class that let
     # sbe_telemetry's `data-export --help` run a real export.
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
-        print(SCORE_USAGE)
+        for usage_line in SCORE_USAGE.splitlines():
+            say(usage_line)
         sys.exit(0)
     for a in sys.argv[1:]:
         if a.startswith("-") and a not in ("--strict", "--strict-soft"):
-            print(SCORE_USAGE)
+            for usage_line in SCORE_USAGE.splitlines():
+                say(usage_line)
             say("sbe_score: unrecognized flag %r; refusing rather than running past it" % a)
             sys.exit(2)
     # Building the context is itself guarded. It used to sit outside run_guarded,

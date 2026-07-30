@@ -1085,7 +1085,8 @@ def main():
     if any(a in ("-h", "--help") for a in argv):
         # Help is not an error. This used to fall through to the unknown-flag
         # refusal, so an explicit help request printed usage and exited 2.
-        print(PLAN_USAGE % ", ".join(PLAN_CHECKS))
+        for usage_line in (PLAN_USAGE % ", ".join(PLAN_CHECKS)).splitlines():
+            say(usage_line)
         return 0
     strict = "--strict" in argv
     write = "--write" in argv
