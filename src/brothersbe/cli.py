@@ -389,6 +389,10 @@ def _cmd_adopt(args):
         sys.stdout.write("  PROTECTION %-28s %s\n" % (prot["name"], prot["status"]))
     for fact in data["localFacts"]:
         sys.stdout.write("  LOCAL      %-28s %s\n" % (fact["name"], fact["status"]))
+    dropped = data.get("notProposed", {}).get("categories", {})
+    for key in sorted(dropped):
+        sys.stdout.write("  NOT-PROPOSED %-26s no such path under this root: %s\n"
+                         % (key, ", ".join(dropped[key]["missingPaths"])))
     if applied is None:
         sys.stdout.write("\nsbe adopt: dry run, nothing written. Rerun with --apply to write, "
                          "or --apply --force to overwrite a file that already exists and "

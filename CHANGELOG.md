@@ -40,6 +40,27 @@ checklist's own rules.
   each restore verified byte-identical against the pre-recorded `git hash-object` of the
   fixed file rather than by `git checkout`.
 
+- `sbe adopt` no longer proposes ghost paths. The proposal used to carry
+  protectedPaths and CODEOWNERS entries hardcoded to this repository's own
+  layout (the plugin manifest, `hooks/`, `src/brothersbe/`, the release
+  files), none of which exist in a foreign clone, so a consumer applied
+  protection rules over paths that protect nothing while looking like they
+  do; the first external-proof run named this as its one deliberately
+  deferred repair. Now each layout path is proposed only if it exists under
+  the target root, a category that loses paths has every missing one named
+  under the policy's `_notProposed` block (and in a CODEOWNERS comment, and
+  as NOT-PROPOSED lines in both output modes) instead of vanishing, and the
+  two paths the kit itself creates (`.brothersbe/` by `sbe adopt --apply`,
+  `design/` by `sbe init --apply`) stay proposed unconditionally, because
+  existence-checking a path your own first apply creates makes the second
+  apply disagree with the first. Proof: `tools/test_sbe_adopt.py`
+  `TestGhostPathsNeverProposed` (eight fixtures) plus
+  `TestAdoptOnThisRepository` (nothing real is dropped where every path
+  exists), each counted green only after being shown red against the
+  defect it names: eight against the restored fixed-proposal behavior, and
+  the second-apply fixture against a filter that existence-checks the
+  self-created paths too.
+
 - External proof round one: three public estates (a FastAPI application, a dbt
   project, an infrastructure deployment) ran the whole assurance path with
   attack rounds, and four defects they surfaced are fixed with calibrated

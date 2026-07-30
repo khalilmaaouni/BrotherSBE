@@ -27,12 +27,27 @@ not asked**. From that it proposes two files:
   field. A detected migrations directory or dbt project adds a matching
   `migrations` or `dbtModels` entry under `protectedPaths`; neither appears
   when neither is detected.
+
+  Every other `protectedPaths` entry obeys one law: **only a path that
+  exists under the target root is proposed**. Two entries are proposed
+  unconditionally because the kit itself creates them (`.brothersbe/`, which
+  `sbe adopt --apply` writes, and `design/`, which `sbe init --apply`
+  writes). The remaining categories (the plugin manifest, the hooks, where
+  the evidence schema is declared in code, product and consumer CI, and
+  release identity files) name paths from a repository shaped like this
+  one, and each path is checked against your tree first: a protection rule
+  over a path that does not exist protects nothing while looking like it
+  does, and the first external-proof run showed every one of them is a
+  ghost in a foreign clone. A category that loses paths is not dropped
+  silently: the policy's `_notProposed` block names every missing path, the
+  report carries the same block under `notProposed`, and the human output
+  prints one `NOT-PROPOSED` line per dropped category. If your repository
+  keeps the equivalent files elsewhere, add the real paths to
+  `protectedPaths` by hand before applying.
 - `.github/CODEOWNERS`: generated straight from that same `protectedPaths`
-  map (never a second hand-typed list, so the two cannot drift apart),
-  covering the six categories the adoption kit is asked to protect: the
-  plugin manifest, the hooks, BrotherSBE's own policy and config, where the
-  evidence schema is declared in code, product and consumer CI, and release
-  identity files. Every line carries the placeholder `@REPLACE-ME`: this tool
+  map (never a second hand-typed list, so the two cannot drift apart), so
+  it too carries only paths that exist, plus a comment naming the dropped
+  categories. Every line carries the placeholder `@REPLACE-ME`: this tool
   has no repository membership to read a real username or team from, and
   typing one in would be a guess dressed up as a proposal. **Replace it
   before this file protects anything.**

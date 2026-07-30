@@ -604,6 +604,11 @@ sbe adopt: /private/tmp/sbe-book-ch12-adopt
   LOCAL      codeowners-file              ABSENT
   LOCAL      product-ci-workflow          ABSENT
   LOCAL      consumer-ci-workflow         ABSENT
+  NOT-PROPOSED evidenceSchemas            no such path under this root: src/brothersbe/evidence.py, src/brothersbe/__init__.py
+  NOT-PROPOSED hooks                      no such path under this root: hooks/
+  NOT-PROPOSED manifest                   no such path under this root: .claude-plugin/plugin.json
+  NOT-PROPOSED releaseFiles               no such path under this root: VERSION, CHANGELOG.md, CHECKSUMS.sha256
+  NOT-PROPOSED workflows                  no such path under this root: .github/workflows/, .github/actions/
 
 sbe adopt: dry run, nothing written. Rerun with --apply to write, or --apply --force to overwrite a file that already exists and differs.
 ```
@@ -614,7 +619,11 @@ readable, the same kind of honest trim chapter six ran on a receipt's own
 duration. Read what actually inspected the tree: two Python files
 detected, no migrations, no API contracts, no CI, so the only proposals
 are a starter policy file and a `CODEOWNERS` stub, both marked `new file`,
-neither one written yet. Reading the dry run first, before ever typing
+neither one written yet. The `NOT-PROPOSED` lines are the same honesty
+running in the other direction: each names a protection category whose
+paths do not exist in this tree, with the exact paths that were checked,
+because a protection rule over a path that does not exist protects nothing
+while looking like it does. Reading the dry run first, before ever typing
 `--apply`, is the whole point of the flag existing, and of it defaulting
 on: a proposal a person can read in full costs nothing to get wrong.
 
@@ -637,6 +646,11 @@ sbe adopt: /private/tmp/sbe-book-ch12-adopt
   LOCAL      codeowners-file              PRESENT
   LOCAL      product-ci-workflow          ABSENT
   LOCAL      consumer-ci-workflow         ABSENT
+  NOT-PROPOSED evidenceSchemas            no such path under this root: src/brothersbe/evidence.py, src/brothersbe/__init__.py
+  NOT-PROPOSED hooks                      no such path under this root: hooks/
+  NOT-PROPOSED manifest                   no such path under this root: .claude-plugin/plugin.json
+  NOT-PROPOSED releaseFiles               no such path under this root: VERSION, CHANGELOG.md, CHECKSUMS.sha256
+  NOT-PROPOSED workflows                  no such path under this root: .github/workflows/, .github/actions/
 ```
 
 `codeowners-file` moves from `ABSENT` to `PRESENT`, a local fact this

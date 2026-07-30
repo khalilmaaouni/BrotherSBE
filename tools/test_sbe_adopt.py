@@ -250,6 +250,174 @@ class TestStackDetectionShiftsThePolicy(AdoptFixture):
         self.assertNotIn('"migrations"', policy_proposal["diff"], text)
 
 
+GHOST_LAYOUT_PATHS = (".claude-plugin/plugin.json", "hooks/", "src/brothersbe/evidence.py",
+                      "src/brothersbe/__init__.py", ".github/workflows/", ".github/actions/",
+                      "VERSION", "CHANGELOG.md", "CHECKSUMS.sha256")
+
+LAYOUT_CATEGORIES = ("manifest", "hooks", "evidenceSchemas", "workflows", "releaseFiles")
+
+
+def read_applied(repo):
+    """(policy, codeowners, read_paths): the two files a real `--apply`
+    left on disk, parsed and raw, plus the exact relative paths that were
+    read. Three values, never two: a two-value return reads as a possible
+    (verdict, evidence) pair to the registry lint, and it is neither. The
+    new-law fixtures below read the applied end state rather than the diff
+    text, because the end state is what a consumer repository actually
+    lives with."""
+    read_paths = (".brothersbe/policy.json", ".github/CODEOWNERS")
+    with io.open(os.path.join(repo, ".brothersbe", "policy.json"), encoding="utf-8") as fh:
+        policy = json.load(fh)
+    with io.open(os.path.join(repo, ".github", "CODEOWNERS"), encoding="utf-8") as fh:
+        codeowners = fh.read()
+    return policy, codeowners, read_paths
+
+
+class TestGhostPathsNeverProposed(AdoptFixture):
+    """FIXTURE 5b, THE EXTERNAL-PROOF LAW (docs/EXTERNAL-PROOF-2026-07-31.md,
+    open item 5, closed here): the proposal contains only paths that exist
+    under the target root, plus the two paths the adoption kit itself
+    creates, and every dropped category is NAMED rather than silently
+    vanishing or, worse, proposed as a ghost. Each test in this class was
+    calibrated by re-injecting the fixed-proposal behavior (the pre-fix
+    adopt.py) and watching it fail before being counted green."""
+
+    def test_a_bare_repo_proposes_no_ghost_paths(self):
+        """The original defect: a fresh foreign clone got CODEOWNERS lines
+        and protectedPaths for this repository's own layout, none of which
+        exist there."""
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        policy, codeowners, _read = read_applied(self.repo)
+        proposed = []
+        for entry in policy["protectedPaths"].values():
+            proposed.extend(entry["paths"])
+        for ghost in GHOST_LAYOUT_PATHS:
+            self.assertNotIn(ghost, proposed,
+                             "a path that does not exist in this tree was proposed for "
+                             "protection: %s in %s" % (ghost, proposed))
+        owner_lines = [ln for ln in codeowners.splitlines()
+                       if ln.strip() and not ln.startswith("#")]
+        for line in owner_lines:
+            path = line.split()[0]
+            self.assertNotIn(path, GHOST_LAYOUT_PATHS,
+                             "CODEOWNERS proposes an owner for a ghost path: %s" % line)
+
+    def test_only_the_self_created_entries_survive_in_a_bare_repo(self):
+        """`.brothersbe/` (created by this very --apply) and `design/`
+        (created by sbe init) are the whole proposal when nothing else
+        exists; the five layout categories are all dropped."""
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        policy, _codeowners, _read = read_applied(self.repo)
+        self.assertEqual(sorted(policy["protectedPaths"]), ["dossiers", "policies"], text)
+
+    def test_the_dossiers_entry_is_always_proposed(self):
+        """`design/` does not exist in this fixture and is proposed anyway:
+        it is not a layout guess, it is the directory sbe init will create,
+        and the policy protecting it must exist before the dossiers do."""
+        self.assertFalse(os.path.isdir(os.path.join(self.repo, "design")),
+                         "fixture repo must start without a design/ directory")
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        policy, _codeowners, _read = read_applied(self.repo)
+        self.assertEqual(policy["protectedPaths"]["dossiers"]["paths"], ["design/"], text)
+
+    def test_dropped_categories_are_named_in_notProposed(self):
+        """Silence is the failure mode this note exists for: a reader of a
+        thin proposal must be able to see WHAT was dropped and WHY, path by
+        path, without diffing against this repository."""
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        policy, _codeowners, _read = read_applied(self.repo)
+        categories = policy["_notProposed"]["categories"]
+        self.assertEqual(sorted(categories), sorted(LAYOUT_CATEGORIES),
+                         "every dropped category must be named: %s" % categories)
+        for key, entry in categories.items():
+            self.assertTrue(entry["missingPaths"],
+                            "%s is listed as dropped but names no missing path" % key)
+        self.assertTrue(policy["_notProposed"]["note"],
+                        "the _notProposed block must carry its own explanation")
+
+    def test_codeowners_names_the_dropped_categories_in_a_comment(self):
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        _policy, codeowners, _read = read_applied(self.repo)
+        self.assertIn("# Not proposed (no such path under this root):", codeowners,
+                      "CODEOWNERS must say what it deliberately left out: %s" % codeowners)
+        for key in LAYOUT_CATEGORIES:
+            self.assertIn(key, codeowners,
+                          "CODEOWNERS must name dropped category %s: %s" % (key, codeowners))
+
+    def test_a_partially_present_category_proposes_only_its_existing_paths(self):
+        """Existence is checked per path, not per category: a repo with a
+        VERSION file but no CHANGELOG gets a releaseFiles entry protecting
+        VERSION alone, and the two missing siblings are named."""
+        write(self.repo, "VERSION", "1.0\n")
+        write(self.repo, "hooks/pre-commit.sh", "#!/bin/sh\n")
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        policy, codeowners, _read = read_applied(self.repo)
+        self.assertEqual(policy["protectedPaths"]["releaseFiles"]["paths"], ["VERSION"], text)
+        self.assertEqual(policy["protectedPaths"]["hooks"]["paths"], ["hooks/"], text)
+        self.assertEqual(policy["_notProposed"]["categories"]["releaseFiles"]["missingPaths"],
+                         ["CHANGELOG.md", "CHECKSUMS.sha256"], text)
+        self.assertNotIn("hooks", policy["_notProposed"]["categories"],
+                         "a fully present category must not appear among the dropped")
+        self.assertIn("VERSION @REPLACE-ME", codeowners, codeowners)
+        self.assertNotIn("CHANGELOG.md @REPLACE-ME", codeowners, codeowners)
+
+    def test_both_output_modes_name_the_dropped_categories(self):
+        """The law is only as good as its visibility: `--json` carries a
+        top-level notProposed block, and the human rendering prints one
+        NOT-PROPOSED line per dropped category."""
+        code, data, text = run_sbe("adopt", self.repo, "--dry-run", "--json")
+        self.assertEqual(code, 0, text)
+        self.assertEqual(sorted(data["notProposed"]["categories"]), sorted(LAYOUT_CATEGORIES),
+                         text)
+        code2, _data2, text2 = run_sbe("adopt", self.repo, "--dry-run")
+        self.assertEqual(code2, 0, text2)
+        for key in LAYOUT_CATEGORIES:
+            self.assertIn("NOT-PROPOSED %s" % key, text2,
+                          "the human rendering must name dropped category %s: %s"
+                          % (key, text2))
+
+    def test_second_apply_stays_a_noop_after_adopt_creates_its_own_paths(self):
+        """The trap an existence filter walks into: the first --apply
+        creates `.brothersbe/`, so a naive filter would propose MORE on the
+        second run and break the determinism fixture 2 pins. The two
+        self-created entries are unconditional for exactly this reason."""
+        code, _data, text = run_sbe("adopt", self.repo, "--apply", "--json")
+        self.assertEqual(code, 0, text)
+        before = tree_hash(self.repo)
+        code2, data2, text2 = run_sbe("adopt", self.repo, "--apply", "--json")
+        after = tree_hash(self.repo)
+        self.assertEqual(code2, 0, text2)
+        self.assertEqual(before, after,
+                         "the paths the first --apply created shifted the second proposal: "
+                         "%s" % text2)
+        self.assertEqual(data2["applied"]["written"], [], text2)
+        for item in data2["applied"]["skipped"]:
+            self.assertIn("already matches", item["reason"],
+                          "an unchanged tree must skip as identical, not as a conflicting "
+                          "proposal; a filter that existence-checks the paths adopt itself "
+                          "creates drifts here first: %s" % text2)
+
+
+class TestAdoptOnThisRepository(unittest.TestCase):
+    """FIXTURE 5c: the existence filter must not drop REAL paths. Run
+    against this repository itself, where every layout path exists, nothing
+    is dropped; a filter that trims a category here is filtering on
+    something other than existence."""
+
+    def test_every_layout_category_survives_where_its_paths_exist(self):
+        code, data, text = run_sbe("adopt", ROOT, "--dry-run", "--json")
+        self.assertEqual(code, 0, text)
+        self.assertEqual(data["notProposed"]["categories"], {},
+                         "a layout path that exists in this repository was dropped: %s"
+                         % data["notProposed"])
+
+
 class TestInitReceipt(AdoptFixture):
     """FIXTURE 6: the init receipt exists, lists every written path, and the
     uninstall instructions match that written set exactly."""

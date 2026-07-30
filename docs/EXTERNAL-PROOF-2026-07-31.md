@@ -70,6 +70,13 @@ Open, named, and owned by a next session:
    (propose only paths that exist, name the dropped categories) is designed
    and was reverted tonight only because eight adoption-suite contracts pin
    the current shape and deserve a deliberate rewrite, not a 4am one.
+   CLOSED in the follow-up session, same day: layout paths are now
+   existence-filtered, dropped categories are named in the policy's
+   _notProposed block and in both output modes, and the two paths the kit
+   itself creates stay unconditional so a second --apply cannot disagree
+   with the first. Pinned by tools/test_sbe_adopt.py
+   TestGhostPathsNeverProposed and TestAdoptOnThisRepository, each fixture
+   shown red against the reinjected defect before being counted green.
 6. MAJOR: converge SCOPE matches ownership by file path only; a later range
    touching the same files for an unrelated reason still reads as in scope.
    Deep design work; recorded in KNOWN-LIMITS.

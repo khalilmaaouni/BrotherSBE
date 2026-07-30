@@ -82,18 +82,40 @@ _STACK_PATTERNS = [(det[0], det[3]) for det in DETECTORS if det[0] in _STACK_DET
 POLICY_PATH = ".brothersbe/policy.json"
 CODEOWNERS_PATH = ".github/CODEOWNERS"
 
-#: The six categories the adoption kit is asked to protect, and the paths
-#: proposed for each in THIS repository's own layout. A consumer repository
-#: that vendors BrotherSBE differently edits the proposal before applying it;
-#: `docs/ADOPTION.md` says so.
-_FIXED_PROTECTED_PATHS = (
+#: Two entries proposed unconditionally, because the adoption kit itself
+#: creates both paths: `sbe adopt --apply` writes `.brothersbe/`, and `sbe
+#: init --apply` writes `design/`. Filtering these by existence would make
+#: the proposal depend on whether adopt has already run, and a second
+#: `--apply` would then find its own first write changed the proposal.
+_SELF_CREATED_PROTECTED = (
+    ("policies", (".brothersbe/",),
+     "this repository's BrotherSBE policy and config; sbe adopt --apply creates it"),
+    ("dossiers", ("design/",),
+     "the design dossier root sbe init creates and sbe design reads"),
+)
+
+#: The layout-dependent categories the adoption kit is asked to protect,
+#: with the paths they live at in a repository shaped like this one. Each
+#: path is proposed ONLY if it exists under the target root: the first
+#: external-proof round (docs/EXTERNAL-PROOF-2026-07-31.md) showed every one
+#: of these is a ghost in a foreign clone, and a CODEOWNERS line protecting
+#: a path that does not exist protects nothing while looking like it does.
+#: A category with no surviving path is named in the policy's `_notProposed`
+#: note instead of silently vanishing; `docs/ADOPTION.md` says so.
+_LAYOUT_PROTECTED_PATHS = (
     ("manifest", (".claude-plugin/plugin.json",), "the plugin manifest"),
     ("hooks", ("hooks/",), "the write-fence and session hooks"),
-    ("policies", (".brothersbe/",), "this repository's BrotherSBE policy and config"),
     ("evidenceSchemas", ("src/brothersbe/evidence.py", "src/brothersbe/__init__.py"),
      "where the evidence schema version and required fields are declared"),
     ("workflows", (".github/workflows/", ".github/actions/"), "product and consumer CI"),
     ("releaseFiles", ("VERSION", "CHANGELOG.md", "CHECKSUMS.sha256"), "release identity"),
+)
+
+_NOT_PROPOSED_NOTE = (
+    "Categories listed here name paths that do not exist under this root, so nothing "
+    "was proposed for them: a protection rule over a ghost path protects nothing while "
+    "looking like it does. If this repository keeps the equivalent files elsewhere, add "
+    "the real paths to protectedPaths by hand before applying."
 )
 
 
@@ -140,15 +162,43 @@ def detect_stack(root):
     }
 
 
-def propose_policy(detected):
+def _partition_by_existence(root, paths):
+    """(present, missing, checked): each proposed path split by whether it
+    exists under `root`, a trailing-slash path checked as a directory and
+    any other as a file. Three values, never two: `checked` is the count
+    examined, so a caller can tell "everything was missing" apart from
+    "nothing was checked at all".
+    """
+    present, missing = [], []
+    for rel in paths:
+        target = os.path.join(root, rel.rstrip("/"))
+        if rel.endswith("/"):
+            (present if os.path.isdir(target) else missing).append(rel)
+        else:
+            (present if os.path.isfile(target) else missing).append(rel)
+    return present, missing, len(present) + len(missing)
+
+
+def propose_policy(root, detected):
     """The provisional repository policy `sbe adopt` proposes. Deterministic
-    given `detected`: no timestamp or run id, so two runs against the same
-    tree propose byte-identical content, which is what lets a second
-    `--apply` recognize there is nothing left to write.
+    given the tree at `root` and `detected`: no timestamp or run id, so two
+    runs against the same tree propose byte-identical content, which is what
+    lets a second `--apply` recognize there is nothing left to write. The
+    only paths proposed are the two the kit itself creates and the layout
+    paths that actually exist under `root`; a category that survives with
+    fewer paths, or not at all, has its missing paths named under
+    `_notProposed` rather than proposed as ghosts.
     """
     protected = {}
-    for key, paths, why in _FIXED_PROTECTED_PATHS:
+    not_proposed = {}
+    for key, paths, why in _SELF_CREATED_PROTECTED:
         protected[key] = {"paths": list(paths), "why": why}
+    for key, paths, why in _LAYOUT_PROTECTED_PATHS:
+        present, missing, _checked = _partition_by_existence(root, paths)
+        if present:
+            protected[key] = {"paths": present, "why": why}
+        if missing:
+            not_proposed[key] = {"missingPaths": missing, "why": why}
     if detected["hasMigrations"]:
         protected["migrations"] = {
             "paths": sorted(set(os.path.dirname(p) + "/" for p in
@@ -179,6 +229,7 @@ def propose_policy(detected):
             "hasCiWorkflows": detected["hasCiWorkflows"],
         },
         "protectedPaths": protected,
+        "_notProposed": {"note": _NOT_PROPOSED_NOTE, "categories": not_proposed},
     }
 
 
@@ -201,6 +252,13 @@ def propose_codeowners(policy):
         "# Replace @REPLACE-ME with a real user or team before this file does anything.",
         "",
     ]
+    dropped = sorted(policy.get("_notProposed", {}).get("categories", {}))
+    if dropped:
+        lines.append("# Not proposed (no such path under this root): %s. A rule over a"
+                     % ", ".join(dropped))
+        lines.append("# path that does not exist protects nothing; see policy.json's")
+        lines.append("# _notProposed note for the exact paths that were checked.")
+        lines.append("")
     for key, entry in policy["protectedPaths"].items():
         lines.append("# %s: %s" % (key, entry["why"]))
         for path in entry["paths"]:
@@ -216,7 +274,7 @@ def plan(root):
     it directly and the caller decides whether anything gets written.
     """
     detected = detect_stack(root)
-    policy = propose_policy(detected)
+    policy = propose_policy(root, detected)
     codeowners = propose_codeowners(policy)
     files = {
         POLICY_PATH: json.dumps(policy, indent=2, sort_keys=True) + "\n",
@@ -346,6 +404,7 @@ def report(root):
         "detectedStack": planned["detected"],
         "proposals": [{"path": p["path"], "exists": p["exists"], "identical": p["identical"],
                        "diff": p["diff"]} for p in planned["proposals"]],
+        "notProposed": planned["policy"]["_notProposed"],
         "protections": protections,
         "localFacts": local_facts,
     }
