@@ -1,0 +1,509 @@
+"""A decision package written at the moment a decision is taken, quoting the
+run that took it, bound to the commit it was taken against.
+
+The defect this exists for, in one sentence: a gate FAIL, a waived control, a
+raised tier and a forced close all scroll past in a terminal, so the reason a
+change shipped anyway survives only in whoever happened to be watching, and a
+week later nobody can say what was decided, on what evidence, or what would
+change it.
+
+THE KILL CRITERION THIS MODULE IS BUILT AROUND: this file is a READER and a
+WRITER of files, never a second gate runner. Nothing in it recomputes a verdict
+over source code and nothing in it starts a gate. It quotes verdict lines the
+real tools produced at the moment they were printed, records what it could not
+read as NO-DATA naming the store that would fill it, and binds the package to
+the head commit it was written against. If a truthful package cannot be
+produced without re-running somebody else's check, the section says NO-DATA
+instead of running it.
+
+WHAT A PACKAGE MAY AND MAY NOT CARRY, stated because a package is SHARED:
+
+  - It quotes the verdict line it was handed, and nothing else. Every other
+    line from the triggering run is COUNTED and discarded, never copied. The
+    evidence receipts persist digests rather than raw output for exactly this
+    reason (see `evidence.py`), and a new artifact that everybody is
+    encouraged to paste into a pull request must not quietly widen that
+    policy: an unmatched line may carry a token, a connection string or a
+    customer row.
+  - Absent evidence renders NO-DATA naming the file or store that would fill
+    it. A package never reads as a clean verdict over something nobody
+    examined, and a waived control is recorded WAIVED.
+
+WHERE A PACKAGE LANDS, and why it says so in its own header:
+
+  dossier         <dossier>/decisions/NNN-<slug>/DECISION.md
+  repository      <repo top>/.sbe/decisions/NNN-<slug>/DECISION.md
+
+The dossier location is used only when the checked directory carries a
+`00-intake.json`, because that file is what names the project. With no intake
+there is no project to name, so nothing invents one and the package goes to
+the repository store instead, saying which of the two it is in and why.
+
+NO HELPER IN THIS MODULE RETURNS A BARE TWO-VALUE TUPLE. Every helper returns
+one dict with named keys, or a single value. A two-value return reads as a
+possible `(verdict, evidence)` pair to the honesty meta-test in
+`evals/test_no_data_class.py`, which refuses any such function sitting outside
+a check registry. Where a caller wants two things it reads two keys off one
+dict. Stated here so the next writer does not reintroduce it.
+
+Nothing here constructs a git merge, rebase, push or deploy. The only git this
+module runs is `rev-parse`, through the `impact._git` helper the rest of the
+package already uses rather than a second copy of the plumbing.
+
+Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
+library only. Maturity: INTERNAL-EVAL, exercised on this repository's fixtures
+and on no other estate.
+"""
+import io
+import os
+import re
+import tempfile
+import time
+
+from .impact import _git  # noqa: E402  (the same private helper status.py reuses)
+
+#: Where packages live under a dossier, and under the repository root when
+#: there is no dossier to name. Both spelled once, here, so a writer and a
+#: reader of the store cannot drift into two different stores.
+DECISIONS_REL_DOSSIER = "decisions"
+DECISIONS_REL_ROOT = os.path.join(".sbe", "decisions")
+
+#: The file that names a project. Its ABSENCE is what sends a package to the
+#: repository store; see the module docstring.
+INTAKE_REL = "00-intake.json"
+
+#: The four moments that write a package. A trigger naming something else is
+#: still recorded, with a note saying it is outside this list: refusing to
+#: write would lose the decision, and normalizing it in silence would hide
+#: that a caller is writing packages for a moment nobody declared.
+TRIGGER_KINDS = ("gate", "waiver", "tier", "forced-close")
+
+PACKAGE_FILENAME = "DECISION.md"
+
+#: The header line that binds a package to its commit, written by `render_package`
+#: and read back by `bound_commit_in` so the two spellings cannot drift.
+_BOUND_PREFIX = "- bound to commit: "
+_BOUND_RE = re.compile(r"^%s(\S+)\s*$" % re.escape(_BOUND_PREFIX), re.M)
+
+_SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
+
+
+class DecisionUnwritable(Exception):
+    """The package could not be written, so nothing was recorded. Raised
+    rather than returning a path that does not exist: a decision nobody can
+    open is not a decision that was taken."""
+
+
+def _iso(epoch):
+    """ISO 8601 in UTC, to the second, with an explicit Z: the same spelling
+    the evidence receipts and the task registry use."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+def _slug(text, fallback):
+    """A directory-safe slug, lowercased, with every run of other characters
+    collapsed to one dash. Empty input yields the caller's fallback rather
+    than an empty directory name nobody can read."""
+    slug = _SLUG_STRIP_RE.sub("-", str(text or "").lower()).strip("-")
+    return slug or fallback
+
+
+def repo_top_of(root):
+    """The repository top for `root`, as a dict with keys `top` and `note`.
+
+    A directory git cannot answer for is NOT fatal here: the package is
+    written under the directory the caller named, and `note` carries the
+    NO-DATA sentence the package prints, so a reader can see the package was
+    filed relative to a directory rather than to a repository.
+    """
+    absolute = os.path.abspath(root)
+    try:
+        code, out, err = _git(["rev-parse", "--show-toplevel"], absolute)
+    except OSError as exc:
+        return {"top": absolute,
+                "note": "NO-DATA: git could not be run in %s (%s), so this package was "
+                        "filed under the directory the caller named rather than the "
+                        "repository top" % (absolute, exc)}
+    if code != 0 or not out.strip():
+        return {"top": absolute,
+                "note": "NO-DATA: git cannot answer for %s (%s), so this package was "
+                        "filed under the directory the caller named rather than the "
+                        "repository top" % (absolute, err.strip() or "no toplevel")}
+    return {"top": out.strip(), "note": ""}
+
+
+def head_commit_of(root):
+    """The head commit `root` sits on, as a dict with keys `commit` and `note`.
+
+    `commit` is None when git cannot answer, and `note` says so in NO-DATA
+    words. None is a real answer here, never guessed at: a package bound to a
+    commit nobody resolved would claim to describe a program it never saw.
+    """
+    absolute = os.path.abspath(root)
+    try:
+        code, out, err = _git(["rev-parse", "HEAD"], absolute)
+    except OSError as exc:
+        return {"commit": None,
+                "note": "NO-DATA: git could not be run in %s (%s), so this package is "
+                        "bound to no commit and says nothing about which program was "
+                        "checked" % (absolute, exc)}
+    if code != 0 or not out.strip():
+        return {"commit": None,
+                "note": "NO-DATA: no head commit resolved in %s (%s), so this package is "
+                        "bound to no commit and says nothing about which program was "
+                        "checked" % (absolute, err.strip() or "no HEAD")}
+    return {"commit": out.strip(), "note": ""}
+
+
+def package_location(top, dossier):
+    """Where a package goes, as a dict with keys `dir`, `location` and `reason`.
+
+    The reason is printed in the package's own header, because a reader who
+    finds a package in the repository store needs to know it landed there
+    because no project could be named, not because somebody filed it wrong.
+    """
+    if dossier:
+        intake = os.path.join(os.path.abspath(dossier), INTAKE_REL)
+        if os.path.isfile(intake):
+            return {"dir": os.path.join(os.path.abspath(dossier), DECISIONS_REL_DOSSIER),
+                    "location": "dossier",
+                    "reason": "%s names the project this decision belongs to" % intake}
+        return {"dir": os.path.join(top, DECISIONS_REL_ROOT),
+                "location": "repository store",
+                "reason": "the checked directory %s carries no %s, so there is no project "
+                          "to name and nothing invents one"
+                          % (os.path.abspath(dossier), INTAKE_REL)}
+    return {"dir": os.path.join(top, DECISIONS_REL_ROOT),
+            "location": "repository store",
+            "reason": "the run that triggered this package named no dossier, so there is "
+                      "no project to name and nothing invents one"}
+
+
+def next_id(decisions_dir):
+    """The next NNN, allocated by READING the directory. An unreadable
+    directory raises rather than restarting at 001: restarting would write a
+    second 001 over somebody's first one."""
+    if not os.path.isdir(decisions_dir):
+        return "001"
+    try:
+        entries = os.listdir(decisions_dir)
+    except OSError as exc:
+        raise DecisionUnwritable("%s cannot be listed (%s); refusing to allocate an id "
+                                 "that may already be taken" % (decisions_dir, exc))
+    highest = 0
+    for name in entries:
+        head = name[:3]
+        if head.isdigit():
+            highest = max(highest, int(head))
+    return "%03d" % (highest + 1)
+
+
+def _verdict_section(trigger):
+    """The verdict line this package quotes, as a dict with keys `line` and
+    `note`.
+
+    An empty or unreadable verdict line is NO-DATA naming what would fill it,
+    and the same sentence goes into the package's notes. It is never a package
+    that reads clean: a decision with no quoted verdict says nothing about
+    what was decided.
+    """
+    line = trigger.get("verdictLine")
+    if not isinstance(line, str) or not line.strip():
+        return {"line": "NO-DATA: the run that triggered this package printed no verdict "
+                        "line this module could quote. One line matching the verdict "
+                        "grammar the checks themselves print, captured at the moment the "
+                        "run made it, would fill this. An absence is never a clean "
+                        "verdict.",
+                "note": "NO-DATA: no verdict line was quoted into this package, so it "
+                        "records that a decision happened and not what was decided."}
+    return {"line": line.strip(), "note": ""}
+
+
+def _evidence_lines(trigger):
+    """What a reader can open to check this decision, as a list of lines.
+
+    The verdict line itself is evidence of what was printed. A receipt id is
+    evidence that the run happened at all, and its ABSENCE is named rather
+    than left out, because a package quoting a line nobody can trace back to a
+    run is a quotation, not evidence.
+    """
+    lines = ["the verdict line quoted above, as printed by the run that triggered this "
+             "package"]
+    receipt = trigger.get("evidenceId")
+    if isinstance(receipt, str) and receipt.strip():
+        lines.append("evidence receipt %s, under .sbe/evidence/, minted by `sbe evidence "
+                     "run`" % receipt.strip())
+    else:
+        lines.append("NO-DATA: no evidence receipt id was handed to this package. A "
+                     "receipt minted by `bin/sbe evidence run -- <the command that made "
+                     "this verdict>`, stored under .sbe/evidence/, would bind this "
+                     "decision to a run nobody typed by hand.")
+    return lines
+
+
+def _input_lines(trigger, root, location, head):
+    """Everything this package read, named so a reader can re-read it."""
+    lines = ["the trigger kind %r, handed to this module by the command that made the "
+             "decision" % (trigger.get("kind") or "(unnamed)"),
+             "the check name %r" % (trigger.get("check") or "(unnamed)"),
+             "the directory checked: %s" % (os.path.abspath(trigger["dossier"])
+                                            if trigger.get("dossier")
+                                            else "none named; %s" % os.path.abspath(root)),
+             "the package store: %s (%s)" % (location["dir"], location["location"])]
+    if head["commit"]:
+        lines.append("the head commit this decision was taken against: %s"
+                     % head["commit"])
+    else:
+        lines.append(head["note"])
+    return lines
+
+
+def _risk_lines(verdict):
+    """What is at stake, derived from the verdict word the run printed and
+    from nothing else. A risk this module cannot derive is NO-DATA naming the
+    command that measures it, never an invented blast radius."""
+    lines = []
+    if verdict == "FAIL":
+        lines.append("the claim this check tested is broken at this commit, so shipping "
+                     "over this decision ships the defect the verdict line names")
+    elif verdict == "WAIVED":
+        lines.append("the control did not run here, so nothing was examined and nothing "
+                     "was found; a waiver records who is carrying that, never that the "
+                     "directory was checked and found clean")
+    else:
+        lines.append("the verdict word recorded for this decision is %r; what it puts at "
+                     "stake is whatever that verdict means in the check that printed it"
+                     % (verdict or "(none)"))
+    lines.append("NO-DATA: the blast radius of this decision was not measured here. "
+                 "`bin/sbe impact` computes the tier and names the detectors that raised "
+                 "it, and a disposition file beside the dossier records what a human did "
+                 "about them.")
+    return lines
+
+
+def _flip_lines(verdict, check):
+    """What would change this decision, stated as an action somebody can take
+    and a run that would show it, rather than as an opinion."""
+    name = check or "the check named above"
+    lines = []
+    if verdict == "FAIL":
+        lines.append("a re-run of %s over this same commit returning a verdict other "
+                     "than FAIL, with a receipt under .sbe/evidence/ showing the run "
+                     "happened" % name)
+        lines.append("a correction to the artifact the verdict line names, followed by "
+                     "that same re-run")
+    elif verdict == "WAIVED":
+        lines.append("removing the `.sbe-exempt` entry that covers %s in the directory "
+                     "the verdict line names, then a run that records what the check "
+                     "actually found there" % name)
+    else:
+        lines.append("a re-run of %s over this same commit, recorded with a receipt, "
+                     "printing a different verdict line" % name)
+    lines.append("NO-DATA: the deciding code behind %s is not excerpted into this "
+                 "package. The shipped check registry under tools/ holds the function "
+                 "and the line span that decided." % name)
+    return lines
+
+
+def _checklist_lines(head, unquoted):
+    """The review checklist: questions a reviewer ANSWERS, each of which can be
+    answered from a file rather than from memory."""
+    where = head["commit"][:12] if head["commit"] else "(no commit resolved)"
+    return [
+        "Does the verdict line quoted above come from the run you are reviewing, at "
+        "commit %s?" % where,
+        "Was the check run against this commit, or against an earlier one whose result "
+        "no longer describes this tree?",
+        "%d line(s) from that run were counted and NOT copied into this package. Do you "
+        "need the run's own output to review this decision, and can you still get it?"
+        % unquoted,
+        "Is there an evidence receipt under .sbe/evidence/ for the run this package "
+        "quotes, or is the quotation all there is?",
+        "If this decision waived or forced something, who is named as carrying it, and "
+        "until when?",
+    ]
+
+
+def build_package(root, trigger):
+    """One decision package, as ONE dict. Never a pair, and never a verdict
+    this module computed: every verdict word in it came from the run that was
+    handed to it.
+
+    `trigger` is a dict carrying `kind`, `check`, `verdict`, `verdictLine`,
+    `otherLines` (the lines the run printed that did NOT match the verdict
+    grammar, which are COUNTED here and never copied) and `dossier`.
+
+    Every section with no source renders as a NO-DATA line naming the file or
+    the store that would fill it, so an absence in a shared artifact reads as
+    an absence rather than as a clean bill.
+    """
+    kind = trigger.get("kind") or "(unnamed)"
+    check = trigger.get("check") or ""
+    verdict = trigger.get("verdict") or ""
+    top_result = repo_top_of(root)
+    head = head_commit_of(root)
+    location = package_location(top_result["top"], trigger.get("dossier"))
+    verdict_section = _verdict_section(trigger)
+
+    other = trigger.get("otherLines")
+    notes = ["This package QUOTES the run that triggered it. Nothing in it re-ran a "
+             "check, and nothing in it computed a verdict over source code."]
+    if isinstance(other, (list, tuple)):
+        unquoted = len(other)
+    else:
+        unquoted = 0
+        notes.append("NO-DATA: the trigger carried no readable list of other lines, so "
+                     "the count of lines left unquoted is 0 by absence rather than by "
+                     "measurement.")
+    notes.append("%d line(s) printed by that run fell outside the verdict grammar. They "
+                 "were counted and discarded, never copied: a decision package is shared, "
+                 "and an unmatched line may carry a secret." % unquoted)
+    if kind not in TRIGGER_KINDS:
+        notes.append("The trigger kind %r is outside the four this project declares (%s). "
+                     "It is recorded rather than dropped, and named here rather than "
+                     "normalized in silence." % (kind, ", ".join(TRIGGER_KINDS)))
+    for extra in (verdict_section["note"], top_result["note"], head["note"]):
+        if extra:
+            notes.append(extra)
+
+    identifier = next_id(location["dir"])
+    slug = _slug("%s-%s-%s" % (kind, check, verdict), "decision")
+    return {
+        "id": identifier,
+        "slug": slug,
+        "dir": os.path.join(location["dir"], "%s-%s" % (identifier, slug)),
+        "verdictLine": verdict_section["line"],
+        "evidence": _evidence_lines(trigger),
+        "inputs": _input_lines(trigger, root, location, head),
+        "risks": _risk_lines(verdict),
+        "whatWouldFlipIt": _flip_lines(verdict, check),
+        "checklist": _checklist_lines(head, unquoted),
+        "boundCommit": head["commit"],
+        "location": location["location"],
+        "locationReason": location["reason"],
+        "unquotedLineCount": unquoted,
+        "notes": notes,
+        "trigger": {"kind": kind, "check": check, "verdict": verdict},
+        "writtenAt": _iso(time.time()),
+    }
+
+
+def _bullets(lines):
+    return "".join("- %s\n" % line for line in lines)
+
+
+def render_package(package):
+    """The package as the Markdown a human opens. One section per named key,
+    in the order a reader needs them: what was decided, what backs it, what it
+    read, what is at stake, what would change it, what to check, and what this
+    file does not know."""
+    bound = package["boundCommit"] or ("NO-DATA (no commit resolved; see the notes at the "
+                                       "end of this file)")
+    trigger = package.get("trigger") or {}
+    out = []
+    out.append("# Decision %s: %s\n\n" % (package["id"], package["slug"]))
+    out.append("INTERNAL-EVAL. Written by BrotherSBE at the moment this decision was "
+               "taken, quoting the run that took it. This file re-ran nothing.\n\n")
+    out.append("- id: %s\n" % package["id"])
+    out.append("- trigger: %s\n" % (trigger.get("kind") or "(unnamed)"))
+    out.append("- check: %s\n" % (trigger.get("check") or "(unnamed)"))
+    out.append("- verdict recorded by the run: %s\n"
+               % (trigger.get("verdict") or "(none recorded)"))
+    out.append("%s%s\n" % (_BOUND_PREFIX, bound))
+    out.append("- written at: %s\n" % package.get("writtenAt", "(unrecorded)"))
+    out.append("- filed in the %s, because %s\n"
+               % (package["location"], package["locationReason"]))
+    out.append("- lines from that run counted and not copied: %d\n"
+               % package["unquotedLineCount"])
+    out.append("\n## The verdict, quoted\n\n")
+    out.append("    %s\n" % package["verdictLine"])
+    out.append("\n## Evidence\n\n")
+    out.append(_bullets(package["evidence"]))
+    out.append("\n## What this package read\n\n")
+    out.append(_bullets(package["inputs"]))
+    out.append("\n## Risks\n\n")
+    out.append(_bullets(package["risks"]))
+    out.append("\n## What would flip it\n\n")
+    out.append(_bullets(package["whatWouldFlipIt"]))
+    out.append("\n## Review checklist\n\n")
+    out.append(_bullets(package["checklist"]))
+    out.append("\n## Notes and limits\n\n")
+    out.append(_bullets(package["notes"]))
+    return "".join(out)
+
+
+def bound_commit_in(path):
+    """What an EXISTING package on disk is bound to, as a dict with keys
+    `exists`, `commit` and `note`.
+
+    A file that exists and carries no readable binding line returns
+    `commit` None with a note saying so, and callers treat that as a binding
+    they could not read rather than as a binding that matches theirs.
+    """
+    if not os.path.exists(path):
+        return {"exists": False, "commit": None, "note": ""}
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            body = fh.read()
+    except (OSError, ValueError) as exc:
+        raise DecisionUnwritable("%s exists and cannot be read (%s); refusing to write "
+                                 "over a package whose binding nobody could check"
+                                 % (path, exc))
+    match = _BOUND_RE.search(body)
+    if match is None:
+        return {"exists": True, "commit": None,
+                "note": "NO-DATA: %s carries no readable %r line, so which commit it was "
+                        "written against is unknown" % (path, _BOUND_PREFIX.strip())}
+    return {"exists": True, "commit": match.group(1), "note": ""}
+
+
+def write_package(root, package):
+    """Write the package and return the absolute path of the file written.
+
+    Atomic the way `tasks.save_registry` is atomic: a temp file in the same
+    directory, then `os.replace`, so the file is never half written.
+
+    A `DECISION.md` already sitting there and bound to a DIFFERENT commit is
+    never overwritten. Packages are append-only, because the older package
+    records what somebody decided about a different program, and a rewrite
+    would delete that with no record of the deletion. The refusal raises
+    `DecisionUnwritable` naming both commits.
+
+    A package bound to the SAME commit is rewritten in place, so regenerating
+    a package at the same head is idempotent rather than a second directory.
+    The residual is stated rather than hidden: ids are allocated by reading
+    the store, so a caller that BUILDS two packages before WRITING either
+    reads the same store twice, allocates the same id twice, and the second
+    write lands on top of the first. Build and write one package at a time.
+    """
+    directory = package["dir"]
+    target = os.path.join(directory, PACKAGE_FILENAME)
+    existing = bound_commit_in(target)
+    if existing["exists"] and existing["commit"] != package["boundCommit"]:
+        raise DecisionUnwritable(
+            "%s is already bound to commit %s and this package is bound to %s; refusing "
+            "to overwrite it. A package records what was decided about the program at "
+            "its own commit, and packages are append-only: allocate the next id instead."
+            % (target, existing["commit"] or "(unreadable)",
+               package["boundCommit"] or "(none resolved)"))
+    try:
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+    except OSError as exc:
+        raise DecisionUnwritable("%s cannot be created (%s); nothing was recorded"
+                                 % (directory, exc))
+    body = render_package(package)
+    try:
+        fd, tmp = tempfile.mkstemp(prefix="DECISION.", suffix=".tmp", dir=directory)
+    except OSError as exc:
+        raise DecisionUnwritable("no temp file could be made in %s (%s); nothing was "
+                                 "recorded" % (directory, exc))
+    try:
+        with io.open(fd, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        os.replace(tmp, target)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return os.path.abspath(target)

@@ -502,7 +502,7 @@ The tool holds itself to the rule it enforces. Running the lint over the shipped
 
 ```
 $ python3 tools/sbe_score.py tools/     # one of twelve check lines; the rest are omitted here
-silent-failure-lints      PASS     24 file(s) scanned under tools/, 0 unexempted hit(s), 30 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_design.py:400, sbe_design.py:423, sbe_design.py:430, sbe_design.py:449, and 25 more not named), 21 file(s) holding no match at all; 3 file(s) under tools/ were not opened because this lint has no pattern that reads their kind (.sh 2, .md 1); its patterns are written for .py .sql .swift .rb .js .ts .go, so this verdict covers those kinds and says nothing about the rest; this tool's own source was not scanned (1 file(s): sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
+silent-failure-lints      PASS     25 file(s) scanned under tools/, 0 unexempted hit(s), 30 suppressed by an inline `sbe: allow-silent` comment (sbe_design.py:105, sbe_design.py:400, sbe_design.py:423, sbe_design.py:430, sbe_design.py:449, and 25 more not named), 22 file(s) holding no match at all; 3 file(s) under tools/ were not opened because this lint has no pattern that reads their kind (.sh 2, .md 1); its patterns are written for .py .sql .swift .rb .js .ts .go, so this verdict covers those kinds and says nothing about the rest; this tool's own source was not scanned (1 file(s): sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
 ```
 
 The evidence carries the exemption count and names the lines, because "clean" over
