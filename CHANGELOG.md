@@ -8,6 +8,30 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe converge` (`src/brothersbe/converge.py`) answers whether the code between
+  two pinned commits still matches the approved dossier, in five dimensions,
+  every hard verdict grounded in a citable fact and never in a judgment: an
+  unplanned changed file is REVIEW-REQUIRED by name
+  (`TestScope::test_an_unplanned_changed_file_is_review_required_by_name`); a
+  removed OpenAPI operation no dossier artifact or plan task mentions is a
+  direct contradiction and FAILs naming the operation, while an undocumented
+  added one is REVIEW-REQUIRED
+  (`TestContracts`); a changed migration that drops a column the data model
+  still documents FAILs naming the attribute and both files
+  (`TestData::test_dropping_a_documented_attribute_is_fail_naming_it`); a plan
+  verification command with no receipt bound to the assessed head FAILs
+  naming the command, and a receipt bound to another commit FAILs naming both
+  shas (`TestVerification`, the head-binding control calibrated by disabling
+  it and watching exactly that test go red, restored hash-verified). There is
+  no force flag and argparse refuses one
+  (`TestUsage::test_there_is_no_force_flag`); the only path from divergence
+  to PASS is the amendment round trip the suite walks end to end: diverge,
+  FAIL, amend the dossier, regenerate the plan and the receipt, PASS
+  (`TestAmendment`). The report at `09-convergence.json` carries no
+  timestamps, so two runs are byte-identical, and a FINAL PASS lists every
+  NO-DATA dimension by name as not examined. Proof: `tools/test_sbe_converge.py`,
+  12 tests, `OK`.
+
 - `sbe pr verify` (`src/brothersbe/prverify.py`) binds a PASS/FAIL verdict to
   a pull request's live head commit on GitHub: PR existence, approval bound
   to the current head sha, no self-approval, no dismissed or bot-only

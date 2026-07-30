@@ -730,3 +730,21 @@ shas the check saw, and the remedy is the same command again
 
 Full text: `docs/specs/2026-07-30-sbe-pr-verify.md`,
 `src/brothersbe/prverify.py`, `tools/test_sbe_prverify.py`.
+
+
+## converge compares structures, not intent
+
+`sbe converge` reads names, shapes, and receipts, nothing subtler. Contracts
+are diffed only when the changed file parses as JSON OpenAPI at both commits;
+YAML has no standard-library parser here, so a YAML contract is named
+unmeasured and blocks a clean CONTRACTS verdict rather than passing unread.
+The DATA dimension scans changed migrations for DROP TABLE and DROP COLUMN
+statements against the names the data model documents, and nothing subtler:
+a rename, a type change, or a semantic contradiction is beyond this scan.
+ARCHITECTURE compares declared component names against new top-level
+directories and everything deeper (technology choices, dependencies,
+infrastructure, recovery) is NO-DATA by design: intent is not readable from
+a diff. Scope compares path names against plan ownership and dossier-named
+paths; it does not read file contents. A FINAL PASS therefore means "nothing
+this tool can read contradicts the dossier", and its own output names every
+dimension that had nothing to read.

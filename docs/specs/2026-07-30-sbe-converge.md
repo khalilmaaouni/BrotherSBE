@@ -13,8 +13,11 @@ not a comparison, it is a hope. The verdict set is the impact verdict set:
 PASS, FAIL, REVIEW-REQUIRED, NO-DATA. Exit 0 only for PASS.
 
 Output: one verdict line per dimension (SCOPE, CONTRACTS, DATA, ARCHITECTURE,
-VERIFICATION), then FINAL: FAIL beats REVIEW-REQUIRED beats NO-DATA beats
-PASS. A report is written to <dossier-dir>/09-convergence.json bound to
+VERIFICATION), then FINAL: FAIL beats REVIEW-REQUIRED; NO-DATA is the final
+verdict only when EVERY dimension was NO-DATA (nothing was comparable at
+all); otherwise a PASS stands and lists its NO-DATA dimensions by name as
+not examined, because a range with no contract change must not be blocked
+for the silence of a dimension that had nothing to read. A report is written to <dossier-dir>/09-convergence.json bound to
 repository identity, base, and head; every finding names its evidence source
 (file, symbol, operation, receipt id, commit) because a hard verdict without
 a citable fact is an opinion, and opinions are advisory here by law.
@@ -73,10 +76,15 @@ docs/KNOWN-LIMITS.md carries this limit verbatim.
 
 For every plan task with verificationCommands: a receipt must exist in the
 evidence store (.sbe/evidence, the existing evidence module) that
-- is schema-valid and seal-valid (evidence.verify),
-- binds to the head sha exactly,
-- covers the files the task owns (the receipt covers mechanism),
-- recorded the required exit result.
+- loads and carries a seal matching its own run facts (the receipt is read
+  directly rather than through evidence.verify, because verify binds to the
+  CURRENT head of the tree and converge assesses an explicit --head that may
+  lawfully differ),
+- binds to the assessed head sha exactly,
+- covers every file its task owns, whenever the task owns any (a receipt
+  recording other files is evidence about the wrong files and FAILs naming
+  the uncovered paths),
+- recorded exit 0.
 A missing receipt is FAIL naming the command. A receipt bound to another
 commit is FAIL naming both shas (stale evidence). No plan or no tasks with
 commands: NO-DATA prose. An LLM statement, a chat log, or a human assertion
@@ -100,5 +108,6 @@ wrong commit FAIL naming both shas; unparseable contract file reported
 unmeasured and never PASS; the valid amendment round trip; determinism (two
 runs, identical report bytes apart from nothing: the report carries no
 timestamps for exactly this reason); both shas required (usage error
-otherwise); FINAL ordering (FAIL beats REVIEW-REQUIRED beats NO-DATA beats
-PASS) pinned by constructed cases.
+otherwise); no force flag (argparse refuses one); the FINAL rule (FAIL beats
+REVIEW-REQUIRED, NO-DATA only when every dimension was silent, PASS naming
+its silences) pinned by the scenarios above.

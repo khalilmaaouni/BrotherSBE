@@ -314,6 +314,27 @@ def _cmd_pr(args):
                              exit_usage=EXIT_USAGE)
 
 
+def _cmd_converge(args):
+    """Compare what a range of commits did against what the dossier approved.
+    Deterministic evidence only: files, operations, entities, receipts, shas.
+    There is no force flag and none may be added; a legitimate deviation is
+    legalized by amending the dossier, regenerating the plan and the evidence,
+    and re-running this."""
+    from . import converge as converge_mod
+    root = os.path.abspath(args.cwd or ".")
+    try:
+        report = converge_mod.evaluate(args.path, root, args.base, args.head)
+    except converge_mod.ConvergeUnavailable as exc:
+        sys.stderr.write("sbe converge: %s\n" % exc)
+        return EXIT_USAGE
+    converge_mod.write_report(report, os.path.abspath(args.path))
+    if args.json:
+        sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(converge_mod.render(report) + "\n")
+    return EXIT_OK if report["final"] == "PASS" else EXIT_CONTROL_FAILED
+
+
 def _cmd_adopt(args):
     """Inspect a repository for BrotherSBE readiness. Dry run by default:
     prints every proposal as a unified diff and writes nothing. `--apply`
@@ -516,6 +537,8 @@ COMMANDS = [
              "diff-against-declaration postcondition", _cmd_task),
     ("work", "isolated implementation for one plan task: start, check, finish, remove, "
              "and never a merge", _cmd_work),
+    ("converge", "does the code between two commits still match the approved dossier: "
+                 "scope, contracts, data, architecture, verification", _cmd_converge),
     ("pr", "pull-request surfaces: pr verify <number> --repo owner/name checks live "
            "GitHub approval evidence, bound to the head commit", _cmd_pr),
     ("policy", "validate a repository policy file against its schema",
@@ -580,6 +603,17 @@ def build_parser():
                                help="overwrite an existing file that differs from the "
                                     "proposal; without it, an existing file is skipped and "
                                     "named")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
+        elif name == "converge":
+            child.add_argument("path",
+                               help="the dossier directory the range is measured against")
+            child.add_argument("--base", required=True,
+                               help="the commit the approved design was implemented from")
+            child.add_argument("--head", required=True,
+                               help="the commit whose tree is being judged")
+            child.add_argument("--cwd", default=".",
+                               help="the repository holding both commits (default: the "
+                                    "current one)")
             child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name == "status":
             child.add_argument("path", nargs="?", default=".",
