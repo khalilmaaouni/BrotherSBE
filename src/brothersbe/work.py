@@ -29,6 +29,7 @@ import argparse
 import io
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -167,8 +168,20 @@ def _matching_receipt(root, verify_command, head):
         except evidence_mod.ReceiptUnreadable as exc:
             out["unreadable"].append("%s was not readable as a receipt: %s" % (path, exc))
             continue
-        argv = receipt.get("argv") or []
-        if " ".join(str(a) for a in argv) != verify_command:
+        argv = [str(a) for a in (receipt.get("argv") or [])]
+        # External proof, estate C: comparing a rejoined argv to the plan's RAW
+        # command text can never match a quoted argument, because the shell
+        # consumed the quotes before argv existed. Both sides canonicalize
+        # through shlex; a command shlex cannot parse falls back to the exact
+        # string compare rather than guessing.
+        try:
+            wanted = shlex.split(verify_command)
+        except ValueError:
+            wanted = None
+        if wanted is None:
+            if " ".join(argv) != verify_command:
+                continue
+        elif argv != wanted:
             continue
         if receipt.get("headCommit") != head:
             continue

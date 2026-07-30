@@ -213,7 +213,13 @@ def _rows_of(text):
             continue
         if not set(r) - set("|-: "):
             continue
-        cells = [c.strip() for c in r.strip("|").split("|")]
+        # A backslash-escaped pipe is markdown's own way to put a literal |
+        # inside a cell (external proof, estate A: a grep pattern with an
+        # escaped pipe lost its command half into a phantom cell, silently).
+        # Sentinel-swap before the split, restore after.
+        sentinel = "\x00PIPE\x00"
+        cells = [c.strip().replace(sentinel, "|")
+                 for c in r.strip("|").replace("\\|", sentinel).split("|")]
         if not cells or not cells[0]:
             continue
         rows.append({"claim": cells[0],
@@ -574,10 +580,16 @@ def plan_migration(root):
     if dm["problem"]:
         return "FAIL", dm["problem"]
     physical = _section_answer(dm["text"], _PHYSICAL_PAT) if not dm["absent"] else None
-    paths = _backticked_paths(physical or "")
+    # Only MIGRATION-SHAPED paths declare a migration (external proof, estate
+    # A: a Physical section that backticked a source file in prose explicitly
+    # saying "no migration needed" was forced to invent reverse and
+    # reconciliation rows for a migration that does not exist; the derivation
+    # side already gated on _migrationish and this validation side did not).
+    paths = [pth for pth in _backticked_paths(physical or "") if _migrationish(pth)]
     if not paths:
-        return "NO-DATA", ("no %s Physical section naming a path, so no migration is "
-                           "declared and there is no triplet to demand" % DATA_MODEL)
+        return "NO-DATA", ("no %s Physical section naming a migration-shaped path, so no "
+                           "migration is declared and there is no triplet to demand"
+                           % DATA_MODEL)
     if loaded["nodata"]:
         return "NO-DATA", loaded["nodata"]
     tasks = loaded["tasks"]
@@ -856,7 +868,11 @@ def build_plan(dossier_dir, repo_root):
     decision = _section_answer(adr["text"], _DECISION_PAT)
     consequences = _section_answer(adr["text"], _CONSEQUENCES_PAT)
     physical = _section_answer(dm["text"], _PHYSICAL_PAT)
-    physical_paths = _backticked_paths(physical or "")
+    # Only migration-shaped paths declare a migration; prose that backticks a
+    # source file while saying "no migration needed" must not be forced to
+    # invent reverse and reconciliation rows (external proof, estate A).
+    physical_paths = [pth for pth in _backticked_paths(physical or "")
+                      if _migrationish(pth)]
     rows = _rows_of(ver["text"]) if ver["text"] is not None else []
 
     protos = []

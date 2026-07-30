@@ -306,6 +306,82 @@ class TestVerification(ConvergeScenario):
         self.assertIn(head[:12], text)
 
 
+class TestQuotedCommandReceipts(ConvergeScenario):
+    """External proof, estates A and C, critical: a verification command with a
+    quoted argument could NEVER match its receipt, because the shell strips
+    quotes before argv exists while the plan stores the raw markdown text.
+    The matcher must canonicalize both sides (shlex) instead of comparing a
+    rejoined argv against raw text."""
+
+    def test_a_quoted_command_receipt_binds(self):
+        base = self._seed_with_quoted_command()
+        self._write("src/app.py", "def answer():\n    return 42\n")
+        head = self._head("planned edit")
+        out_path = os.path.join(self.repo, ".sbe", "evidence", "q.json")
+        code, text, _ = self.sbe("evidence", "run", "--out", out_path,
+                                 "--cwd", self.repo, "--",
+                                 "python3", "-c", "print('OK')")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self._converge(base, head)
+        self.assertEqual(code, 0,
+                         "a receipt for the exact quoted command must bind: %s" % text)
+        self.assertNotIn("no receipt for it exists", text)
+
+    def _seed_with_quoted_command(self):
+        self._write("design/chg/00-intake.json", INTAKE)
+        self._write("design/chg/03-adr.md", ADR)
+        self._write("design/chg/07-verification.md",
+                    "| Claim this design makes | The check that proves it | When it runs |\n"
+                    "|---|---|---|\n"
+                    "| the app answers | `python3 -c \"print('OK')\"` | CI |\n")
+        self._write("api/openapi.json", OPENAPI)
+        self._write("src/app.py", "def answer():\n    return 41\n")
+        code, text, _ = self.sbe("plan", self.doss, "--write", "--cwd", self.repo)
+        self.assertEqual(code, 0, text)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "seed quoted")
+        return self.git("rev-parse", "HEAD").strip()
+
+
+class TestSqlModelIsNotAMigration(ConvergeScenario):
+    """External proof, estate B, critical: a plain-SELECT dbt model was called
+    migration-shaped because the detector's content pattern was ignored, and
+    DATA then FAILed a dossier for lacking a data model it never needed. A
+    detector that declares a content pattern speaks only when the content
+    matches it."""
+
+    def test_a_pure_select_sql_change_is_not_migration_shaped(self):
+        self._write("design/chg/00-intake.json", INTAKE)
+        self._write("design/chg/03-adr.md", ADR.replace(
+            "Serve reads from `src/app.py` behind the contract in `api/openapi.json`.",
+            "Rewrite the model `models_dir/customers.sql` for portability."))
+        self._write("design/chg/07-verification.md",
+                    "| Claim this design makes | The check that proves it | When it runs |\n"
+                    "|---|---|---|\n"
+                    "| the model still selects | `grep -q select models_dir/customers.sql` | CI |\n")
+        self._write("models_dir/customers.sql", "select id from users\n")
+        code, text, _ = self.sbe("plan", self.doss, "--write", "--cwd", self.repo)
+        self.assertEqual(code, 0, text)
+        self.git("add", "-A")
+        self.git("commit", "-qm", "seed select model, no data model artifact")
+        base = self.git("rev-parse", "HEAD").strip()
+        self._write("models_dir/customers.sql",
+                    "select id, count(*) as n from users group by id\n")
+        head = self._head("rewrite a select-only model")
+        out_path = os.path.join(self.repo, ".sbe", "evidence", "s.json")
+        code, text, _ = self.sbe("evidence", "run", "--out", out_path,
+                                 "--cwd", self.repo, "--",
+                                 "grep", "-q", "select", "models_dir/customers.sql")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self._converge(base, head)
+        self.assertEqual(code, 0, text)
+        self.assertNotIn("migration-shaped files changed but the dossier has no "
+                         "05-data-model.md", text,
+                         "a SELECT-only .sql without DDL content is not a "
+                         "migration and needs no data model: %s" % text)
+        self.assertIn("FINAL PASS", text)
+
+
 class TestAmendment(ConvergeScenario):
     def test_the_amendment_round_trip_is_the_only_path_from_fail_to_pass(self):
         base = self._seed()

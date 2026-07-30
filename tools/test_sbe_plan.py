@@ -438,5 +438,73 @@ class TestRegistryIntegration(PlanFixture):
                          "task supplied: %s" % record)
 
 
+
+
+def _run_sbe(*argv):
+    import subprocess as _sp
+    out = _sp.run([sys.executable, SBE] + list(argv), capture_output=True,
+                  text=True, stdin=_sp.DEVNULL, timeout=120)
+    # Three values, not two: the honesty meta-test refuses bare pairs.
+    return out.returncode, out.stdout + out.stderr, out.stderr
+
+
+class TestExternalProofRepairs(unittest.TestCase):
+    """Two defects the external estates hit, pinned so they cannot return."""
+
+    def _dossier(self, tmp, physical, check_cell):
+        import json as _json
+        doss = os.path.join(tmp, "design", "chg")
+        os.makedirs(doss)
+        io.open(os.path.join(doss, "00-intake.json"), "w").write(_json.dumps(
+            {"answers": {"changes_contract": "n", "crosses_boundary": "n",
+                         "reversible_under_hour": "y", "touches_sensitive": "n",
+                         "consumers": "none"}, "tier": "T1",
+             "override": None, "override_reason": None}))
+        io.open(os.path.join(doss, "03-adr.md"), "w").write(
+            "# ADR\n## Context\nx\n## Decision\nTouch `src/app.py` only.\n"
+            "## Consequences\nok\n")
+        io.open(os.path.join(doss, "05-data-model.md"), "w").write(
+            "# DM\n## Conceptual: entities and meanings\n- U: a user; system of "
+            "record: here.\n## Physical\n" + physical + "\n")
+        io.open(os.path.join(doss, "07-verification.md"), "w").write(
+            "| Claim this design makes | The check that proves it | When it runs |\n"
+            "|---|---|---|\n| it works | " + check_cell + " | CI |\n")
+        return doss
+
+    def test_a_source_path_in_physical_prose_demands_no_migration_triplet(self):
+        import shutil as _sh, tempfile as _tf
+        tmp = _tf.mkdtemp()
+        try:
+            doss = self._dossier(
+                tmp, "No migration is needed: `src/app.py` changes in place "
+                     "and alembic stays untouched.", "`grep -q def src/app.py`")
+            code, out, _err = _run_sbe("plan", doss, "--write", "--cwd", tmp)
+            self.assertEqual(code, 0,
+                             "prose backticking a source file is not a migration "
+                             "declaration: %s" % out)
+        finally:
+            _sh.rmtree(tmp, ignore_errors=True)
+
+    def test_an_escaped_pipe_stays_inside_the_check_cell(self):
+        import shutil as _sh, tempfile as _tf
+        tmp = _tf.mkdtemp()
+        try:
+            doss = self._dossier(
+                tmp, "No migration is needed here either.",
+                "`grep -Eq \"(a\\|b)\" src/app.py`")
+            code, out, _err = _run_sbe("plan", doss, "--write", "--cwd", tmp)
+            self.assertEqual(code, 0, out)
+            import json as _json
+            plan = _json.loads(io.open(os.path.join(doss, "08-plan.json")).read())
+            row_task = [t for t in plan["tasks"]
+                        if "07-verification.md#row-1" in t["dossierSources"]][0]
+            self.assertTrue(row_task["verificationCommands"],
+                            "the escaped pipe must not eat the command half: %r"
+                            % row_task)
+            self.assertIn("(a|b)", row_task["verificationCommands"][0],
+                          "the literal pipe survives into the derived command")
+        finally:
+            _sh.rmtree(tmp, ignore_errors=True)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

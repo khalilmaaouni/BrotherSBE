@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import shlex
 import sys
 
 TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
@@ -82,12 +83,37 @@ def _show(cwd, sha, rel):
     return out if code == 0 else None
 
 
-def _detector_kinds(rel):
+def _detector_kinds(rel, content=None):
+    """Detector ids whose PATH matches, honoring each detector's CONTENT
+    pattern when it declares one. External proof, estate B: dropping the
+    content half made every .sql (and every .py, via the destructive
+    detector's path pattern) migration-shaped, so a SELECT-only dbt model
+    FAILed a dossier for lacking a data model it never needed. A detector
+    that declares a content pattern speaks only when the content matches;
+    with no content to inspect (an unreadable or absent side), the detector
+    stays silent rather than guessing."""
     kinds = []
-    for det_id, _why, _sets, path_pat, _content_pat in impact_mod.DETECTORS:
-        if re.search(path_pat, rel):
-            kinds.append(det_id)
+    for det_id, _why, _sets, path_pat, content_pat in impact_mod.DETECTORS:
+        if not re.search(path_pat, rel):
+            continue
+        if content_pat is not None:
+            if content is None or not re.search(content_pat, content, re.IGNORECASE):
+                continue
+        kinds.append(det_id)
     return kinds
+
+
+def _command_tokens(command):
+    """The command as the shell would split it, or None when it does not
+    parse. The receipt records ARGV (quotes already consumed by the shell);
+    the plan records the RAW markdown text (quotes included). Comparing a
+    rejoined argv to raw text can never match a quoted argument, which is
+    how two estates' freshly-made receipts were refused as absent. Both
+    sides canonicalize through shlex before comparison."""
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return None
 
 
 def _dossier_text(dossier_dir):
@@ -174,8 +200,12 @@ def _find_receipt(evidence_dir, command, head):
         except evidence_mod.ReceiptUnreadable as exc:
             out["unreadable"].append("%s: %s" % (name, exc))
             continue
-        argv = receipt.get("argv") or []
-        if " ".join(str(a) for a in argv) != command:
+        argv = [str(a) for a in (receipt.get("argv") or [])]
+        wanted = _command_tokens(command)
+        if wanted is None:
+            if " ".join(argv) != command:
+                continue
+        elif argv != wanted:
             continue
         if receipt.get("runId") != evidence_mod.compute_seal(receipt):
             out["broken"].append("%s: runId does not match the seal over its own "
@@ -277,7 +307,8 @@ def evaluate(dossier_dir, cwd, base, head):
     # CONTRACTS --------------------------------------------------------
     contract_findings = []
     contract_files = [r for r in changed
-                      if any(k in _CONTRACT_KINDS for k in _detector_kinds(r))]
+                      if any(k in _CONTRACT_KINDS
+                             for k in _detector_kinds(r, _show(cwd, head_sha, r)))]
     unmeasured = []
     for rel in contract_files:
         if not re.search(r"(openapi|swagger)[^/]*\.json$", rel):
@@ -341,7 +372,8 @@ def evaluate(dossier_dir, cwd, base, head):
     # DATA -------------------------------------------------------------
     data_findings = []
     migration_files = [r for r in changed
-                       if any(k in _MIGRATION_KINDS for k in _detector_kinds(r))]
+                       if any(k in _MIGRATION_KINDS
+                              for k in _detector_kinds(r, _show(cwd, head_sha, r)))]
     documented = _data_model_names(dossier_dir)
     if migration_files and documented is None:
         data_findings.append({"verdict": "FAIL",

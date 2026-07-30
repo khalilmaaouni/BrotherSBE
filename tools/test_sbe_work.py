@@ -665,6 +665,55 @@ def _find_unreviewable_git_argv(source):
     return violations
 
 
+class TestQuotedVerifyCommandReceipt(unittest.TestCase):
+    """External proof, estate C, critical: finish refused a receipt whose argv,
+    head and exit all matched, because the plan's raw quoted command text can
+    never equal a rejoined argv. The matcher canonicalizes both sides."""
+
+    def test_shlex_canonicalization_binds_quoted_commands(self):
+        import importlib.util, os as _os, sys as _sys
+        src = _os.path.join(HERE, "..", "src", "brothersbe")
+        if _os.path.abspath(_os.path.join(HERE, "..", "src")) not in _sys.path:
+            _sys.path.insert(0, _os.path.abspath(_os.path.join(HERE, "..", "src")))
+        from brothersbe import work as work_mod
+        import json as _json, tempfile as _tf
+        d = _tf.mkdtemp()
+        try:
+            evdir = _os.path.join(d, ".sbe", "evidence")
+            _os.makedirs(evdir)
+            _sys.path.insert(0, _os.path.abspath(_os.path.join(HERE, "..", "src")))
+            from brothersbe import evidence as ev
+            receipt = {"schemaVersion": "1.1", "generatorVersion": "x",
+                       "repository": "r", "baseCommit": None,
+                       "headCommit": "a" * 40,
+                       "argv": ["python3", "-c", "print('OK')"],
+                       "argvRedactions": 0,
+                       "startedAt": "2026-07-31T00:00:00Z",
+                       "endedAt": "2026-07-31T00:00:01Z",
+                       "startedAtEpoch": 1.0, "endedAtEpoch": 2.0,
+                       "durationSeconds": 1.0, "exitCode": 0,
+                       "toolVersions": {}, "environment": "test",
+                       "stdoutSha256": "0" * 64, "stderrSha256": "0" * 64,
+                       "stdoutBytes": 0, "stderrBytes": 0,
+                       "outputPolicy": "digests only",
+                       "workingTreeDirty": False, "workingTreeDetail": "",
+                       "ciRunId": None, "coveredFiles": ["x.py"],
+                       "coveredFilesSource": "declared"}
+            receipt["runId"] = ev.compute_seal(receipt)
+            _io = __import__("io")
+            _io.open(_os.path.join(evdir, "q.json"), "w").write(
+                _json.dumps(receipt))
+            found = work_mod._matching_receipt(
+                d, "python3 -c \"print('OK')\"", "a" * 40)
+            self.assertIsNotNone(
+                found["match"],
+                "the quoted plan text and the shell-split argv are the same "
+                "command and must bind: %r" % found)
+        finally:
+            import shutil as _sh
+            _sh.rmtree(d, ignore_errors=True)
+
+
 class TestNoMergeLaw(unittest.TestCase):
     """Source-level: nothing in the work code path ever runs git merge, rebase,
     push, or deploy (CHANGELOG and KNOWN-LIMITS both say deploy is guarded

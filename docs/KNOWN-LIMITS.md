@@ -768,3 +768,17 @@ no collision can hide, and two changes cannot hold an open task with the
 same id at the same time. A team-profile designRoots entry that resolves
 outside the repository is refused by name and never walked; discovery stays
 inside the tree it was asked about.
+
+
+## What the first external round taught converge and plan (2026-07-31)
+
+Receipt matching is shlex-canonical on both sides now, and detector kinds
+honor content patterns, both learned from foreign estates the hard way
+(docs/EXTERNAL-PROOF-2026-07-31.md). Two limits stay: converge SCOPE matches
+ownership by file path only, so a later range touching the same files for an
+unrelated reason still reads in scope (the deeper diff-content comparison is
+future work), and sbe plan does not re-check the tier's required-artifact
+list because sbe design owns that gate; run design before plan and CI runs
+both. sbe adopt still proposes this repository's own layout to foreign
+trees; the existence-filtered proposal is designed and lands with its suite
+rewrite, not before.
