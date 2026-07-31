@@ -10,6 +10,19 @@ it was pointed at.
 
 Read `${CLAUDE_PLUGIN_ROOT}/SKILL.md` first, then `${CLAUDE_PLUGIN_ROOT}/docs/SETUP.md`.
 
+## Run the proposal first
+
+Before inspecting anything by hand, run:
+
+```
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" adopt .
+```
+
+This is a dry run by default: it detects the stack and proposes the configuration without
+changing the repository. Read its output before doing anything else, it is the primary
+source the rest of this skill builds on. Reserve `--apply` for when the user explicitly asks
+to install the proposed configuration.
+
 ## What to inspect, in this order
 
 1. **Stack**: languages present, test runner, migration tool, CI system, whether a data

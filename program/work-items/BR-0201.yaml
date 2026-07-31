@@ -1,0 +1,43 @@
+id: BR-0201
+title: Guided project navigator, Claude slice
+why: >
+  A beginner needs one path into the product: start, get the next
+  recommended action, check status, and get help, without learning the
+  full command surface first. This item tracks the prompt-guided slice
+  shipped on the Claude host, and names what remains for a deterministic,
+  engine-backed navigator.
+owner: product-engineer
+reviewer: independent-reviewer
+status: partially done
+wave: guided-experience
+depends_on:
+  - BR-0000
+spec: docs/specs/2026-07-31-guided-layer.md
+acceptance:
+  - claude plugin validate . exits 0
+  - the four skills (start, next, status, help) each satisfy the one-action
+    contract on audit
+  - python3 evals/run_evals.py at or above the session baseline with 0
+    regressions
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: 2026-07-31
+completed_at: null
+evidence:
+  - "skills exist under skills/: start, next, status, help"
+  - "claude plugin validate . passed"
+  - "python3 evals/run_evals.py at commit 71f4d3f (2026-08-01 baseline): 521
+    evals, 0 regressions"
+  - "audit on 2026-08-01 confirmed all four skills satisfy the one-action
+    contract"
+  - "two skill wording fixes landed this train: adopt now runs its own
+    command, next explains in plain words first"
+risks:
+  - The shipped slice is prompt-guided (skills instructing the model), not
+    engine-backed. It depends on the model following the skill's wording
+    each run, not on a deterministic program.
+alerts:
+  - "The master plan's full BR-0202, a deterministic engine-backed next
+    command, remains open and unstarted. This item covers only the
+    prompt-guided slice above; the engine is separate, future work."

@@ -4,7 +4,16 @@ BrotherSBE is an engineering colleague for Claude Code that designs backend and 
 
 Why it is worth your time: install once, describe the outcome you want, then follow one recommended action at a time. You never memorize a command list, and nothing is claimed as done until a check has shown it.
 
-Install it in three commands: clone the repository anywhere, check the package before you trust it, then start Claude Code with the plugin loaded:
+Install it in two commands: add this repository as a marketplace source, then install the plugin from it.
+
+```bash
+claude plugin marketplace add khalilmaaouni/BrotherSBE
+claude plugin install brothersbe@brothersbe
+```
+
+That is the persistent install: it stays across sessions, and the pair was executed end to end against this public repository on 2026-08-01. Update it with `claude plugin update brothersbe` (restart to apply) and remove it with `claude plugin uninstall brothersbe`.
+
+Prefer to inspect the package before you trust it? Clone and validate first, then load it for one session only:
 
 ```bash
 git clone https://github.com/khalilmaaouni/BrotherSBE
@@ -12,13 +21,13 @@ claude plugin validate BrotherSBE
 claude --plugin-dir BrotherSBE
 ```
 
-The validate step must pass before you load anything. Adding the repository as a marketplace source works too; [docs/MIGRATION.md](docs/MIGRATION.md) covers both paths. Then, inside that session, make the one first move:
+The validate step must pass before you load anything, and `--plugin-dir` loads the plugin for that session only, not persistently the way the marketplace install does; [docs/MIGRATION.md](docs/MIGRATION.md) covers both paths. Either way, once the plugin is loaded, make the one first move:
 
 ```
 /brothersbe:start
 ```
 
-That command looks at where you are and takes it from there: a new project or one already in progress, it finds the right next step. Along the way, three guided companions in [`skills/`](skills/) keep you oriented: `/brothersbe:next` recommends exactly one next action, `/brothersbe:status` explains where you are in plain language, and `/brothersbe:help` lays out the whole map when you ask for it.
+That command looks at where you are and takes it from there: a new project or one already in progress, it finds the right next step. Along the way, three guided companions in [`skills/`](skills/) keep you oriented: `/brothersbe:next` recommends exactly one next action, `/brothersbe:status` explains where you are in plain language, and `/brothersbe:help` lays out the whole map when you ask for it. New to any of this? [The beginner explainer](docs/explainer/index.html) covers the same ground in plain language.
 
 ---
 
@@ -51,7 +60,7 @@ Two rules carry the design.
 
 ## The dossier
 
-A design engagement produces at most seven files in one directory. Templates with worked content are in [`templates/dossier/`](templates/dossier/).
+A design engagement produces at most eight files in one directory, seven dossier files plus the `00-intake.json` the intake writes into the same place. Templates with worked content are in [`templates/dossier/`](templates/dossier/).
 
 | File | Holds | Checked by |
 |---|---|---|
@@ -145,7 +154,14 @@ Validating plugin manifest: /path/to/BrotherSBE/.claude-plugin/plugin.json
 ✔ Validation passed
 ```
 
-That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). Distribution through an internal marketplace pinned to a signed release is not built yet, and is not claimed here.
+Once it validates, the persistent install is the marketplace pair, executed and verified on 2026-08-01:
+
+```bash
+claude plugin marketplace add khalilmaaouni/BrotherSBE
+claude plugin install brothersbe@brothersbe
+```
+
+That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). The public repository itself is the marketplace source today, verified working; a signed, directory-listed distribution is still ahead, see [docs/ROLLOUT.md](docs/ROLLOUT.md).
 
 Either way you install it, there is one command line over the nine script paths:
 

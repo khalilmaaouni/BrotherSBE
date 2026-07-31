@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrotherSBE, explained for beginners</title>
+<meta name="description" content="A plain-language guide to BrotherSBE: what it is, how to install it, and what it honestly does not do yet.">
+<style>
+  /* ---------- Tokens: light palette (default) ---------- */
+  :root {
+    --color-page: #FAF9F6;
+    --color-ink: #1F2933;
+    --color-muted: #52606D;
+    --color-accent: #0F766E;
+    --color-amber: #B45309;
+    --color-red: #B91C1C;
+
+    --font-display: "Iowan Old Style", Palatino, Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+    --ratio: 1.25;
+    --text-sm: 1rem;
+    --text-eyebrow: 0.8rem;
+    --text-md: 1.25rem;
+    --text-lg: 1.5625rem;
+    --text-xl: 1.953rem;
+    --text-2xl: 2.441rem;
+
+    --space-1: 0.5rem;
+    --space-2: 1rem;
+    --space-3: 1.5rem;
+    --space-4: 2.5rem;
+    --space-5: 4rem;
+    --space-6: 6rem;
+
+    --measure: 68ch;
+    --border: color-mix(in srgb, var(--color-ink) 14%, transparent);
+    --card-bg: color-mix(in srgb, var(--color-ink) 4%, var(--color-page));
+  }
+
+  /* ---------- Tokens: dark palette, system preference ---------- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-page: #161B22;
+      --color-ink: #E6EDF3;
+      --color-muted: #9BA7B4;
+      --color-accent: #2DD4BF;
+      --color-amber: #F59E0B;
+      --color-red: #F87171;
+    }
+  }
+
+  /* ---------- Tokens: explicit toggle wins over system preference, both ways ---------- */
+  :root[data-theme="dark"] {
+    --color-page: #161B22;
+    --color-ink: #E6EDF3;
+    --color-muted: #9BA7B4;
+    --color-accent: #2DD4BF;
+    --color-amber: #F59E0B;
+    --color-red: #F87171;
+  }
+  :root[data-theme="light"] {
+    --color-page: #FAF9F6;
+    --color-ink: #1F2933;
+    --color-muted: #52606D;
+    --color-accent: #0F766E;
+    --color-amber: #B45309;
+    --color-red: #B91C1C;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { font-size: 17px; }
+
+  body {
+    margin: 0;
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: 1.65;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-5) var(--space-2);
+    gap: var(--space-6);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  .page {
+    width: 100%;
+    max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h1 { font-size: var(--text-2xl); line-height: 1.15; }
+  h2 { font-size: var(--text-xl); line-height: 1.2; }
+  h3 { font-size: var(--text-md); line-height: 1.3; }
+
+  p { margin: 0; }
+
+  .eyebrow {
+    font-family: var(--font-body);
+    font-size: var(--text-eyebrow);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin: 0;
+  }
+
+  .muted { color: var(--color-muted); }
+
+  a {
+    color: var(--color-accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+
+  a:hover { text-decoration-thickness: 2px; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  header.hero {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  header.hero p.subtitle {
+    font-size: var(--text-md);
+    color: var(--color-muted);
+    max-width: var(--measure);
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  section > p, section > ul, section > ol {
+    max-width: var(--measure);
+  }
+
+  ul, ol {
+    margin: 0;
+    padding-left: 1.25em;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  code, pre {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  code {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font-size: 0.92em;
+  }
+
+  .code-chip {
+    display: inline-block;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: var(--space-2);
+    overflow-x: auto;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 1em;
+  }
+
+  .scroll-x {
+    overflow-x: auto;
+  }
+
+  .verified {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 640px) {
+    .card-grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: var(--space-3);
+  }
+
+  .card h3 code {
+    font-size: 0.85em;
+  }
+
+  .honest-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 640px) {
+    .honest-grid { grid-template-columns: 1fr; }
+  }
+
+  .refuse-list li::marker {
+    color: var(--color-red);
+  }
+
+  .gap-list li::marker {
+    color: var(--color-amber);
+  }
+
+  .diagram-svg {
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+    display: block;
+  }
+
+  footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    color: var(--color-muted);
+    font-size: 0.9em;
+  }
+
+  footer .nums {
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">A Claude Code plugin</p>
+    <h1>BrotherSBE</h1>
+    <p class="subtitle">An engineering colleague that designs before it builds and refuses to claim what it did not check.</p>
+  </header>
+
+  <section id="what-it-is">
+    <h2>What it is</h2>
+    <p>BrotherSBE runs inside Claude Code, the terminal-based coding assistant that Anthropic makes. You do not learn a new tool or a new syntax. You describe the outcome you want, in ordinary language, the way you would explain it to a colleague sitting next to you.</p>
+    <p>From there, BrotherSBE sizes the risk (how much could go wrong if the change is made carelessly), asks for design work in proportion to that risk (a one-line fix gets none, a change to something central gets a real plan first), and then proves the result with checks that actually ran on your machine, not ones it remembers running from before. Where it could not check something, it says <strong>NO-DATA</strong>, meaning no evidence either way, instead of quietly assuming the best.</p>
+  </section>
+
+  <section id="install">
+    <h2>Install in two commands</h2>
+    <div class="scroll-x">
+      <pre><code>claude plugin marketplace add khalilmaaouni/BrotherSBE
+claude plugin install brothersbe@brothersbe</code></pre>
+    </div>
+    <p><span class="verified">Verified working on <span class="nums">2026-08-01</span>.</span> To update later, run <code>claude plugin update brothersbe</code>.</p>
+    <p class="muted">Prefer to look before you trust? Clone the repository and run <code>claude plugin validate BrotherSBE</code> first.</p>
+  </section>
+
+  <section id="first-project">
+    <h2>Your first project</h2>
+    <p>Open Claude Code in any project and type:</p>
+    <p><code class="code-chip">/brothersbe:start</code></p>
+    <p>That one command is the only one you truly need. It is part of a guided set of four:</p>
+    <div class="card-grid">
+      <article class="card">
+        <h3><code>/brothersbe:start</code></h3>
+        <p>Begin or resume. It finds where you are, so you never have to hunt for it yourself.</p>
+      </article>
+      <article class="card">
+        <h3><code>/brothersbe:next</code></h3>
+        <p>Exactly one recommended action, and why it is the right one right now.</p>
+      </article>
+      <article class="card">
+        <h3><code>/brothersbe:status</code></h3>
+        <p>Where things stand, in plain words, with nothing left to decode.</p>
+      </article>
+      <article class="card">
+        <h3><code>/brothersbe:help</code></h3>
+        <p>The whole map, for when you want to see everything at once.</p>
+      </article>
+    </div>
+    <p class="muted">You never have to memorize the machinery. Just take one action at a time.</p>
+  </section>
+
+  <section id="lifecycle">
+    <h2>How a change moves through it</h2>
+    <p>Every change, big or small, passes through the same six stops:</p>
+    <div class="scroll-x">
+      <svg class="diagram-svg" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lifecycle diagram: describe the outcome, size the risk, design in proportion, build against the design, prove with real checks, a person decides the merge.">
+        <style>
+          .node-box { fill: none; stroke: var(--color-accent); stroke-width: 2; }
+          .node-num { fill: var(--color-accent); }
+          .node-num-text { fill: var(--color-page); font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; text-anchor: middle; }
+          .node-label { fill: var(--color-ink); font-family: system-ui, sans-serif; font-size: 14px; text-anchor: middle; }
+          .arrow { stroke: var(--color-muted); stroke-width: 2; fill: none; }
+          .arrow-head { fill: var(--color-muted); }
+        </style>
+
+        <!-- boxes: x=0,154,308,462,616,770 width=130 height=90 y=65 -->
+        <g>
+          <rect class="node-box" x="0" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="18" cy="65" r="12"></circle>
+          <text class="node-num-text" x="18" y="70">1</text>
+          <text class="node-label" x="65" y="108"><tspan x="65" dy="0">Describe</tspan><tspan x="65" dy="18">the outcome</tspan></text>
+        </g>
+
+        <g>
+          <rect class="node-box" x="154" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="172" cy="65" r="12"></circle>
+          <text class="node-num-text" x="172" y="70">2</text>
+          <text class="node-label" x="219" y="108"><tspan x="219" dy="0">Size the</tspan><tspan x="219" dy="18">risk</tspan></text>
+        </g>
+
+        <g>
+          <rect class="node-box" x="308" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="326" cy="65" r="12"></circle>
+          <text class="node-num-text" x="326" y="70">3</text>
+          <text class="node-label" x="373" y="108"><tspan x="373" dy="0">Design in</tspan><tspan x="373" dy="18">proportion</tspan></text>
+        </g>
+
+        <g>
+          <rect class="node-box" x="462" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="480" cy="65" r="12"></circle>
+          <text class="node-num-text" x="480" y="70">4</text>
+          <text class="node-label" x="527" y="108"><tspan x="527" dy="0">Build against</tspan><tspan x="527" dy="18">the design</tspan></text>
+        </g>
+
+        <g>
+          <rect class="node-box" x="616" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="634" cy="65" r="12"></circle>
+          <text class="node-num-text" x="634" y="70">5</text>
+          <text class="node-label" x="681" y="108"><tspan x="681" dy="0">Prove with</tspan><tspan x="681" dy="18">real checks</tspan></text>
+        </g>
+
+        <g>
+          <rect class="node-box" x="770" y="65" width="130" height="90" rx="10"></rect>
+          <circle class="node-num" cx="788" cy="65" r="12"></circle>
+          <text class="node-num-text" x="788" y="70">6</text>
+          <text class="node-label" x="835" y="100"><tspan x="835" dy="0">A person</tspan><tspan x="835" dy="18">decides the</tspan><tspan x="835" dy="18">merge</tspan></text>
+        </g>
+
+        <!-- arrows between boxes, y=110 -->
+        <g class="arrow">
+          <line x1="130" y1="110" x2="150" y2="110"></line>
+          <line x1="284" y1="110" x2="304" y2="110"></line>
+          <line x1="438" y1="110" x2="458" y2="110"></line>
+          <line x1="592" y1="110" x2="612" y2="110"></line>
+          <line x1="746" y1="110" x2="766" y2="110"></line>
+        </g>
+        <g class="arrow-head">
+          <polygon points="150,110 141,105 141,115"></polygon>
+          <polygon points="304,110 295,105 295,115"></polygon>
+          <polygon points="458,110 449,105 449,115"></polygon>
+          <polygon points="612,110 603,105 603,115"></polygon>
+          <polygon points="766,110 757,105 757,115"></polygon>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <section id="honest">
+    <h2>What makes it honest</h2>
+    <div class="honest-grid">
+      <article class="card">
+        <h3>NO-DATA is never a pass</h3>
+        <p>Missing evidence gets named out loud, not quietly folded into a passing result.</p>
+      </article>
+      <article class="card">
+        <h3>Evidence comes from running it</h3>
+        <p>Every check is generated by actually running the command, never typed from memory.</p>
+      </article>
+      <article class="card">
+        <h3>Nothing merges itself</h3>
+        <p>A person always holds the final decision to merge a change.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="wont-do">
+    <h2>What it will not do</h2>
+    <ul class="refuse-list">
+      <li>No auto-merge, ever.</li>
+      <li>No changes to a live production system.</li>
+      <li>No invented numbers standing in for a real result.</li>
+      <li>No green checkmark without a command that ran after the last edit.</li>
+    </ul>
+  </section>
+
+  <section id="not-there-yet">
+    <h2>Honestly not there yet</h2>
+    <p>Some things worth knowing before you rely on this:</p>
+    <ul class="gap-list">
+      <li>Not yet listed in Claude's official plugin directory. Installing means running the two commands above, not clicking install in a store.</li>
+      <li>Claude Code is the only supported host today. Other AI coding tools are planned but not shipped.</li>
+      <li>Releases are not yet signed, and the current tag (a labeled release point) lags behind the main branch (the most current, actively developed version).</li>
+      <li>No outside beginner studies have been run yet.</li>
+    </ul>
+    <p class="muted">BrotherSBE's own rulebook is what insists these gaps get said out loud this early. It would rather list them than let you find them the hard way.</p>
+  </section>
+
+  <section id="go-deeper">
+    <h2>Go deeper</h2>
+    <ul>
+      <li><a href="../../README.md">The full README</a></li>
+      <li><a href="../guides/05-a-worked-engagement.md">A worked engagement, start to finish</a></li>
+      <li><a href="../CLI.md">The command line reference</a></li>
+      <li><a href="../book/">The illustrated book</a></li>
+    </ul>
+  </section>
+
+  <footer>
+    <p><span class="nums">BrotherSBE 1.0.0-rc.1</span>. Page generated <span class="nums">2026-08-01</span>. MIT license.</p>
+  </footer>
+
+</div>
+</body>
+</html>

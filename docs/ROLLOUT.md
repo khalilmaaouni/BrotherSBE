@@ -100,15 +100,13 @@ never need anything beyond the tree itself:
 - `scripts/test-upgrade-rollback.sh`: finds the most recent tag that is an
   ancestor of `HEAD`, installs it fresh, upgrades to `HEAD` fresh, then rolls
   back to that same tag fresh, verifying with `scripts/verify-install.sh` at
-  every step. **As of this wave, this repository has cut no tag yet**
-  (`docs/RELEASE.md`: steps 5 and 6, tagging and pushing, have never been
-  executed; `main` at commit `1c86c9d` predates tagging entirely), so on this
-  repository today the script finds no previous tag, prints a NO-DATA
-  sentence naming that reason, and exits 0 without ever claiming an upgrade
-  was tested. `tools/test_sbe.py` does not assert this NO-DATA behavior
-  (that assertion lives in the two scripts' own calibration, run directly);
-  once a first tag exists, this script starts exercising the real path
-  automatically, with no code change required.
+  every step. **Tag `v1.0.0-rc.1` exists** (commit `dacee900`, cut and
+  published 2026-07-31), and it sits behind `main`, which by now carries the
+  guided skills the tag predates. So the script today finds that previous tag
+  and exercises the real upgrade and rollback path, not the NO-DATA case;
+  pinning to the tag today means missing the guided skills until a fresh tag
+  is cut. `tools/test_sbe.py` does not assert this behavior (that assertion
+  lives in the two scripts' own calibration, run directly).
 
 For an adopting organization, once a tag exists to pin to:
 

@@ -1,0 +1,46 @@
+id: BR-0301
+title: Install path, marketplace primary
+why: >
+  A person installing this product for the first time needs one documented
+  path that has actually been run end to end, not several plausible ones.
+  This item tracks making the marketplace install the primary, verified
+  path across the install docs, and naming what has not been done yet
+  toward a public release.
+owner: product-engineer
+reviewer: independent-reviewer
+status: partially done
+wave: release-readiness
+depends_on:
+  - BR-0000
+spec: docs/specs/2026-07-31-guided-layer.md
+acceptance:
+  - README, docs/SETUP.md, docs/ROLLOUT.md, docs/RELEASE.md document only
+    install paths that were actually executed
+  - the marketplace add plus install pair succeeds end to end in an
+    isolated config directory
+  - scripts/test-install-artifact.sh passes for the commit under test
+acceptance_notes: >
+  Acceptance criteria for this item are being finalized alongside the wave
+  5 install-artifact work; the two checks above are the ones exercised this
+  train.
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: 2026-07-31
+completed_at: null
+evidence:
+  - "README, docs/SETUP.md, docs/ROLLOUT.md, docs/RELEASE.md now document
+    only executed install paths this train"
+  - "the two-command marketplace install from the public repository
+    succeeded end to end in an isolated config directory on 2026-08-01:
+    marketplace add exit 0, install exit 0, plugin listed 1.0.0-rc.1
+    enabled, content verified at main head 71f4d3f with all ten skills"
+  - "scripts/test-install-artifact.sh PASSED for HEAD 71f4d3f"
+risks:
+  - Verification ran against main at 71f4d3f in an isolated config
+    directory, not against a tagged release artifact.
+alerts:
+  - "Not started: official directory listing submission."
+  - "Not resolved: tag v1.0.0-rc.1 lags main by 9 commits; a fresh tag
+    decision is pending with the product owner."
+  - "Not started: signed artifacts and SBOM."
