@@ -492,6 +492,20 @@ def _cmd_work(args):
     from . import work as work_mod
     return work_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                          exit_usage=EXIT_USAGE)
+def _cmd_explain(args):
+    """Browse a decision package, or regenerate one from the shipped registry.
+
+    Not a delegation: like `evidence`, `task` and `work`, there is no tool in
+    `tools/` behind it. It READS the decision store; the only file it can create
+    is a NEW package under the next id, written through the one writer in
+    `brothersbe.decisions`, which refuses to overwrite a package bound to a
+    different commit.
+    """
+    from . import decisions as decisions_mod
+    return decisions_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                              exit_usage=EXIT_USAGE)
+
+
 def _cmd_pr(args):
     """Pull-request surfaces, `verify` first. Not a delegation: like `evidence`,
     `task` and `work`, there is no tool in `tools/` behind it. The read-only
@@ -761,6 +775,9 @@ COMMANDS = [
                  "scope, contracts, data, architecture, verification", _cmd_converge),
     ("pr", "pull-request surfaces: pr verify <number> --repo owner/name checks live "
            "GitHub approval evidence, bound to the head commit", _cmd_pr),
+    ("explain", "print the decision package for a decision id, or for a gate or check name, "
+                "regenerating one from the shipped registry when no run has written it",
+     _cmd_explain),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",
@@ -786,7 +803,7 @@ COMMANDS = [
 #: refused by that same parser with a nonzero exit.
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
-    "evidence", "task", "work", "pr"))
+    "evidence", "task", "work", "pr", "explain"))
 
 
 def build_parser():

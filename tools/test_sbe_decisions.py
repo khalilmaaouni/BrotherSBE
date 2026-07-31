@@ -475,5 +475,131 @@ class TestOtherTriggers(unittest.TestCase):
         self.assertIn("decision package written", result["stderr"])
 
 
+class TestExplain(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-explain-")
+        _git_repo(self.tmp)
+
+    def _store(self):
+        return os.path.join(self.tmp, ".sbe", "decisions")
+
+    def _packages(self):
+        store = self._store()
+        return sorted(os.listdir(store)) if os.path.isdir(store) else []
+
+    def test_explaining_a_check_with_no_run_regenerates_and_says_no_data(self):
+        result = _run([sys.executable, SBE, "explain", "numbers"], cwd=self.tmp)
+        self.assertEqual(result["code"], 0, result["stderr"])
+        self.assertIn("NO-DATA", result["stdout"])
+        self.assertIn("gate_numbers", result["stdout"])
+        # The bare NO-DATA above is satisfied by the flowchart alone, which
+        # carries the word for its own reasons. These two hold the sentence this
+        # fixture is actually about: the VERDICT of a regenerated package is
+        # NO-DATA, and the package says it was regenerated rather than decided.
+        self.assertIn("- verdict recorded by the run: NO-DATA", result["stdout"])
+        self.assertIn("REGENERATED", result["stdout"])
+
+    def test_an_unknown_name_is_refused_by_name_and_never_an_empty_package(self):
+        result = _run([sys.executable, SBE, "explain", "not-a-real-check"], cwd=self.tmp)
+        self.assertEqual(result["code"], 2)
+        self.assertIn("not-a-real-check", result["stdout"] + result["stderr"])
+        self.assertEqual(self._packages(), [],
+                         "a name no registry declares must leave no package behind")
+
+    def test_a_package_bound_to_another_commit_is_superseded_never_overwritten(self):
+        first = decisions_mod.write_package(
+            self.tmp, decisions_mod.build_package(
+                self.tmp, {"kind": "gate", "check": "numbers", "verdict": "FAIL",
+                           "verdictLine": "numbers FAIL x", "otherLines": [],
+                           "dossier": None}))
+        with io.open(os.path.join(self.tmp, "seed.txt"), "a", encoding="utf-8") as fh:
+            fh.write("second\n")
+        subprocess.run(["git", "-C", self.tmp, "commit", "-aqm", "second"], check=True)
+        second = decisions_mod.write_package(
+            self.tmp, decisions_mod.build_package(
+                self.tmp, {"kind": "gate", "check": "numbers", "verdict": "FAIL",
+                           "verdictLine": "numbers FAIL x", "otherLines": [],
+                           "dossier": None}))
+        self.assertNotEqual(first, second)
+        self.assertTrue(os.path.isfile(first), "the older package still exists")
+        self.assertIn("supersedes", io.open(second, encoding="utf-8").read())
+
+    def test_writing_over_a_package_bound_to_another_commit_is_refused_by_name(self):
+        """The task's hard constraint, held directly rather than as a side
+        effect of id allocation. The fixture above cannot reach it: two packages
+        get two ids and therefore two paths, so the refusal never fires. This
+        one aims the second package at the first one's directory, which is what
+        a caller reusing a directory would do, and the write must refuse naming
+        BOTH commits rather than replacing a record of a different program."""
+        trigger = {"kind": "gate", "check": "numbers", "verdict": "FAIL",
+                   "verdictLine": "numbers FAIL x", "otherLines": [], "dossier": None}
+        first = decisions_mod.build_package(self.tmp, trigger)
+        path = decisions_mod.write_package(self.tmp, first)
+        before = io.open(path, "rb").read()
+        with io.open(os.path.join(self.tmp, "seed.txt"), "a", encoding="utf-8") as fh:
+            fh.write("second\n")
+        subprocess.run(["git", "-C", self.tmp, "commit", "-aqm", "second"], check=True)
+        second = decisions_mod.build_package(self.tmp, trigger)
+        second["dir"] = first["dir"]
+        with self.assertRaises(decisions_mod.DecisionUnwritable) as caught:
+            decisions_mod.write_package(self.tmp, second)
+        self.assertIn(first["boundCommit"], str(caught.exception))
+        self.assertIn(second["boundCommit"], str(caught.exception))
+        self.assertEqual(io.open(path, "rb").read(), before,
+                         "the refused write still changed the file")
+
+    # The fixtures below are not in the plan. They hold the sentences Task 5
+    # makes in prose and would otherwise be held by nobody: that regenerating
+    # twice at one head does not spray ids across the store, that a decision id
+    # browses the package it names, and that a regenerate against a NEW head
+    # leaves the older package byte for byte where it was.
+
+    def test_a_second_explain_at_the_same_head_prints_what_it_already_wrote(self):
+        first = _run([sys.executable, SBE, "explain", "numbers"], cwd=self.tmp)
+        self.assertEqual(first["code"], 0, first["stderr"])
+        after_first = self._packages()
+        self.assertEqual(len(after_first), 1, after_first)
+        second = _run([sys.executable, SBE, "explain", "numbers"], cwd=self.tmp)
+        self.assertEqual(second["code"], 0, second["stderr"])
+        self.assertEqual(self._packages(), after_first,
+                         "a second explain at the same head allocated a second id")
+        self.assertIn("gate_numbers", second["stdout"])
+
+    def test_a_decision_id_browses_that_package_and_an_unknown_id_is_refused(self):
+        seeded = _run([sys.executable, SBE, "explain", "numbers"], cwd=self.tmp)
+        self.assertEqual(seeded["code"], 0, seeded["stderr"])
+        found = _run([sys.executable, SBE, "explain", "001"], cwd=self.tmp)
+        self.assertEqual(found["code"], 0, found["stderr"])
+        self.assertIn("Decision 001", found["stdout"])
+        missing = _run([sys.executable, SBE, "explain", "042"], cwd=self.tmp)
+        self.assertEqual(missing["code"], 2)
+        self.assertIn("042", missing["stdout"] + missing["stderr"])
+
+    def test_a_regenerate_at_a_new_head_leaves_the_older_package_byte_for_byte(self):
+        """The whole refusal this task exists for, held through the CLI rather
+        than through the writer: a package records what somebody decided about
+        the program at its own commit, so a regenerate allocates the next id and
+        the file bound to the older commit is not touched at all."""
+        self.assertEqual(_run([sys.executable, SBE, "explain", "numbers"],
+                              cwd=self.tmp)["code"], 0)
+        names = self._packages()
+        self.assertEqual(len(names), 1, names)
+        older = os.path.join(self._store(), names[0], "DECISION.md")
+        before = io.open(older, "rb").read()
+        with io.open(os.path.join(self.tmp, "seed.txt"), "a", encoding="utf-8") as fh:
+            fh.write("second\n")
+        subprocess.run(["git", "-C", self.tmp, "commit", "-aqm", "second"], check=True)
+        again = _run([sys.executable, SBE, "explain", "numbers"], cwd=self.tmp)
+        self.assertEqual(again["code"], 0, again["stderr"])
+        self.assertEqual(io.open(older, "rb").read(), before,
+                         "the package bound to the older commit was rewritten")
+        names = self._packages()
+        self.assertEqual(len(names), 2, names)
+        newer = io.open(os.path.join(self._store(), names[1], "DECISION.md"),
+                        encoding="utf-8").read()
+        self.assertIn("supersedes", newer)
+        self.assertIn(names[0][:3], newer, "the new package must name the id it supersedes")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
