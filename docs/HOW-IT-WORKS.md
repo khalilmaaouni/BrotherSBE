@@ -329,6 +329,12 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
       # than a gate: a fixture no merge runs cannot stop anything.
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
+      - name: Replay detail on failure (which excerpt blocks differ, and how)
+        if: failure()
+        run: |
+          python3 --version
+          python3 evals/replay_book.py || true
+          python3 evals/replay_guide05.py || true
       - name: Honesty meta-test (no check may PASS over evidence it never examined)
         run: |
           python3 evals/test_no_data_class.py
