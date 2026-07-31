@@ -65,8 +65,9 @@ a check registry. Where a caller wants two things it reads two keys off one
 dict. Stated here so the next writer does not reintroduce it.
 
 Nothing here constructs a git merge, rebase, push or deploy. The only git this
-module runs is `rev-parse`, through the `impact._git` helper the rest of the
-package already uses rather than a second copy of the plumbing. Reading the
+module runs is `rev-parse` and, for `sbe lineage`, a read of `git log
+--follow`, both through the `impact._git` helper the rest of the package
+already uses rather than a second copy of the plumbing. Reading the
 deciding code and drawing the flowchart start NO process at all: they import
 the shipped registries and read source files with `inspect`, and
 `tools/test_sbe_decisions.py::
@@ -1683,6 +1684,367 @@ def explain(root, target):
             "problem": "", "text": "%s\n\n%s" % ("\n".join(header), render_package(package))}
 
 
+# ---------------------------------------------------------------------------
+# `sbe lineage <artifact>`: the chain for one artifact, oldest to newest, one
+# line per hop, an evidence pointer on every hop.
+#
+# THIS SURFACE ONLY READS. It consults, in this order: the task registry for
+# the binding that claimed the path, the evidence store for every receipt whose
+# coveredFiles names the artifact, the decision store for packages naming it,
+# the notes store, and `git log --follow` for commits and authors. Every store
+# it cannot read, and every store that is absent, renders ONE hop of kind
+# NO-DATA naming the store and what would fill it: an absent store is never a
+# silently shorter chain. Nothing here re-derives a rule the owning module
+# already states: `tasks.load_registry` reads the registry, `evidence.load` and
+# `evidence.verify` read and judge the receipts, `list_packages` reads the
+# decision store, and `impact._git` runs the one git read.
+# ---------------------------------------------------------------------------
+
+#: Where notes on an artifact will live once `notes.py` ships in Loop 4. Spelled
+#: here so the NO-DATA hop for the store names the same place that module will
+#: read, rather than a path remembered differently on each side.
+NOTES_REL = os.path.join(".sbe", "notes")
+
+#: The written-at header line `render_package` writes, read back for a decision
+#: hop's timestamp. The same writer-and-reader pairing as the prefixes above.
+_WRITTEN_AT_RE = re.compile(r"^- written at: (\S+)", re.M)
+
+
+def _hop(when, kind, summary, evidence):
+    """ONE lineage hop, as ONE dict with keys `when`, `kind`, `summary` and
+    `evidence`. Four named keys, never a tuple. `evidence` is the file, receipt
+    path, commit sha or decision package a reader can open, and no caller may
+    hand an empty one: a hop with no pointer proves nothing."""
+    return {"when": when, "kind": kind, "summary": summary, "evidence": evidence}
+
+
+def _same_artifact(recorded, artifact):
+    """Whether a recorded path and the asked-for artifact name the same file,
+    by normalized exact equality. Deliberately narrow: a substring match here
+    would claim receipts about `seed.txt.bak` as evidence about `seed.txt`."""
+    return os.path.normpath(str(recorded or "")) == os.path.normpath(str(artifact or ""))
+
+
+def _lineage_binding(top, artifact):
+    """The task-registry hops: which binding claimed this path, as ONE dict
+    with keys `present` and `hops`. The overlap question is answered by
+    `tasks.claims_overlap`, the same rule `sbe task check` runs, never by a
+    second spelling of it here."""
+    from . import tasks as tasks_mod
+    registry = tasks_mod.registry_path(top)
+    rel = os.path.relpath(registry, top)
+    if not os.path.exists(registry):
+        return {"present": False, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: no task registry exists at %s, so which binding claimed %s was never "
+            "recorded. `sbe task open --owns %s` is what writes that record."
+            % (rel, artifact, artifact), registry)]}
+    try:
+        data = tasks_mod.load_registry(top)
+    except tasks_mod.RegistryUnusable as exc:
+        return {"present": True, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: the task registry at %s could not be read (%s), so which binding "
+            "claimed %s is unknown here. Nothing in this chain says nobody held it."
+            % (rel, exc, artifact), registry)]}
+    hops = []
+    records = data.get("tasks") or []
+    for record in records:
+        owned = [str(p) for p in (record.get("ownedPaths") or [])
+                 if tasks_mod.claims_overlap(str(p), artifact, top)]
+        if not owned:
+            continue
+        hops.append(_hop(
+            str(record.get("openedAt") or ""), "task-binding",
+            "task %s (role %s, status %s) claimed %s under its declared path(s): %s"
+            % (record.get("id") or "(no id)", record.get("role") or "(none)",
+               record.get("status") or "(none)", artifact, ", ".join(owned)),
+            "%s, task record %s" % (rel, record.get("id") or "(no id)")))
+    if not hops:
+        hops.append(_hop(
+            "", "NO-DATA",
+            "NO-DATA: %s holds %d task record(s) and none claims %s, so no binding ever "
+            "fenced this artifact. `sbe task open --owns %s` would."
+            % (rel, len(records), artifact, artifact), registry))
+    return {"present": True, "hops": hops}
+
+
+def _lineage_receipts(top, artifact):
+    """The evidence-store hops, as ONE dict with keys `present` and `hops`.
+
+    Every receipt whose coveredFiles names the artifact becomes one hop. A
+    receipt that fails `evidence.verify` is a hop of kind `broken-receipt`
+    with FAIL in its summary and it STAYS VISIBLE: a broken claim is a
+    finding, never a gap. A receipt this run could not read at all is a
+    NO-DATA hop naming the path, because whether it covers the artifact is
+    exactly what could not be read."""
+    from . import evidence as evidence_mod
+    from . import tasks as tasks_mod
+    store = os.path.join(top, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    rel_store = os.path.relpath(store, top)
+    if not os.path.isdir(store):
+        return {"present": False, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: no evidence store exists at %s, so no receipt names %s. `bin/sbe "
+            "evidence run -- <command>` writes one per run." % (rel_store, artifact),
+            store)]}
+    paths = []
+    for dirpath, _dirnames, filenames in os.walk(store):
+        for filename in filenames:
+            if filename.endswith(".json"):
+                paths.append(os.path.join(dirpath, filename))
+    paths.sort()
+    hops = []
+    named = 0
+    for full in paths:
+        rel = os.path.relpath(full, top)
+        try:
+            receipt = evidence_mod.load(full)
+        except evidence_mod.ReceiptUnreadable as exc:
+            hops.append(_hop(
+                "", "NO-DATA",
+                "NO-DATA: receipt %s could not be read (%s), so whether it covers %s is "
+                "unknown and this chain may be missing a run." % (rel, exc, artifact),
+                full))
+            continue
+        covered = [entry.get("path") for entry in (receipt.get("coveredFiles") or [])
+                   if isinstance(entry, dict) and entry.get("path")]
+        if not any(_same_artifact(path, artifact) for path in covered):
+            continue
+        named += 1
+        judged = evidence_mod.verify(full, cwd=top)
+        when = str(receipt.get("endedAt") or receipt.get("startedAt") or "")
+        argv_text = " ".join(str(a) for a in (receipt.get("argv") or []))
+        if judged["verdict"] == "FAIL":
+            hops.append(_hop(
+                when, "broken-receipt",
+                "receipt %s covers %s and verifies FAIL (%s); it stays visible, because a "
+                "broken claim is a finding and never a gap"
+                % (rel, artifact, "; ".join(judged["reasons"])), full))
+        else:
+            hops.append(_hop(
+                when, "receipt",
+                "receipt %s covers %s: verify says %s over the run `%s`, exit code %s"
+                % (rel, artifact, judged["verdict"], argv_text or "(argv not recorded)",
+                   receipt.get("exitCode")), full))
+    if named == 0:
+        hops.append(_hop(
+            "", "NO-DATA",
+            "NO-DATA: %d receipt(s) under %s and none names %s in its coveredFiles, so no "
+            "recorded run is bound to this artifact. `bin/sbe evidence run --covers %s -- "
+            "<command>` would bind one." % (len(paths), rel_store, artifact, artifact),
+            store))
+    return {"present": True, "hops": hops}
+
+
+def _lineage_decisions(root, top, artifact):
+    """The decision-store hops, as ONE dict with keys `present` and `hops`.
+
+    The store is the one `package_location` names for this root, the same rule
+    the writers and `sbe explain` use. A package names the artifact when its
+    own body carries the path, which is stated as the substring test it is:
+    a package quotes one verdict line and composed detail lines, and the
+    artifact a decision was about appears in those or not at all. Every store
+    problem `list_packages` found is forwarded as a NO-DATA hop rather than
+    dropped, because a package nobody could read may be exactly the one that
+    names this artifact."""
+    location = package_location(top, root)
+    store = location["dir"]
+    if not os.path.isdir(store):
+        return {"present": False, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: no decision store exists at %s, so no decision package names %s. A "
+            "gate FAIL, a WAIVED check, a tier decision or a forced close is what writes "
+            "one." % (store, artifact), store)]}
+    listing = list_packages(store)
+    hops = [_hop("", "NO-DATA", problem, store) for problem in listing["problems"]]
+    named = 0
+    for package in listing["packages"]:
+        try:
+            with io.open(package["path"], encoding="utf-8") as fh:
+                body = fh.read()
+        except (OSError, ValueError) as exc:
+            hops.append(_hop(
+                "", "NO-DATA",
+                "NO-DATA: decision package %s could not be read (%s), so whether it names "
+                "%s is unknown." % (package["path"], exc, artifact), package["path"]))
+            continue
+        if artifact not in body:
+            continue
+        named += 1
+        stamp = _WRITTEN_AT_RE.search(body)
+        hops.append(_hop(
+            stamp.group(1) if stamp else "", "decision",
+            "decision %s (%s) names %s; check %s, bound to commit %s"
+            % (package["id"], package["dirName"], artifact,
+               package["check"] or "(unnamed)", package["commit"] or "(unresolved)"),
+            package["path"]))
+    if named == 0:
+        hops.append(_hop(
+            "", "NO-DATA",
+            "NO-DATA: %d decision package(s) under %s and none names %s, so no recorded "
+            "decision is bound to this artifact."
+            % (len(listing["packages"]), store, artifact), store))
+    return {"present": True, "hops": hops}
+
+
+def _lineage_notes(top, artifact):
+    """The notes hop, as ONE dict with keys `present` and `hops`. Exactly one
+    hop, and in this loop it is always NO-DATA: the notes store is absent by
+    design, `notes.py` ships in Loop 4, and a named absence is never a dropped
+    hop and never silence."""
+    key = _slug(artifact, "artifact")
+    store = os.path.join(top, NOTES_REL, key)
+    rel_store = ".sbe/notes/%s/" % key
+    present = os.path.isdir(store)
+    if present:
+        summary = ("NO-DATA: %s exists on disk and no notes reader ships in this loop, so "
+                   "whatever it holds was not read. The notes store is absent from this "
+                   "loop by design: notes.py ships in Loop 4 and is what would fill this "
+                   "hop." % rel_store)
+    else:
+        summary = ("NO-DATA: the notes store %s is absent in this loop by design (notes.py "
+                   "ships in Loop 4), so no note on %s was read. That store is what would "
+                   "fill this hop." % (rel_store, artifact))
+    return {"present": present, "hops": [_hop("", "notes-NO-DATA", summary, store)]}
+
+
+def _lineage_commits(top, artifact):
+    """The commit hops, read through the existing `_git` helper, as ONE dict
+    with keys `present` and `hops`. A repository git cannot answer for
+    produces one NO-DATA hop naming that, never a silently shorter chain, and
+    so does a history in which no commit ever touched the artifact."""
+    try:
+        code, out, err = _git(
+            ["log", "--follow", "--format=%H%x1f%at%x1f%an", "--", artifact], top)
+    except OSError as exc:
+        return {"present": False, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: git could not be run in %s (%s), so no commit history for %s was "
+            "read. Nothing here says the chain is short." % (top, exc, artifact), top)]}
+    if code != 0:
+        return {"present": False, "hops": [_hop(
+            "", "NO-DATA",
+            "NO-DATA: git log --follow cannot answer for %s in %s (%s), so the commit "
+            "chain was not read. Nothing here says the chain is short."
+            % (artifact, top, err.strip() or "no error text"), top)]}
+    hops = []
+    for line in out.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 3:
+            hops.append(_hop(
+                "", "NO-DATA",
+                "NO-DATA: one line of git log output did not parse into sha, date and "
+                "author, so one commit in this chain is unreadable here.", top))
+            continue
+        sha, epoch, author = parts
+        try:
+            when = _iso(int(epoch))
+        except ValueError:
+            when = ""
+        hops.append(_hop(when, "commit",
+                         "commit %s by %s touched %s" % (sha[:12], author, artifact), sha))
+    if not hops:
+        hops.append(_hop(
+            "", "NO-DATA",
+            "NO-DATA: git log --follow names no commit touching %s in this repository, so "
+            "either it was never committed here or it lives under another name. A commit "
+            "that adds it is what would fill this hop." % artifact, top))
+    return {"present": True, "hops": hops}
+
+
+def lineage(root, artifact):
+    """The chain for one artifact, as ONE dict with keys `artifact`, `hops`
+    and `notes`. Never a pair.
+
+    Each hop carries `when`, `kind`, `summary` and `evidence` (the file,
+    receipt path, commit sha or decision package a reader can open), sorted
+    oldest to newest; hops nothing dated sort after every dated one rather
+    than being guessed a place in time. The last note states how many stores
+    were consulted, read and absent, and the renderer prints it as the final
+    line, so a chain read over a half-missing estate says so on its face.
+    """
+    root = os.path.abspath(root)
+    name = " ".join(str(artifact or "").split())
+    top_result = repo_top_of(root)
+    top = top_result["top"]
+    notes = []
+    if top_result["note"]:
+        notes.append(top_result["note"])
+    results = [
+        _lineage_binding(top, name),
+        _lineage_receipts(top, name),
+        _lineage_decisions(root, top, name),
+        _lineage_notes(top, name),
+        _lineage_commits(top, name),
+    ]
+    hops = []
+    read = 0
+    for result in results:
+        hops.extend(result["hops"])
+        if result["present"]:
+            read += 1
+    # "~" sorts after every ISO timestamp, so undated hops land at the end in
+    # scan order rather than being guessed a place in time.
+    hops.sort(key=lambda hop: hop["when"] or "~")
+    notes.append("%d store(s) were consulted for this chain: %d read and %d absent. An "
+                 "absent store is a NO-DATA hop above, never a shorter chain."
+                 % (len(results), read, len(results) - read))
+    return {"artifact": name, "hops": hops, "notes": notes}
+
+
+def render_lineage(data):
+    """The chain as the text a human reads: one line per hop, oldest to
+    newest, the evidence pointer on the same line, and the store count last."""
+    out = ["sbe lineage: %s, oldest to newest, one line per hop\n"
+           % (data["artifact"] or "(no artifact named)")]
+    for hop in data["hops"]:
+        out.append("%s  %-14s %s [evidence: %s]\n"
+                   % (hop["when"] or "(no timestamp)   ", hop["kind"], hop["summary"],
+                      hop["evidence"]))
+    for note in data["notes"]:
+        out.append("%s\n" % note)
+    return "".join(out)
+
+
+def _lineage_parser():
+    parser = argparse.ArgumentParser(
+        prog="sbe lineage",
+        description="Walk the chain for one artifact, oldest to newest: the binding that "
+                    "claimed it, every receipt covering it, every decision package naming "
+                    "it, notes, and the commits that touched it, with an evidence pointer "
+                    "on every hop. A store that is absent is a NO-DATA hop, never a "
+                    "shorter chain.")
+    parser.add_argument("artifact",
+                        help="the artifact to walk, as a path relative to the repository "
+                             "top (for example src/module.py)")
+    parser.add_argument("--path", default=".",
+                        help="the directory to walk from (default: the current one); the "
+                             "stores are read at that directory's repository top")
+    return parser
+
+
+def _lineage_main(rest, exit_ok, exit_usage):
+    """The `sbe lineage` surface, routed here by `main` below. Exit 0 when a
+    chain was printed, whatever the hops in it say: a printed chain is a
+    printed chain, and a chain of NO-DATA hops is a true answer."""
+    rest = list(rest)
+    if rest and rest[0] in ("-h", "--help"):
+        _lineage_parser().print_help(sys.stdout)
+        return exit_ok
+    try:
+        args = _lineage_parser().parse_args(rest)
+    except SystemExit as exc:
+        return exit_ok if exc.code in (0, None) else exit_usage
+    root = os.path.abspath(args.path)
+    if not os.path.isdir(root):
+        sys.stderr.write("sbe lineage: '%s' is not a directory, so no store was read. A "
+                         "mistyped path must not read as an empty chain.\n" % root)
+        return exit_usage
+    sys.stdout.write(render_lineage(lineage(root, args.artifact)))
+    return exit_ok
+
+
 def _explain_parser():
     parser = argparse.ArgumentParser(
         prog="sbe explain",
@@ -1701,18 +2063,22 @@ def _explain_parser():
     return parser
 
 
-def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
-    """The `sbe explain` surface. Exit codes come from the caller so this module
-    never disagrees with the CLI's documented table: 0 when a package was
-    printed, 2 for an id or a name nothing knows, and for a path that is not a
-    directory.
+def main(rest, exit_ok=0, exit_failed=1, exit_usage=2, surface="explain"):
+    """The `sbe explain` and `sbe lineage` surfaces. Exit codes come from the
+    caller so this module never disagrees with the CLI's documented table: 0
+    when a package or a chain was printed, 2 for an id or a name nothing
+    knows, and for a path that is not a directory.
 
-    `exit_failed` is accepted and not used, because nothing here reaches a
-    verdict: a printed package is a printed package whatever the run it quotes
-    decided. It is in the signature so this module keeps the one shape
-    `tasks.main`, `evidence.main` and `prverify.main` already have, and so a
-    later surface in this module that DOES fail has the code to return.
+    `surface` names which of the two the CLI dispatched, defaulting to
+    `explain` so every existing caller keeps its meaning. `exit_failed` is
+    accepted and not used, because nothing here reaches a verdict: a printed
+    package is a printed package whatever the run it quotes decided. It is in
+    the signature so this module keeps the one shape `tasks.main`,
+    `evidence.main` and `prverify.main` already have, and so a later surface
+    in this module that DOES fail has the code to return.
     """
+    if surface == "lineage":
+        return _lineage_main(rest, exit_ok, exit_usage)
     rest = list(rest)
     if rest and rest[0] in ("-h", "--help"):
         # Help is not an error: it prints this surface's own usage and exits 0,

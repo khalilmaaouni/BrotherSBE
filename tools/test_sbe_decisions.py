@@ -601,5 +601,32 @@ class TestExplain(unittest.TestCase):
         self.assertIn(names[0][:3], newer, "the new package must name the id it supersedes")
 
 
+class TestLineage(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-lineage-")
+        _git_repo(self.tmp)
+
+    def test_every_hop_carries_an_evidence_pointer_and_they_run_oldest_first(self):
+        data = decisions_mod.lineage(self.tmp, "seed.txt")
+        self.assertTrue(data["hops"])
+        for hop in data["hops"]:
+            self.assertIn("evidence", hop)
+            self.assertTrue(hop["evidence"], "a hop with no pointer proves nothing")
+        stamps = [h["when"] for h in data["hops"] if h["when"]]
+        self.assertEqual(stamps, sorted(stamps))
+
+    def test_the_notes_store_is_a_named_no_data_hop_not_a_missing_one(self):
+        data = decisions_mod.lineage(self.tmp, "seed.txt")
+        notes_hops = [h for h in data["hops"] if "notes" in h["kind"]]
+        self.assertEqual(len(notes_hops), 1)
+        self.assertIn("NO-DATA", notes_hops[0]["summary"])
+        self.assertIn(".sbe/notes", notes_hops[0]["summary"])
+
+    def test_an_artifact_nothing_knows_about_is_no_data_and_never_an_empty_pass(self):
+        result = _run([sys.executable, SBE, "lineage", "never/existed.py"], cwd=self.tmp)
+        self.assertIn("NO-DATA", result["stdout"])
+        self.assertNotIn("PASS", result["stdout"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

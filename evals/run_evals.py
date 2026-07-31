@@ -7555,6 +7555,147 @@ def r7c(root):
                               authors=("Dana Author", "danaauthor@gmail.com"))
 
 
+# ---------------------------------------------------------------------------
+# Decision packages (src/brothersbe/decisions.py): the four controls Feature 2
+# ships, each fed the defect it exists to catch. The module lives in a package
+# and uses relative imports, so it is imported the way
+# tools/test_sbe_decisions.py imports it, through sys.path, not through
+# SourceFileLoader, which would break `from . import tasks`.
+# ---------------------------------------------------------------------------
+
+sys.path.insert(0, os.path.join(HERE, "..", "src"))
+from brothersbe import decisions as _decisions  # noqa: E402
+
+
+def _decision_repo(root):
+    """A repository with one commit, so a package has a head to bind to. The
+    same seed fixture tools/test_sbe_decisions.py builds."""
+    git_init(root)
+    write(root, "seed.txt", "seed\n")
+    subprocess.run(["git", "-C", root, "add", "-A"], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "seed"], check=True)
+
+
+@case("a-waived-check-writes-a-waived-package-never-a-pass-one", "guard",
+      "waived-not-passed")
+def dp1(root):
+    """THE PLANTED DEFECT: a run whose only decision is a WAIVED check. The
+    failure class is a package that records the waiver as PASS, which is I7
+    laundered through a second artifact: the gate itself never prints PASS for
+    a waived control (gx4 above holds that line), and a decision package that
+    upgraded the word on the way to disk would hand a reviewer the clean bill
+    the gate refused to print. The package must record WAIVED in its own
+    header and quote the WAIVED line, never a PASS."""
+    _decision_repo(root)
+    text = ("  >> migration WAIVED   .sbe-exempt names this directory: rehearsal pending\n"
+            "chatter nobody parses\n")
+    written = _decisions.record_from_run(root, text, None)
+    if len(written) != 1:
+        return "%d package(s) written for one WAIVED line" % len(written)
+    body = open(written[0], encoding="utf-8").read()
+    if not re.search(r"(?m)^- verdict recorded by the run: WAIVED$", body):
+        return "the package does not record WAIVED as the verdict"
+    if re.search(r"(?m)^- verdict recorded by the run: PASS", body):
+        return "PASS recorded over a waived control"
+    quoted = re.search(r"(?m)^    (?:>> )?migration\s+(\S+)", body)
+    if quoted is None or quoted.group(1) != "WAIVED":
+        return "the quoted verdict line does not read WAIVED: %r" % (
+            quoted.group(0) if quoted else None)
+    return "waived-not-passed"
+
+
+@case("a-decision-package-quotes-no-line-outside-the-verdict-grammar", "guard",
+      "counted-not-copied")
+def dp2(root):
+    """THE PLANTED DEFECT: a run whose output carries a connection string with
+    a credential in it, one line under a FAIL the package must record. A
+    decision package is written to be pasted into a pull request, and the
+    evidence receipts persist digests rather than raw output for exactly this
+    reason, so a package that copied one unmatched line would quietly widen
+    that policy in an artifact that is also shared. Every line outside the
+    verdict grammar is counted and discarded, and the package states the
+    count."""
+    _decision_repo(root)
+    secret = "connection: postgres://svc:hunter2@db.internal/prod"
+    text = ("numbers   FAIL     an overstated total in report.md\n"
+            "%s\n"
+            "Traceback (most recent call last):\n" % secret)
+    parsed = _decisions.parse_verdict_lines(text)
+    if parsed["unquotedLineCount"] != 2:
+        return "%d unmatched line(s) counted, not 2" % parsed["unquotedLineCount"]
+    if any("hunter2" in v["line"] for v in parsed["verdicts"]):
+        return "the parser carried the secret line out as a verdict"
+    written = _decisions.record_from_run(root, text, None)
+    if len(written) != 1:
+        return "%d package(s) written for one FAIL line" % len(written)
+    body = open(written[0], encoding="utf-8").read()
+    if "hunter2" in body or "db.internal" in body:
+        return "a line outside the verdict grammar was copied into the package"
+    if "counted and not copied: 2" not in body:
+        return "the package does not state the discarded-line count"
+    return "counted-not-copied"
+
+
+@case("a-package-bound-to-an-older-commit-is-never-overwritten", "guard",
+      "refused-and-superseded")
+def dp3(root):
+    """THE PLANTED DEFECT: a package aimed at the directory of an existing
+    DECISION.md bound to an OLDER commit. The older package records what
+    somebody decided about a different program, and a rewrite would delete
+    that with no record of the deletion, so the write must be refused with
+    the older file left byte for byte as it was, and the honest path is a NEW
+    id whose package names the one it supersedes."""
+    _decision_repo(root)
+    trigger = {"kind": "gate", "check": "numbers", "verdict": "FAIL",
+               "verdictLine": "numbers FAIL an overstated total in report.md",
+               "otherLines": [], "dossier": None}
+    first = _decisions.write_package(root, _decisions.build_package(root, trigger))
+    before = open(first, encoding="utf-8").read()
+    write(root, "seed.txt", "seed\nsecond\n")
+    subprocess.run(["git", "-C", root, "commit", "-aqm", "second"], check=True)
+    stale = _decisions.build_package(root, trigger)
+    stale["dir"] = os.path.dirname(first)
+    try:
+        _decisions.write_package(root, stale)
+        return "the rewrite over the older commit's package was accepted"
+    except _decisions.DecisionUnwritable as exc:
+        if "append-only" not in str(exc):
+            return "the refusal does not say append-only: %s" % str(exc)[:160]
+    after = open(first, encoding="utf-8").read()
+    if after != before:
+        return "the older package's bytes changed under the refusal"
+    second = _decisions.write_package(root, _decisions.build_package(root, trigger))
+    if os.path.dirname(second) == os.path.dirname(first):
+        return "the honest path reused the older package's directory"
+    if "supersedes" not in open(second, encoding="utf-8").read():
+        return "the new package does not name the one it supersedes"
+    return "refused-and-superseded"
+
+
+@case("a-lineage-hop-with-no-evidence-pointer-is-refused", "guard",
+      "every-hop-pointed")
+def dp4(root):
+    """THE PLANTED DEFECT: a hop dict with an empty `evidence`. A hop with no
+    pointer proves nothing: the chain's whole claim is that every line names
+    the file, receipt, commit or package a reader can open. The place the
+    pointer is most tempting to drop is a NO-DATA hop over an absent store,
+    so this walks BOTH chains, an artifact git knows and an artifact nothing
+    knows (whose chain is NO-DATA hops end to end), and refuses any hop whose
+    evidence or summary is empty."""
+    _decision_repo(root)
+    for artifact in ("seed.txt", "never/existed.py"):
+        data = _decisions.lineage(root, artifact)
+        if not data["hops"]:
+            return "no hops at all for %s" % artifact
+        for hop in data["hops"]:
+            if not str(hop.get("evidence") or "").strip():
+                return "hop %r about %s carries no evidence pointer" % (
+                    hop["kind"], artifact)
+            if not str(hop.get("summary") or "").strip():
+                return "hop %r about %s says nothing" % (hop["kind"], artifact)
+    return "every-hop-pointed"
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

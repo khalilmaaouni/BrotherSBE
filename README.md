@@ -124,6 +124,8 @@ Each gate walks the directory it was named (the default is the current directory
 {"checks": [{"name": "reconcile", "exit_code": 0, "duration_ms": 812}]}
 ```
 
+Four moments also write themselves down as **decision packages**: a gate FAIL, a WAIVED check, a tier raised or disposed by `sbe impact`, and a forced task close. Each package is a versioned Markdown file bound to the commit it was written against, quoting the verdict line verbatim, excerpting the checker code at the lines that decided, and counting rather than copying every output line outside the verdict grammar, so a package you share cannot leak what a receipt already refuses to store. `sbe explain` browses or regenerates a package without ever overwriting one bound to another commit, and `sbe lineage <artifact>` walks binding, receipts, decisions, notes and commits oldest to newest with an evidence pointer on every hop; a store that is absent is a named NO-DATA hop, never a silently shorter chain. The writer never recomputes a verdict and never starts a gate: it records what the real tools printed, at the moment they printed it.
+
 ## Install in minutes
 
 What a first run on an unmodified repository tells you, and what it does not. It tells you one thing about your code immediately: the linter scans the tree you point it at and names every place an error is swallowed, with the file, the line and the pattern. Everything else starts empty on purpose. The four gates read receipts that a change has to produce, so on a repository that has never written one they report NO-DATA on all four, which means "no evidence either way" and never "checked and fine". The design checks read a dossier directory that does not exist yet. The graded checks read a telemetry vault and fence registries you have not installed, so their verdicts are about files outside your repository, and the report prints them under a heading that says exactly that. Nothing here infers quality from a repository's shape: a green first run is a report about what was read, and on a fresh install that is the linter and nothing else.
@@ -326,7 +328,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-517 evals: 517 passed, 0 regressions.
+521 evals: 521 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

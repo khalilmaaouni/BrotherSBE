@@ -8,6 +8,26 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- A decision can now be read back on demand and traced end to end. `sbe explain
+  <id|gate|check>` prints a recorded decision package, or, when no run has
+  written one, regenerates a package from the shipped registry with the verdict
+  section marked NO-DATA, because no run has been made; a package bound to a
+  different commit is never overwritten, the new one allocates the next id and
+  names the one it supersedes, so packages stay append-only. `sbe lineage
+  <artifact>` walks the task binding, evidence receipts, decision packages,
+  notes and git commits oldest to newest with an evidence pointer on every hop;
+  an absent store, including the notes store that ships in Loop 4, renders one
+  named NO-DATA hop rather than a silently shorter chain, and a receipt that
+  fails verification stays visible as a broken-receipt hop. Four calibrated
+  evals feed each new control its defect: a WAIVED trigger packaged as PASS, a
+  line outside the verdict grammar copied into a package, a package rewritten
+  under an older commit, and a lineage hop carrying no evidence pointer. The
+  command table in `docs/CLI.md` gains both rows, and every shipped doc that
+  prints the eval count now prints the live 521, recomputed from a run rather
+  than typed. Loop 2, tasks 5 to 8 of 8. Held by `TestExplain`, `TestLineage`,
+  the four eval cases above, and the doc-count eval
+  `no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce`.
+
 - The product now opens with a guided layer instead of a command inventory.
   Four new skills route a person who does not know the machinery into the
   machinery that exists: `/brothersbe:start` detects prior state and resumes it

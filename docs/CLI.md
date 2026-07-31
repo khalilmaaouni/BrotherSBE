@@ -45,6 +45,8 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove` |
 | `pr` | `pr verify <number> --repo owner/name`: live GitHub approval evidence bound to the head sha; no credentials is NO-DATA with a remedy, never PASS |
 | `converge` | does base..head still match the approved dossier: scope, contracts, data, architecture, verification; no force flag exists |
+| `explain` | print the decision package for a decision id, or for a gate or check name; with no recorded run it regenerates one from the shipped registry and marks the verdict NO-DATA, and it never overwrites a package bound to another commit |
+| `lineage` | walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, an evidence pointer on every hop; an absent store is a named NO-DATA hop, never a shorter chain |
 
 Two more are **present and refuse**: `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.

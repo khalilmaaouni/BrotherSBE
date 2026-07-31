@@ -506,6 +506,22 @@ def _cmd_explain(args):
                               exit_usage=EXIT_USAGE)
 
 
+def _cmd_lineage(args):
+    """Walk the chain for one artifact, oldest to newest, one evidence pointer
+    per hop.
+
+    Not a delegation: like `explain`, there is no tool in `tools/` behind it.
+    It READS the task registry, the evidence store, the decision store, the
+    notes store and `git log --follow`, writes nothing, and renders every
+    absent store as a NO-DATA hop rather than a shorter chain. It lives in
+    `brothersbe.decisions` because a lineage is read out of the same stores
+    the decision packages are written into.
+    """
+    from . import decisions as decisions_mod
+    return decisions_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                              exit_usage=EXIT_USAGE, surface="lineage")
+
+
 def _cmd_pr(args):
     """Pull-request surfaces, `verify` first. Not a delegation: like `evidence`,
     `task` and `work`, there is no tool in `tools/` behind it. The read-only
@@ -778,6 +794,9 @@ COMMANDS = [
     ("explain", "print the decision package for a decision id, or for a gate or check name, "
                 "regenerating one from the shipped registry when no run has written it",
      _cmd_explain),
+    ("lineage", "walk the chain for one artifact oldest to newest: binding, receipts, "
+                "decisions, notes and commits, with an evidence pointer on every hop",
+     _cmd_lineage),
     ("policy", "validate a repository policy file against its schema",
      _not_built("policy", 3, "The policy schema does not exist yet.")),
     ("exceptions", "list exceptions, their owners and their expiry",
@@ -803,7 +822,7 @@ COMMANDS = [
 #: refused by that same parser with a nonzero exit.
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
-    "evidence", "task", "work", "pr", "explain"))
+    "evidence", "task", "work", "pr", "explain", "lineage"))
 
 
 def build_parser():
