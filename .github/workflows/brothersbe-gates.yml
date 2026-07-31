@@ -48,6 +48,11 @@ jobs:
         # promise names and the newest an adopter will actually have.
         python: ['3.9', '3.x']
     runs-on: ${{ matrix.os }}
+    # Founder decision 2026-07-31 (batched round): the 3.9 floor is the
+    # BLOCKING leg because it is the promise on the front page; the newest
+    # interpreter is informational, so a 3.x-only failure is a heads-up about
+    # the future, never a release blocker.
+    continue-on-error: ${{ matrix.python == '3.x' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
