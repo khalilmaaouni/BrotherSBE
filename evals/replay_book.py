@@ -74,6 +74,12 @@ VOLATILE_TESTID = re.compile(r"\((__main__\.[A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A
 # beneath a traceback frame. The floor is 3.9, whose tracebacks carry none,
 # so an underline-only line is interpreter decoration, not content.
 VOLATILE_CARETS = re.compile(r"^\s*[\^~]+\s*$", re.M)
+# The doctor's python line prints the LIVE interpreter version next to the
+# floor: "python  PASS  3.9.6 (floor is 3.9)". The version is the machine's,
+# so only that token masks; the verdict before it and the floor text after
+# it stay compared byte for byte.
+VOLATILE_PYVER = re.compile(
+    r"^(python\s+(?:PASS|FAIL)\s+)\d+\.\d+\.\d+(?=\s*\(floor is )", re.M)
 
 
 def stable(text):
@@ -84,6 +90,7 @@ def stable(text):
     text = VOLATILE_SHA.sub("<sha>", text)
     text = VOLATILE_TESTID.sub(r"(\1)", text)
     text = VOLATILE_CARETS.sub("", text)
+    text = VOLATILE_PYVER.sub(r"\1<python-version>", text)
     return text
 
 

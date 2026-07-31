@@ -135,6 +135,24 @@ class TestDeclaredVolatileLine(unittest.TestCase):
         self.assertNotEqual(stable(a), stable(c),
                             "the outcome beside a masked path must still bite")
 
+    def test_doctor_python_version_masks_but_verdict_and_floor_still_bite(self):
+        """The doctor prints the live interpreter version beside the floor:
+        "python  PASS  3.9.6 (floor is 3.9)". The version is the machine's,
+        so a version-only difference must compare equal; the verdict before
+        it and the floor text after it are content and must still fail."""
+        stable = self._stable()
+        a = "python           PASS     3.9.6 (floor is 3.9)\n"
+        b = "python           PASS     3.14.6 (floor is 3.9)\n"
+        self.assertEqual(stable(a), stable(b),
+                         "the book's 3.9.6 and a newer machine's 3.14.6 are "
+                         "the same masked shape")
+        c = "python           FAIL     3.9.6 (floor is 3.9)\n"
+        self.assertNotEqual(stable(a), stable(c),
+                            "the verdict beside a masked version must still bite")
+        d = "python           PASS     3.9.6 (floor is 3.10)\n"
+        self.assertNotEqual(stable(a), stable(d),
+                            "the floor beside a masked version must still bite")
+
 
 class TestChapterCapabilities(unittest.TestCase):
     """A chapter that declares a required capability is skipped WHOLE and
