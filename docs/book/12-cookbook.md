@@ -737,7 +737,7 @@ six wraps any command in a receipt regardless of what it expects to find:
 
 ```bash
 rm -rf .sbe/evidence daily_totals.json orders.csv && mkdir -p .sbe/evidence
-python3 "$ROOT/bin/sbe" evidence run --out .sbe/evidence/agent-2-receipt.json --covers api.py --cwd . -- python3 test_estate.py 2>&1 | tail -14 | sed -E 's/[0-9]+\.[0-9]+s/<N.NNNs>/'
+python3 "$ROOT/bin/sbe" evidence run --out .sbe/evidence/agent-2-receipt.json --covers api.py --cwd . -- python3 test_estate.py 2>&1 | sed -n '/^======/,$p' | sed -E 's/[0-9]+\.[0-9]+s/<N.NNNs>/'
 ```
 
 ```
