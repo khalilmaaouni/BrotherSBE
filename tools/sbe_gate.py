@@ -48,7 +48,7 @@ The classes (ratified 2026-07-24):
                 job that queries your review platform for that id) if you need
                 it to be a control. There is NO shape check on the id beyond
                 refusing the vacuity tokens; "an id in the right shape" was a
-                claim the regex \S+ never made.
+                claim the regex \\S+ never made.
             A bare typed name FAILS. A signature the host cannot check (git
             %G? = E, the normal result on a runner with no imported keys) is
             NO-DATA, never an approval: CI must import the signer's public keys,
@@ -168,6 +168,9 @@ def _read_text(path):
         return ""
 
 
+ADDRESSED_TO_CHECKS = "addressed to tools/sbe_design.py: it names checks: and no gates:"
+
+
 def parse_exemption(text):
     """(gates waived, reason, problem) for a `.sbe-exempt` file.
 
@@ -213,6 +216,14 @@ def parse_exemption(text):
             "waives and why, as two fields:  gates: %s  and  reason: <why>. A file of free text "
             "waives whatever gate artifact sits in or under it by default, which is an off switch "
             "and not an exemption" % (len(GATES), names))
+    if not gates and any(re.match(r"(?i)^\s*checks\s*:", l) for l in (text or "").splitlines()):
+        # Addressed to the design checks (tools/sbe_design.py), not to the hard
+        # gates: that scanner honors and PRINTS it as a waiver, so skipping it
+        # here leaves it visible in exactly one shipped report rather than
+        # refused by the scanner it never spoke to. This is how the shipped
+        # templates/dossier exemption, which waives five design checks over
+        # deliberately unfilled templates, stops reading as a broken GATE file.
+        return [], reason, ADDRESSED_TO_CHECKS
     if not gates:
         return [], reason, ("it records a reason but names no gates; list the ones it waives "
                             "(gates: %s), because an exemption that names nothing waives everything"
@@ -296,7 +307,11 @@ def find(root, name, gate):
         entered.append(dp)
         if EXEMPT in fns:
             gates, reason, problem = parse_exemption(_read_text(os.path.join(dp, EXEMPT)))
-            if problem:
+            if problem == ADDRESSED_TO_CHECKS:
+                # The design scanner owns this file and prints its waiver;
+                # nothing is waived and nothing is refused here.
+                pass
+            elif problem:
                 refused.append((dp, problem))
             else:
                 exempt_dirs.append((dp, gates, reason))

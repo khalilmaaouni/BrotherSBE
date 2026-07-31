@@ -1264,6 +1264,90 @@ class TestHelpMeansHelpOnEveryCommand(unittest.TestCase):
                                 out.stdout + out.stderr))
 
 
+class TestExemptionAddressing(unittest.TestCase):
+    """One `.sbe-exempt` format, two scanners, and each used to refuse a file
+    addressed only to the other: the gate scanner FAILed the shipped
+    templates/dossier exemption (checks: only, no gates:), and the design
+    scanner FAILed the teaching dossier's approval waiver (gates: only, no
+    checks:), so `--strict .` could not be green with both files well-formed.
+    The rule now: a file naming ONLY the other registry's field is addressed
+    to that scanner, which honors and PRINTS it, and this scanner skips it;
+    a file naming NEITHER field is still refused by both, because that shape
+    is an off switch. Calibrated by reinjecting the parsers without the
+    addressed-elsewhere branches: the first three fixtures went red (a design
+    refusal where exit 0 was asserted, a gate refusal where an approval FAIL
+    was asserted, and exit 1 at the repo root), before the fix was restored,
+    the restore verified against the pre-recorded `git hash-object` of both
+    tools."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+
+    def _tool(self, name, *argv):
+        return subprocess.run(
+            [sys.executable, os.path.join(self.ROOT, "tools", name)] + list(argv),
+            capture_output=True, text=True, stdin=subprocess.DEVNULL)
+
+    def _estate(self, exempt_body, dossier=False):
+        """A directory carrying the exemption and a bare typed APPROVAL. With
+        dossier=True it also carries 01-purpose.md, because the design walk
+        only reads a .sbe-exempt inside something it recognizes as a dossier."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with io.open(os.path.join(tmp, ".sbe-exempt"), "w", encoding="utf-8") as fh:
+            fh.write(exempt_body)
+        with io.open(os.path.join(tmp, "APPROVAL"), "w", encoding="utf-8") as fh:
+            fh.write("A bare typed name, exactly the shape the approval gate refuses.\n")
+        if dossier:
+            with io.open(os.path.join(tmp, "01-purpose.md"), "w", encoding="utf-8") as fh:
+                fh.write("# Purpose\nA fixture dossier for the exemption-addressing tests.\n")
+        return tmp
+
+    def test_a_gates_only_exemption_belongs_to_the_gate_scanner(self):
+        body = ("gates: approval\nreason: a shipped teaching fixture, "
+                "waived so a whole-tree scan reads pedagogy as WAIVED\n")
+        gate = self._tool("sbe_gate.py", "--strict", self._estate(body))
+        self.assertEqual(gate.returncode, 0,
+                         "the gate scanner must honor its own field: %s" % gate.stdout)
+        self.assertIn("WAIVED", gate.stdout)
+        design = self._tool("sbe_design.py", "--strict", self._estate(body, dossier=True))
+        self.assertNotIn("names no checks", design.stdout,
+                         "a gates-only exemption is not design's to refuse: %s"
+                         % design.stdout)
+        self.assertNotIn(".sbe-exempt that does not exempt anything", design.stdout)
+
+    def test_a_checks_only_exemption_belongs_to_the_design_scanner_and_waives_no_gate(self):
+        tmp = self._estate("checks: adr\nreason: kept for history, the decision record "
+                           "moved to the archive and this dossier is closed\n")
+        gate = self._tool("sbe_gate.py", "--strict", tmp)
+        self.assertEqual(gate.returncode, 1,
+                         "a checks-only exemption must not waive the approval gate; the "
+                         "bare typed APPROVAL under it has to FAIL: %s" % gate.stdout)
+        self.assertIn("approval", gate.stdout)
+        self.assertNotIn("names no gates", gate.stdout,
+                         "the gate scanner refused a file addressed to design")
+
+    def test_an_exemption_naming_neither_field_is_refused_by_both(self):
+        body = "reason: three words of filler that switch everything off\n"
+        gate = self._tool("sbe_gate.py", "--strict", self._estate(body))
+        self.assertEqual(gate.returncode, 1, gate.stdout)
+        self.assertIn("names no gates", gate.stdout)
+        design = self._tool("sbe_design.py", "--strict", self._estate(body, dossier=True))
+        self.assertEqual(design.returncode, 1, design.stdout)
+        self.assertIn("names no checks", design.stdout)
+
+    def test_this_repository_passes_its_own_root_scan_with_the_pedagogy_waived(self):
+        gate = self._tool("sbe_gate.py", "--strict", self.ROOT)
+        self.assertEqual(gate.returncode, 0,
+                         "gate --strict over the repo root: %s" % gate.stdout[-2000:])
+        self.assertIn("WAIVED", gate.stdout)
+        self.assertIn("infra-topology", gate.stdout,
+                      "the teaching dossier's approval waiver must be printed, "
+                      "never silent")
+        design = self._tool("sbe_design.py", "--strict", self.ROOT)
+        self.assertEqual(design.returncode, 0,
+                         "design --strict over the repo root: %s" % design.stdout[-2000:])
+
+
 class TestDoctorIdentityCheck(unittest.TestCase):
     """THE DEFECT THIS CONTROL EXISTS FOR: a leaked fixture identity, `ci
     <ci@example.com>`, authored a run of real commits in public history

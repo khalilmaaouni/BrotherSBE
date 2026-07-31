@@ -8,6 +8,30 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- One `.sbe-exempt` format, two scanners, and each used to refuse a file addressed only
+  to the other, so this repository could not pass its own whole-root gate scan with both
+  shipped exemption files well-formed: `sbe_gate.py --strict .` FAILed the
+  templates/dossier exemption (a `checks:` file with no `gates:` line) as "records a
+  reason but names no gates", and `sbe_design.py --strict .` FAILed the new teaching
+  waiver the same way in mirror. The rule now, in both parsers: an exemption naming ONLY
+  the other registry's field is addressed to that scanner, which honors it and PRINTS it
+  as a WAIVED line, and this scanner skips it, so every exemption file stays visible in
+  exactly one shipped report; a file naming NEITHER field is still refused by both,
+  because that shape is an off switch, not an exemption. Alongside this,
+  docs/for-engineers/examples/infra-topology gains a `gates: approval` waiver stating
+  that its APPROVAL is DESIGNED to fail as pedagogy (the CI note in
+  docs/guides/01-quickstart.md records the scoping decision this mirrors), so a
+  whole-checkout scan now reads the teaching refusal as WAIVED with the reason printed,
+  never as this repository failing its own controls and never as a PASS; the example's
+  numbers, migration and ran fixtures stay unwaived and judged. The publish checklist's
+  self-consistency line (`sbe_gate.py --strict .` exits 0) is true for the first time
+  since the estates wave tightened the exempt gate. Proof: `TestExemptionAddressing` in
+  `tools/test_sbe.py`, four fixtures, calibrated red against the parsers with the
+  addressed-elsewhere branches removed (a design refusal where exit 0 was asserted, a
+  gate refusal where an approval FAIL was asserted, exit 1 at the repo root) before the
+  fix was restored, the restore verified against the pre-recorded `git hash-object` of
+  both tools.
+
 - `sbe score` reports on the directory you asked about, not the one you happen
   to be standing in. The split that opens the report groups checks by whether
   they opened a file inside the directory being reported on, and that directory

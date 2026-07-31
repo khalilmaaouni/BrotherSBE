@@ -2734,6 +2734,9 @@ CHECKS = {
 }
 
 
+ADDRESSED_TO_GATES = "addressed to tools/sbe_gate.py: it names gates: and no checks:"
+
+
 def parse_exemption(text):
     """(checks waived, reason, problem) for a `.sbe-exempt` file.
 
@@ -2777,6 +2780,12 @@ def parse_exemption(text):
             "waives and why, as two fields:  checks: %s  and  reason: <at least %d words>. A file of "
             "free text waives everything by default, which is an off switch and not an exemption"
             % (len(CHECKS), ", ".join(CHECKS), OVERRIDE_MIN_WORDS))
+    if not checks and any(re.match(r"(?i)^\s*gates\s*:", l) for l in (text or "").splitlines()):
+        # Addressed to the hard gates (tools/sbe_gate.py), not to the design
+        # checks: that scanner honors and PRINTS it as a waiver, so skipping it
+        # here leaves it visible in exactly one shipped report rather than
+        # refused by the scanner it never spoke to.
+        return [], reason, ADDRESSED_TO_GATES
     if not checks:
         return [], reason, ("it records a reason but names no checks; list the ones it waives "
                             "(checks: %s), because an exemption that names nothing waives everything"
@@ -2825,6 +2834,11 @@ def find_dossiers(root):
             # is checked, and the broken exemption is its own failure, so that
             # nobody discovers it by noticing the gate went quiet.
             waived, reason, problem = parse_exemption(read(dp, EXEMPT))
+            if problem == ADDRESSED_TO_GATES:
+                # The gate scanner owns this file and prints its waiver; the
+                # dossier itself is still design-checked in full.
+                hits.append(dp)
+                continue
             if problem:
                 refused.append((dp, problem))
                 hits.append(dp)
