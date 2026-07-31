@@ -28,6 +28,15 @@ WHAT A PACKAGE MAY AND MAY NOT CARRY, stated because a package is SHARED:
   - Absent evidence renders NO-DATA naming the file or store that would fill
     it. A package never reads as a clean verdict over something nobody
     examined, and a waived control is recorded WAIVED.
+  - It carries the DECIDING CODE: the shipped check's own function, excerpted
+    verbatim with the file and the first and last line numbers beside it, plus
+    a Mermaid flowchart of what that check's registry entry DECLARES about how
+    it decides. Both are read from this project's own source under `tools/`,
+    which already ships in the open, so the sharing policy above is not
+    widened by them: no customer file, no run output and no environment is
+    read to build either one. A check no registry declares gets NO-DATA in
+    both sections and no invented span, because a span nobody read sends a
+    reviewer to the wrong lines, which is worse than printing none.
 
 WHERE A PACKAGE LANDS, and why it says so in its own header:
 
@@ -48,19 +57,36 @@ dict. Stated here so the next writer does not reintroduce it.
 
 Nothing here constructs a git merge, rebase, push or deploy. The only git this
 module runs is `rev-parse`, through the `impact._git` helper the rest of the
-package already uses rather than a second copy of the plumbing.
+package already uses rather than a second copy of the plumbing. Reading the
+deciding code and drawing the flowchart start NO process at all: they import
+the shipped registries and read source files with `inspect`, and
+`tools/test_sbe_decisions.py::
+test_neither_helper_starts_a_subprocess_to_read_the_logic` holds that by
+closing `_git`, this module's only door to a child process, and demanding an
+answer anyway.
 
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. Maturity: INTERNAL-EVAL, exercised on this repository's fixtures
 and on no other estate.
 """
+import inspect
 import io
 import os
 import re
+import stat
+import sys
 import tempfile
 import time
+from importlib.machinery import SourceFileLoader
 
 from .impact import _git  # noqa: E402  (the same private helper status.py reuses)
+
+#: The shipped tools tree, resolved the way `evidence.py` resolves it rather
+#: than by a second spelling. It is put on `sys.path` LAZILY, inside
+#: `registries()`, never here: this module is imported by a module under
+#: `tools/` (`tools/test_sbe_decisions.py`), so importing `tools/` at module
+#: scope would be a cycle.
+TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
 
 #: Where packages live under a dossier, and under the repository root when
 #: there is no dossier to name. Both spelled once, here, so a writer and a
@@ -198,6 +224,354 @@ def next_id(decisions_dir):
     return "%03d" % (highest + 1)
 
 
+# ---------------------------------------------------------------------------
+# The deciding code: which shipped check decided, where it lives, and what its
+# own registry declares about how it decides. Everything below READS. Nothing
+# below invokes a check, and the fixture
+# `test_neither_helper_starts_a_subprocess_to_read_the_logic` holds that by
+# closing this module's only door to a child process and demanding an answer
+# anyway.
+# ---------------------------------------------------------------------------
+
+#: One process reads the registries once. A list rather than a bare global so
+#: the "filled or not" question is `if _REGISTRY_CACHE` and not a sentinel
+#: nobody can tell from a legitimately empty result.
+_REGISTRY_CACHE = []
+
+#: Characters a Mermaid label may carry. A whitelist rather than a blacklist,
+#: because the failure mode is a check name or an evidence path that closes a
+#: label early and turns the rest of the sentence into diagram syntax. `<` and
+#: `>` are absent on purpose: without them no label can spell an edge arrow.
+_LABEL_SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                  "0123456789 .,:;/_-?=+%")
+
+#: The three verdict words this project ships, spelled here so a flowchart can
+#: say which of them a registry did NOT declare an example for. Imported from
+#: `sbe_checks` inside `registries()` would be better; it is not, because this
+#: constant is read by `logic_flowchart` on the NO-DATA path where the tools
+#: tree may be exactly what could not be read.
+_VERDICT_WORDS = ("PASS", "FAIL", "NO-DATA")
+
+
+def registries():
+    """Every shipped check registry, as ONE dict with keys `declarations`,
+    `modules` and `problems`.
+
+    `declarations` maps a check name to a LIST of dicts, each carrying
+    `source` (the path under `tools/`), `path` (the absolute file), `registry`
+    (the name of the module-level dict) and `check` (the `Check` object). A
+    list, not a single entry, because two shipped registries genuinely declare
+    the name `migration` today, and resolving one of them in silence would
+    print a line span out of a file the reader was not thinking about.
+
+    THE DISCOVERY RULE HERE IS NOT A SECOND RULE. It is the one
+    `evals/test_no_data_class.py` states and applies (`tool_sources`,
+    `load_tool_modules`, `discover_registries`): every `.py` anywhere under
+    `tools/`, pruned by the shared `sbe_checks.Pruner`, never one inside a
+    `__pycache__` directory, never one that is not a regular file, imported,
+    with `sbe_checks.py` itself excluded because reloading it would rebind
+    `Check` to a second unequal class; and every module-level non-underscore
+    dict holding at least one `Check` is a registry.
+
+    That eval module is not IMPORTED here, and the reason is mechanical rather
+    than a matter of taste: it imports every module under `tools/`, which
+    includes `tools/test_sbe_decisions.py`, which imports THIS module, so
+    importing it from here is a cycle that would break the honesty meta-test
+    itself. The two are held in agreement by a fixture instead
+    (`tools/test_sbe_decisions.py::
+    test_the_discovery_rule_here_and_in_the_honesty_meta_test_agree`), which
+    asks both for their registries and fails on any disagreement, so a change
+    to the rule there goes red here rather than drifting quietly.
+
+    Residual, stated because it is real: following that rule imports every
+    module under `tools/`, test modules included, on the first call in a
+    process. It is fast and it starts no subprocess, and it is what makes a
+    registry added next year visible on the day it is added rather than on the
+    day somebody remembers to list it here.
+
+    A module that cannot be imported, a path that cannot be stat-ed, a pruned
+    directory holding Python and a directory the walk was refused all land in
+    `problems` as NO-DATA sentences and are printed by the callers below. None
+    of them is swallowed: a registry this module could not read is a check it
+    may resolve to nothing, and the reader has to be told which.
+    """
+    if _REGISTRY_CACHE:
+        return _REGISTRY_CACHE[0]
+    tools = os.path.abspath(TOOLS)
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    from sbe_checks import Check, Pruner  # noqa: E402
+    declarations, modules, problems = {}, [], []
+    pruner = Pruner()
+    for dirpath, dirnames, filenames in os.walk(tools, onerror=pruner.onerror):
+        dirnames[:] = pruner(dirpath, dirnames)
+        for filename in sorted(filenames):
+            if not filename.endswith(".py"):
+                continue
+            full = os.path.join(dirpath, filename)
+            rel = os.path.relpath(full, tools)
+            if "__pycache__" in rel.split(os.sep):
+                problems.append("NO-DATA: tools/%s sits in a bytecode cache directory, so it is "
+                                "named here and never imported; any check declared there is "
+                                "invisible to this module" % rel)
+                continue
+            try:
+                regular = not os.path.islink(full) and stat.S_ISREG(os.lstat(full).st_mode)
+            except OSError as exc:
+                problems.append("NO-DATA: tools/%s could not be stat-ed (%s), so whether it is "
+                                "source at all is unknown and it was not imported" % (rel, exc))
+                continue
+            if not regular:
+                problems.append("NO-DATA: tools/%s is not a regular file, so it is named here "
+                                "and never imported; any check declared through it is invisible "
+                                "to this module" % rel)
+                continue
+            if filename == "sbe_checks.py":
+                # The one named exclusion, and the same one the honesty
+                # meta-test makes: re-loading this file would bind a SECOND,
+                # unequal `Check` class, and every isinstance test below would
+                # then be false against registries that imported the first.
+                # It declares no registry of its own, so nothing is lost.
+                continue
+            try:
+                module = SourceFileLoader(rel[:-3].replace(os.sep, "."), full).load_module()
+            except Exception as exc:
+                problems.append("NO-DATA: tools/%s could not be imported (%s: %s), so any check "
+                                "registry in it went unread and a check declared there resolves "
+                                "to nothing here" % (rel, type(exc).__name__, exc))
+                continue
+            modules.append("tools/%s" % rel)
+            for attr, value in sorted(vars(module).items()):
+                if attr.startswith("_") or not isinstance(value, dict) or not value:
+                    continue
+                if not any(isinstance(item, Check) for item in value.values()):
+                    continue
+                for name, item in sorted(value.items()):
+                    if not isinstance(item, Check):
+                        problems.append("NO-DATA: tools/%s::%s registers %r as a bare value "
+                                        "rather than a Check declaring its evidence, so this "
+                                        "module can read no logic for it" % (rel, attr, name))
+                        continue
+                    declarations.setdefault(name, []).append(
+                        {"source": "tools/%s" % rel, "path": full, "registry": attr,
+                         "check": item})
+    hidden, uninspected = pruner.hidden(lambda f: f.endswith(".py"))
+    for tree in list(hidden) + list(uninspected) + list(pruner.denied):
+        problems.append("NO-DATA: %s under tools/ was pruned or could not be entered, so a "
+                        "registry inside it was never read" % tree)
+    for entries in declarations.values():
+        entries.sort(key=lambda entry: (entry["source"], entry["registry"]))
+    result = {"declarations": declarations, "modules": sorted(modules),
+              "problems": problems}
+    _REGISTRY_CACHE.append(result)
+    return result
+
+
+def _unresolved_note(name, found):
+    """The NO-DATA sentence for a check name no shipped registry declares."""
+    known = sorted(found["declarations"])
+    note = ("NO-DATA: no shipped check registry under tools/ declares %r, so no deciding code "
+            "was read and no line span is printed here. %d registry module(s) were read and "
+            "they declare %d check(s)%s. Naming a file this module never opened would send a "
+            "reviewer to lines nobody looked at."
+            % (name or "(no check name was recorded on this decision)",
+               len(found["modules"]), len(known),
+               "" if not known else " (%s)" % ", ".join(known)))
+    if found["problems"]:
+        note += " Read with these gaps: %s" % " ".join(found["problems"])
+    return note
+
+
+def _declaration_note(name, entries, found):
+    """The sentence naming WHERE this check is declared, including every other
+    registry that declares the same name.
+
+    A name two registries declare is resolved to the first by path, and the
+    others are named in the same sentence rather than dropped: a silent pick
+    would print a span out of a file the reader was not thinking about.
+    """
+    where = ", ".join("%s::%s" % (entry["source"], entry["registry"]) for entry in entries)
+    if len(entries) == 1:
+        note = "the check %r is declared in %s, and the span above is that declaration." % (
+            name, where)
+    else:
+        note = ("the check %r is declared in %d registries (%s). The span above is the first "
+                "of them by path; the others are named here rather than dropped, because a "
+                "silent pick would send a reader to a file they were not thinking about."
+                % (name, len(entries), where))
+    if found["problems"]:
+        note += " Read with these gaps: %s" % " ".join(found["problems"])
+    return note
+
+
+def deciding_code(check_name):
+    """The code that decided, as ONE dict with keys `file`, `firstLine`,
+    `lastLine`, `excerpt` and `note`.
+
+    The excerpt is the function's own lines, unmodified, and `firstLine` and
+    `lastLine` address exactly those lines in that file, so a reader can open
+    the file at the span and see the same text. `tools/test_sbe_decisions.py::
+    test_the_excerpt_is_the_functions_own_lines_at_the_span_it_names` holds
+    that: a span that does not address its own excerpt sends a reviewer to the
+    wrong lines, which is worse than printing no span at all.
+
+    A check no shipped registry declares returns this same dict with `file`,
+    `firstLine` and `lastLine` all None, `excerpt` empty and `note` carrying
+    the NO-DATA sentence. Nothing is guessed.
+
+    Read with `inspect`, which reads the FILE. It does not call the check, and
+    calling it is the one thing this module may never do.
+    """
+    name = (check_name or "").strip()
+    found = registries()
+    entries = found["declarations"].get(name) or []
+    if not entries:
+        return {"file": None, "firstLine": None, "lastLine": None, "excerpt": "",
+                "note": _unresolved_note(name, found)}
+    chosen = entries[0]
+    try:
+        source_file = inspect.getsourcefile(chosen["check"].fn)
+        lines, first = inspect.getsourcelines(chosen["check"].fn)
+    except (OSError, TypeError) as exc:
+        return {"file": None, "firstLine": None, "lastLine": None, "excerpt": "",
+                "note": "NO-DATA: %r is declared in %s::%s and its source could not be read "
+                        "(%s: %s), so no span is printed. %s"
+                        % (name, chosen["source"], chosen["registry"],
+                           type(exc).__name__, exc, _declaration_note(name, entries, found))}
+    if not source_file:
+        return {"file": None, "firstLine": None, "lastLine": None, "excerpt": "",
+                "note": "NO-DATA: %r is declared in %s::%s and Python could name no source file "
+                        "for the function behind it, so no span is printed. %s"
+                        % (name, chosen["source"], chosen["registry"],
+                           _declaration_note(name, entries, found))}
+    return {"file": os.path.abspath(source_file),
+            "firstLine": first,
+            "lastLine": first + len(lines) - 1,
+            "excerpt": "".join(lines),
+            "note": _declaration_note(name, entries, found)}
+
+
+def _label(text):
+    """One Mermaid label: whitespace collapsed, unsafe characters dropped.
+
+    A whitelist, because the shape that breaks a diagram is a path or a check
+    name carrying a quote or an angle bracket and closing the label early, and
+    the remainder of the sentence then reads as diagram syntax rather than as
+    text. `<` and `>` are outside the safe set, so no label can spell an edge.
+    """
+    flat = " ".join(str(text or "").split())
+    kept = "".join(ch for ch in flat if ch in _LABEL_SAFE)
+    return kept or "unreadable label"
+
+
+def logic_flowchart(check_name):
+    """The check's declared logic as a Mermaid `flowchart`, or ONE NO-DATA line
+    naming why nothing was drawn.
+
+    Every box comes from a DECLARATION in the shipped registry: what the check
+    says it reads, the verdict its own registry entry declares for evidence
+    that declares nothing, the verdict its own worked example declares, and the
+    severity it declared at write time. A verdict word the registry declares no
+    example for becomes a NO-DATA box naming the missing declaration, rather
+    than a confident box drawn from somebody's memory of how the check behaves.
+
+    Nothing here reads the function body and nothing here runs it: a picture
+    derived from a run would be a second gate, and this module is not one.
+    """
+    name = (check_name or "").strip()
+    found = registries()
+    entries = found["declarations"].get(name) or []
+    if not entries:
+        return _unresolved_note(name, found) + (
+            " No flowchart was drawn: a diagram of logic nobody read is a drawing.")
+    chosen = entries[0]
+    check = chosen["check"]
+    code = deciding_code(name)
+    out = ["flowchart TD\n"]
+    out.append('    run["%s"]\n' % _label("a run of the check %s" % name))
+    out.append('    run --> declared["%s"]\n'
+               % _label("declared in %s::%s, evidence kind %s"
+                        % (chosen["source"], chosen["registry"], check.kind)))
+    out.append('    code["%s"]\n' % _label(
+        "the deciding code: %s lines %s to %s"
+        % (chosen["source"], code["firstLine"], code["lastLine"])
+        if code["firstLine"] else
+        "NO-DATA: the deciding code behind this check could not be read, so this chart names "
+        "no line span"))
+    out.append('    empty["%s"]\n'
+               % _label("%s: the verdict this entry declares for evidence that declares "
+                        "nothing%s"
+                        % (check.empty_expect,
+                           (", because %s" % check.empty_note) if check.empty_note else "")))
+    reads = [str(r) for r in (check.reads or ()) if str(r).strip()]
+    if not reads:
+        out.append('    declared --> reads0["%s"]\n'
+                   % _label("NO-DATA: this registry entry declares no evidence to read, so "
+                            "what it opens was not read from a declaration"))
+        out.append('    reads0 --> code\n')
+    for index, source in enumerate(reads):
+        out.append('    declared --> reads%d["%s"]\n'
+                   % (index, _label("reads %s" % source)))
+        out.append('    reads%d --> present%d{"%s"}\n'
+                   % (index, index, _label("is %s present and answered?" % source)))
+        out.append('    present%d -- "no" --> empty\n' % index)
+        out.append('    present%d -- "yes" --> code\n' % index)
+    declared_words = [check.empty_expect]
+    if check.full_fixture is not None:
+        out.append('    code --> worked["%s"]\n'
+                   % _label("%s: the verdict this entry declares over its own worked example%s"
+                            % (check.full_expect,
+                               (", because %s" % check.full_expect_reason)
+                               if check.full_expect_reason else "")))
+        declared_words.append(check.full_expect)
+    else:
+        out.append('    code --> worked["%s"]\n'
+                   % _label("NO-DATA: this entry declares no worked positive example (%s), so "
+                            "the verdict a complete piece of evidence reaches was not read from "
+                            "a declaration" % (check.no_full_fixture or "no reason declared")))
+    for word in _VERDICT_WORDS:
+        if word in declared_words:
+            continue
+        out.append('    code --> undeclared%s["%s"]\n'
+                   % (word.replace("-", ""),
+                      _label("NO-DATA: this registry entry declares no worked example reaching "
+                             "%s, so when this check reaches that verdict was not read from a "
+                             "declaration" % word)))
+    out.append('    code --> severity["%s"]\n'
+               % _label("declared severity %s: %s"
+                        % (check.severity,
+                           "a FAIL blocks a strict run"
+                           if check.severity == "gate" else
+                           "a FAIL is graded and blocks only under the opt-in strict-soft run")))
+    if len(entries) > 1:
+        out.append('    run --> alsoDeclared["%s"]\n'
+                   % _label("the same check name is also declared in %s, and this chart draws "
+                            "only the first by path"
+                            % ", ".join("%s::%s" % (e["source"], e["registry"])
+                                        for e in entries[1:])))
+    if found["problems"]:
+        out.append('    run --> gaps["%s"]\n'
+                   % _label("NO-DATA: %d registry gap(s) were hit while reading this chart: %s"
+                            % (len(found["problems"]), " ".join(found["problems"]))))
+    return "".join(out)
+
+
+def _fenced(body, language):
+    """A fenced block whose fence is longer than any run of backticks inside it.
+
+    An excerpt of real source can carry a fence of its own, and a three-tick
+    fence around it would end the block early and spill the rest of the
+    function into the document as prose.
+    """
+    longest, run = 0, 0
+    for ch in body:
+        run = run + 1 if ch == "`" else 0
+        longest = max(longest, run)
+    fence = "`" * max(3, longest + 1)
+    tail = "" if body.endswith("\n") else "\n"
+    return "%s%s\n%s%s%s\n" % (fence, language, body, tail, fence)
+
+
 def _verdict_section(trigger):
     """The verdict line this package quotes, as a dict with keys `line` and
     `note`.
@@ -281,9 +655,16 @@ def _risk_lines(verdict):
     return lines
 
 
-def _flip_lines(verdict, check):
+def _flip_lines(verdict, check, code):
     """What would change this decision, stated as an action somebody can take
-    and a run that would show it, rather than as an opinion."""
+    and a run that would show it, rather than as an opinion.
+
+    `code` is the `deciding_code` dict. The last line here used to be a flat
+    NO-DATA sentence saying the deciding code was not excerpted; now that it is
+    excerpted, that sentence would be a false absence, which is the same defect
+    as a false PASS pointing the other way. It says what was actually read, and
+    keeps the NO-DATA wording only where nothing was.
+    """
     name = check or "the check named above"
     lines = []
     if verdict == "FAIL":
@@ -299,9 +680,13 @@ def _flip_lines(verdict, check):
     else:
         lines.append("a re-run of %s over this same commit, recorded with a receipt, "
                      "printing a different verdict line" % name)
-    lines.append("NO-DATA: the deciding code behind %s is not excerpted into this "
-                 "package. The shipped check registry under tools/ holds the function "
-                 "and the line span that decided." % name)
+    if code["firstLine"]:
+        lines.append("reading the deciding code excerpted below, at %s lines %d to %d, and "
+                     "changing what it examines; a check that decides differently is a change "
+                     "to that function and to the fixtures that hold it"
+                     % (code["file"], code["firstLine"], code["lastLine"]))
+    else:
+        lines.append(code["note"])
     return lines
 
 
@@ -366,6 +751,11 @@ def build_package(root, trigger):
         if extra:
             notes.append(extra)
 
+    code = deciding_code(check)
+    chart = logic_flowchart(check)
+    if not code["firstLine"]:
+        notes.append(code["note"])
+
     identifier = next_id(location["dir"])
     slug = _slug("%s-%s-%s" % (kind, check, verdict), "decision")
     return {
@@ -376,8 +766,10 @@ def build_package(root, trigger):
         "evidence": _evidence_lines(trigger),
         "inputs": _input_lines(trigger, root, location, head),
         "risks": _risk_lines(verdict),
-        "whatWouldFlipIt": _flip_lines(verdict, check),
+        "whatWouldFlipIt": _flip_lines(verdict, check, code),
         "checklist": _checklist_lines(head, unquoted),
+        "decidingCode": code,
+        "logicFlowchart": chart,
         "boundCommit": head["commit"],
         "location": location["location"],
         "locationReason": location["reason"],
@@ -425,6 +817,27 @@ def render_package(package):
     out.append(_bullets(package["risks"]))
     out.append("\n## What would flip it\n\n")
     out.append(_bullets(package["whatWouldFlipIt"]))
+    code = package.get("decidingCode") or {}
+    out.append("\n## The code that decided\n\n")
+    if code.get("firstLine"):
+        out.append(_bullets(["file: %s" % code["file"],
+                             "lines %d to %d, which address exactly the excerpt below"
+                             % (code["firstLine"], code["lastLine"]),
+                             code["note"]]))
+        out.append("\n")
+        out.append(_fenced(code["excerpt"], "python"))
+    else:
+        out.append(_bullets([code.get("note") or
+                             "NO-DATA: no deciding code was read for this decision, and the "
+                             "shipped check registries under tools/ are what would fill it."]))
+    chart = package.get("logicFlowchart") or ""
+    out.append("\n## How that check decides, as its registry declares it\n\n")
+    if chart.lstrip().startswith("flowchart"):
+        out.append(_fenced(chart, "mermaid"))
+    else:
+        out.append(_bullets([chart or
+                             "NO-DATA: no flowchart was drawn, and no reason was recorded for "
+                             "it, which is itself a gap in this package."]))
     out.append("\n## Review checklist\n\n")
     out.append(_bullets(package["checklist"]))
     out.append("\n## Notes and limits\n\n")

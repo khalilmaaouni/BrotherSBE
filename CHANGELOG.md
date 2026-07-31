@@ -8,6 +8,19 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- A decision package now carries the code that decided, not just the verdict it
+  reached. `deciding_code` returns the check's own function, excerpted at the
+  source span it names, resolved through the shipped check registries rather
+  than from memory; `logic_flowchart` draws the check's parts from what the
+  registry DECLARES it reads, and every verdict the registry gives no example
+  for becomes a NO-DATA node rather than a confident arrow. An unknown check
+  gets NO-DATA and never an invented span, and a name that two registries
+  declare (`migration`, from both `sbe_gate.py` and `sbe_plan.py`) is reported
+  as ambiguous with every declaration named, rather than resolved quietly to
+  whichever was found first. Neither helper starts a subprocess. Loop 2, task 2
+  of 8. Held by `TestDecidingCode`, calibrated by nine deliberate breaks each
+  traced to the single test that caught it
+
 - One `.sbe-exempt` format, two scanners, and each used to refuse a file addressed only
   to the other, so this repository could not pass its own whole-root gate scan with both
   shipped exemption files well-formed: `sbe_gate.py --strict .` FAILed the

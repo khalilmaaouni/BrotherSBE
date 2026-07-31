@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from importlib.machinery import SourceFileLoader
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -89,6 +90,154 @@ class TestPackageWriter(unittest.TestCase):
         # characters from every file, including the test that checks for them.
         for banned in ("\u2014", "\u2013"):
             self.assertNotIn(banned, body)
+
+
+class TestDecidingCode(unittest.TestCase):
+    def test_a_shipped_check_names_its_file_lines_and_carries_the_excerpt(self):
+        code = decisions_mod.deciding_code("numbers")
+        self.assertTrue(code["file"].endswith("sbe_gate.py"))
+        self.assertGreater(code["lastLine"], code["firstLine"])
+        self.assertIn("def gate_numbers", code["excerpt"])
+
+    def test_an_unknown_check_is_no_data_and_never_an_invented_span(self):
+        code = decisions_mod.deciding_code("not-a-real-check")
+        self.assertEqual(code["excerpt"], "")
+        self.assertIn("NO-DATA", code["note"])
+        self.assertIsNone(code["file"])
+
+    def test_the_flowchart_is_mermaid_and_names_the_check_it_drew(self):
+        chart = decisions_mod.logic_flowchart("numbers")
+        self.assertTrue(chart.lstrip().startswith("flowchart"))
+        self.assertIn("numbers", chart)
+
+    # ---- Fixtures beyond the plan's three, each holding one sentence the
+    # implementation makes and nothing else would catch. ----
+
+    def test_the_excerpt_is_the_functions_own_lines_at_the_span_it_names(self):
+        """The span is a pointer a reader OPENS. If the numbers do not address
+        the excerpt in the file itself, the package sends a reviewer to the
+        wrong lines, which is worse than printing no span at all."""
+        code = decisions_mod.deciding_code("numbers")
+        with io.open(code["file"], encoding="utf-8") as fh:
+            file_lines = fh.readlines()
+        span = "".join(file_lines[code["firstLine"] - 1:code["lastLine"]])
+        self.assertEqual(span, code["excerpt"])
+
+    def test_the_flowchart_draws_only_parts_the_registry_declares(self):
+        """Every box comes from a declaration: what the check reads, the verdict
+        its empty evidence gets, and its severity. A box nobody declared is a
+        picture, not a record."""
+        chart = decisions_mod.logic_flowchart("numbers")
+        self.assertIn("NO-DATA", chart, "the declared empty-evidence verdict")
+        self.assertIn("gate", chart, "the declared severity")
+        self.assertIn("numbers-manifest.json", chart,
+                      "the evidence the check declares it reads")
+
+    def test_an_unknown_check_gets_no_flowchart_and_says_why(self):
+        chart = decisions_mod.logic_flowchart("not-a-real-check")
+        self.assertIn("NO-DATA", chart)
+        self.assertIn("not-a-real-check", chart)
+        self.assertFalse(chart.lstrip().startswith("flowchart"),
+                         "a check nobody resolved gets a named absence, never a drawing")
+
+    def test_a_check_name_two_registries_declare_says_so_rather_than_picking_quietly(self):
+        """`migration` is declared by BOTH tools/sbe_gate.py and
+        tools/sbe_plan.py. Resolving one of them in silence would print a span
+        from a file the reader was not thinking about."""
+        code = decisions_mod.deciding_code("migration")
+        self.assertIsNotNone(code["file"])
+        self.assertIn("sbe_plan.py", code["note"] + (code["file"] or ""))
+        self.assertIn("sbe_gate.py", code["note"] + (code["file"] or ""))
+
+    def test_neither_helper_starts_a_subprocess_to_read_the_logic(self):
+        """The kill criterion of this module, held as a fixture rather than as a
+        sentence in a docstring. `_git` is the only door in this module through
+        which a child process is started, so a run that cannot open that door
+        and still answers is a run that read files and nothing else."""
+        original = decisions_mod._git
+
+        def refuse(*a, **kw):
+            raise AssertionError("deciding_code and logic_flowchart started a process")
+
+        decisions_mod._git = refuse
+        try:
+            code = decisions_mod.deciding_code("numbers")
+            chart = decisions_mod.logic_flowchart("numbers")
+        finally:
+            decisions_mod._git = original
+        self.assertIn("def gate_numbers", code["excerpt"])
+        self.assertTrue(chart.lstrip().startswith("flowchart"))
+
+    def test_the_package_carries_the_deciding_code_and_the_flowchart(self):
+        tmp = tempfile.mkdtemp(prefix="sbe-deciding-")
+        _git_repo(tmp)
+        pkg = decisions_mod.build_package(
+            tmp, {"kind": "gate", "check": "numbers", "verdict": "FAIL",
+                  "verdictLine": "numbers FAIL an overstated total in report.md",
+                  "otherLines": [], "dossier": None})
+        self.assertIn("def gate_numbers", pkg["decidingCode"]["excerpt"])
+        self.assertTrue(pkg["logicFlowchart"].lstrip().startswith("flowchart"))
+        with io.open(decisions_mod.write_package(tmp, pkg), encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("def gate_numbers", body)
+        self.assertIn("```mermaid", body)
+        # Escapes, not the glyphs themselves, for the reason stated in
+        # TestPackageWriter above: this repository bans both characters from
+        # every file, including the test that checks for them.
+        for banned in ("\u2014", "\u2013"):
+            self.assertNotIn(banned, body)
+
+    def test_a_fenced_block_is_longer_than_any_fence_inside_it(self):
+        """An excerpt of real source can carry a fence of its own, and a three
+        tick fence around it would close the block early and spill the rest of
+        the deciding function into the document as prose."""
+        block = decisions_mod._fenced("a = '''```not the end```'''\n", "python")
+        opener = block.splitlines()[0]
+        self.assertTrue(opener.startswith("````"), opener)
+        self.assertEqual(block.splitlines()[-1], opener[:-len("python")])
+
+    def test_the_discovery_rule_here_and_in_the_honesty_meta_test_agree(self):
+        """decisions.registries() cannot IMPORT evals/test_no_data_class.py: that
+        module imports every module under tools/, this one among them, and this
+        one imports brothersbe.decisions, so the import would be a cycle. The
+        two therefore state the same rule twice, and this fixture is what stops
+        the second copy from drifting: it asks both for their registries and
+        fails on any disagreement, so a rule changed there goes red here."""
+        meta = SourceFileLoader(
+            "sbe_no_data_class_for_decisions",
+            os.path.join(ROOT, "evals", "test_no_data_class.py")).load_module()
+        modules, failures = meta.load_tool_modules()
+        self.assertEqual(failures, [], "the meta-test could not import part of tools/")
+        registries, defects = meta.discover_registries(modules)
+        self.assertEqual(defects, [], defects)
+        theirs = set()
+        for source, attr, table in registries:
+            for check_name in table:
+                theirs.add(("tools/%s" % source, attr, check_name))
+        found = decisions_mod.registries()
+        self.assertEqual(found["problems"], [], found["problems"])
+        mine = set()
+        for check_name, entries in found["declarations"].items():
+            for entry in entries:
+                mine.add((entry["source"], entry["registry"], check_name))
+        self.assertEqual(mine, theirs,
+                         "the two discoveries disagree, so one of them is reading a registry "
+                         "the other cannot see")
+        self.assertTrue(mine, "neither discovery found a registry at all")
+
+    def test_a_package_for_a_check_nobody_ships_says_no_data_in_both_sections(self):
+        tmp = tempfile.mkdtemp(prefix="sbe-deciding-unknown-")
+        _git_repo(tmp)
+        pkg = decisions_mod.build_package(
+            tmp, {"kind": "forced-close", "check": "", "verdict": "FAIL",
+                  "verdictLine": "a human forced this closed", "otherLines": [],
+                  "dossier": None})
+        with io.open(decisions_mod.write_package(tmp, pkg), encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("NO-DATA", pkg["decidingCode"]["note"])
+        self.assertIn("NO-DATA", pkg["logicFlowchart"])
+        self.assertNotIn("```mermaid", body,
+                         "no fenced diagram is drawn where no logic was read")
 
 
 if __name__ == "__main__":
