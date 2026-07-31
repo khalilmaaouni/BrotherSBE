@@ -236,6 +236,8 @@ proposed tier T3 (a floor, not a ceiling), declared tier T1
   DISAGREEMENT partner-path           migrations/0002_add_partner_id.sql [disposition: missing]
 verdict: REVIEW-REQUIRED
 The diff shows more than the intake declared. This tool will not lower a human tier and will not raise one behind your back either: record a disposition naming the detector, the decision, the reason, who decided, and the head commit it was decided against.
+
+sbe impact: decision package written, because this run raised a tier or read a disposition: /tmp/sbe-book-ch12-schema-dossier/decisions/001-tier-review-required/DECISION.md
 ```
 
 Three detectors fired on one file, not one: a migration, raw DDL, and a

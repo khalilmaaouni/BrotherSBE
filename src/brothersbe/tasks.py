@@ -340,6 +340,41 @@ def cmd_open(args, exit_ok, exit_failed, exit_usage):
     return exit_ok
 
 
+def _record_forced_close(root, task):
+    """Write ONE decision package for a forced close, and say where it landed.
+
+    THIS FUNCTION CANNOT MOVE THIS COMMAND'S EXIT CODE, and that is structural
+    rather than a promise. It returns nothing at all, so there is no value for
+    the caller to fold into a code; the caller invokes it as a bare statement,
+    AFTER `save_registry` has already committed the close, so the close itself
+    is durable before any of this runs; and every failure raised inside it, of
+    any class, is caught here, printed with its exception class named, and stops
+    here. A forced close still exits on the close's own result with a broken
+    decisions directory. The failure is never swallowed either: the sentence
+    printed on the way out says exactly what was not recorded, because a
+    bookkeeping failure nobody was told about is worse than the missing package.
+
+    `decisions` is imported LAZILY, inside the function, the way `cli.py`
+    imports its modules, so an older installation that ships no
+    `brothersbe.decisions` still opens, closes and fences tasks.
+    """
+    try:
+        from . import decisions as decisions_mod
+    except ImportError as exc:
+        sys.stdout.write("sbe task close: no decision package was written: this installation "
+                         "carries no brothersbe.decisions (%s). The close above stands and "
+                         "this command's exit code is unchanged.\n" % exc)
+        return
+    try:
+        path = decisions_mod.record_forced_close(root, task)
+    except Exception as exc:
+        sys.stdout.write("sbe task close: no decision package was written: %s: %s. The close "
+                         "above stands and this command's exit code is unchanged.\n"
+                         % (type(exc).__name__, exc))
+        return
+    sys.stdout.write("sbe task close: decision package written: %s\n" % path)
+
+
 def cmd_close(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
     data = load_registry(root)
@@ -411,6 +446,10 @@ def cmd_close(args, exit_ok, exit_failed, exit_usage):
     sys.stdout.write("sbe task close %s: FORCED by %s (%s). The record carries the "
                      "disposition and the violation list; this close is never read as "
                      "clean.\n" % (args.id, args.who, args.why))
+    # A bare statement, after the registry is saved and before the exit code is
+    # returned unchanged: a forced close is one of the four moments that write a
+    # decision package, and writing one may not move what this close decided.
+    _record_forced_close(root, task)
     return exit_ok
 
 

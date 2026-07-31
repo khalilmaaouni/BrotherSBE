@@ -189,6 +189,54 @@ def _record_decisions(command, argv, lines, suppressed):
             "PASS or a NO-DATA is not one.\n" % command)
 
 
+def _record_tier_decision(root, data, intake_path, machine_readable):
+    """Write ONE decision package when an impact run raised a tier or read a
+    disposition, and say where it landed.
+
+    THIS FUNCTION CANNOT MOVE A VERDICT OR AN EXIT CODE, for exactly the reasons
+    `_record_decisions` above states and by exactly the same construction: it
+    returns nothing at all, so there is no value for a caller to fold into an
+    exit code; the caller invokes it as a bare statement and returns the code it
+    computed from the report; and every failure raised inside it, of any class,
+    is caught here, printed here with its exception class named, and stops here.
+    A REVIEW-REQUIRED impact still exits 1 with a broken decisions directory.
+
+    NOTHING IS PRINTED WHEN NOTHING WAS DECIDED. `record_tier_decision` returns
+    None for a run that raised no tier and disposed of nothing, and an empty
+    package, or a line announcing one, would both claim a decision that never
+    happened. That is the one difference from `_record_decisions`, which is
+    watching a run that always decided something.
+
+    WHERE THE SENTENCE GOES. Under `--json`, stdout is a document a caller
+    parses, so the sentence is written to stderr instead: a human line appended
+    to that document would break every one of those callers. Without `--json`
+    it goes to stdout beside the report it describes.
+    """
+    stream = sys.stderr if machine_readable else sys.stdout
+    try:
+        from . import decisions as decisions_mod
+    except ImportError as exc:
+        stream.write("\nsbe impact: no decision package was written: this installation "
+                     "carries no brothersbe.decisions (%s). The verdict above stands and "
+                     "this command's exit code is unchanged.\n" % exc)
+        return
+    dossier = os.path.dirname(os.path.abspath(intake_path)) if intake_path else None
+    try:
+        written = decisions_mod.record_tier_decision(root, data, dossier)
+    except Exception as exc:
+        # Deliberately every class, for the reason `_record_decisions` gives:
+        # an exception class nobody anticipated would change a verdict by
+        # escaping. It is reported in full, with its class named, never
+        # swallowed.
+        stream.write("\nsbe impact: no decision package was written: %s: %s. The verdict "
+                     "above stands and this command's exit code is unchanged.\n"
+                     % (type(exc).__name__, exc))
+        return
+    if written:
+        stream.write("\nsbe impact: decision package written, because this run raised a tier "
+                     "or read a disposition: %s\n" % written)
+
+
 def _closing_caveat(command, code):
     """The last line a reader sees, and the one that stops an exit code from
     being over-read.
@@ -395,6 +443,11 @@ def _cmd_impact(args):
                 "human tier and will not raise one behind your back either: record a "
                 "disposition naming the detector, the decision, the reason, who decided, and "
                 "the head commit it was decided against.\n")
+    # A bare statement, before the exit code is computed from `data` below and
+    # with no value flowing out of it: a raised or disposed tier is one of the
+    # four moments that write a package, and writing one may not move what this
+    # command decided. See `_record_tier_decision`.
+    _record_tier_decision(os.path.abspath(args.path), data, args.intake, args.json)
     if data["verdict"] in ("REVIEW-REQUIRED", "FAIL"):
         return EXIT_CONTROL_FAILED
     if data["verdict"] == "NO-DATA" and args.strict:

@@ -313,5 +313,167 @@ class TestGateTriggers(unittest.TestCase):
                         result["lines"][:5])
 
 
+class TestOtherTriggers(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-other-trigger-")
+        _git_repo(self.tmp)
+
+    def test_a_forced_close_leaves_a_package_naming_who_why_and_the_violations(self):
+        record = {"id": "T01", "agent": "writer-a", "role": "writer",
+                  "forced": {"who": "a human", "why": "shipped under a deadline",
+                             "verdict": "FAIL", "violations": ["src/other.py"],
+                             "at": "2026-07-31T00:00:00Z"}}
+        path = decisions_mod.record_forced_close(self.tmp, record)
+        body = io.open(path, encoding="utf-8").read()
+        for expected in ("a human", "shipped under a deadline", "src/other.py", "FAIL"):
+            self.assertIn(expected, body)
+        self.assertNotIn("PASS", body)
+
+    def test_an_impact_run_with_nothing_decided_writes_nothing(self):
+        quiet = {"verdict": "PASS", "disagreements": [], "proposedTier": "T1",
+                 "humanTier": "T1", "headCommit": None}
+        self.assertIsNone(decisions_mod.record_tier_decision(self.tmp, quiet, None))
+
+    def test_a_review_required_impact_writes_a_package_naming_the_detector(self):
+        raised = {"verdict": "REVIEW-REQUIRED", "proposedTier": "T3", "humanTier": "T1",
+                  "headCommit": None,
+                  "disagreements": [{"detector": "schema-migration", "file": "db/001.sql",
+                                     "disposition": "missing"}]}
+        path = decisions_mod.record_tier_decision(self.tmp, raised, None)
+        body = io.open(path, encoding="utf-8").read()
+        self.assertIn("schema-migration", body)
+        self.assertIn("T1", body)
+        self.assertIn("T3", body)
+
+    # The fixtures below are not in the plan. They hold the sentences Task 4
+    # makes in prose and would otherwise be held by nobody: that a forced close
+    # cannot be recorded as a pass whatever the record claims, that a disposed
+    # tier raise is WAIVED rather than the PASS the report printed, and that a
+    # package write on either path cannot move an exit code.
+
+    def test_a_forced_record_claiming_pass_is_recorded_no_data_and_the_claim_is_named(self):
+        """`sbe task close --force` returns before the forced branch on PASS, so
+        a record reaching here claiming PASS is a caller that did not run the
+        postcondition. Copying that word into a FORCED package would print a
+        clean verdict over a close nobody's diff cleared."""
+        record = {"id": "T02", "agent": "writer-a", "role": "writer",
+                  "forced": {"who": "a human", "why": "the deadline",
+                             "verdict": "PASS", "violations": ["src/other.py"],
+                             "at": "2026-07-31T00:00:00Z"}}
+        path = decisions_mod.record_forced_close(self.tmp, record)
+        body = io.open(path, encoding="utf-8").read()
+        self.assertIn("- verdict recorded by the run: NO-DATA\n", body)
+        self.assertIn("PASS", body, "the word the record claimed is named, never silently "
+                                    "dropped")
+
+    def test_a_close_record_with_no_forced_block_is_no_data_and_names_what_would_fill_it(self):
+        record = {"id": "T03", "agent": "writer-a", "role": "writer"}
+        path = decisions_mod.record_forced_close(self.tmp, record)
+        body = io.open(path, encoding="utf-8").read()
+        self.assertIn("- verdict recorded by the run: NO-DATA\n", body)
+        self.assertIn("--force --who --why", body)
+        self.assertNotIn("PASS", body)
+
+    def test_a_disposed_raise_is_waived_never_the_pass_the_report_printed(self):
+        """impact prints PASS once every disagreement carries a disposition. The
+        decision this package records is that suppression, and a suppression is
+        WAIVED. Recording the report's PASS here would be a package that reads
+        clean over a control a human switched off."""
+        disposed = {"verdict": "PASS", "proposedTier": "T3", "humanTier": "T1",
+                    "headCommit": None,
+                    "disagreements": [{"detector": "db-migration", "file": "db/001.sql",
+                                       "disposition": "recorded"}]}
+        path = decisions_mod.record_tier_decision(self.tmp, disposed, None)
+        self.assertIsNotNone(path)
+        body = io.open(path, encoding="utf-8").read()
+        self.assertIn("- verdict recorded by the run: WAIVED\n", body)
+        self.assertIn("db-migration", body)
+
+    def test_a_tier_package_never_quotes_a_line_the_caller_did_not_compose(self):
+        """The tier path is handed a REPORT, not a terminal capture. Everything
+        it prints is composed from that report's own named fields, and the
+        package says so, because a section headed "quoted" that carries
+        something nobody quoted is the same defect as an uncounted line."""
+        raised = {"verdict": "REVIEW-REQUIRED", "proposedTier": "T3", "humanTier": "T1",
+                  "headCommit": None, "disagreements": [],
+                  "chatter": "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIcorrecthorse"}
+        path = decisions_mod.record_tier_decision(self.tmp, raised, None)
+        body = io.open(path, encoding="utf-8").read()
+        self.assertNotIn("wJalrXUtnFEMIcorrecthorse", body)
+        self.assertIn("composed from the impact report's own fields", body)
+
+    def test_a_forced_close_through_the_cli_writes_a_package_and_keeps_its_exit_code(self):
+        sha = subprocess.run(["git", "-C", self.tmp, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        _run([sys.executable, SBE, "task", "open", "--id", "w1", "--agent", "a",
+              "--role", "writer", "--base", sha, "--verify", "true",
+              "--owns", "owned.txt", "--cwd", self.tmp], cwd=self.tmp)
+        with io.open(os.path.join(self.tmp, "outside.txt"), "w", encoding="utf-8") as fh:
+            fh.write("written outside the declaration\n")
+        result = _run([sys.executable, SBE, "task", "close", "w1", "--force",
+                       "--who", "the operator", "--why", "hotfix, out of band",
+                       "--cwd", self.tmp], cwd=self.tmp)
+        both = result["stdout"] + result["stderr"]
+        self.assertEqual(result["code"], 0, both)
+        self.assertIn("FORCED", both)
+        self.assertIn("decision package written", both)
+        written = [line.split("decision package written:")[1].strip()
+                   for line in both.splitlines() if "decision package written:" in line]
+        self.assertEqual(len(written), 1, both)
+        body = io.open(written[0], encoding="utf-8").read()
+        self.assertIn("the operator", body)
+        self.assertIn("outside.txt", body)
+
+    def test_a_package_write_that_fails_leaves_the_forced_close_exit_code_alone(self):
+        # A FILE where the decisions directory has to go, so every write under
+        # it fails. `.sbe` also holds the registry, so the close itself is run
+        # first, in a repository whose `.sbe` is still a directory, and the file
+        # is planted between the close and nothing else by pointing the writer
+        # at a root whose `.sbe` cannot hold a directory.
+        record = {"id": "T04", "agent": "a", "role": "writer",
+                  "forced": {"who": "a human", "why": "the deadline", "verdict": "FAIL",
+                             "violations": ["src/other.py"], "at": "2026-07-31T00:00:00Z"}}
+        with io.open(os.path.join(self.tmp, ".sbe"), "w", encoding="utf-8") as fh:
+            fh.write("not a directory\n")
+        with self.assertRaises(decisions_mod.DecisionUnwritable):
+            decisions_mod.record_forced_close(self.tmp, record)
+        # And the CLI path swallows nothing while changing nothing: the close
+        # exits on its own verdict and the failure is printed by name.
+        from brothersbe import tasks as tasks_mod
+        printed = []
+        original = tasks_mod.sys.stdout.write
+        try:
+            tasks_mod.sys.stdout.write = lambda s: printed.append(s)
+            tasks_mod._record_forced_close(self.tmp, record)
+        finally:
+            tasks_mod.sys.stdout.write = original
+        joined = "".join(printed)
+        self.assertIn("no decision package was written", joined)
+        self.assertIn("DecisionUnwritable", joined)
+        self.assertIn("exit code is unchanged", joined)
+
+    def test_impact_in_json_mode_keeps_stdout_parseable(self):
+        """`sbe impact --json` stdout is a document callers parse. A human
+        sentence appended to it would break every one of them, so the package
+        line goes to stderr there and to stdout otherwise."""
+        with io.open(os.path.join(self.tmp, "00-intake.json"), "w", encoding="utf-8") as fh:
+            json.dump({"answers": {"changes_contract": "n", "crosses_boundary": "n",
+                                   "reversible_under_hour": "y", "touches_sensitive": "n",
+                                   "consumers": "none"}}, fh)
+        with io.open(os.path.join(self.tmp, "0002_add_partner_id.sql"), "w",
+                     encoding="utf-8") as fh:
+            fh.write("ALTER TABLE orders ADD COLUMN partner_id TEXT;\n")
+        subprocess.run(["git", "-C", self.tmp, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", self.tmp, "commit", "-qm", "migration"], check=True)
+        base = subprocess.run(["git", "-C", self.tmp, "rev-parse", "HEAD~1"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        result = _run([sys.executable, SBE, "impact", self.tmp, "--base", base,
+                       "--intake", os.path.join(self.tmp, "00-intake.json"), "--json"],
+                      cwd=self.tmp)
+        data = json.loads(result["stdout"])
+        self.assertEqual(data["verdict"], "REVIEW-REQUIRED", result["stdout"])
+        self.assertIn("decision package written", result["stderr"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

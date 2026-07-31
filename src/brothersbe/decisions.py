@@ -79,7 +79,11 @@ import tempfile
 import time
 from importlib.machinery import SourceFileLoader
 
-from .impact import _git  # noqa: E402  (the same private helper status.py reuses)
+# `_git` is the same private helper `status.py` reuses. `_tier_index` is
+# imported for the same reason rather than re-spelled: the tier ORDER is
+# `impact.py`'s rule, and a second copy of it here would decide "is this a
+# raise?" differently from the tool that printed the report.
+from .impact import _git, _tier_index  # noqa: E402
 
 #: The shipped tools tree, resolved the way `evidence.py` resolves it rather
 #: than by a second spelling. It is put on `sys.path` LAZILY, inside
@@ -643,6 +647,29 @@ def _evidence_lines(trigger):
     return lines
 
 
+def _detail_lines(trigger):
+    """The detail lines the CALLER composed, as a list, appended to the inputs
+    section of the package.
+
+    WHAT MAY COME THROUGH HERE, stated because this is the one door into a
+    package that does not go through `parse_verdict_lines`: lines composed from
+    a STRUCTURED RECORD THIS PROJECT ITSELF WROTE, and nothing else.
+    `record_tier_decision` composes them from the named fields of an impact
+    report and `record_forced_close` from the named fields of a task registry
+    record. Both are files this project writes and a reader already has.
+
+    IT IS NOT A DOOR FOR CAPTURED OUTPUT. Text captured from a run goes through
+    `parse_verdict_lines`, which counts and discards every line outside the
+    verdict grammar for the reason that function states at length. Routing
+    captured lines through here instead would undo that whole policy in one
+    line, so a caller that holds terminal text uses `record_from_run`.
+    """
+    details = trigger.get("details")
+    if not isinstance(details, (list, tuple)):
+        return []
+    return [" ".join(str(item).split()) for item in details if str(item).strip()]
+
+
 def _input_lines(trigger, root, location, head):
     """Everything this package read, named so a reader can re-read it."""
     lines = ["the trigger kind %r, handed to this module by the command that made the "
@@ -657,6 +684,7 @@ def _input_lines(trigger, root, location, head):
                      % head["commit"])
     else:
         lines.append(head["note"])
+    lines.extend(_detail_lines(trigger))
     return lines
 
 
@@ -1031,3 +1059,247 @@ def record_from_run(root, text, dossier):
                 % (exc, len(written), ", ".join(written) or "none",
                    len(worthy) - index))
     return written
+
+
+# ---------------------------------------------------------------------------
+# The other two triggers: a tier raised or disposed, and a forced task close.
+#
+# Neither of these is handed TERMINAL TEXT the way `record_from_run` is. Each is
+# handed a STRUCTURED RECORD this project itself wrote: `sbe impact`'s report
+# dict, and the task registry's own task record. So neither one quotes a
+# captured line, and each says so in the package rather than letting a section
+# headed "quoted" carry something nobody quoted. Both route through
+# `build_package` and `write_package` above. There is no second package format.
+# ---------------------------------------------------------------------------
+
+#: How a composed verdict line is described in the package that carries it, so a
+#: reader can tell a line CAPTURED from a run apart from a line COMPOSED from a
+#: report's named fields. Two different things, and a package that blurred them
+#: would be claiming a provenance it does not have.
+_COMPOSED_FROM_IMPACT = ("NOTE ON THE LINE UNDER 'The verdict, quoted': it was composed from "
+                         "the impact report's own fields (verdict, proposedTier, humanTier), "
+                         "not captured from a terminal. `sbe impact` hands this module a "
+                         "report rather than text, so no line of that run's output was read, "
+                         "quoted or counted here.")
+
+_COMPOSED_FROM_REGISTRY = ("NOTE ON THE LINE UNDER 'The verdict, quoted': it was composed "
+                           "from the task registry record's own fields (id, forced.who, "
+                           "forced.why, forced.verdict), not captured from a terminal. `sbe "
+                           "task close --force` hands this module a record rather than text, "
+                           "so no line of that run's output was read, quoted or counted here.")
+
+
+def _raise_note(proposed, human):
+    """Whether the report proposes a HIGHER tier than the human declared, as ONE
+    dict with keys `raised` and `note`.
+
+    A tier word on either side that this project does not ship raises nothing
+    and claims no raise: `raised` is False and `note` carries the NO-DATA
+    sentence, because a comparison nobody could make is not a comparison that
+    came out equal. The ORDER itself is `impact._tier_index`, imported rather
+    than re-spelled, so this cannot decide "is this a raise?" differently from
+    the tool that printed the report.
+    """
+    try:
+        raised = _tier_index(str(proposed)) > _tier_index(str(human))
+    except ValueError:
+        return {"raised": False,
+                "note": "NO-DATA: the report's proposed tier %r and declared tier %r could not "
+                        "both be ordered, so whether this run RAISED a tier was not compared. "
+                        "A comparison nobody could make is not a comparison that came out "
+                        "equal." % (proposed, human)}
+    return {"raised": raised, "note": ""}
+
+
+def record_tier_decision(root, impact_data, dossier):
+    """ONE decision package for a tier raised or disposed, as the absolute path
+    written, or None when the report shows neither.
+
+    None is the honest answer for "nothing was decided here", and the caller
+    prints nothing rather than an empty package: a package records a decision
+    somebody has to carry, and a run whose proposed tier matched the declared
+    one and disposed of nothing produced none.
+
+    IT READS `impact_data` AND NOTHING ELSE. It never re-runs `sbe impact`, it
+    never reads the diff a second time, and it starts no process beyond the
+    `rev-parse` every package makes to bind itself to a commit. A second reading
+    of the diff here could disagree with the report the user is looking at,
+    which is the failure this whole module is built to avoid.
+
+    WHICH VERDICT WORD THE PACKAGE CARRIES, and why it is never PASS:
+
+      - The report's own word, when that word is FAIL, NO-DATA or
+        REVIEW-REQUIRED. Those are what the run printed and this module reports
+        them rather than inventing a fifth.
+      - WAIVED, when every disagreement carries a recorded disposition. `sbe
+        impact` prints PASS in that case, and it prints PASS BECAUSE a human
+        suppressed the raise. The decision this package records is that
+        suppression, and a suppression is WAIVED (I7). Copying the report's
+        PASS onto a package about a switched-off control is exactly the
+        clean-looking record this project exists to stop.
+      - NO-DATA otherwise, with the report's own word named in the notes, so a
+        word this module did not expect is visible rather than normalized in
+        silence.
+    """
+    data = impact_data if isinstance(impact_data, dict) else {}
+    reported = str(data.get("verdict") or "").strip()
+    raw_disagreements = data.get("disagreements")
+    disagreements = [d for d in raw_disagreements if isinstance(d, dict)] \
+        if isinstance(raw_disagreements, (list, tuple)) else []
+    disposed = [d for d in disagreements if d.get("disposition") == "recorded"]
+    unresolved = [d for d in disagreements if d.get("disposition") != "recorded"]
+    proposed = data.get("proposedTier")
+    human = data.get("humanTier")
+    raise_result = _raise_note(proposed, human)
+
+    if not (reported == "REVIEW-REQUIRED" or disagreements or raise_result["raised"]):
+        return None
+
+    notes = []
+    if reported in ("FAIL", "NO-DATA", "REVIEW-REQUIRED"):
+        verdict = reported
+    elif disposed and not unresolved:
+        verdict = "WAIVED"
+        notes.append("This run's report carries the word %r, and it carries it BECAUSE %d "
+                     "disagreement(s) were disposed of by a recorded human decision. What "
+                     "this package records is that suppression, so it is WAIVED and never "
+                     "%r: a control somebody switched off did not pass."
+                     % (reported or "(none)", len(disposed), reported or "(none)"))
+    else:
+        verdict = "NO-DATA"
+        notes.append("NO-DATA: this run's report carries the verdict word %r, which is not "
+                     "one this module can record as a decision, so the package carries "
+                     "NO-DATA and names the word rather than normalizing it in silence."
+                     % (reported or "(none)"))
+    if raise_result["note"]:
+        notes.append(raise_result["note"])
+
+    line = ("verdict: %s. proposed tier %s (a floor, not a ceiling), declared tier %s"
+            % (reported or "(none recorded)", proposed or "(none recorded)",
+               human or "none read"))
+    details = [_COMPOSED_FROM_IMPACT,
+               "the tier the diff proposes: %s (a floor, never a ceiling: two of the five "
+               "intake answers cannot be derived from a diff)" % (proposed or "(none "
+                                                                  "recorded)"),
+               "the tier the human declared at intake: %s" % (human or "none read")]
+    for item in disagreements:
+        details.append("DISAGREEMENT %s %s [disposition: %s]"
+                       % (item.get("detector") or "(unnamed detector)",
+                          item.get("file") or "(no file named)",
+                          item.get("disposition") or "(none recorded)"))
+    if not disagreements:
+        details.append("NO-DATA: this report names no disagreement, so which detector raised "
+                       "the tier was not read from it. The DETECTED lines `sbe impact` prints "
+                       "over this same range are what would fill it.")
+    head_sha = data.get("headCommit")
+    if isinstance(head_sha, str) and head_sha.strip():
+        details.append("the head commit the report was computed against: %s" % head_sha.strip())
+    else:
+        details.append("NO-DATA: the report named no head commit, so which tree it measured "
+                       "was not read from it. `sbe impact --json` records it as headCommit.")
+    problem = data.get("intakeProblem")
+    if isinstance(problem, str) and problem.strip():
+        details.append("the intake this report could not use: %s" % problem.strip())
+
+    package = build_package(root, {
+        "kind": "tier",
+        # No shipped check registry decides a tier: the detectors live in
+        # `impact.py`. Naming one here would send a reader to a check that never
+        # ran, so the deciding-code and flowchart sections say NO-DATA instead.
+        "check": "",
+        "verdict": verdict,
+        "verdictLine": line,
+        "unquotedLineCount": 0,
+        "details": details,
+        "dossier": dossier,
+    })
+    package["notes"].extend(notes)
+    return write_package(root, package)
+
+
+def record_forced_close(root, task_record):
+    """ONE decision package for a forced task close, as the absolute path
+    written.
+
+    The package carries who forced it, why, the violation list, and the verdict
+    the diff postcondition ACTUALLY reached. That verdict is FAIL or NO-DATA and
+    never PASS, and the reason is mechanical rather than a matter of taste:
+    `tasks.cmd_close` returns on PASS before its forced branch is reached, so a
+    record arriving here claiming PASS came from a caller that did not run the
+    postcondition. Such a word is recorded as NO-DATA and NAMED in the notes,
+    never copied into the header, because a FORCED close headed PASS is a clean
+    verdict over a diff nobody cleared.
+
+    A record with no `forced` block at all is written too, as NO-DATA naming
+    `sbe task close --force --who --why` as what writes that block. Refusing
+    would lose the decision entirely, and writing it as though somebody had been
+    named would be worse than either.
+    """
+    record = task_record if isinstance(task_record, dict) else {}
+    forced = record.get("forced")
+    forced = forced if isinstance(forced, dict) else None
+    task_id = str(record.get("id") or "").strip() or "(no task id recorded)"
+    notes = []
+
+    if forced is None:
+        verdict = "NO-DATA"
+        who = "NO-DATA: nobody is recorded as forcing this close"
+        why = "NO-DATA: no reason is recorded for it"
+        violations = []
+        notes.append("NO-DATA: this task record carries no `forced` block, so who forced the "
+                     "close, why, and what the diff postcondition reached are all unknown "
+                     "here. `sbe task close --force --who --why` is what writes that block, "
+                     "and only a close that ran through it records a disposition.")
+    else:
+        claimed = str(forced.get("verdict") or "").strip()
+        if claimed in ("FAIL", "NO-DATA"):
+            verdict = claimed
+        else:
+            verdict = "NO-DATA"
+            notes.append("NO-DATA: this record claims the postcondition reached %r. `sbe task "
+                         "close` returns before its forced branch on that word, so a record "
+                         "reaching here with it did not run the postcondition. The package "
+                         "carries NO-DATA and names the claim rather than printing a clean "
+                         "verdict over a diff nobody cleared." % (claimed or "(nothing)"))
+        who = str(forced.get("who") or "").strip() or \
+            "NO-DATA: the record names nobody as forcing this close"
+        why = str(forced.get("why") or "").strip() or \
+            "NO-DATA: the record carries no reason for forcing this close"
+        raw = forced.get("violations")
+        violations = [str(v) for v in raw] if isinstance(raw, (list, tuple)) else []
+
+    line = ("sbe task close %s: FORCED by %s (%s). The diff postcondition reached %s."
+            % (task_id, who, why, verdict))
+    details = [_COMPOSED_FROM_REGISTRY,
+               "the task id: %s" % task_id,
+               "the agent on the record: %s" % (str(record.get("agent") or "").strip()
+                                                or "NO-DATA: none recorded"),
+               "the role on the record: %s" % (str(record.get("role") or "").strip()
+                                               or "NO-DATA: none recorded"),
+               "who forced it: %s" % who,
+               "why: %s" % why]
+    if forced is not None:
+        details.append("when: %s" % (str(forced.get("at") or "").strip()
+                                     or "NO-DATA: the record carries no timestamp"))
+    for path in violations:
+        details.append("VIOLATION %s (changed outside the declaration, closed over anyway)"
+                       % path)
+    if not violations:
+        details.append("NO-DATA: this record lists no violation path. Either the "
+                       "postcondition could not be computed at all, in which case nothing "
+                       "was compared, or the list was not carried; `.sbe/tasks.json` holds "
+                       "the record either way.")
+
+    package = build_package(root, {
+        "kind": "forced-close",
+        # A forced close is decided by a human, not by a shipped check, so there
+        # is no deciding code to excerpt and nothing invents one.
+        "check": "",
+        "verdict": verdict,
+        "verdictLine": line,
+        "unquotedLineCount": 0,
+        "details": details,
+        "dossier": None,
+    })
+    package["notes"].extend(notes)
+    return write_package(root, package)

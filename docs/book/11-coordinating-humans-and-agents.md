@@ -247,6 +247,7 @@ python3 "$ROOT/bin/sbe" task close review-the-bundle --cwd . --force --who revie
   VIOLATION  daily_totals.json
   VIOLATION  orders.csv
 sbe task close review-the-bundle: FORCED by reviewer-1 (agent-1 receipt verified, row-count message still off by one, tracked by hand until sbe note ships). The record carries the disposition and the violation list; this close is never read as clean.
+sbe task close: decision package written: /private/tmp/sbe-book-ch11-repo/.sbe/decisions/001-forced-close-fail/DECISION.md
 ```
 
 `FORCED`, never `PASS`, printed in the record forever. That is the whole

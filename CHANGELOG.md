@@ -8,6 +8,21 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The other two decisions worth recording now record themselves: a tier raised
+  or disposed by `sbe impact`, and a forced task close. Both go through helpers
+  that return nothing and are invoked as bare statements, so neither can move an
+  exit code, and both catch every exception class and say so rather than
+  escaping. Two honesty rules are enforced where they are easy to get wrong: a
+  raise whose disagreements are all disposed is recorded WAIVED, never the PASS
+  the impact report prints, because copying PASS onto a suppressed control is
+  exactly the defect these packages exist to catch; and a forced record that
+  CLAIMS a PASS, or carries no verdict at all, is recorded NO-DATA with the
+  claim named rather than believed. Under `--json` the package still gets
+  written and its sentence goes to stderr, so machine-readable stdout stays
+  parseable. Loop 2, task 4 of 8. Held by `TestOtherTriggers`, calibrated by
+  eight deliberate breaks with none uncaught. Two of the book's terminal blocks
+  print those commands and are regenerated from live runs in the same change
+
 - A failing or waived gate now writes its own decision package, without the
   writing ever being able to change what the gate decided. `sbe verify`, `gate`
   and `score` tee their delegate's output, parse only lines matching the shipped
