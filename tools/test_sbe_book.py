@@ -190,6 +190,40 @@ class TestChapterCapabilities(unittest.TestCase):
         self.assertNotEqual(mod.stable(old), mod.stable(other),
                             "the message beside a masked caret line still bites")
 
+    def test_a_mid_text_underline_line_vanishes_whole(self):
+        """The first mask stripped only the glyphs, which worked by accident
+        when the underline was the text's last line (the trailing whitespace
+        class swallowed the final newline) and left a blank line behind
+        everywhere else. The two 3.14 CI legs (2026-07-31) failed on exactly
+        that: a mid-traceback underline whose leftover blank line no
+        3.9-recorded excerpt could ever contain. Calibrated both ways: the
+        3.13 tilde-plus-caret shape masks wholly, and a line carrying any
+        byte besides underline glyphs still bites."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "replay_book", os.path.join(ROOT, "evals", "replay_book.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        floor = ("Traceback (most recent call last):\n"
+                 "    self.assertIn(a, b)\n"
+                 "AssertionError: boom\n")
+        newer = ("Traceback (most recent call last):\n"
+                 "    self.assertIn(a, b)\n"
+                 "    ~~~~~~~~~~~~~^^^^^^\n"
+                 "AssertionError: boom\n")
+        self.assertEqual(mod.stable(floor), mod.stable(newer),
+                         "a mid-text underline line must vanish with its "
+                         "newline, leaving no blank line behind")
+        self.assertEqual(mod.stable(newer), mod.stable(mod.stable(newer)),
+                         "the mask stays idempotent")
+        content = ("Traceback (most recent call last):\n"
+                   "    self.assertIn(a, b)\n"
+                   "    ^^^^ partial, carries content\n"
+                   "AssertionError: boom\n")
+        self.assertNotEqual(mod.stable(floor), mod.stable(content),
+                            "a line with any byte besides underline glyphs "
+                            "is content and must still bite")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

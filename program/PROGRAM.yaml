@@ -1,0 +1,69 @@
+# Program record for the BrotherSBE public release.
+# Source of truth for scope and budgets: program/MASTER-PLAN.md (sections 9 to 11).
+
+program: brothersbe-public-release
+objective: >
+  Turn BrotherSBE's strong assurance engine into the simplest, most guided,
+  most maintainable engineering product in its category.
+version_target: 1.0.0
+product_owner: Khalil Maaouni
+status: delivery_blueprint_no_public_release_authorized
+plan: MASTER-PLAN.md
+baseline_reviewed: dacee900d24d40b351bc117ebbf001406bb09699
+plan_date: 2026-07-31
+
+token_budget:
+  planned_total: 6200000
+  hard_ceiling: 7400000
+  note: >
+    Estimates, not a promise. The release is evidence gated, not date gated.
+    Reaching 75 percent of a task cap without a passing acceptance criterion
+    triggers a scope review; reaching 100 percent stops the task.
+
+target_window:
+  earliest_stable: 2026-11-09
+  latest_stated: 2026-11-23
+  condition: only if every release gate in the plan passes
+
+# The plan defines seven waves, numbered 0 through 6.
+waves:
+  - id: wave-0
+    name: Truth reset and feature freeze
+    work_items: BR-0001 to BR-0006
+    token_budget: 430000
+  - id: wave-1
+    name: Canonical lifecycle and maintainable contracts
+    work_items: BR-0101 to BR-0106
+    token_budget: 890000
+  - id: wave-2
+    name: Guided experience and onboarding
+    work_items: BR-0201 to BR-0208
+    token_budget: 1180000
+  - id: wave-3
+    name: Installation, packaging, update, and rollback
+    work_items: BR-0301 to BR-0307
+    token_budget: 1130000
+  - id: wave-4
+    name: Cross-host adapters
+    work_items: BR-0401 to BR-0409
+    token_budget: 1180000
+  - id: wave-5
+    name: Team control, governance, and release engineering
+    work_items: BR-0501 to BR-0507
+    token_budget: 1240000
+  - id: wave-6
+    name: Human validation and release candidate
+    work_items: BR-0601 to BR-0607
+    token_budget: 1340000
+
+# Release gate categories, one per plan section 11.x. A stable release requires
+# every gate in every category to pass; a documented no-go is a valid outcome.
+release_gates:
+  - truth-and-security
+  - installation
+  - beginner-experience
+  - engineering-experience
+  - team-experience
+  - cross-host-support
+  - maintainability
+  - public-readiness

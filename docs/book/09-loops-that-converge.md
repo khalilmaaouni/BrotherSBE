@@ -148,8 +148,8 @@ new = '''    def test_the_api_refuses_before_the_pipeline_ran(self):
         with open(os.path.join(HERE, "daily_totals.json")) as fh:
             rows_on_disk = len(json.load(fh))
         printed = int(out.stdout.strip().splitlines()[-1].split()[1])
-        self.assertEqual(printed, rows_on_disk,
-                          "the pipeline claimed %d row(s) but wrote %d" % (printed, rows_on_disk))
+        msg = "the pipeline claimed %d row(s) but wrote %d" % (printed, rows_on_disk)
+        self.assertEqual(printed, rows_on_disk, msg)
 
 
 if __name__ == "__main__":'''
@@ -176,8 +176,8 @@ test_the_wrote_line_matches_the_rows_actually_on_disk (__main__.TestEstate) ... 
 FAIL: test_the_wrote_line_matches_the_rows_actually_on_disk (__main__.TestEstate)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/private/tmp/sbe-book-ch09-repo/test_estate.py", line 52, in test_the_wrote_line_matches_the_rows_actually_on_disk
-    self.assertEqual(printed, rows_on_disk,
+  File "/private/tmp/sbe-book-ch09-repo/test_estate.py", line 53, in test_the_wrote_line_matches_the_rows_actually_on_disk
+    self.assertEqual(printed, rows_on_disk, msg)
 AssertionError: 3 != 2 : the pipeline claimed 3 row(s) but wrote 2
 
 ----------------------------------------------------------------------

@@ -72,8 +72,13 @@ VOLATILE_SHA = re.compile(r"\b[0-9a-f]{12,40}\b")
 VOLATILE_TESTID = re.compile(r"\((__main__\.[A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\)")
 # 3.11 added fine-grained error locations: caret and tilde underline lines
 # beneath a traceback frame. The floor is 3.9, whose tracebacks carry none,
-# so an underline-only line is interpreter decoration, not content.
-VOLATILE_CARETS = re.compile(r"^\s*[\^~]+\s*$", re.M)
+# so an underline-only line is interpreter decoration, not content. The
+# match takes the line's newline with it: stripping only the glyphs left a
+# blank line behind on the side that had the underline, and a 3.9-recorded
+# excerpt with no underline at all could never equal it (proven by the two
+# 3.14 CI legs, 2026-07-31). A line that carries any byte besides
+# underline glyphs and horizontal whitespace is content and never matches.
+VOLATILE_CARETS = re.compile(r"^[ \t]*[\^~]+[ \t]*$\n?", re.M)
 # The doctor's python line prints the LIVE interpreter version next to the
 # floor: "python  PASS  3.9.6 (floor is 3.9)". The version is the machine's,
 # so only that token masks; the verdict before it and the floor text after
