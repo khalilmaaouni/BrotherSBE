@@ -365,6 +365,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        # The front page promises a 3.9 floor and the runners ship 3.14; the
+        # first readable CI logs proved excerpts can drift between the two
+        # (unittest id formatting), so BOTH ends are tested: the floor the
+        # promise names and the newest an adopter will actually have.
+        python: ['3.9', '3.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -372,7 +377,7 @@ jobs:
           fetch-depth: 0   # the approval gate reads commit trailers and signatures
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.x'
+          python-version: ${{ matrix.python }}
       # The approval gate accepts a signature only if THIS host verified it. A
       # runner with no public keys imported reports "cannot verify" for every
       # signed commit, which is NO-DATA and not an approval. To use the signed
@@ -438,6 +443,12 @@ jobs:
       # than a gate: a fixture no merge runs cannot stop anything.
       - name: Regression evals (every gate against the defect it exists to catch)
         run: python3 evals/run_evals.py
+      - name: Replay detail on failure (which excerpt blocks differ, and how)
+        if: failure()
+        run: |
+          python3 --version
+          python3 evals/replay_book.py || true
+          python3 evals/replay_guide05.py || true
       # Two passes: the fixed sweep, then a seeded random composition of the
       # same hollowing operations (--seed). The seeds are fixed so CI is
       # reproducible; a failing scenario prints its seed in its id. A wider

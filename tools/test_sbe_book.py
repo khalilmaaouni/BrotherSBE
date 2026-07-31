@@ -103,12 +103,37 @@ class TestDeclaredVolatileLine(unittest.TestCase):
         live = "verdict: NO-DATA\ngit diff 47422a88df57..HEAD over 2 changed file(s)\n"
         self.assertNotEqual(stable(book), stable(live))
 
-    def test_a_pinned_range_is_not_masked(self):
+    def test_sha_masking_never_eats_the_count_or_the_verdict(self):
+        """This fixture used to pin the opposite: a pinned range stayed
+        byte-compared. The first authenticated CI read (2026-07-31) moved the
+        law: the replay builds demo repositories whose commit ids fold in
+        dates and identity, so no two machines agree on them, and a mask by
+        shape cannot tell a reproducible pinned sha from a machine-dependent
+        demo one. Shas mask everywhere now; what this fixture defends is
+        that ONLY the sha masks: a differing count, verdict, or any other
+        byte beside it must still fail the comparison."""
         stable = self._stable()
-        pinned = "git diff 47422a88df57..f924538 over 2 changed file(s)\n"
-        self.assertEqual(stable(pinned), pinned,
-                         "a range pinned to two commits is deterministic and "
-                         "must stay byte-compared")
+        a = "git diff 47422a88df57..f924538 over 2 changed file(s)\nverdict: PASS\n"
+        b = "git diff aaaaaaaaaaaa..f924538 over 2 changed file(s)\nverdict: PASS\n"
+        self.assertEqual(stable(a), stable(b),
+                         "two shas in the same position are the same masked shape")
+        c = "git diff 47422a88df57..f924538 over 3 changed file(s)\nverdict: PASS\n"
+        self.assertNotEqual(stable(a), stable(c),
+                            "the count beside a masked sha must still bite")
+        d = "git diff 47422a88df57..f924538 over 2 changed file(s)\nverdict: FAIL\n"
+        self.assertNotEqual(stable(a), stable(d),
+                            "the verdict beside a masked sha must still bite")
+
+    def test_paths_and_test_ids_mask_but_their_neighbors_still_bite(self):
+        stable = self._stable()
+        a = "store: /Users/author/Documents/Repo/.sbe ok (__main__.TestEstate.test_x) ... FAIL\n"
+        b = "store: /home/runner/work/Repo/.sbe ok (__main__.TestEstate) ... FAIL\n"
+        self.assertEqual(stable(a), stable(b),
+                         "author path and runner path, old and new unittest id "
+                         "formats, are the same masked shape")
+        c = "store: /home/runner/work/Repo/.sbe ok (__main__.TestEstate) ... ok\n"
+        self.assertNotEqual(stable(a), stable(c),
+                            "the outcome beside a masked path must still bite")
 
 
 if __name__ == "__main__":

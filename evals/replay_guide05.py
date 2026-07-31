@@ -129,7 +129,11 @@ def main():
     fails, patches = 0, []
     for i, mk in compare:
         want, got = blocks[i]["text"], caps.get(mk, "<NO CAPTURE>")
-        if want != got:
+        # The same declared-volatile masks the book harness uses (paths, demo
+        # shas, interpreter-version unittest ids, the merge-base line); one
+        # definition, imported, so the two harnesses cannot drift apart.
+        from replay_book import stable
+        if stable(want) != stable(got):
             fails += 1
             print("=== BLOCK %d (lines %d-%d) DIFFERS ===" % (i, blocks[i]["a"], blocks[i]["b"]))
             for line in difflib.unified_diff(want.splitlines(), got.splitlines(),

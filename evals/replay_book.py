@@ -55,11 +55,28 @@ TIMEOUT_PER_CHAPTER = 60
 VOLATILE_LINE = re.compile(
     r"git diff [0-9a-f]{7,40}\.\.HEAD over \d+ changed file\(s\)")
 
+# The first authenticated read of the CI logs (2026-07-31) proved three more
+# machine-dependent surfaces inside otherwise-honest excerpts, each masked
+# here BY SHAPE and nothing else, so every remaining byte stays compared:
+# absolute filesystem paths (the author's /Users/... against a runner's
+# /home/runner/...), bare commit hashes of the demo repositories the replay
+# itself creates (a commit id folds in dates and identity, so no two
+# machines agree), and the unittest verbose id, whose format gained the
+# method name in newer interpreters while the floor this project promises
+# is 3.9.
+VOLATILE_PATH = re.compile(r"/(?:Users|home|private/tmp|tmp|var/folders)/[^\s:;,)'\"]+")
+VOLATILE_SHA = re.compile(r"\b[0-9a-f]{12,40}\b")
+VOLATILE_TESTID = re.compile(r"\((__main__\.[A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\)")
+
 
 def stable(text):
-    """Mask the declared-volatile diff line before comparison. Idempotent."""
-    return VOLATILE_LINE.sub(
+    """Mask the declared-volatile shapes before comparison. Idempotent."""
+    text = VOLATILE_LINE.sub(
         "git diff <live-base>..HEAD over <live-count> changed file(s)", text)
+    text = VOLATILE_PATH.sub("<path>", text)
+    text = VOLATILE_SHA.sub("<sha>", text)
+    text = VOLATILE_TESTID.sub(r"(\1)", text)
+    return text
 
 
 def chapters():
