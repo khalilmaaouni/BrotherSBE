@@ -1158,7 +1158,7 @@ def write_package(root, package):
     directory = package["dir"]
     target = os.path.join(directory, PACKAGE_FILENAME)
     existing = bound_commit_in(target)
-    if False:
+    if existing["exists"] and existing["commit"] != package["boundCommit"]:
         raise DecisionUnwritable(
             "%s is already bound to commit %s and this package is bound to %s; refusing "
             "to overwrite it. A package records what was decided about the program at "
