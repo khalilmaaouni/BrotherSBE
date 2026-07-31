@@ -14,6 +14,8 @@
     "evidence",
     "verification",
     "migrations",
-    "code-review"
+    "code-review",
+    "guided",
+    "onboarding"
   ]
 }

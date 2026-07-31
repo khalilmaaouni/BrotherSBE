@@ -239,3 +239,57 @@ captured.
 - population: one reported incident
 - date: page undated in this capture; entry recorded July 2026
 - limit: vendor incident writeup, single source
+
+## https://brothersbe.dev/install
+- claim: the master plan proposes this as the future one-command universal installer endpoint for macOS and Linux
+- population: the delivery blueprint in program/MASTER-PLAN.md, section 7.2
+- date: plan dated 2026-07-31
+- limit: planned endpoint only; the domain serves nothing today and no installer exists, which the plan itself gates behind wave 3
+
+## https://brothersbe.dev/install.ps1
+- claim: the master plan proposes this as the future one-command universal installer endpoint for Windows
+- population: the delivery blueprint in program/MASTER-PLAN.md, section 7.2
+- date: plan dated 2026-07-31
+- limit: planned endpoint only; the domain serves nothing today and no installer exists, which the plan itself gates behind wave 3
+
+## https://claude.com/plugins
+- claim: Claude's public plugin browser exists as a distribution surface the plan targets
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: interface and marketplace requirements can change; adapter tests, not this link, are the compatibility truth
+
+## https://github.com/MoonshotAI/kimi-code
+- claim: Kimi Code is a coding host the plan targets for a tier 1 adapter
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: integration target only; no adapter exists and no compatibility is claimed
+
+## https://github.com/QwenLM/qwen-code
+- claim: Qwen Code is a coding host the plan targets for a tier 1 adapter
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: integration target only; no adapter exists and no compatibility is claimed
+
+## https://github.com/anthropics/claude-plugins-official
+- claim: the official Claude plugin directory is the plan's primary distribution target
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: submission and acceptance are external decisions this repository cannot time or guarantee
+
+## https://github.com/google-gemini/gemini-cli
+- claim: Gemini CLI is a coding host the plan targets for a tier 1 adapter
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: integration target only; no adapter exists and no compatibility is claimed
+
+## https://openai.com/codex/
+- claim: OpenAI Codex is a coding host the plan targets for a tier 1 adapter
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: integration target only; no adapter exists and no compatibility is claimed
+
+## https://opencode.ai/docs
+- claim: OpenCode is a provider-neutral coding host the plan targets for a tier 1 adapter
+- population: the plan's ecosystem reference list, section 15
+- date: checked by the plan's author on 2026-07-31
+- limit: integration target only; no adapter exists and no compatibility is claimed

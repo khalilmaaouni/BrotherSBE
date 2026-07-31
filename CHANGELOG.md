@@ -8,6 +8,23 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The product now opens with a guided layer instead of a command inventory.
+  Four new skills route a person who does not know the machinery into the
+  machinery that exists: `/brothersbe:start` detects prior state and resumes it
+  or asks for the outcome in plain language, `/brothersbe:next` walks a fixed
+  priority ladder and returns exactly one recommended action with its reason,
+  `/brothersbe:status` reframes the status command as a plain answer with one
+  next action, and `/brothersbe:help` explains the product before it lists it.
+  No engine file changed: the skills wrap commands that already ship, per the
+  master plan's rule to wrap the proven engine rather than rewrite it. The
+  README's first screen now answers what this is, why a beginner should care,
+  and the one first move, with the full engineering reference intact below a
+  named divider. The public release program itself is tracked in `program/`
+  (the founder's master plan verbatim, PROGRAM.yaml, and work items), with the
+  unbuilt parts of its section 9 named as unbuilt in program/README.md. Held by
+  the existing frontmatter, citation-drift, and YAML tests over `skills/`, the
+  eval battery, and the manifest check.
+
 - The other two decisions worth recording now record themselves: a tier raised
   or disposed by `sbe impact`, and a forced task close. Both go through helpers
   that return nothing and are invoked as bare statements, so neither can move an

@@ -1,5 +1,31 @@
 # BrotherSBE
 
+BrotherSBE is an engineering colleague for Claude Code that designs backend and data systems before building them, and proves its work with checks that actually run. You tell it the outcome you want in plain language, and it handles the method, the order, and the evidence.
+
+Why it is worth your time: install once, describe the outcome you want, then follow one recommended action at a time. You never memorize a command list, and nothing is claimed as done until a check has shown it.
+
+Install it in three commands: clone the repository anywhere, check the package before you trust it, then start Claude Code with the plugin loaded:
+
+```bash
+git clone https://github.com/khalilmaaouni/BrotherSBE
+claude plugin validate BrotherSBE
+claude --plugin-dir BrotherSBE
+```
+
+The validate step must pass before you load anything. Adding the repository as a marketplace source works too; [docs/MIGRATION.md](docs/MIGRATION.md) covers both paths. Then, inside that session, make the one first move:
+
+```
+/brothersbe:start
+```
+
+That command looks at where you are and takes it from there: a new project or one already in progress, it finds the right next step. Along the way, three guided companions in [`skills/`](skills/) keep you oriented: `/brothersbe:next` recommends exactly one next action, `/brothersbe:status` explains where you are in plain language, and `/brothersbe:help` lays out the whole map when you ask for it.
+
+---
+
+## The engineering reference
+
+Everything below this line is the full engineering documentation: what the method is, how the gates work, and how to wire the checks into CI. You do not need it to begin, and `/brothersbe:start` will bring you here when it matters.
+
 BrotherSBE is a Claude Code skill that acts as a senior backend and data engineering colleague. It designs systems in the order the work actually runs: purpose, process, architecture, data, expression, then verification. It produces a design dossier, decides architecture from decision tables with named criteria, and holds the result to checks that run.
 
 Identity, five words, each a law in [SKILL.md](SKILL.md) and the [`references/`](references/) files its routing table names: **realistic, SOTA, best practices driven, proven, trustable.**
@@ -117,7 +143,7 @@ Validating plugin manifest: /path/to/BrotherSBE/.claude-plugin/plugin.json
 ✔ Validation passed
 ```
 
-That gives you six namespaced skills (`/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). Distribution through an internal marketplace pinned to a signed release is not built yet, and is not claimed here.
+That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). Distribution through an internal marketplace pinned to a signed release is not built yet, and is not claimed here.
 
 Either way you install it, there is one command line over the nine script paths:
 
