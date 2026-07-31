@@ -100,6 +100,9 @@ python3 "$ROOT/bin/sbe" gate approval .
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   approval  FAIL     APPROVAL (of 1 APPROVAL file(s) read) declares 'Approved by Dana Reviewer', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]
+
+sbe gate: 1 decision package(s) written, one per FAIL and per WAIVED line above:
+  /private/tmp/sbe-book-ch08-repo/.sbe/decisions/001-gate-approval-fail/DECISION.md
 ```
 
 Read that line whole, because nothing about it is vague. It names the file
@@ -148,6 +151,8 @@ python3 "$ROOT/bin/sbe" gate approval .
 ```
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   approval  NO-DATA  commit records Reviewed-in: PR-4821. This gate read a trailer out of a commit message and does not resolve the id against any review platform, so it points a human at a review rather than proving one happened. That is a pointer, not a control: resolve the id in CI (a job that queries your review platform) or sign the commit, and this becomes a verdict [severity: gate]
+
+sbe gate: 0 decision package(s) written: no FAIL and no WAIVED line was printed above. A package records a decision somebody has to carry, and a PASS or a NO-DATA is not one.
 ```
 
 That is real movement, FAIL to NO-DATA, and it is worth being precise about

@@ -47,6 +47,13 @@ def _delegate(tool_name, argv):
     Streams rather than captures: the tools print evidence lines that a human or
     a CI log is meant to read, and swallowing them to re-print a summary would
     put a layer of paraphrase between the reader and the verdict.
+
+    THIS IS THE DEFAULT DELEGATE and it is used by every command that does not
+    write a decision package. It never sees the child's output at all: the
+    child's stdout IS this process's stdout. `delegate_teed` below is the only
+    other one, it is used only on `verify`, `gate` and `score`, and the two are
+    kept apart on purpose. Two delegates nobody can tell apart is how the
+    streaming promise in the paragraph above gets quietly retracted.
     """
     path = _tool(tool_name)
     if not os.path.exists(path):
@@ -54,6 +61,132 @@ def _delegate(tool_name, argv):
                          "run and is not reporting a result\n" % path)
         return EXIT_USAGE
     return subprocess.call([sys.executable, path] + list(argv))
+
+
+def delegate_teed(tool_name, argv):
+    """Run a tool in tools/ and hand back ONE dict with keys `code` and `lines`:
+    its exit code untouched, and a copy of the stdout lines it printed.
+
+    Not a two-value tuple, deliberately: a pair-shaped return reads as a
+    possible `(verdict, evidence)` pair to the honesty meta-test in
+    `evals/test_no_data_class.py`, and this function is not a check.
+
+    WHICH DELEGATE IS USED WHERE, AND WHY. `_delegate` above is the default and
+    stays the default. This one is used ONLY where a decision package has to be
+    written: `verify`, `gate` and `score`. A package quotes the verdict line the
+    run printed, and the only place that line exists is the child's own output,
+    so those three paths have to see it go by.
+
+    IT STILL STREAMS, and that is the point of a tee rather than a capture:
+    every line is written to `sys.stdout` and flushed AS IT ARRIVES, before the
+    copy is kept, so somebody watching a long gate run sees exactly what they
+    would have seen without the tee, at the same moment. A `subprocess.run(...,
+    capture_output=True)` here would have been three lines shorter and would
+    have held the whole report back until the tool exited.
+
+    stderr is not touched: it is inherited, so a tool's errors reach the
+    terminal directly and interleave the way they always did.
+    """
+    path = _tool(tool_name)
+    if not os.path.exists(path):
+        sys.stderr.write("sbe: %s is missing from this installation; the command cannot "
+                         "run and is not reporting a result\n" % path)
+        return {"code": EXIT_USAGE, "lines": []}
+    lines = []
+    child = subprocess.Popen([sys.executable, path] + list(argv),
+                             stdout=subprocess.PIPE, universal_newlines=True)
+    for line in child.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        lines.append(line.rstrip("\n"))
+    child.stdout.close()
+    return {"code": child.wait(), "lines": lines}
+
+
+#: The flag that suppresses the automatic decision package. It is spelled once,
+#: here, and stripped from the argv before the tool behind the command sees it,
+#: because the tools refuse a flag they do not know rather than running past it.
+NO_DECISIONS_FLAG = "--no-decisions"
+
+
+def _split_decisions_flag(argv):
+    """Take `--no-decisions` out of an argv, as ONE dict with keys `argv` (what
+    the tool behind the command should actually be run with) and `suppressed`
+    (whether the flag was there)."""
+    kept = [a for a in argv if a != NO_DECISIONS_FLAG]
+    return {"argv": kept, "suppressed": len(kept) != len(argv)}
+
+
+def _checked_directory(argv):
+    """The directory the delegated tool examined, read off the argv it was
+    given, as a single path.
+
+    The scanning tools take at most one directory and default to the current
+    one, so this reads the argv the same way they do: the first argument that
+    is not a flag and IS a directory wins, and with none, the current
+    directory. Reading it here rather than asking the tool keeps this file from
+    growing a second copy of anybody's argument parsing.
+    """
+    for arg in argv:
+        if not arg.startswith("-") and os.path.isdir(arg):
+            return os.path.abspath(arg)
+    return os.path.abspath(".")
+
+
+def _record_decisions(command, argv, lines, suppressed):
+    """Write one decision package per FAIL and per WAIVED line the run printed,
+    and SAY on stdout what was written, or why nothing was.
+
+    THIS FUNCTION CANNOT MOVE A VERDICT OR AN EXIT CODE, and that is a
+    structural property rather than a promise. It returns nothing at all, so
+    there is no value for a caller to fold into an exit code; every caller
+    returns the delegated tool's own code, computed before this is called; and
+    every failure raised inside it, of any class, is caught here, printed here
+    in full with the name of its exception class, and stops here. A gate that
+    FAILED still FAILS with a broken decisions directory; a gate that passed is
+    not failed by one either. The failure is never swallowed, because a
+    bookkeeping failure nobody was told about would be worse than the missing
+    package: the sentence printed on the way out says what was not recorded.
+    """
+    if suppressed:
+        sys.stdout.write(
+            "\nsbe %s: %s was passed, so no decision package was written for the verdict "
+            "lines above. The verdicts themselves are unchanged; what is missing is the "
+            "durable record of them, and this line is here so that absence is never "
+            "silent.\n" % (command, NO_DECISIONS_FLAG))
+        return
+    try:
+        from . import decisions as decisions_mod
+    except ImportError as exc:
+        sys.stdout.write(
+            "\nsbe %s: no decision package was written: this installation carries no "
+            "brothersbe.decisions (%s). The verdicts above stand and this command's exit "
+            "code is unchanged.\n" % (command, exc))
+        return
+    target = _checked_directory(argv)
+    try:
+        written = decisions_mod.record_from_run(target, "\n".join(lines), target)
+    except Exception as exc:
+        # Deliberately every class, not only DecisionUnwritable. The rule this
+        # obeys is that writing a package must never change what a gate
+        # decided, and an exception class nobody anticipated would change it by
+        # escaping. It is reported, in full, with its class named, so it is
+        # visible rather than swallowed.
+        sys.stdout.write(
+            "\nsbe %s: no decision package was written: %s: %s. The verdicts above stand "
+            "and this command's exit code is unchanged.\n"
+            % (command, type(exc).__name__, exc))
+        return
+    if written:
+        sys.stdout.write("\nsbe %s: %d decision package(s) written, one per FAIL and per "
+                         "WAIVED line above:\n" % (command, len(written)))
+        for path in written:
+            sys.stdout.write("  %s\n" % path)
+    else:
+        sys.stdout.write(
+            "\nsbe %s: 0 decision package(s) written: no FAIL and no WAIVED line was "
+            "printed above. A package records a decision somebody has to carry, and a "
+            "PASS or a NO-DATA is not one.\n" % command)
 
 
 def _closing_caveat(command, code):
@@ -87,12 +220,17 @@ def _cmd_verify(args):
                          "read as a clean scan.\n" % target)
         return EXIT_USAGE
     worst = EXIT_OK
+    lines = []
     for tool, argv in (("sbe_design.py", ["--strict", target]),
                        ("sbe_gate.py", [target]),
                        ("sbe_score.py", ["--strict", target])):
-        code = _delegate(tool, argv)
-        if code != EXIT_OK:
+        result = delegate_teed(tool, argv)
+        lines.extend(result["lines"])
+        if result["code"] != EXIT_OK:
             worst = EXIT_CONTROL_FAILED
+    # Before the closing caveat, so that caveat stays the last line a reader
+    # sees, which is the promise `_closing_caveat` makes in its own docstring.
+    _record_decisions("verify", [target], lines, args.no_decisions)
     _closing_caveat("verify", worst)
     return worst
 
@@ -503,6 +641,25 @@ def _cmd_init(args):
     return EXIT_OK
 
 
+def _cmd_gate(args):
+    """The hard gates, teed so the FAIL and WAIVED lines they print become
+    decision packages. Still a delegation: `tools/sbe_gate.py` owns every
+    verdict, this wrapper adds no check and changes no exit code."""
+    split = _split_decisions_flag(args.rest)
+    result = delegate_teed("sbe_gate.py", split["argv"])
+    _record_decisions("gate", split["argv"], result["lines"], split["suppressed"])
+    return result["code"]
+
+
+def _cmd_score(args):
+    """The scored surface, teed for the same reason `gate` is, and with the
+    same guarantee: `tools/sbe_score.py` owns the verdicts and the exit code."""
+    split = _split_decisions_flag(args.rest)
+    result = delegate_teed("sbe_score.py", split["argv"])
+    _record_decisions("score", split["argv"], result["lines"], split["suppressed"])
+    return result["code"]
+
+
 def _cmd_version(args):
     sys.stdout.write("sbe %s (evidence schema %s, python %d.%d)\n"
                      % (version(), SCHEMA_VERSION, sys.version_info[0], sys.version_info[1]))
@@ -528,10 +685,8 @@ COMMANDS = [
     ("review", "run the scored surface including soft findings, plus the gates", _cmd_review),
     ("design", "the design completeness check (delegates to sbe_design.py)",
      lambda a: _delegate("sbe_design.py", a.rest)),
-    ("gate", "one hard gate by name, or all of them over a directory",
-     lambda a: _delegate("sbe_gate.py", a.rest)),
-    ("score", "the scored surface (delegates to sbe_score.py)",
-     lambda a: _delegate("sbe_score.py", a.rest)),
+    ("gate", "one hard gate by name, or all of them over a directory", _cmd_gate),
+    ("score", "the scored surface (delegates to sbe_score.py)", _cmd_score),
     ("intake", "score the five intake questions into a tier",
      lambda a: _delegate("sbe_intake.py", a.rest)),
     ("decide", "run a decision table (delegates to sbe_decide.py)",
@@ -620,6 +775,15 @@ def build_parser():
         elif name in ("verify", "review"):
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")
+            if name == "verify":
+                # `review` does not take it because `review` writes no package.
+                # Adding the flag there would advertise a suppression of
+                # something that never happens, which is its own small lie.
+                child.add_argument(NO_DECISIONS_FLAG, dest="no_decisions",
+                                   action="store_true",
+                                   help="do not write a decision package for the FAIL and "
+                                        "WAIVED lines below; the suppression is printed, "
+                                        "never silent")
         elif name == "adopt":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to inspect (default: the current one)")

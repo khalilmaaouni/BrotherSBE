@@ -8,6 +8,22 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- A failing or waived gate now writes its own decision package, without the
+  writing ever being able to change what the gate decided. `sbe verify`, `gate`
+  and `score` tee their delegate's output, parse only lines matching the shipped
+  verdict grammar, and record one package per FAIL and per WAIVED. A PASS is
+  never packaged. A line outside the grammar is COUNTED and never copied, so an
+  unrecognized line cannot smuggle its text into a shared artifact.
+  The no-effect-on-exit-code property is structural rather than promised:
+  `_record_decisions` returns nothing, so no caller has a value to fold in; every
+  caller returns the delegated tool's own code, computed before the call; and
+  every exception class is caught there, printed with its class named, and
+  stopped. A fixture proves it by making the write fail while the gate FAILs, and
+  the exit code stays 1. `--no-decisions` suppresses the write and SAYS it did,
+  because a silent suppression is indistinguishable from a tool that never ran.
+  Loop 2, task 3 of 8. Held by `TestGateTriggers`, calibrated by six breaks with
+  none uncaught
+
 - A decision package now carries the code that decided, not just the verdict it
   reached. `deciding_code` returns the check's own function, excerpted at the
   source span it names, resolved through the shipped check registries rather

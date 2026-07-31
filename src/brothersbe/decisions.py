@@ -106,6 +106,34 @@ TRIGGER_KINDS = ("gate", "waiver", "tier", "forced-close")
 
 PACKAGE_FILENAME = "DECISION.md"
 
+#: The four verdict words this project ships. This module introduces none: it
+#: REPORTS the ones the checks themselves printed.
+VERDICT_WORDS = ("PASS", "FAIL", "NO-DATA", "WAIVED")
+
+#: The two that are a decision. A PASS decided nothing anybody has to carry,
+#: and a NO-DATA decided nothing either: it records that nothing was examined,
+#: which is a finding for the gate to print and not a decision to package.
+PACKAGE_WORTHY = ("FAIL", "WAIVED")
+
+#: THE VERDICT-LINE GRAMMAR, copied from the printers rather than remembered.
+#: The three lines it was copied from, each opened before this was written:
+#:
+#:   tools/sbe_gate.py:1524   say("  %-9s %-8s %s [severity: %s]"
+#:                                % (name, verdict, one_line(ev), check.severity))
+#:   tools/sbe_gate.py:1504   say("  %-9s %-8s %s" % (">> " + name, "WAIVED", ...))
+#:   tools/sbe_score.py:1380  say("%-*s  %-7s  %s [severity: %s]"
+#:                                % (width, n, v, one_line(e), CHECKS[n].severity))
+#:
+#: Three printers, one shape: an optional indent, a check name optionally
+#: prefixed with ">> " for a waiver, whitespace, one of the four verdict words,
+#: and the evidence. The padding widths differ between the tools and are not
+#: matched here on purpose: matching a column count would make this parser go
+#: blind the day somebody renames a check to a longer name, which is the
+#: silent-narrowing defect this project keeps finding one level lower.
+_VERDICT_LINE_RE = re.compile(
+    r"^[ \t]*(?:>>[ \t]+)?(?P<check>\S+)[ \t]+(?P<verdict>%s)(?:[ \t]+(?P<evidence>.*))?$"
+    % "|".join(VERDICT_WORDS))
+
 #: The header line that binds a package to its commit, written by `render_package`
 #: and read back by `bound_commit_in` so the two spellings cannot drift.
 _BOUND_PREFIX = "- bound to commit: "
@@ -731,9 +759,16 @@ def build_package(root, trigger):
     verdict_section = _verdict_section(trigger)
 
     other = trigger.get("otherLines")
+    counted = trigger.get("unquotedLineCount")
     notes = ["This package QUOTES the run that triggered it. Nothing in it re-ran a "
              "check, and nothing in it computed a verdict over source code."]
-    if isinstance(other, (list, tuple)):
+    if isinstance(counted, int) and not isinstance(counted, bool):
+        # The stronger of the two shapes, and the one `record_from_run` uses:
+        # the caller counted the unmatched lines and DISCARDED them before
+        # calling here, so their text never reaches this module at all. A
+        # caller that hands `otherLines` instead is still holding them.
+        unquoted = counted
+    elif isinstance(other, (list, tuple)):
         unquoted = len(other)
     else:
         unquoted = 0
@@ -920,3 +955,79 @@ def write_package(root, package):
             os.unlink(tmp)
         raise
     return os.path.abspath(target)
+
+
+def parse_verdict_lines(text):
+    """Every verdict line in a run's output, as ONE dict with keys `verdicts`
+    and `unquotedLineCount`. Never a pair.
+
+    `verdicts` is a list of dicts, each carrying `check`, `verdict` and `line`.
+    `line` is the matched line with its indentation stripped, and it is the
+    ONLY text this module ever carries out of a run.
+
+    EVERY LINE THAT DOES NOT MATCH IS COUNTED AND THROWN AWAY, HERE, before any
+    caller can hold it. That is the whole reason the counting happens in this
+    function rather than in the writer: a decision package is written to be
+    pasted into a pull request, and an unmatched line from a real run may carry
+    a token, a connection string, a customer row or a file path nobody meant to
+    publish. The evidence receipts persist digests rather than raw output for
+    exactly that reason (see `evidence.py`), and a second artifact that widened
+    the policy by accident would undo it. A reader who needs the run's own
+    output goes and reads the run.
+
+    A verdict word this module does not know is not a verdict line: it is
+    counted with the rest. Nothing here invents a fifth verdict.
+    """
+    verdicts = []
+    unquoted = 0
+    for raw in str(text or "").splitlines():
+        match = _VERDICT_LINE_RE.match(raw)
+        if match is None:
+            unquoted += 1
+            continue
+        verdicts.append({"check": match.group("check"),
+                         "verdict": match.group("verdict"),
+                         "line": raw.strip()})
+    return {"verdicts": verdicts, "unquotedLineCount": unquoted}
+
+
+def record_from_run(root, text, dossier):
+    """One decision package per FAIL and per WAIVED line the run printed, as a
+    list of the absolute paths written, oldest first.
+
+    A PASS writes nothing, and so does a NO-DATA: neither is a decision
+    somebody has to carry. An empty list is the honest answer for "this run
+    decided nothing", and the caller says that in words rather than printing an
+    empty package.
+
+    Packages are built and written ONE AT A TIME, because ids are allocated by
+    reading the store: building two before writing either would read the same
+    store twice and allocate the same id twice.
+
+    A write that fails raises `DecisionUnwritable` carrying what had already
+    been written and what is now recorded nowhere. It is raised rather than
+    returned, so a caller cannot mistake a partial run for a complete one, and
+    the CLI that calls it catches it, prints it, and leaves the exit code of
+    the gate it was watching exactly where the gate put it.
+    """
+    parsed = parse_verdict_lines(text)
+    worthy = [v for v in parsed["verdicts"] if v["verdict"] in PACKAGE_WORTHY]
+    written = []
+    for index, item in enumerate(worthy):
+        trigger = {
+            "kind": "waiver" if item["verdict"] == "WAIVED" else "gate",
+            "check": item["check"],
+            "verdict": item["verdict"],
+            "verdictLine": item["line"],
+            "unquotedLineCount": parsed["unquotedLineCount"],
+            "dossier": dossier,
+        }
+        try:
+            written.append(write_package(root, build_package(root, trigger)))
+        except DecisionUnwritable as exc:
+            raise DecisionUnwritable(
+                "%s. %d package(s) for this run were written before this failure (%s); "
+                "the remaining %d verdict line(s) are recorded nowhere."
+                % (exc, len(written), ", ".join(written) or "none",
+                   len(worthy) - index))
+    return written

@@ -238,6 +238,79 @@ class TestDecidingCode(unittest.TestCase):
         self.assertIn("NO-DATA", pkg["logicFlowchart"])
         self.assertNotIn("```mermaid", body,
                          "no fenced diagram is drawn where no logic was read")
+class TestGateTriggers(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-gate-trigger-")
+        _git_repo(self.tmp)
+
+    def test_a_fail_and_a_waiver_each_get_their_own_package(self):
+        text = ("numbers   FAIL     an overstated total in report.md\n"
+                "  >> migration WAIVED  .sbe-exempt names this directory: rehearsal pending\n"
+                "chatter nobody parses\n")
+        written = decisions_mod.record_from_run(self.tmp, text, None)
+        self.assertEqual(len(written), 2, written)
+        bodies = [io.open(p, encoding="utf-8").read() for p in written]
+        self.assertTrue(any("FAIL" in b for b in bodies))
+        self.assertTrue(any("WAIVED" in b for b in bodies))
+
+    def test_a_pass_line_writes_no_package(self):
+        text = "numbers   PASS     3 figures, each with its check run\n"
+        self.assertEqual(decisions_mod.record_from_run(self.tmp, text, None), [])
+
+    def test_lines_outside_the_grammar_are_counted_never_copied(self):
+        parsed = decisions_mod.parse_verdict_lines("numbers FAIL x\nsecret: hunter2\n")
+        self.assertEqual(parsed["unquotedLineCount"], 1)
+        self.assertEqual(len(parsed["verdicts"]), 1)
+
+    def test_the_cli_writes_a_package_and_says_so(self):
+        result = _run([sys.executable, SBE, "gate", self.tmp], cwd=self.tmp)
+        self.assertIn("decision package", result["stdout"] + result["stderr"])
+
+    def test_no_decisions_suppresses_the_write_and_names_the_suppression(self):
+        result = _run([sys.executable, SBE, "gate", "--no-decisions", self.tmp],
+                      cwd=self.tmp)
+        self.assertIn("no decision package was written", result["stdout"]
+                      + result["stderr"])
+
+    # The three fixtures below are not in the plan. They hold the promises Task 3
+    # makes in prose and would otherwise be held by nobody: that an unmatched
+    # line's TEXT never reaches the package, that a bookkeeping failure cannot
+    # move a gate's exit code, and that the tee still streams.
+
+    def test_the_text_of_an_unmatched_line_never_reaches_a_package(self):
+        text = ("numbers   FAIL     an overstated total in report.md\n"
+                "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIcorrecthorse\n")
+        written = decisions_mod.record_from_run(self.tmp, text, None)
+        self.assertEqual(len(written), 1, written)
+        body = io.open(written[0], encoding="utf-8").read()
+        self.assertNotIn("wJalrXUtnFEMIcorrecthorse", body)
+        self.assertIn("1 line(s)", body)
+
+    def test_a_package_write_that_fails_leaves_the_gate_exit_code_alone(self):
+        # A FILE where the decisions directory has to go, so every write under
+        # it fails: exactly the bookkeeping failure that must never be allowed
+        # to move a verdict. The gate itself FAILs here on an unparseable
+        # manifest, so the exit code under test is a real 1 and not a 0 that
+        # would have been 0 anyway.
+        with io.open(os.path.join(self.tmp, ".sbe"), "w", encoding="utf-8") as fh:
+            fh.write("not a directory\n")
+        with io.open(os.path.join(self.tmp, "numbers-manifest.json"), "w",
+                     encoding="utf-8") as fh:
+            fh.write("{ not json\n")
+        run = _run([sys.executable, SBE, "gate", "--strict", self.tmp], cwd=self.tmp)
+        both = run["stdout"] + run["stderr"]
+        self.assertEqual(run["code"], 1, both)
+        self.assertIn("no decision package was written", both)
+        self.assertIn("exit code is unchanged", both)
+
+    def test_the_teeing_delegate_streams_and_keeps_a_copy(self):
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        from brothersbe import cli as cli_mod
+        result = cli_mod.delegate_teed("sbe_gate.py", [self.tmp])
+        self.assertIn("code", result)
+        self.assertIn("lines", result)
+        self.assertTrue(any("BROTHERSBE HARD GATES" in line for line in result["lines"]),
+                        result["lines"][:5])
 
 
 if __name__ == "__main__":
