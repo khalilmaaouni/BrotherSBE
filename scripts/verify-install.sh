@@ -136,6 +136,7 @@ find "$TARGET" \( -type f -o -type l -o -type p -o -type s \) \
     ! -name 'STATE.md' \
     ! -path "$TARGET/.brothersbe/install-receipt.json" \
     ! -path "$TARGET/docs/book/BrotherSBE-for-Dummies.html" \
+    ! -path "$TARGET/docs/book/.replay-*.sh" \
     ! -path "$TARGET/docs/book/estate/orders.csv" \
     ! -path "$TARGET/docs/book/estate/daily_totals.json" \
     ! -name '~$*' \
@@ -236,7 +237,7 @@ echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missin
 if [ "$DENIED" -gt 0 ]; then
     echo "verify-install: $DENIED location(s) could not be enumerated (named UNWALKABLE above), so no sentence here covers what is inside them."
 fi
-echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
+echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
 
 if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$EXCLUDED_NONREGULAR" -gt 0 ] || [ "$NONREGULAR" -gt 0 ] || [ "$DENIED" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \

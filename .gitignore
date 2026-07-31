@@ -29,3 +29,10 @@ docs/book/estate/daily_totals.json
 # The built book is a build product of build_book.py, regenerated from the
 # chapter markdown and the vendored mermaid.js on every run, never a fixture.
 docs/book/BrotherSBE-for-Dummies.html
+
+# The excerpt replay harness writes one shell script per chapter beside the
+# chapter while it re-executes that chapter's terminal blocks, and removes it
+# when the run finishes. A run that is interrupted leaves one behind, where it
+# shows up as untracked in every concurrent session's sweep and as an
+# unexplained EXTRA to the install verifier. It is scratch, never a fixture.
+docs/book/.replay-*.sh
