@@ -49,7 +49,14 @@ def main():
             i += 1
 
     work = tempfile.mkdtemp(prefix="guide05-replay-")
-    script = ["#!/bin/bash", 'SBE="%s"' % REPO, "cd %s" % work]
+    # Reader preconditions a fresh runner lacks: a git identity (without it
+    # every scratch commit fails on a strict git and the approval gate grades
+    # the APPROVAL file instead of the commit trailer the guide teaches) and
+    # fixed dates for deterministic scratch commit ids.
+    script = ["#!/bin/bash", 'SBE="%s"' % REPO, "cd %s" % work,
+              'export GIT_AUTHOR_NAME="a reader" GIT_AUTHOR_EMAIL="reader@example.invalid"',
+              'export GIT_COMMITTER_NAME="a reader" GIT_COMMITTER_EMAIL="reader@example.invalid"',
+              'export GIT_AUTHOR_DATE="2026-07-30T00:00:00Z" GIT_COMMITTER_DATE="2026-07-30T00:00:00Z"']
     compare, marker, prev_bash = [], 0, None
     # The one forward reference a human resolves by reading ahead: "Write
     # 07-verification.md (next section) and run again" sits before the 07 block.

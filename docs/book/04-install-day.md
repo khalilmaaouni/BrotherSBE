@@ -1,5 +1,7 @@
 # Install day
 
+<!-- replay: chapter requires claude -->
+
 ## What one script promises
 
 Part I stayed out of the terminal on purpose. From here on, the book expects

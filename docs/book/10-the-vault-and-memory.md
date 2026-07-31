@@ -1,5 +1,7 @@
 # The vault and memory
 
+<!-- replay: chapter requires vault -->
+
 ## One environment variable, and what is honest about it being unset
 
 Every session this tool touches ends, and the next one starts knowing

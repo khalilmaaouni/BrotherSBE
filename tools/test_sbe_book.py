@@ -136,5 +136,42 @@ class TestDeclaredVolatileLine(unittest.TestCase):
                             "the outcome beside a masked path must still bite")
 
 
+class TestChapterCapabilities(unittest.TestCase):
+    """A chapter that declares a required capability is skipped WHOLE and
+    LOUDLY on a machine that lacks it, and runs normally where it exists.
+    Chapter blocks share one shell, so a skipped setup block would orphan
+    every later excerpt; capability is a chapter property by design."""
+
+    def test_a_bare_machine_skips_the_declared_chapters_by_name(self):
+        import subprocess
+        env = dict(os.environ, PATH="/usr/bin:/bin", SBE_REPLAY_TIMEOUT="240")
+        env.pop("BROTHERSBE_VAULT", None)
+        out = subprocess.run([sys.executable,
+                              os.path.join(ROOT, "evals", "replay_book.py")],
+                             capture_output=True, text=True, env=env, timeout=600)
+        text = out.stdout + out.stderr
+        self.assertIn("SKIPPED chapter 04-install-day.md", text)
+        self.assertIn("requires claude", text)
+        self.assertIn("SKIPPED chapter 10-the-vault-and-memory.md", text)
+        self.assertIn("requires vault", text)
+        self.assertIn(", 0 differ", text.strip().splitlines()[-1],
+                      "skipping must leave nothing differing: %s" % text[-400:])
+
+    def test_the_caret_underline_lines_of_newer_interpreters_mask(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "replay_book", os.path.join(ROOT, "evals", "replay_book.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        old = "AssertionError: boom\n    self.assertEqual(a, b)\n"
+        new_style = ("AssertionError: boom\n    self.assertEqual(a, b)\n"
+                     "    ^^^^^^^^^^^^^^^^^^^^^^\n")
+        self.assertEqual(mod.stable(old), mod.stable(new_style),
+                         "an underline-only line is interpreter decoration")
+        other = "AssertionError: different\n    self.assertEqual(a, b)\n"
+        self.assertNotEqual(mod.stable(old), mod.stable(other),
+                            "the message beside a masked caret line still bites")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
