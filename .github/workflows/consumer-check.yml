@@ -56,3 +56,12 @@ jobs:
         with:
           sbe-path: '.'
           strict: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+          # This repository now declares its own intake, so it is graded the way
+          # a client repository is rather than exempt from its own rule. Without
+          # it, any pull request touching a CI pipeline file proposes a tier
+          # above T0, finds nothing to reconcile that proposal against, and
+          # blocks under --strict with a NO-DATA that names a real gap: nobody
+          # declared what this change is. The proposed tier is a floor, so a
+          # declared T3 covers every proposal a detector can raise here.
+          intake: design/final-release-program/00-intake.json
+          dossier: design/final-release-program

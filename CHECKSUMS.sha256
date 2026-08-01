@@ -3,7 +3,7 @@ ba5a33f3e434419cfc1020acb0913a1788b02d2553f74fb6beeb30db2cee234e  .claude-plugin
 12b3ba12bb2cd9bf45684fde37f0a27d37a43ea3c504c6302b94265e6a5e4273  .claude-plugin/plugin.json
 f10d19e53cb20f4ba4f4ae1098af56881247b667d7213277dda6de0590a672cf  .github/actions/sbe-consumer/action.yml
 9fe93e9055f3f2bf4723ae0297252180375f5bacde2e55608702db03ed3ad62f  .github/workflows/brothersbe-gates.yml
-c99e892091887515555e65fe70a063cea131d167a50479193f852897188616c4  .github/workflows/consumer-check.yml
+077a37869df7f005516feb333fbd1930e1996f863c58b1076579501c4508c11f  .github/workflows/consumer-check.yml
 09779c991b44ebe23aa165526cab887b3855b77d212d5e1e184e0438cf3d51ad  .gitignore
 68f16b1a195d784204600265905a3d140cc911447b35ee7f4feb248a255cee6a  .sbe/team-profile.json
 a304dc10c058d79ae097475355c1008764ec9be95b253424a6deef501c41e9aa  CHANGELOG.md
@@ -78,7 +78,7 @@ a56069a72a924f4d38425801f6c6588848f22a724b9023197f219fbee3e3a133  docs/book/09-l
 87f59be3e18c43cbd6f54d977d7692bbedb2c0f78f173bc2fd266f206720f756  docs/book/12-cookbook.md
 1f990f284b5d8236f1e286cfcf4bb6fc957170a7ab1c529d5cd94a939f0118ea  docs/book/13-the-backend-engineers-deep-dive.md
 977c2e7125618af3ba1aab70aa0c4d258b77a35c549a7790dda8339767769da7  docs/book/14-the-data-engineers-deep-dive.md
-06c4d6985058a715bf49eedcaf9b41a2660f6e6c7f26725a1e9ce2cf4c73d2ae  docs/book/15-the-platform-lead-deep-dive.md
+bfd2950c7d001ae8e3988961a668352ff637fa5bb8efac2ec3dc0d30412f075c  docs/book/15-the-platform-lead-deep-dive.md
 541b88372d9c85daab2d51807d74a401799dc9051675edbbad01ffe0cd3ca025  docs/book/16-working-as-one-team.md
 a07409950248dd3ad02bbc954856949b6931d183af819d4ffda5f213fe95d95f  docs/book/17-the-vault-in-obsidian.md
 4a4619f5af6e1cb241ff80bf72bb40180fcf63b2b7227c5a61a6a7d46ea86f26  docs/book/18-from-dummy-to-definitive-expert.md
