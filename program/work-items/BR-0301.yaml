@@ -24,7 +24,11 @@ acceptance_notes: >
   5 install-artifact work; the two checks above are the ones exercised this
   train.
 estimated_days: null
-token_budget: null
+# cap basis: this repository's own measured writer spend, 150k to 310k per sole-writer
+# stage across waves 1 to 10 and loops A to C (several overran a lower cap; the caps
+# here are set at the observed range, not below it). A stage reaching 75 percent with
+# no passing acceptance test triggers a scope review; 100 percent stops the stage.
+token_budget: 200000
 tokens_used: null
 started_at: 2026-07-31
 completed_at: null

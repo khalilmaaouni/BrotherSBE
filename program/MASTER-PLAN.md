@@ -39,7 +39,7 @@ For one maintainer working sequentially, the same program is approximately **26 
 ### Token budget
 
 - **Planned agent budget:** approximately **6.2 million input and output tokens**
-- **Hard program ceiling:** **7.4 million tokens**
+- **Hard program ceiling:** **7,410,000 tokens** (the sum of the per-item caps in section 10)
 - CI logs, test fixture output, and deterministic generated files are excluded from this estimate.
 - Every task has its own token cap. Reaching 75 percent without an acceptance criterion passing triggers a scope review. Reaching 100 percent stops the task until it is split or re-planned.
 
@@ -1047,7 +1047,7 @@ One person may hold multiple implementation roles, but product owner, implemente
 | BR-0408 | Provide VS Code/Cursor, JetBrains, and Zed integration layer | IDE engineer | 5 | 220k | BR-0401, BR-0403 to BR-0407 |
 | BR-0409 | Certify TRAE, Tongyi Lingma, ACP/MCP, and AGENTS-based fallback paths | Adapter engineer | 3 | 120k | BR-0401 |
 
-**Wave budget:** 1.18M tokens  
+**Wave budget:** 1.20M tokens  
 **Exit:** Every Tier 1 host passes the same ten-scenario adapter contract suite.
 
 ### Wave 5 - Team control, governance, and release engineering
@@ -1088,7 +1088,7 @@ One person may hold multiple implementation roles, but product owner, implemente
 
 ### Total
 
-The task caps above intentionally contain contingency. Their sum is approximately **7.4 million tokens**, the program's hard ceiling. Planned use should remain around **6.2 million tokens** through reuse, deterministic generation, and early task splitting.
+The task caps above intentionally contain contingency. Their sum is exactly **7,410,000 tokens**, the program's hard ceiling, recomputed from the per-item caps rather than typed by hand. Planned use should remain around **6.2 million tokens** through reuse, deterministic generation, and early task splitting.
 
 ---
 
