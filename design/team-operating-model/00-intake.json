@@ -1,0 +1,12 @@
+{
+  "answers": {
+    "changes_contract": false,
+    "crosses_boundary": false,
+    "reversible_under_hour": true,
+    "touches_sensitive": false,
+    "consumers": "some"
+  },
+  "tier": "T3",
+  "override": "T3",
+  "override_reason": "Raised deliberately from the computed T1. The five answers are honest about the change itself, which writes documents and ledger rows only and is revertible in one commit, so the rule lands on T1 and asks for a purpose brief alone. The subject of the design is not that small: it fixes the stance every later integration with Jira, Confluence, Asana, Microsoft Teams and the shared vault will inherit rather than revisit. A stance recorded as one purpose brief carries no decision record to supersede, no technology map naming owners and failure modes, and no verification plan holding it to account. The founder ordered the full dossier for that reason, so artifacts 01 through 07 are all written here and this raise is recorded rather than left as an unexplained edit."
+}
