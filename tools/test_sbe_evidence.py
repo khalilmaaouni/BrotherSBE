@@ -647,11 +647,13 @@ class TestRedactArgv(unittest.TestCase):
 class TestSchemaCompat(EvidenceFixture):
     """A receipt is judged by its own version's contract.
 
-    Schema "1.0" predates argvRedactions. An honest 1.0 receipt must not FAIL
-    for missing a field its version never defined, and a 1.1 receipt missing
-    it must. The transform below (rewrite the version, drop the one field,
-    reseal) is the entire difference between the versions, which is what makes
-    these fixtures a statement about version handling and nothing else.
+    Schema "1.0" predates argvRedactions and "1.1" predates the declared check
+    kind. An honest receipt of either version must not FAIL for missing a field
+    its version never defined, and a receipt of the version that DID define it
+    must. The transforms below (rewrite the version, drop the fields that
+    version postdates, reseal) are the entire difference between the versions,
+    which is what makes these fixtures a statement about version handling and
+    nothing else.
     """
 
     def _as_v10(self):
@@ -659,6 +661,18 @@ class TestSchemaCompat(EvidenceFixture):
         data = self.load()
         data["schemaVersion"] = "1.0"
         del data["argvRedactions"]
+        del data["checkKinds"]
+        del data["checkKindsSource"]
+        self.save(self.reseal(data))
+
+    def _as_v11(self):
+        """A legacy receipt exactly as the previous build wrote them: everything
+        1.1 defined, and nothing 1.2 added."""
+        self.generate()
+        data = self.load()
+        data["schemaVersion"] = "1.1"
+        del data["checkKinds"]
+        del data["checkKindsSource"]
         self.save(self.reseal(data))
 
     def test_a_1_0_receipt_is_not_failed_for_a_field_its_version_never_had(self):
@@ -676,9 +690,166 @@ class TestSchemaCompat(EvidenceFixture):
         self.assertEqual(blob["verdict"], "FAIL", text)
         self.assertIn("argvRedactions", text)
 
+    def test_a_1_1_receipt_is_not_failed_for_the_check_kind_field_it_predates(self):
+        """The forward-only promise, in the direction that costs something: the
+        1.2 bump must not turn every receipt already on disk into a FAIL."""
+        self._as_v11()
+        _code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "PASS", text)
+        self.assertNotIn("checkKindsSource", json.dumps(blob["reasons"]), text)
+
+    def test_a_1_2_receipt_missing_the_kind_provenance_fails_by_name(self):
+        self.generate()
+        data = self.load()
+        del data["checkKindsSource"]
+        self.save(self.reseal(data))
+        _code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "FAIL", text)
+        self.assertIn("checkKindsSource", text)
+
     def test_new_receipts_stamp_the_evidence_version(self):
         self.generate()
-        self.assertEqual(self.load()["schemaVersion"], "1.1")
+        self.assertEqual(self.load()["schemaVersion"], "1.2")
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import evidence as mod
+            self.assertEqual(mod.EVIDENCE_SCHEMA_VERSION, "1.2")
+            self.assertEqual(mod.KNOWN_SCHEMA_VERSIONS[-1], "1.2",
+                             "the newest version must be last: _fields_for reads this tuple "
+                             "as the version timeline")
+            for older in ("1.0", "1.1"):
+                self.assertIn(older, mod.KNOWN_SCHEMA_VERSIONS,
+                              "a bump that stops reading an older receipt is a rewrite, not a "
+                              "forward-only bump")
+        finally:
+            sys.path.pop(0)
+
+
+class TestDeclaredCheckKind(EvidenceFixture):
+    """THE DEFECT THIS FIELD EXISTS FOR, stated here where it is generated and
+    pinned at the consumer in `tools/test_sbe_status.py`: which check a receipt
+    is evidence FOR used to be worked out by substring-matching the recorded
+    command line, so `/bin/cat tests/test_design_of_gate_score.txt` cleared the
+    design, gate and score obligations at once. The kind is now declared, and
+    sealed so it cannot be added to a receipt after the fact."""
+
+    def test_a_run_without_kind_declares_nothing_and_says_so(self):
+        path, code, text = self.generate()
+        self.assertEqual(code, 0, text)
+        data = self.load(path)
+        self.assertEqual(data["checkKinds"], [],
+                         "a run that declared no kind must record an empty list, not a guess "
+                         "derived from its own command line")
+        self.assertIn("no --kind was given", data["checkKindsSource"])
+        self.assertIn("clears no design, gate or score obligation", text,
+                      "the operator must be told at the moment of writing, not only when a "
+                      "later command reports a missing obligation: %s" % text)
+
+    def test_a_declared_kind_is_recorded_and_survives_verify(self):
+        path, code, text = self.generate(extra=("--kind", "design"))
+        self.assertEqual(code, 0, text)
+        self.assertEqual(self.load(path)["checkKinds"], ["design"])
+        code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "PASS", text)
+        self.assertEqual(code, 0, text)
+
+    def test_repeated_kinds_are_recorded_sorted_and_deduplicated(self):
+        path, _code, text = self.generate(
+            extra=("--kind", "score", "--kind", "design", "--kind", "score"))
+        self.assertEqual(self.load(path)["checkKinds"], ["design", "score"], text)
+
+    def test_the_command_line_is_never_read_as_a_declaration(self):
+        """The exact shape of the old bypass, at the generator: a command whose
+        argv spells all three obligations declares none of them."""
+        named = write(self.out, "test_design_of_gate_score.txt", "not a check\n")
+        path, _code, text = self.generate(command=["/bin/cat", named])
+        data = self.load(path)
+        self.assertEqual(data["checkKinds"], [],
+                         "the wrapper inferred a check kind from the words in the command "
+                         "line, which is the defect this field replaced: %r" % data["argv"])
+
+    def test_an_unknown_kind_is_refused_and_writes_no_receipt(self):
+        out = self.receipt_path("unknown-kind.json")
+        proc = self.run_sbe("evidence", "run", "--out", out, "--cwd", self.repo,
+                            "--kind", "smoke", "--", "python3", "-c", "pass")
+        text = self.output(proc)
+        self.assertEqual(proc.returncode, 2, text)
+        self.assertFalse(os.path.exists(out),
+                         "a refused kind must not leave a receipt behind")
+
+    def test_adding_a_kind_to_an_existing_receipt_breaks_the_seal(self):
+        """The forgery this field would otherwise invite: take a real receipt
+        for a command that checked nothing, and type the obligation into it."""
+        self.generate()
+        doctored = self.load()
+        self.assertEqual(doctored["checkKinds"], [])
+        doctored["checkKinds"] = ["design", "gate", "score"]
+        self.save(doctored)
+        code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "FAIL", text)
+        self.assertEqual(code, 1, text)
+        self.assertIn("does not match the seal", json.dumps(blob["reasons"]), text)
+
+    def test_a_kind_this_build_does_not_know_fails_by_name(self):
+        """Resealed on purpose, so the kind control is the only one that can
+        fire and this fixture proves that control rather than the seal."""
+        self.generate()
+        data = self.load()
+        data["checkKinds"] = ["deployment"]
+        self.save(self.reseal(data))
+        code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "FAIL", text)
+        blob_text = json.dumps(blob["reasons"])
+        self.assertIn("deployment", blob_text, text)
+        self.assertNotIn("does not match the seal", blob_text,
+                         "the seal was recomputed, so only the kind control should fire")
+
+    def test_a_kind_field_that_is_not_a_list_fails_rather_than_being_ignored(self):
+        self.generate()
+        data = self.load()
+        data["checkKinds"] = "design"
+        self.save(self.reseal(data))
+        _code, blob, text = self.verify()
+        self.assertEqual(blob["verdict"], "FAIL", text)
+        self.assertIn("JSON array", json.dumps(blob["reasons"]), text)
+
+    def test_show_names_the_declared_kind_and_its_provenance(self):
+        path, _code, _text = self.generate(extra=("--kind", "gate"))
+        text = self.output(self.run_sbe("evidence", "show", path))
+        self.assertIn("check kinds", text)
+        self.assertIn("gate", text)
+        self.assertIn("never a proof", text,
+                      "show must not let a declared kind read as a verified one: %s" % text)
+
+    def test_the_seal_covers_the_declared_kind(self):
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import evidence as mod
+            for field in ("checkKinds", "checkKindsSource"):
+                self.assertIn(field, mod.SEALED_FIELDS,
+                              "%s is forgeable without breaking the seal" % field)
+        finally:
+            sys.path.pop(0)
+
+    def test_the_reader_never_infers_a_kind_from_argv(self):
+        """`declared_kinds` is the ONE reader of the field, so this pins the
+        property at the function every consumer goes through."""
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import evidence as mod
+            spelled = {"argv": ["/bin/cat", "tests/test_design_of_gate_score.txt"]}
+            self.assertEqual(mod.declared_kinds(spelled), set(),
+                             "a receipt with no checkKinds field must yield no kind, however "
+                             "its command line reads")
+            self.assertIsNotNone(mod.kind_declaration_gap(spelled),
+                                 "a legacy receipt must carry a sentence saying why it clears "
+                                 "nothing, never a silent empty set")
+            self.assertEqual(mod.declared_kinds({"checkKinds": ["gate"],
+                                                 "argv": ["/bin/cat", "design.txt"]}),
+                             set(["gate"]),
+                             "the declared field is the only source; argv must not add to it")
+        finally:
+            sys.path.pop(0)
 
 
 class TestHelpMeansHelp(unittest.TestCase):

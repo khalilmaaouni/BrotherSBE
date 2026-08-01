@@ -2598,6 +2598,103 @@ class TestVersionMark(unittest.TestCase):
                             "'the skill changed' forever" % m.group(1))
 
 
+class TestCheckUpdateFindsAWorktreeGitdir(unittest.TestCase):
+    """check-update's git-dir resolution used to be os.path.isdir(SKILL_DIR/
+    .git), true only for a normal clone. A LINKED WORKTREE's top-level .git
+    is a FILE (`gitdir: <path>`), so that check was False and the whole
+    command returned in total silence: exit 0, no output, no marker written,
+    no warning. Reproduced against a real `git worktree add` checkout below,
+    not a guess: every fixture here builds its own repo and vault in a temp
+    dir rather than depending on any state of the machine running it. Skips
+    (states NO-DATA) rather than passing when git is not on PATH, since git
+    is what builds the fixture in the first place, not the thing under test."""
+
+    def setUp(self):
+        if shutil.which("git") is None:
+            self.skipTest("NO-DATA: git is not on PATH; the worktree fixture "
+                          "this test builds itself could not be constructed, "
+                          "so nothing about check-update was exercised")
+        self._orig_skill_dir = bm.SKILL_DIR
+        self._orig_tel_dir = bm.TEL_DIR
+        self._orig_version_mark = bm.VERSION_MARK
+
+    def tearDown(self):
+        bm.SKILL_DIR = self._orig_skill_dir
+        bm.TEL_DIR = self._orig_tel_dir
+        bm.VERSION_MARK = self._orig_version_mark
+
+    def _git(self, cwd, *args):
+        r = subprocess.run(["git", "-C", cwd] + list(args),
+                           capture_output=True, text=True)
+        self.assertEqual(0, r.returncode,
+                         "git %s failed building the fixture: %s" % (" ".join(args), r.stderr))
+        return r
+
+    def _run_check_update(self):
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            bm.cmd_check_update()
+            return sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+    def test_check_update_writes_the_marker_from_a_linked_worktree(self):
+        with tempfile.TemporaryDirectory() as base:
+            main = os.path.join(base, "main")
+            os.makedirs(main)
+            self._git(main, "init", "-q")
+            self._git(main, "config", "user.email", "t@t.t")
+            self._git(main, "config", "user.name", "t")
+            io.open(os.path.join(main, "SKILL.md"), "w").write("v1\n")
+            self._git(main, "add", "-A")
+            self._git(main, "commit", "-qm", "init")
+            linked = os.path.join(base, "linked")
+            self._git(main, "worktree", "add", "-q", linked, "-b", "feature")
+            # Confirm the fixture is really a linked worktree, not a clone:
+            # its top-level .git must be a FILE, never a directory.
+            self.assertTrue(os.path.isfile(os.path.join(linked, ".git")),
+                            "fixture is not a linked worktree: .git is not a plain file")
+            self.assertFalse(os.path.isdir(os.path.join(linked, ".git")))
+
+            vault = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, vault, ignore_errors=True)
+            bm.SKILL_DIR = linked
+            bm.TEL_DIR = os.path.join(vault, "99-System", "telemetry")
+            bm.VERSION_MARK = os.path.join(bm.TEL_DIR, "installed-skill-version-brothersbe")
+            self.assertFalse(os.path.exists(bm.VERSION_MARK), "marker existed before the run")
+
+            out = self._run_check_update()
+            self.assertTrue(os.path.isfile(bm.VERSION_MARK),
+                            "check-update never reached the marker write from a linked "
+                            "worktree; output was: %r" % out)
+            marked = io.open(bm.VERSION_MARK).read().strip()
+            self.assertRegex(marked, r"^[0-9a-f]{40}$",
+                             "the written marker is not a commit sha: %r" % marked)
+
+    def test_check_update_names_a_non_git_directory_instead_of_silence(self):
+        with tempfile.TemporaryDirectory() as plain:
+            vault = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, vault, ignore_errors=True)
+            bm.SKILL_DIR = plain
+            bm.TEL_DIR = os.path.join(vault, "99-System", "telemetry")
+            bm.VERSION_MARK = os.path.join(bm.TEL_DIR, "installed-skill-version-brothersbe")
+
+            out = self._run_check_update()
+            self.assertIn(plain, out,
+                         "a genuinely non-git directory produced no named line: %r" % out)
+            # The substance, not one phrasing of it: the line says the check was
+            # skipped AND gives the reason it could not run. Asserting an exact
+            # sentence made this fixture fail when the reason grew more specific,
+            # which is a test guarding wording rather than behaviour.
+            self.assertIn("skipped", out,
+                          "the line does not say the check was skipped: %r" % out)
+            self.assertIn(".git", out,
+                          "the line does not say what it looked for: %r" % out)
+            self.assertFalse(os.path.exists(bm.VERSION_MARK),
+                             "a non-git directory should never write the version marker")
+
+
 class TestHelpMapTemplate(unittest.TestCase):
     """Guards the help project map template shipped at
     skills/help/map-template.html: it must stay a real, substantial file, name

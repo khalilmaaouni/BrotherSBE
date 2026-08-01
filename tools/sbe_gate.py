@@ -75,6 +75,19 @@ receipt is INTERNALLY CONSISTENT (a run id resolves to a nonzero duration and an
 exit code, a manifest's second query differs textually from the first), because
 the operating record proves pasted receipts get invented.
 
+Stale-receipt defense: a numbers-manifest, migration-receipt or ran-receipt may
+now name the commit it was made against in an optional `headCommit` field, the
+same field name and the same comparison src/brothersbe/evidence.py's own
+`sbe evidence` receipt store already carries. When the field is present and
+names a commit that is not the directory's current HEAD, the receipt is stale
+(the code it covered has moved on since) and the gate FAILs rather than PASSes
+over it: a passing receipt copied forward from an earlier commit no longer
+clears the gate at the new one. A receipt naming no commit at all is not new
+behavior; every receipt written before this field existed is one, and this
+gate cannot tell that case apart from an operator who chose not to record one,
+so it is left exactly as this gate always treated it. See _current_head and
+_commit_problem, and docs/KNOWN-LIMITS.md for the boundary this leaves open.
+
 A directory that holds gate-artifact-shaped files without being live work (a
 finished project's old receipts, a teaching example) carries a `.sbe-exempt`
 file whose contents say why, and the report prints that reason on every run as
@@ -353,6 +366,64 @@ def _partial(nothing, checked, kind, unit):
                        "the verdict cannot cover a receipt with nothing in it, so it says so "
                        "instead of passing over it"
             % (checked, unit, len(nothing), kind, "; ".join(nothing[:4])))
+
+
+def _current_head(root):
+    """git rev-parse HEAD in root, or None when root carries nothing to bind a
+    receipt to: not a git checkout at all, or a checkout with zero commits (an
+    unborn HEAD). None is not a problem, it is nothing to check against,
+    exactly as src/brothersbe/evidence.py's own _check_commit no-ops the same
+    way when HEAD does not resolve there. A fixture directory built with no
+    git history at all is unaffected by the commit-binding check below,
+    precisely because there is no HEAD a receipt could be stale against.
+    """
+    try:
+        out = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, timeout=10)
+    except Exception:
+        # No git binary, or a timed-out process: the same broad catch
+        # git_trailers above already makes, read here as "no HEAD resolved"
+        # rather than re-raised, and handled by the ordinary check below.
+        out = None
+    if out is None or out.returncode != 0:
+        return None
+    head = out.stdout.strip()
+    return head or None
+
+
+def _commit_problem(d, head, rel):
+    """The FAIL sentence for a receipt whose recorded headCommit has moved on
+    from the current HEAD, or None when there is nothing wrong.
+
+    head is the directory's current HEAD (see _current_head), or None when
+    there is nothing to bind against; in that case this never returns a
+    problem, because no HEAD means no receipt here can be stale relative to
+    one.
+
+    A receipt that records no headCommit at all is not judged here: the field
+    is new here, and this gate cannot tell "a receipt written before this
+    field existed" apart from "an operator who chose not to record one". What
+    IS judged, because it is the reproduced bypass this check exists to close,
+    is a receipt that DOES name a commit, where that commit is not HEAD: the
+    code the receipt covered has moved on, the receipt is stale evidence for
+    the CURRENT change, and a stale receipt does not PASS. This is the same
+    mismatch src/brothersbe/evidence.py's own _check_commit already treats as
+    a broken claim, applied here to the older hard-gate receipt shapes that
+    never carried the concept until now.
+    """
+    if head is None:
+        return None
+    claimed = answered(d.get("headCommit"))
+    if claimed is None:
+        return None
+    if not isinstance(claimed, str):
+        return ("%s: headCommit is %s, not a commit id string, so nothing here confirms "
+                "which commit this receipt covers" % (rel, type(claimed).__name__))
+    if claimed != head:
+        return ("%s: headCommit %s is not the current head %s: this receipt is evidence for "
+                "a commit that is no longer checked out, the code it covered has moved, and a "
+                "stale receipt does not PASS" % (rel, claimed[:12], head[:12]))
+    return None
 
 
 def git_trailers(root):
@@ -670,11 +741,15 @@ def gate_numbers(root):
     checked = 0
     seen_figures = []
     snapshots = []
+    head = _current_head(root)
     for m in manifests:
         d, err = load_receipt(m)
         if d is None:
             unreadable.append("%s: %s" % (os.path.relpath(m, root), err))
             continue
+        bp = _commit_problem(d, head, os.path.relpath(m, root))
+        if bp:
+            problems.append(bp)
         figs, note = _items(d, "figures")
         if not figs:
             nothing.append("%s: %s" % (os.path.relpath(m, root), note))
@@ -836,12 +911,16 @@ def gate_migration(root):
     checked = 0      # receipts that recorded both legs
     compared = 0     # row-count comparisons actually made
     bodies = []      # parsed receipts, for the shared dedupe rule
+    head = _current_head(root)
     for m in receipts:
         rel = os.path.relpath(m, root)
         d, err = load_receipt(m)
         if d is None:
             unreadable.append("%s: %s" % (rel, err))
             continue
+        bp = _commit_problem(d, head, rel)
+        if bp:
+            problems.append(bp)
         bodies.append(d)
         legs = {k: d.get(k) for k in ("forward", "reverse")}
         if all(v is None for v in legs.values()) and "row_counts" not in d:
@@ -1297,11 +1376,15 @@ def gate_ran(root):
     nothing = []
     checked = 0
     entries = []     # every check object, for the shared dedupe rule
+    head = _current_head(root)
     for m in receipts:
         d, err = load_receipt(m)
         if d is None:
             unreadable.append("%s: %s" % (os.path.relpath(m, root), err))
             continue
+        bp = _commit_problem(d, head, os.path.relpath(m, root))
+        if bp:
+            problems.append(bp)
         chks, note = _items(d, "checks")
         if not chks:
             nothing.append("%s: %s" % (os.path.relpath(m, root), note))

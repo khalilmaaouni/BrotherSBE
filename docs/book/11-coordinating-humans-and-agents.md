@@ -88,7 +88,7 @@ python3 "$ROOT/bin/sbe" evidence run --out /tmp/sbe-book-ch11-receipts/agent-1-r
 
 ```
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch11-receipts/agent-1-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: receipt written to /tmp/sbe-book-ch11-receipts/agent-1-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 ```bash
@@ -179,7 +179,7 @@ python3 "$ROOT/bin/sbe" evidence verify /tmp/sbe-book-ch11-receipts/agent-1-rece
 
 ```
 NO-DATA  /tmp/sbe-book-ch11-receipts/agent-1-receipt.json
-  inspected: receipt file /tmp/sbe-book-ch11-receipts/agent-1-receipt.json; schemaVersion; 17 required field(s); the runId seal over 22 run fact(s); the current git HEAD in /private/tmp/sbe-book-ch11-repo; 1 covered file(s)
+  inspected: receipt file /tmp/sbe-book-ch11-receipts/agent-1-receipt.json; schemaVersion; 18 required field(s); the declared check kind(s); the runId seal over 24 run fact(s); the current git HEAD in /private/tmp/sbe-book-ch11-repo; 1 covered file(s)
   trust:     LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it)
   the working tree was dirty or unreadable when this ran (2 uncommitted path(s)), so the receipt covers a state that was never committed and nobody else can reproduce. That is advisory, and advisory is NO-DATA here rather than a pass
 ```

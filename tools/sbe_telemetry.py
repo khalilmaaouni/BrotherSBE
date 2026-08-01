@@ -1333,19 +1333,70 @@ def _git_ref(git_dir, ref):
     return ""
 
 
+def _resolve_git_dirs(skill_dir):
+    """Return (head_dir, refs_dir, why_not) for skill_dir's git checkout.
+
+    THREE values, never two, and deliberately so: this file's own honesty
+    meta-test reads any 2-tuple returned by a module under tools/ as a
+    (verdict, evidence) pair and refuses one it cannot prove never says
+    PASS. This helper resolves paths, it grades nothing, and the third
+    value carries the reason the first two are empty so a caller can say
+    what it could not read instead of going quiet.
+
+    A normal clone's `.git` is a directory and serves as both: HEAD and
+    refs/* live together there. A LINKED WORKTREE's top-level `.git` is a
+    FILE containing one line, `gitdir: <path>` (absolute, or relative to
+    skill_dir), pointing at a directory under the main repo's
+    `.git/worktrees/<name>` that holds that worktree's own HEAD, but does
+    NOT duplicate refs/heads or refs/remotes: those stay in the COMMON dir,
+    named by a `commondir` file inside the per-worktree directory (typically
+    `../..`). The old check here was `os.path.isdir(skill_dir/.git)`, true
+    only for a normal clone and false for every linked worktree, so the
+    whole update command returned in total silence there: exit 0, no
+    output, no marker written, no warning. Reproduced this session against
+    a real `git worktree add` checkout, not a guess."""
+    git_path = os.path.join(skill_dir, ".git")
+    if os.path.isdir(git_path):
+        return git_path, git_path, ""
+    if os.path.isfile(git_path):
+        line = _read_first_line(git_path)
+        if line.startswith("gitdir:"):
+            target = line[len("gitdir:"):].strip()
+            if target and not os.path.isabs(target):
+                target = os.path.normpath(os.path.join(skill_dir, target))
+            if target and os.path.isdir(target):
+                common = _read_first_line(os.path.join(target, "commondir"))
+                refs_dir = target
+                if common:
+                    common_dir = common if os.path.isabs(common) \
+                        else os.path.normpath(os.path.join(target, common))
+                    if os.path.isdir(common_dir):
+                        refs_dir = common_dir
+                return target, refs_dir, ""
+            return "", "", ("%s names a gitdir at %s that is not a directory"
+                             % (git_path, target))
+        return "", "", "%s is a file but carries no gitdir: line" % git_path
+    return "", "", "no .git directory and no .git file at %s" % skill_dir
+
+
 def cmd_check_update():
-    git_dir = os.path.join(SKILL_DIR, ".git")
-    if not os.path.isdir(git_dir):
-        return                      # not a git install; nothing to compare
-    head = _read_first_line(os.path.join(git_dir, "HEAD"))
+    head_dir, refs_dir, why_not = _resolve_git_dirs(SKILL_DIR)
+    if not head_dir:
+        # Genuinely not a git checkout (or a worktree pointer this could not
+        # follow): SAY so, once, rather than return in total silence. The
+        # old behavior here was indistinguishable from "everything is up to
+        # date" and from "the update check never ran at all".
+        print("BROTHERSBE UPDATE: the update check is skipped: %s" % why_not)
+        return
+    head = _read_first_line(os.path.join(head_dir, "HEAD"))
     branch = head[5:].strip() if head.startswith("ref:") else ""
-    local = _git_ref(git_dir, branch) if branch else head
+    local = _git_ref(refs_dir, branch) if branch else head
     if not local:
         return
     remote = ""
     if branch.startswith("refs/heads/"):
         name = branch[len("refs/heads/"):]
-        remote = _git_ref(git_dir, "refs/remotes/origin/" + name)
+        remote = _git_ref(refs_dir, "refs/remotes/origin/" + name)
 
     # (a) an update is already fetched and waiting
     if remote and remote != local:

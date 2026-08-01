@@ -7,13 +7,22 @@ control exists for lives exactly at the seam between what several other
 commands recorded and what a reader has to assemble by hand, and a mocked
 store would test the mock.
 
-Evidence receipts for "a design/gate/score run happened" are generated with
-the real `sbe evidence run`, over a stand-in command whose argv merely
-CONTAINS the keyword ("gate", "score", ...) status.py's classifier reads.
-That is deliberate and stated here once: this suite pins status's OWN argv
-classifier, not `sbe_gate.py` or `sbe_score.py` themselves, which already have
-their own fixtures. A real gate run would make every fixture slower and would
-not exercise the classifier any more thoroughly.
+Evidence receipts are generated with the real `sbe evidence run`, over a
+stand-in command that declares its check kind with `--kind` instead of being a
+real gate or score run. That is deliberate and stated here once: this suite
+pins status's OWN reading of the declared field, not `sbe_gate.py` or
+`sbe_score.py` themselves, which already have their own fixtures. A real gate
+run would make every fixture slower and would not exercise the reading any
+more thoroughly.
+
+`TestCheckKindIdentity` below is the exception that has to be read: it pins the
+BYPASS, a receipt whose command line spells design, gate and score and which
+must clear none of them. Status used to derive the obligation from that text.
+
+Commands are always `sys.executable`, never a system binary picked up from the
+machine: the interpreter running this file is the one executable a fixture can
+prove exists, and the defect being pinned is about what a receipt SAYS, not
+about which program did the saying.
 """
 import io
 import json
@@ -88,17 +97,42 @@ class StatusFixture(unittest.TestCase):
         base.update(answers)
         return write(self.repo, "00-intake.json", json.dumps({"answers": base}))
 
-    def run_evidence(self, out_rel, argv_kind, exit_code=0, covers="README.md"):
-        """A real receipt, written by the real `sbe evidence run`, whose argv
-        contains `argv_kind` (e.g. "gate", "score") so status's classifier can
-        read it. `exit_code` != 0 is produced by asking python to exit that
-        code; the receipt is still sound evidence (verify PASS), it just
-        records a failing run, which is the MERGE BLOCKER shape."""
+    def run_evidence(self, out_rel, argv_kind, exit_code=0, covers="README.md", kinds=()):
+        """A real receipt, written by the real `sbe evidence run`.
+
+        `argv_kind` is a trailing word in the command line, and it is now only
+        a label a human reads: nothing in status derives an obligation from it.
+        `kinds` is what does clear an obligation, passed through as `--kind`
+        and recorded in the receipt's own sealed field. `exit_code` != 0 is
+        produced by asking python to exit that code; the receipt is still sound
+        evidence (verify PASS), it just records a failing run, which is the
+        MERGE BLOCKER shape.
+        """
         out_path = os.path.join(self.repo, out_rel)
+        declared = []
+        for kind in kinds:
+            declared += ["--kind", kind]
         code, text, _ = self.sbe(
             "evidence", "run", "--out", out_path, "--covers", covers, "--cwd", self.repo,
-            "--", sys.executable, "-c", "import sys; sys.exit(%d)" % exit_code, argv_kind)
+            *(declared + ["--", sys.executable, "-c",
+                          "import sys; sys.exit(%d)" % exit_code, argv_kind]))
         return out_path
+
+    def reseal(self, path):
+        """Recompute a receipt's seal in place, so a fixture that rewrites one
+        field isolates the control it is actually about instead of tripping the
+        seal as well."""
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import evidence as mod
+            with io.open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            data["runId"] = mod.compute_seal(data)
+            with io.open(path, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(data, indent=2, sort_keys=True))
+        finally:
+            sys.path.pop(0)
+        return path
 
 
 class TestNoStores(StatusFixture):
@@ -154,6 +188,143 @@ class TestBrokenClaims(StatusFixture):
         broken_block = text.split("MERGE BLOCKERS:")[0]
         self.assertNotIn(".sbe/evidence/r1.json", broken_block,
                          "a current, sound receipt must not appear under BROKEN CLAIMS")
+
+
+class TestEvidenceStoreSelfPoisoning(StatusFixture):
+    """T6. A receipt's `coveredFiles`, when computed from a diff rather than
+    an explicit `--covers` list, cannot tell "code this run tested" from
+    "another evidence receipt that happened to land in the same
+    base..HEAD range". Regenerating a receipt at a fixed `--out` path is the
+    ordinary shape of a CI re-run (the design/gate/score checks all write to
+    well-known paths), not an edit to any code under test, so an unrelated
+    receipt that merely covered its OLD bytes by diff-range accident must
+    never fail because of it: the evidence store must not poison itself.
+
+    Every fixture here leaves the "gate" receipt UNCOMMITTED on purpose. A
+    receipt's `headCommit` is resolved at generation time, before it can be
+    committed, so ANY receipt that is later committed necessarily records a
+    headCommit one commit behind whatever HEAD becomes once that commit
+    lands: `verify` FAILs it for that reason alone, correctly and
+    inconveniently, on every subsequent commit, T6 or not (this is the
+    pre-existing, already-documented limit at docs/KNOWN-LIMITS.md, "The
+    evidence wrapper binds a run to a commit..."; see also
+    `TestBrokenClaims.test_a_stale_receipt_is_named_under_broken_claims_and_exits_1`
+    above, which pins exactly that behavior as correct). Committing "gate"
+    here would bury the covered-file assertion under that unrelated,
+    already-accepted staleness. Leaving it uncommitted isolates the ONE
+    thing this stage changes.
+    """
+
+    def _make_design_and_gate(self):
+        # A real source change, so gate's diff-based coverage below names
+        # actual code under test alongside the evidence-store accident, not
+        # only the accident.
+        write(self.repo, "app.py", "print('hello')\n")
+        self.commit("add app.py")
+
+        # "design": explicit --covers, so its own coverage never depends on
+        # anything under .sbe/evidence/.
+        self.run_evidence(".sbe/evidence/design.json", "design", covers="app.py",
+                          kinds=("design",))
+        self.commit("add design receipt")
+
+        # "gate": the DEFAULT (diff-based) coverage, no --covers at all. Its
+        # coveredFiles comes from `git diff self.base..HEAD`, which now
+        # includes design.json (added by the commit above) purely because of
+        # where it landed in that range, alongside app.py, the file gate
+        # actually ran against.
+        gate_path = os.path.join(self.repo, ".sbe/evidence/gate.json")
+        code, out, _ = self.sbe(
+            "evidence", "run", "--out", gate_path, "--base", self.base, "--kind", "gate",
+            "--cwd", self.repo,
+            "--", sys.executable, "-c", "import sys; sys.exit(0)", "gate")
+        self.assertEqual(code, 0, out)
+        with io.open(gate_path, encoding="utf-8") as fh:
+            gate_receipt = json.load(fh)
+        covered_paths = [c["path"] for c in gate_receipt["coveredFiles"]]
+        self.assertIn(".sbe/evidence/design.json", covered_paths,
+                      "setup check: gate.json's default coverage must include design.json "
+                      "for this fixture to exercise T6 at all; got %r" % covered_paths)
+        self.assertIn("app.py", covered_paths)
+        return gate_path
+
+    def test_regenerating_the_covered_receipt_does_not_break_the_one_that_covers_it(self):
+        gate_path = self._make_design_and_gate()
+
+        code, text, _ = self.status("--base", self.base)
+        broken_block = text.split("MERGE BLOCKERS:")[0]
+        self.assertNotIn(".sbe/evidence/gate.json", broken_block,
+                         "gate.json, freshly generated and never committed, must start clean: "
+                         "%r" % text)
+
+        # BREAK: regenerate design.json IN PLACE, same --out path and same
+        # --covers, exactly as a routine CI re-run of the design check would.
+        # Nothing about app.py (what gate.json actually tested) changes; only
+        # design.json's own bytes (its timestamps, its runId) do.
+        self.run_evidence(".sbe/evidence/design.json", "design", covers="app.py",
+                          kinds=("design",))
+
+        code, text, _ = self.status("--base", self.base)
+        broken_block = text.split("MERGE BLOCKERS:")[0]
+        self.assertNotIn(".sbe/evidence/gate.json", broken_block,
+                         "regenerating an UNRELATED evidence receipt (design.json) must never "
+                         "break gate.json, which never claimed to cover it: %r" % text)
+        self.assertNotIn("covered file .sbe/evidence/design.json now hashes to", text, text)
+        self.assertNotEqual(gate_path, None)
+
+    def test_the_same_scenario_committed_end_to_end_never_shows_a_covered_file_reason(self):
+        # The literal "two receipts committed in sequence" shape: both
+        # design.json and its regenerated successor get committed. gate.json
+        # DOES then pick up the pre-existing, documented headCommit
+        # staleness (every commit after it does that; see the class
+        # docstring), so this checks the ONE thing T6 owns: whichever BROKEN
+        # CLAIMS line names gate.json, it is never for a covered-file reason.
+        self._make_design_and_gate()
+        self.commit("add gate receipt")
+        self.run_evidence(".sbe/evidence/design.json", "design", covers="app.py",
+                          kinds=("design",))
+        self.commit("regenerate design receipt")
+
+        code, text, _ = self.status("--base", self.base)
+        gate_lines = [l for l in text.splitlines()
+                     if ".sbe/evidence/gate.json" in l and "fails verify" in l]
+        self.assertTrue(gate_lines, "gate.json is expected to be named at least once (its own "
+                                    "headCommit is stale the moment anything else commits, by "
+                                    "the pre-existing rule this stage does not change): %r"
+                                    % text)
+        for line in gate_lines:
+            self.assertNotIn("covered file", line,
+                             "gate.json's ONLY acceptable reason here is headCommit staleness; "
+                             "a covered-file complaint means design.json's regeneration leaked "
+                             "into gate.json's verdict: %r" % line)
+
+    def test_a_receipt_covering_only_the_evidence_store_reads_no_data_not_pass(self):
+        # The limiting case: EVERY covered file this receipt names sits under
+        # the evidence store, so nothing grounds it once that store is
+        # excluded. NO-DATA, never a silent PASS built on nothing.
+        self.run_evidence(".sbe/evidence/design.json", "design", covers="README.md",
+                          kinds=("design",))
+        self.commit("add design receipt")
+        gate_path = os.path.join(self.repo, ".sbe/evidence/onlyevidence.json")
+        code, out, _ = self.sbe(
+            "evidence", "run", "--out", gate_path, "--covers", ".sbe/evidence/design.json",
+            "--kind", "gate", "--cwd", self.repo,
+            "--", sys.executable, "-c", "import sys; sys.exit(0)", "gate")
+        self.assertEqual(code, 0, out)
+
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        rel = ".sbe/evidence/onlyevidence.json"
+        self.assertNotIn(rel, [i.get("path") for i in data["soundEvidence"]],
+                         "a receipt covering only excluded paths must never verify PASS: %r"
+                         % text)
+        self.assertFalse(
+            any(rel in i.get("finding", "") for i in data["brokenClaims"]),
+            "a receipt covering only excluded paths is NO-DATA, not a broken claim: %r" % text)
+        self.assertFalse(
+            any(rel in i.get("finding", "") or rel in (i.get("path") or "")
+               for i in data["mergeBlockers"]),
+            "a receipt covering only excluded paths is NO-DATA, not a merge blocker: %r" % text)
 
 
 class TestTierReconciliation(StatusFixture):
@@ -262,6 +433,145 @@ class TestMissingEvidence(StatusFixture):
         code, text, _ = self.status("--base", self.base)
         self.assertEqual(code, 0, text)
         self.assertNotIn("owes one", text)
+
+
+class TestCheckKindIdentity(StatusFixture):
+    """THE BYPASS THIS EXISTS FOR, reproduced before it was closed: status
+    decided WHICH obligation a receipt satisfied by substring-matching the
+    recorded command line, so a receipt for a command that ran no check at all
+    cleared the design, gate and score obligations at once, as long as a path
+    in its argv spelled the words. A T2 change owing three checks went green on
+    one command that read a text file.
+
+    The kind is now a declared, sealed field on the receipt
+    (`sbe evidence run --kind gate`), and the command line is not read for it.
+    Every fixture here asserts the receipt VERIFIES first, because a receipt
+    that failed verification would clear nothing for an unrelated reason and
+    would make the interesting assertion pass for free.
+    """
+
+    NAMED = "tests/test_design_of_gate_score.txt"
+
+    def _t2_change_with(self, out_rel, kinds=()):
+        """A committed T2 change plus one sound receipt over it. The tree is
+        committed BEFORE the run so the receipt is generated clean and reaches
+        PASS; a dirty-tree receipt is NO-DATA and would clear nothing whatever
+        this fixture proved."""
+        write(self.repo, self.NAMED, "this file runs no check; it is only named like one\n")
+        self.intake(changes_contract="y")
+        self.commit("a T2 change, and a file named after all three checks")
+        return self.run_evidence(out_rel, self.NAMED, kinds=kinds)
+
+    def _completed_block(self, text):
+        return text.split("COMPLETED EVIDENCE:")[1].split("NEXT ACTION")[0]
+
+    def _missing_block(self, text):
+        return text.split("MISSING EVIDENCE:")[1].split("COMPLETED EVIDENCE:")[0]
+
+    def test_a_command_named_after_the_checks_clears_no_obligation(self):
+        """THE FIXTURE THE BYPASS DIES ON. The receipt is sound, current and
+        verifies PASS. Its argv names design, gate and score. It declared no
+        kind, so all three obligations stay open."""
+        out_path = self._t2_change_with(".sbe/evidence/named.json")
+        code, text, _ = self.status("--base", self.base)
+        self.assertIn(os.path.relpath(out_path, self.repo), self._completed_block(text),
+                      "the receipt must verify as sound evidence, or this fixture would be "
+                      "proving that a broken receipt clears nothing: %s" % text)
+        missing = self._missing_block(text)
+        for label in ("design completeness check", "hard gate", "scored surface"):
+            self.assertIn(label, missing,
+                          "a command that ran no check cleared the %s obligation by naming it "
+                          "in a filename: %s" % (label, text))
+        self.assertNotEqual(code, 0, text)
+        self.assertIn("declare no check kind", text,
+                      "the reader must be told the store holds a receipt that says nothing "
+                      "about which check it was, never left to read it as no evidence: %s"
+                      % text)
+
+    def test_a_declared_kind_clears_that_obligation_and_only_that_one(self):
+        """The other direction, which matters just as much: the new field has
+        to actually work, or every T2 change is permanently blocked and the
+        control gets switched off."""
+        self._t2_change_with(".sbe/evidence/gate.json", kinds=("gate",))
+        code, text, _ = self.status("--base", self.base)
+        missing = self._missing_block(text)
+        self.assertNotIn("hard gate", missing,
+                         "a receipt declaring --kind gate must clear the gate obligation: %s"
+                         % text)
+        self.assertIn("design completeness check", missing, text)
+        self.assertIn("scored surface", missing, text)
+
+    def test_declaring_all_three_clears_all_three(self):
+        self._t2_change_with(".sbe/evidence/all.json",
+                             kinds=("design", "gate", "score"))
+        code, text, _ = self.status("--base", self.base)
+        self.assertEqual(code, 0, "three declared kinds on a sound receipt must leave MISSING "
+                                  "EVIDENCE empty: %s" % text)
+        self.assertNotIn("owes one", text, text)
+
+    def test_a_legacy_receipt_is_no_data_for_obligations_and_is_named(self):
+        """A receipt written before the field existed. It still verifies, it
+        still counts as completed evidence, and it clears nothing: NO-DATA for
+        obligation purposes, never a silent pass. The transform below is
+        exactly what the previous build wrote, resealed so the legacy control
+        is the only one that can fire."""
+        out_path = self._t2_change_with(".sbe/evidence/legacy.json")
+        with io.open(out_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["schemaVersion"] = "1.1"
+        del data["checkKinds"]
+        del data["checkKindsSource"]
+        with io.open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=2, sort_keys=True))
+        self.reseal(out_path)
+        code, text, _ = self.status("--base", self.base)
+        self.assertIn(".sbe/evidence/legacy.json", self._completed_block(text),
+                      "a 1.1 receipt must still verify, or this fixture proves nothing about "
+                      "obligations: %s" % text)
+        missing = self._missing_block(text)
+        self.assertIn("hard gate", missing, text)
+        self.assertIn("records no checkKinds field at all", missing,
+                      "a legacy receipt must be named as legacy, not silently absent: %s"
+                      % text)
+
+    def test_a_kind_typed_into_a_receipt_after_the_run_clears_nothing(self):
+        """The forgery the field would otherwise invite. Not resealed, on
+        purpose: the point is that the seal is what stops this, so the receipt
+        lands in BROKEN CLAIMS and the obligation stays open."""
+        out_path = self._t2_change_with(".sbe/evidence/forged.json")
+        with io.open(out_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["checkKinds"] = ["design", "gate", "score"]
+        with io.open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=2, sort_keys=True))
+        code, text, _ = self.status("--base", self.base)
+        self.assertNotEqual(code, 0, text)
+        self.assertIn("BROKEN CLAIMS", text)
+        self.assertIn("does not match the seal", text, text)
+        missing = self._missing_block(text)
+        for label in ("design completeness check", "hard gate", "scored surface"):
+            self.assertIn(label, missing,
+                          "a hand-typed kind cleared the %s obligation: %s" % (label, text))
+
+    def test_status_reads_the_field_through_the_one_reader_in_evidence(self):
+        """Source-level, and cheap: status must not grow a second
+        interpretation of the field. `_receipt_kinds` delegates to
+        `evidence.declared_kinds`, and this pins that it takes the receipt's
+        own field rather than anything derived from argv."""
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import status as mod
+            spelled = {"argv": ["python3", "-c", "pass", self.NAMED]}
+            self.assertEqual(mod._receipt_kinds(spelled), set(),
+                             "an argv naming all three checks must yield no kind")
+            self.assertEqual(mod._receipt_kinds({"checkKinds": ["score"], "argv": []}),
+                             set(["score"]))
+            self.assertEqual(tuple(k for k, _l, _c in mod.CHECK_KINDS),
+                             mod.evidence_mod.CHECK_KIND_NAMES,
+                             "the kind vocabulary must come from evidence.py, or the writer "
+                             "and the reader can disagree about what a kind is")
+        finally:
+            sys.path.pop(0)
 
 
 class TestCompletedEvidence(StatusFixture):

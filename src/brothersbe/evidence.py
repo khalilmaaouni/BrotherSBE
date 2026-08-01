@@ -37,6 +37,26 @@ a token, a connection string or a customer row would otherwise persist it
 forever in the one artifact everybody is encouraged to share. The digest proves
 the same bytes came back; it carries none of them.
 
+WHICH CHECK RAN IS DECLARED, NEVER INFERRED FROM THE COMMAND LINE. `--kind`
+records, as a first-class sealed field, which of this project's obligations the
+run is offered against (`design`, `gate`, `score`). It exists because the
+consumer of these receipts used to work the identity out for itself, by
+substring-matching the recorded `argv`: a receipt for `/bin/cat
+tests/test_design_of_gate_score.txt` named all three words, so one command that
+ran no check at all cleared three obligations at once. Nothing about that was
+hypothetical; it was reproduced. The field moves the claim from a guess a reader
+makes about a string to a statement the receipt carries.
+
+What the field IS: a declaration made at generation time, bound to a run that
+actually happened, sealed with everything else, so it cannot be added to a
+receipt afterwards and cannot be given to a command that never ran. What it is
+NOT: proof of what the command did. This wrapper starts a process and times it;
+it does not understand the process. An operator who types `--kind design` over a
+command that checks nothing has written a false declaration, and the receipt
+records the argv right beside it so a reader can see the two disagree. A receipt
+that declares no kind clears no obligation, and one written before this field
+existed is legacy: NO-DATA for obligation purposes, never a silent pass.
+
 ARGV IS DIFFERENT, AND ONLY PARTLY FIXED. Unlike stdout and stderr, `argv` has
 to be recorded as text: a receipt whose command was paraphrased proves nothing
 about what happened. So a credential typed ON the command line used to be
@@ -77,26 +97,46 @@ from sbe_telemetry import SECRET_PATTERNS  # noqa: E402
 #: Schema versions this module knows how to read. An unknown version is refused
 #: rather than parsed hopefully: a consumer that reads an old field under new
 #: semantics is worse off than one that fails loudly. See `_check_schema`.
-KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1")
+#: OLDEST FIRST, and the order is load-bearing: `_fields_for` reads it as the
+#: version timeline, so a receipt is never judged by a field its own version
+#: postdates.
+KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2")
 
 #: The version NEW receipts are stamped with. Evidence-local on purpose: the
 #: package-wide SCHEMA_VERSION governs other stores (the task registry, the
 #: init config), and coupling their versions would force every consumer to
 #: move in lockstep for a change only receipts carry. "1.1" adds
-#: `argvRedactions` beside the recorded argv.
-EVIDENCE_SCHEMA_VERSION = "1.1"
+#: `argvRedactions` beside the recorded argv. "1.2" adds `checkKinds` and
+#: `checkKindsSource`, the declared identity of the check this run is offered
+#: as. FORWARD ONLY: no receipt already on disk is rewritten by this bump, and
+#: every older version stays readable under its own contract.
+EVIDENCE_SCHEMA_VERSION = "1.2"
 
 GENERATOR = "sbe evidence run"
+
+#: The obligations a receipt can be declared against, and the ONE place this
+#: vocabulary is written down. `src/brothersbe/status.py` derives its own
+#: MISSING EVIDENCE table from this tuple rather than keeping a second copy,
+#: so a kind added here can never be a kind the consumer silently does not
+#: know. Values are lowercase and stable: they are written into receipts that
+#: outlive the build that wrote them.
+CHECK_KIND_NAMES = ("design", "gate", "score")
 
 #: Every field a receipt must record before any verdict is built on it. Each
 #: goes through `answered()`, the same vacuity test every other receipt field in
 #: this project goes through, so "" and "TODO" record nothing here too. `0` and
 #: `False` are answers: a zero exit code and a zero-byte stdout are results.
+#: `checkKinds` is deliberately NOT here: an empty list is a real answer (this
+#: run declares no obligation), and `answered()` reads an empty list as
+#: nothing, so requiring it would fail every honest run that made no claim.
+#: `checkKindsSource` IS required, because the provenance sentence is written
+#: unconditionally: a receipt that carries no sentence at all is a receipt
+#: whose generator never considered the question.
 REQUIRED_FIELDS = (
     "schemaVersion", "generator", "generatorVersion", "runId", "argv",
     "argvRedactions", "startedAt", "endedAt", "durationSeconds", "exitCode",
     "headCommit", "stdoutSha256", "stderrSha256", "environment", "toolVersions",
-    "workingTreeDirty", "coveredFilesSource",
+    "workingTreeDirty", "coveredFilesSource", "checkKindsSource",
 )
 
 #: The facts the seal covers. Deliberately every fact a forger would have to
@@ -106,27 +146,51 @@ REQUIRED_FIELDS = (
 #: covers what the receipt actually says, the same way it always has, and
 #: `argvRedactions` sits beside it so a forger cannot drop the count to make a
 #: redacted receipt read as verbatim without breaking the seal.
+#: `checkKinds` and `checkKindsSource` are sealed for the reason the whole
+#: field exists: an unsealed identity could be typed into an existing receipt
+#: afterwards, which is the same hand-authoring this module refuses everywhere
+#: else. Sealed, a declared kind can only come from a run that happened.
 SEALED_FIELDS = (
     "schemaVersion", "generator", "generatorVersion", "argv", "argvRedactions",
     "startedAt", "endedAt", "durationSeconds", "exitCode", "baseCommit",
     "headCommit", "stdoutSha256", "stderrSha256", "stdoutBytes", "stderrBytes",
     "environment", "toolVersions", "workingTreeDirty", "ciRunId",
-    "coveredFiles", "coveredFilesSource", "repository",
+    "coveredFiles", "coveredFilesSource", "repository", "checkKinds",
+    "checkKindsSource",
 )
+
+#: Which fields each schema version INTRODUCED, so `_fields_for` can judge a
+#: receipt by its own version's contract instead of by the newest one. Add a
+#: row here when a version adds a field; nothing else needs to change.
+FIELDS_INTRODUCED_IN = (
+    ("1.1", ("argvRedactions",)),
+    ("1.2", ("checkKinds", "checkKindsSource")),
+)
+
 
 def _fields_for(declared, fields):
     """The field tuple a receipt of `declared` schema version is judged by.
 
-    "1.0" predates argv redaction, so its receipts are judged by their own
-    contract: requiring a field that version never defined would fail an
-    honest old receipt with a sentence about emptiness instead of the truth,
-    that the field postdates it. Every other field is identical between the
-    two versions, and an UNKNOWN version never reaches here because
-    `_check_schema` refuses it first.
+    "1.0" predates argv redaction and "1.1" predates the declared check kind,
+    so their receipts are judged by their own contract: requiring a field that
+    version never defined would fail an honest old receipt with a sentence
+    about emptiness instead of the truth, that the field postdates it. Fields
+    are only ever ADDED here, which is what makes the bump forward-only.
+
+    An unknown or missing version is judged by the FULL, newest set, which is
+    the strict direction: `_check_schema` refuses an unknown version before
+    any caller in `verify` reaches this, so the only way to arrive here with
+    one is a caller that skipped that refusal, and such a caller should get
+    the strictest reading rather than the most forgiving.
     """
-    if declared == "1.0":
-        return tuple(f for f in fields if f != "argvRedactions")
-    return fields
+    if declared not in KNOWN_SCHEMA_VERSIONS:
+        return fields
+    age = KNOWN_SCHEMA_VERSIONS.index(declared)
+    later = set()
+    for version_name, names in FIELDS_INTRODUCED_IN:
+        if KNOWN_SCHEMA_VERSIONS.index(version_name) > age:
+            later.update(names)
+    return tuple(f for f in fields if f not in later)
 
 
 #: One name per pattern in `SECRET_PATTERNS`, same order, so a redacted argv
@@ -230,6 +294,73 @@ def redact_argv(argv):
     return redacted, count, note
 
 
+def kind_declaration_note(kinds):
+    """The provenance sentence written into `checkKindsSource`, every time.
+
+    Written unconditionally, including when nothing was declared, because the
+    absence of a declaration is itself a fact a reader needs: a receipt with an
+    empty `checkKinds` and no sentence beside it is indistinguishable from a
+    receipt whose generator predates the field, and those two are different
+    situations. One value, not a pair: this is a note, never a verdict.
+    """
+    if not kinds:
+        return ("no --kind was given, so this receipt declares no check kind and satisfies no "
+                "design, gate or score obligation. A kind is never inferred from the recorded "
+                "command line; that inference is the defect this field replaced")
+    return ("declared by --kind at generation time: %s. The wrapper ran the command and timed "
+            "it; it does not inspect what the command did, so this names the obligation the "
+            "run was OFFERED against, never a proof that the command performs that check. The "
+            "recorded argv sits beside it for a reader to compare"
+            % ", ".join(kinds))
+
+
+def declared_kinds(receipt):
+    """The set of check kinds this receipt DECLARES. Never inferred from argv.
+
+    The one reader of the field, so `sbe status` and anything else downstream
+    cannot drift into a second interpretation. An entry that is not a known
+    kind name is dropped here rather than passed on, because an unknown kind
+    can clear no obligation this build knows about; `_check_kinds` is what
+    reports the receipt as malformed for carrying one.
+    """
+    declared = receipt.get("checkKinds")
+    if not isinstance(declared, list):
+        return set()
+    return set(k for k in declared if isinstance(k, str) and k in CHECK_KIND_NAMES)
+
+
+def kind_declaration_gap(receipt):
+    """The sentence saying why this receipt clears no obligation, or None when
+    it declares at least one kind.
+
+    Three different absences, named separately, because a consumer that folds
+    them together tells a reader "no evidence" where the truth is "evidence
+    this build cannot read as evidence for anything":
+    a receipt written before the field existed, a receipt whose field holds
+    something that is not a list of kinds, and an honest run that declared
+    nothing.
+    """
+    if declared_kinds(receipt):
+        return None
+    version_seen = answered(receipt.get("schemaVersion")) or "no schemaVersion"
+    if "checkKinds" not in receipt:
+        return ("it records no checkKinds field at all (schema %s predates it), so which check "
+                "it ran is not stated anywhere in it. Legacy receipts are NO-DATA for "
+                "obligation purposes here, never a silent pass; re-run the check through `sbe "
+                "evidence run --kind <design|gate|score>` to record one that says"
+                % version_seen)
+    raw = receipt.get("checkKinds")
+    if not isinstance(raw, list):
+        return ("its checkKinds field holds %r, which is not a list of check kinds, so nothing "
+                "here can read which check it ran" % (raw,))
+    known = [k for k in raw if isinstance(k, str) and k in CHECK_KIND_NAMES]
+    if raw and not known:
+        return ("its checkKinds field names only %s, and this build knows no such kind (it "
+                "knows %s)" % (", ".join(repr(k) for k in raw), ", ".join(CHECK_KIND_NAMES)))
+    return ("it declares no check kind: it was run without `--kind`, so it is evidence that a "
+            "command ran and not evidence that any named obligation was met")
+
+
 def working_tree_dirty(cwd):
     """(dirty, detail). A repository git cannot answer for is reported, never
     assumed clean: 'no output from git status' and 'git did not run' look
@@ -294,12 +425,20 @@ def trust_level(receipt):
             "set for itself" % ci)
 
 
-def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None):
+def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds=None):
     """Run `argv` and return the receipt describing what actually happened.
 
     The command runs HERE. Nothing in the signature accepts a duration, an exit
     code or an output digest, which is the whole point: those three are the
     fields a hand-written receipt gets to invent today.
+
+    `kinds` is the operator's declaration of WHICH obligation this run is
+    offered against, from `CHECK_KIND_NAMES`, and it is the one thing here the
+    wrapper takes on trust rather than observes. It is taken anyway, because
+    the alternative shipped for a wave and was worse: the consumer guessed the
+    identity from the command line, and a command that ran no check cleared
+    three obligations by having three words in a filename. A declaration is
+    checkable by a reader against the argv recorded next to it; a guess is not.
 
     `timeout`, in seconds, is None unless the caller passes `--timeout`. There
     is no default: a silent one would kill a legitimate long suite and hand
@@ -313,6 +452,18 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None):
     """
     if not argv:
         raise ReceiptUnreadable("no command to run: `sbe evidence run` needs `-- <command...>`")
+
+    # Refused BEFORE the command runs, not after: a receipt that could not be
+    # written is a run whose result nobody records, so the argument that makes
+    # the receipt impossible has to fail first.
+    declared = sorted(set(kinds or ()))
+    unknown = [k for k in declared if k not in CHECK_KIND_NAMES]
+    if unknown:
+        raise ReceiptUnreadable(
+            "no receipt would be readable for check kind(s) %s; this build knows %s. A kind "
+            "nothing downstream recognizes clears no obligation, so it is refused here rather "
+            "than written into a receipt that would look like a claim"
+            % (", ".join(repr(k) for k in unknown), ", ".join(CHECK_KIND_NAMES)))
 
     covered_source = "explicit --covers"
     if covers:
@@ -408,6 +559,10 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None):
         "ciRunId": os.environ.get("SBE_CI_RUN_ID") or None,
         "coveredFiles": covered,
         "coveredFilesSource": covered_source,
+        # WHICH CHECK, as a field, because the consumer used to read it out of
+        # the command line above and a filename could spell three obligations.
+        "checkKinds": declared,
+        "checkKindsSource": kind_declaration_note(declared),
     }
     receipt["runId"] = compute_seal(receipt)
     return receipt
@@ -469,6 +624,32 @@ def _check_required(receipt):
             "describing an empty string" % (len(missing), ", ".join(sorted(missing))))
 
 
+def _check_kinds(receipt):
+    """The declared check kind is a list of names this build knows, or nothing.
+
+    Only the SHAPE is checkable here. Whether the command actually performed
+    the declared check is not something this module can know, and a control
+    that pretended otherwise would be the overselling this file's own docstring
+    warns about. A receipt that carries no field at all is not a problem: that
+    is a legacy receipt, judged under its own version, and its consequence
+    lives at the consumer (it clears no obligation) rather than as a FAIL here.
+    """
+    if "checkKinds" not in receipt:
+        return None
+    raw = receipt.get("checkKinds")
+    if not isinstance(raw, list):
+        return ("checkKinds records %r, and a check kind list is a JSON array; a receipt whose "
+                "declared identity cannot be read is not a receipt anything should build an "
+                "obligation verdict on" % (raw,))
+    bad = [k for k in raw if not isinstance(k, str) or k not in CHECK_KIND_NAMES]
+    if bad:
+        return ("checkKinds names %s, which this build does not know (it knows %s). An "
+                "unrecognized kind is refused rather than ignored, because ignoring it would "
+                "leave a receipt that reads as a declaration and satisfies nothing"
+                % (", ".join(repr(k) for k in bad), ", ".join(CHECK_KIND_NAMES)))
+    return None
+
+
 def _check_seal(receipt):
     claimed = answered(receipt.get("runId"))
     actual = compute_seal(receipt)
@@ -498,8 +679,23 @@ def _check_commit(receipt, cwd):
             % (str(claimed)[:12], current[:12]), None)
 
 
-def _check_covered(receipt, cwd):
-    """(problems, note). Did the code this receipt claims to cover change since?
+def _under_excluded(rel, exclude_dirs):
+    """True when `rel` (a receipt-recorded path, POSIX-style) sits inside one
+    of `exclude_dirs` (also POSIX-style, relative to the same root). A path
+    equal to an excluded directory, or nested under it, matches; a path that
+    merely shares a string prefix (`.sbe/evidence-old` against `.sbe/evidence`)
+    does not, because this compares path SEGMENTS, not characters."""
+    norm = rel.replace(os.sep, "/").strip("/")
+    for d in exclude_dirs or ():
+        dn = str(d).replace(os.sep, "/").strip("/")
+        if dn and (norm == dn or norm.startswith(dn + "/")):
+            return True
+    return False
+
+
+def _check_covered(receipt, cwd, exclude_dirs=None):
+    """(problems, note, excluded). Did the code this receipt claims to cover
+    change since?
 
     Two ways a covered file stops being covered, and both are named separately
     because they are different findings: the bytes differ from the digest the
@@ -507,14 +703,31 @@ def _check_covered(receipt, cwd):
     catches a change that was made and reverted, and it is deliberately strict:
     a file touched after the evidence was made is a file the evidence did not
     see in its current state.
+
+    `exclude_dirs`, when given, names path prefixes this receipt's coverage
+    must never be judged against, even though `coveredFiles` still lists them
+    faithfully (that field records what the diff actually found; this
+    function decides what that finding is allowed to PROVE). This exists for
+    one reason: a receipt's `coveredFiles`, computed from a diff rather than
+    an explicit `--covers` list, cannot tell "code this run tested" from
+    "another evidence receipt that happened to land in the same diff", and a
+    receipt that regenerates routinely (every CI push re-runs the same check
+    at the same `--out` path) is not a fact about the code under test. Without
+    this, an unrelated receipt that merely covered the OLD bytes by diff-range
+    accident fails the moment the covered receipt is refreshed: the evidence
+    store poisoning itself. See docs/KNOWN-LIMITS.md ("Evidence covering
+    evidence") for what excluding it does and does not close.
     """
     covered = receipt.get("coveredFiles") or []
     ended = receipt.get("endedAtEpoch")
-    problems, checked, touched = [], 0, 0
+    problems, checked, touched, excluded = [], 0, 0, 0
     for entry in covered:
         rel = answered(entry.get("path"))
         if rel is None:
             problems.append("a coveredFiles entry records no path")
+            continue
+        if _under_excluded(rel, exclude_dirs):
+            excluded += 1
             continue
         full = rel if os.path.isabs(rel) else os.path.join(cwd, rel)
         if not os.path.exists(full):
@@ -543,10 +756,13 @@ def _check_covered(receipt, cwd):
                                 % (rel, _iso(mtime), _iso(ended)))
     note = ("%d covered file(s) re-hashed against the receipt, %d written after the run"
             % (checked, touched))
-    return problems, note
+    if excluded:
+        note += (", %d under an excluded path (the evidence store) never judged as coverage"
+                 % excluded)
+    return problems, note, excluded
 
 
-def verify(path, cwd=None):
+def verify(path, cwd=None, exclude_dirs=None):
     """PASS, FAIL or NO-DATA over one receipt, with the reasons it inspected.
 
     ORDER, and it is deliberate. Every FAIL condition is evaluated first, then
@@ -554,6 +770,12 @@ def verify(path, cwd=None):
     advisory, because "this receipt is wrong" outranks "this receipt was never
     authoritative". Only a receipt with nothing broken about it can reach the
     NO-DATA that a dirty tree earns, and only a clean one can reach PASS.
+
+    `exclude_dirs`, forwarded to `_check_covered` unchanged, names path
+    prefixes (relative to `cwd`) whose `coveredFiles` entries are recorded but
+    never judged: see `_check_covered` for why. Every existing caller that
+    does not pass it keeps today's behavior exactly, because the default is
+    an empty exclusion, not a guessed one.
     """
     cwd = os.path.abspath(cwd or os.getcwd())
     inspected = ["receipt file %s" % path]
@@ -580,6 +802,11 @@ def verify(path, cwd=None):
     if required_problem:
         problems.append(required_problem)
 
+    inspected.append("the declared check kind(s)")
+    kinds_problem = _check_kinds(receipt)
+    if kinds_problem:
+        problems.append(kinds_problem)
+
     inspected.append("the runId seal over %d run fact(s)" % len(
         _fields_for(answered(receipt.get("schemaVersion")), SEALED_FIELDS)))
     seal_problem = _check_seal(receipt)
@@ -595,7 +822,7 @@ def verify(path, cwd=None):
 
     covered = receipt.get("coveredFiles") or []
     inspected.append("%d covered file(s)" % len(covered))
-    covered_problems, covered_note = _check_covered(receipt, cwd)
+    covered_problems, covered_note, covered_excluded = _check_covered(receipt, cwd, exclude_dirs)
     problems.extend(covered_problems)
     notes.append(covered_note)
 
@@ -622,6 +849,16 @@ def verify(path, cwd=None):
                             % (answered(receipt.get("coveredFilesSource")) or "no source "
                                "recorded")]}
 
+    if covered_excluded >= len(covered):
+        return {"verdict": "NO-DATA", "inspected": inspected, "receipt": receipt,
+                "trust": level, "trustWhy": why,
+                "reasons": ["every one of this receipt's %d covered file(s) (%s) sits under an "
+                            "excluded path and was never judged as coverage, so nothing here "
+                            "grounds this receipt in code that was actually inspected"
+                            % (len(covered),
+                               answered(receipt.get("coveredFilesSource")) or "no source "
+                               "recorded")]}
+
     return {"verdict": "PASS", "reasons": notes, "inspected": inspected, "receipt": receipt,
             "trust": level, "trustWhy": why}
 
@@ -645,6 +882,10 @@ def render(receipt, path):
         "not recorded" if redactions is None else
         "no (0 secret-shaped token(s) matched; the command above is verbatim)" if redactions == 0
         else "yes, %d secret-shaped token(s); the command above is NOT verbatim" % redactions))
+    kinds = sorted(declared_kinds(receipt))
+    out.append("check kinds    %s" % (", ".join(kinds) if kinds else "none declared"))
+    out.append("kind source    %s" % (receipt.get("checkKindsSource")
+                                      or "not recorded (this receipt predates the field)"))
     out.append("exit code      %s" % receipt.get("exitCode"))
     out.append("ran            %s to %s (%s s)"
                % (receipt.get("startedAt"), receipt.get("endedAt"),
@@ -700,6 +941,13 @@ def _parser():
     run.add_argument("--covers", action="append", default=[],
                      help="a file this run is evidence for; repeatable. Without it, the "
                           "files changed between base and head are used")
+    run.add_argument("--kind", action="append", default=[], choices=list(CHECK_KIND_NAMES),
+                     dest="kind",
+                     help="the obligation this run is evidence for (%s); repeatable. Without "
+                          "it the receipt declares no check kind and clears no obligation. "
+                          "This is a declaration, not a proof: the wrapper runs the command, "
+                          "it does not inspect what the command checks"
+                          % "|".join(CHECK_KIND_NAMES))
     run.add_argument("--base", default=None, help="the commit to diff from for --covers")
     run.add_argument("--head", default="HEAD", help="the commit this receipt is made against")
     run.add_argument("--cwd", default=".", help="the repository to run in")
@@ -749,7 +997,8 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
             return exit_usage
         try:
             receipt = generate(os.path.abspath(args.cwd), command, base=args.base,
-                               head=args.head, covers=args.covers, timeout=args.timeout)
+                               head=args.head, covers=args.covers, timeout=args.timeout,
+                               kinds=args.kind)
         except ReceiptUnreadable as exc:
             sys.stderr.write("sbe evidence run: no receipt written. %s\n" % exc)
             return exit_failed
@@ -771,10 +1020,13 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         level, why = trust_level(receipt)
         sys.stdout.write(
             "\nsbe evidence run: receipt written to %s. Trust %s (%s). Command exited %d in "
-            "%.3fs, over %d covered file(s) from %s. stdout and stderr are recorded as "
-            "digests only. argv held %d secret-shaped token(s) and %s.\n"
+            "%.3fs, over %d covered file(s) from %s. Declared check kind(s): %s. stdout and "
+            "stderr are recorded as digests only. argv held %d secret-shaped token(s) and "
+            "%s.\n"
             % (args.out, level, why, receipt["exitCode"], receipt["durationSeconds"],
                len(receipt["coveredFiles"]), receipt["coveredFilesSource"],
+               ", ".join(receipt["checkKinds"]) or "none, so this receipt clears no design, "
+                                                  "gate or score obligation",
                receipt["argvRedactions"],
                "was recorded verbatim" if receipt["argvRedactions"] == 0
                else "was redacted before it was written"))

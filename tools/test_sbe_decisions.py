@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from importlib.machinery import SourceFileLoader
 
@@ -626,6 +627,116 @@ class TestLineage(unittest.TestCase):
         result = _run([sys.executable, SBE, "lineage", "never/existed.py"], cwd=self.tmp)
         self.assertIn("NO-DATA", result["stdout"])
         self.assertNotIn("PASS", result["stdout"])
+
+
+class TestConcurrentWriters(unittest.TestCase):
+    """T1's own defect, reproduced rather than assumed: `next_id` used to be
+    a plain, unlocked directory scan, and a `DECISION.md` already bound to the
+    SAME commit was treated as "rewrite in place" instead of a collision, so
+    two writers that both read "the next id is 001" both wrote it and the
+    second write landed on the first in silence.
+
+    These fixtures spawn REAL, separate processes, never threads inside one
+    interpreter: the lock this task adds is an `fcntl.flock`, a cross-process
+    primitive, and the defect only ever showed up across processes, two `sbe`
+    invocations racing each other. Each worker is released from a filesystem
+    barrier (an `O_CREAT|O_EXCL` marker per worker, then one shared "go" file
+    the parent creates only once every marker exists) so the 50 writes
+    genuinely overlap rather than trickle in one interpreter start at a time,
+    which is what this test's own precondition (a machine fast enough to
+    schedule 50 process starts within a few milliseconds of each other) would
+    otherwise require. The barrier removes that precondition: this test states
+    it, and builds it, rather than depending on it.
+    """
+
+    def _worker_script(self, src_dir):
+        # A worker: import the module the way this test file does, prove it
+        # reached the barrier by planting its own ready marker, wait for the
+        # shared go marker, then build and write ONE package and print the
+        # path `write_package` returns. `otherLines` stays empty and the
+        # trigger is otherwise identical across every worker (same kind,
+        # check and verdict, hence the same slug) on purpose: that is the
+        # shape that forces every worker to contend for the SAME numbered
+        # slot, which is exactly what an unlocked `next_id` gets wrong.
+        return (
+            "import sys, os, time\n"
+            "sys.path.insert(0, %r)\n" % src_dir +
+            "from brothersbe import decisions as d\n"
+            "root, ready_path, go_path, idx = sys.argv[1:5]\n"
+            "trigger = {'kind': 'gate', 'check': 'race-check', 'verdict': 'FAIL',\n"
+            "           'verdictLine': 'race-check FAIL from worker %s' % idx,\n"
+            "           'otherLines': [], 'dossier': None}\n"
+            "fd = os.open(ready_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)\n"
+            "os.close(fd)\n"
+            "deadline = time.time() + 60\n"
+            "while not os.path.exists(go_path):\n"
+            "    if time.time() > deadline:\n"
+            "        sys.stderr.write('TIMEOUT-WAITING-FOR-GO\\n')\n"
+            "        sys.exit(1)\n"
+            "    time.sleep(0.005)\n"
+            "print(d.write_package(root, d.build_package(root, trigger)))\n"
+        )
+
+    def _run_concurrent_writers(self, n, root):
+        """Launch `n` real subprocesses against `root`'s decision store, all
+        released at once from a shared filesystem barrier. Returns a list of
+        `(index, stdout, stderr, returncode)`, one per worker."""
+        barrier = tempfile.mkdtemp(prefix="sbe-decisions-barrier-")
+        go_path = os.path.join(barrier, "go")
+        script = self._worker_script(os.path.join(ROOT, "src"))
+        procs = []
+        for i in range(n):
+            ready_path = os.path.join(barrier, "ready-%03d" % i)
+            proc = subprocess.Popen(
+                [sys.executable, "-c", script, root, ready_path, go_path, str(i)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            procs.append((i, ready_path, proc))
+        deadline = time.time() + 60
+        while not all(os.path.exists(ready) for _, ready, _ in procs):
+            if time.time() > deadline:
+                self.fail("not every one of %d worker(s) reached the barrier within 60s" % n)
+            time.sleep(0.01)
+        fd = os.open(go_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.close(fd)
+        results = []
+        for i, _, proc in procs:
+            out, err = proc.communicate(timeout=120)
+            results.append((i, out, err, proc.returncode))
+        return results
+
+    def test_fifty_concurrent_writers_against_one_store_lose_none(self):
+        """THE DONE-CHECK: 50 real processes, one temp store, the identical
+        kind/check/verdict (so the identical slug) at the same commit. Every
+        one of the 50 must survive as its own distinct, durable file naming
+        its own worker: 0 lost, 0 collided, 50 directories on disk."""
+        n = 50
+        root = tempfile.mkdtemp(prefix="sbe-decisions-race-")
+        _git_repo(root)
+        results = self._run_concurrent_writers(n, root)
+        paths = {}
+        for i, out, err, code in results:
+            self.assertEqual(code, 0, "worker %d exited %s: %s" % (i, code, err.strip()[-4000:]))
+            path = out.strip()
+            self.assertTrue(path and os.path.isfile(path),
+                            "worker %d printed a path that is not a file on disk: %r (stderr: "
+                            "%s)" % (i, path, err.strip()[-2000:]))
+            if path in paths:
+                self.fail("worker %d's package landed at %s, already claimed by worker %d: "
+                         "one write landed on top of the other" % (i, path, paths[path]))
+            paths[path] = i
+        self.assertEqual(len(paths), n,
+                         "expected %d distinct durable packages, got %d: %r"
+                         % (n, len(paths), sorted(paths)))
+        for path, i in paths.items():
+            body = io.open(path, encoding="utf-8").read()
+            self.assertIn("from worker %d" % i, body,
+                          "%s does not carry worker %d's own verdict line: a different "
+                          "worker's content landed there instead" % (path, i))
+        store = os.path.join(root, ".sbe", "decisions")
+        on_disk = sorted(name for name in os.listdir(store) if name[:3].isdigit())
+        self.assertEqual(len(on_disk), n,
+                         "the store holds %d numbered package directories, not %d: %r"
+                         % (len(on_disk), n, on_disk))
 
 
 if __name__ == "__main__":

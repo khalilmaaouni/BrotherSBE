@@ -8,6 +8,269 @@ checklist's own rules.
 
 ## Unreleased
 
+- The evidence store no longer poisons itself. A receipt's `coveredFiles`,
+  when computed from a diff rather than an explicit `--covers` list, is every
+  file that changed in `base..head`, and that diff cannot tell "the code this
+  run tested" apart from "another evidence receipt that happened to land in
+  the same range". A receipt regenerated at a fixed `--out` path (the
+  ordinary shape of a CI re-run: the design, gate and score checks all write
+  to well-known paths on every push) is not an edit to any code under test,
+  and before this change an unrelated receipt that merely covered its OLD
+  bytes by diff-range accident FAILed the moment it refreshed, naming
+  "covered file .sbe/evidence/other.json now hashes to ...: the code
+  changed after the evidence was made" for a check that never touched that
+  file. `src/brothersbe/evidence.py`'s `verify` gains an `exclude_dirs`
+  parameter (default: none, so every existing caller not updated in this
+  change keeps today's behavior exactly) naming path prefixes whose
+  `coveredFiles` entries are still recorded and shown in the note but never
+  hashed, timed, or allowed to decide a verdict; a receipt whose ENTIRE
+  coverage sits under an excluded path now reads NO-DATA rather than a
+  silent PASS. `src/brothersbe/status.py`'s `_scan_evidence`, the one place
+  this repository reads every receipt in the store to build BROKEN CLAIMS and
+  COMPLETED EVIDENCE, passes the evidence store itself as that exclusion.
+  This is an interpretation change, not a schema change: a receipt's own
+  `coveredFiles` field still lists an evidence-store path when the diff found
+  one, faithfully; only what that record is allowed to prove changed, so no
+  receipt already on disk needs regenerating.
+  WHAT THIS DOES NOT CLOSE, named rather than left implicit:
+  `src/brothersbe/decisions.py` and `src/brothersbe/work.py` also call
+  `evidence.verify` and neither passes `exclude_dirs` in this change, so the
+  identical accidental coupling can still reach a decision package's judged
+  receipts or a task's close postcondition; and the pre-existing,
+  already-tested commit-binding rule (a receipt that is itself committed to
+  the repository necessarily records a `headCommit` one commit behind
+  whatever HEAD becomes once that commit lands, so ANY further commit, T6 or
+  not, still names it under BROKEN CLAIMS for that separate reason) is
+  untouched. Both are recorded in `docs/KNOWN-LIMITS.md` ("Evidence covering
+  evidence").
+  Proved by three new fixtures in `tools/test_sbe_status.py::
+  TestEvidenceStoreSelfPoisoning`:
+  `test_regenerating_the_covered_receipt_does_not_break_the_one_that_covers_it`
+  builds a "design" receipt (explicit `--covers`), commits it, generates a
+  "gate" receipt with the default diff-based coverage (confirmed by an
+  in-test assertion to include `design.json` alongside the real source file),
+  regenerates `design.json` in place, and asserts `gate.json` never appears
+  under BROKEN CLAIMS;
+  `test_the_same_scenario_committed_end_to_end_never_shows_a_covered_file_reason`
+  repeats it with every receipt committed, and asserts that wherever
+  `gate.json` IS named (the unrelated, pre-existing headCommit staleness,
+  which this change does not remove) the reason is never a covered-file
+  complaint; `test_a_receipt_covering_only_the_evidence_store_reads_no_data_not_pass`
+  pins the limiting case. Calibrated: with `status.py`'s call to
+  `evidence.verify` reverted to omit `exclude_dirs`, all three fixtures fail,
+  the second and third quoting the exact line this change removes
+  (`receipt .sbe/evidence/gate.json fails verify: ... covered file
+  .sbe/evidence/design.json now hashes to ..., not the ... the receipt
+  recorded: the code changed after the evidence was made`) and the first
+  quoting the silent-PASS regression this closes (`.sbe/evidence/
+  onlyevidence.json` unexpectedly present in `soundEvidence`); the file was
+  restored afterward and its `evidence_mod.verify(...,
+  exclude_dirs=(exclude_rel,))` call line matches the version before the
+  break, byte for byte. The existing 25 `tools/test_sbe_status.py` fixtures,
+  the 19 in `tools/test_sbe_status_team.py`, and the 57 in
+  `tools/test_sbe_evidence.py` stay green.
+
+- `tools/sbe_telemetry.py check-update` no longer skips itself in silence
+  inside a linked git worktree. `cmd_check_update` tested
+  `os.path.isdir(SKILL_DIR/.git)`, true only for a normal clone: a linked
+  worktree's top-level `.git` is a FILE holding `gitdir: <path>`, not a
+  directory, so that test read False and the whole command returned with
+  exit 0, no output, no marker written, and no warning, reproduced this
+  session against a real `git worktree add` checkout. A new
+  `_resolve_git_dirs` helper follows that `gitdir:` pointer to the
+  per-worktree directory (for HEAD, which is genuinely per-worktree) and,
+  via its `commondir` file, to the COMMON directory (for refs/heads and
+  refs/remotes, which a linked worktree does not duplicate); `cmd_check_update`
+  now reads HEAD and refs from the two correctly instead of assuming they
+  are the same directory. The genuinely-not-a-git-install path, and a
+  worktree pointer this cannot follow, now say so on stdout instead of
+  returning nothing, so silence is never the answer to "did the check run".
+  Proved by two new fixtures in
+  `tools/test_sbe.py::TestCheckUpdateFindsAWorktreeGitdir`, each building its
+  own repo and vault in a temp directory:
+  `test_check_update_writes_the_marker_from_a_linked_worktree` builds a real
+  linked worktree and asserts the version marker is written (proof the
+  command reached code the old check made unreachable there), and
+  `test_check_update_names_a_non_git_directory_instead_of_silence` asserts a
+  genuinely non-git directory names itself in the output rather than
+  printing nothing. Calibrated: reverted to
+  the old `os.path.isdir(SKILL_DIR/.git)` check, both fixtures read
+  `AssertionError: False is not true : check-update never reached the
+  marker write from a linked worktree; output was: ''` and `AssertionError:
+  '<tmp path>' not found in '' : a genuinely non-git directory produced no
+  named line: ''`; the file was restored and its SHA256
+  (`6c23f3814f7e5af096c1b8011ad79f981f8941b322969467359d998446c98ba2`) and
+  `git hash-object` (`b3163f67219cf88bb71baa565f40538bb16b1512`) match the
+  fixed version from before the break. A narrower residual gap, a worktree
+  whose `commondir` file is itself missing or broken, is named in
+  `docs/KNOWN-LIMITS.md` rather than forced through more of this file than
+  the reproduced defect asked for. The full suite in `tools/test_sbe.py`
+  (93 tests) stays green.
+
+- The three hard-gate evidence files (`numbers-manifest.json`,
+  `migration-receipt.json`, `ran-receipt.json`, read by `tools/sbe_gate.py`)
+  gain the same commit binding `src/brothersbe/evidence.py`'s own `sbe
+  evidence` receipt store already carries. An optional `headCommit` field,
+  the same field name and comparison the evidence store uses, is now read by
+  `gate_numbers`, `gate_migration` and `gate_ran` via two new shared
+  functions, `_current_head` (the directory's `git rev-parse HEAD`, or `None`
+  when there is nothing to bind against) and `_commit_problem` (the FAIL
+  sentence for a mismatch, or `None`). A receipt naming a commit that is not
+  the directory's current HEAD is stale: the code it covered has moved on,
+  and the gate now FAILs rather than PASSing over it, so a receipt copied
+  forward from an earlier commit no longer clears the gate at a later one. A
+  receipt naming no commit at all is left exactly as this gate always treated
+  it: this gate cannot tell a receipt that predates the field apart from an
+  operator who chose not to record one, and every worked receipt this
+  repository ships today is the first kind, so none of them are affected.
+  That residual gap, and a second, smaller one (six new eval cases move
+  `evals/run_evals.py`'s own case count past what a few shipped docs outside
+  this change's scope quote), are both named in `docs/KNOWN-LIMITS.md` rather
+  than forced through files this change was not scoped to touch.
+  Proved by `evals/run_evals.py`'s
+  `a-stale-headcommit-ran-receipt-no-longer-passes`,
+  `a-stale-headcommit-numbers-manifest-no-longer-passes`,
+  `a-stale-headcommit-migration-receipt-no-longer-passes` (each pins a
+  receipt sound in every other field to an old commit, moves HEAD on with a
+  second, unrelated commit, and asserts FAIL), `a-non-string-headcommit-is-
+  caught` (a `headCommit` of the wrong type is a broken claim, not a stale
+  one, mirroring the type checks `numbers-manifest.json`'s own `snapshot_id`
+  already gets), and two controls, `a-headcommit-bound-to-the-current-commit-
+  still-passes` and `no-git-history-leaves-the-receipt-unaffected`, proving
+  the check catches staleness specifically rather than presence, or any
+  directory at all. Calibrated: with `_commit_problem` neutralized to always
+  return `None`, the three stale-receipt cases and the type-check case all
+  read `want=FAIL got=PASS REGRESSION`; the file was restored and both its
+  SHA256 and its `git hash-object` match the version before the break
+  (`c0ce2c240397494f868cd1eb7438b69795027693d618872c9048d7a18475fa27` and
+  `481e50e8b49efe68377402cc2a9840379f397ec9`).
+
+- A receipt now says WHICH CHECK it ran, and `sbe status` believes the receipt
+  instead of reading the command line. This closes a live bypass, reproduced
+  before it was fixed: `src/brothersbe/status.py::_receipt_kinds` decided which
+  of the design, gate and score obligations a receipt satisfied by
+  substring-matching its recorded `argv`, so one receipt for `/bin/cat
+  tests/test_design_of_gate_score.txt` spelled all three words and cleared all
+  three obligations, for a command that ran no check at all. A T2 change owing
+  three checks went green on a file read. `sbe evidence run` gains
+  `--kind {design,gate,score}` (repeatable), recorded as the receipt fields
+  `checkKinds` and `checkKindsSource` and covered by the `runId` seal, so a
+  kind cannot be typed into a receipt after the fact and cannot exist without a
+  run that happened. `status` reads that field through
+  `evidence.declared_kinds`, the single reader of it, and reads the command
+  line for nothing. A receipt that declares no kind clears no obligation: it is
+  NO-DATA there, never a silent pass, and each shape of that (a receipt older
+  than the field, a field that does not parse as a kind list, an honest run
+  that declared nothing) is named in the MISSING EVIDENCE finding rather than
+  dropped, so nobody is told an obligation is unmet while receipts sit unread
+  in the store. The vocabulary lives once, in `evidence.CHECK_KIND_NAMES`, and
+  `status.CHECK_KINDS` is derived from it rather than keeping a second copy
+  that could drift.
+  FORWARD ONLY, never a rewrite: the evidence schema goes to `1.2`, `1.0` and
+  `1.1` stay readable, `_fields_for` now judges every receipt against the
+  fields its own version defined (the same compatibility precedent `1.1` set
+  for `argvRedactions`, generalized into a `FIELDS_INTRODUCED_IN` timeline),
+  and no receipt already on disk is touched.
+  WHAT THIS DOES NOT DO, stated because a control that oversells itself is
+  worse than none: a declared kind is the operator's statement, bound to a real
+  run and sealed against later editing. It is not proof that the command
+  performs the check it names. The wrapper starts a process and times it; it
+  does not understand it. The recorded argv sits beside the declaration so a
+  reader can see the two disagree.
+  Proved by `tools/test_sbe_status.py::TestCheckKindIdentity::
+  test_a_command_named_after_the_checks_clears_no_obligation`, which builds a
+  T2 change, generates a real receipt over a command whose argv names all three
+  checks, asserts the receipt verifies as sound evidence (so the fixture cannot
+  pass for the wrong reason) and asserts all three obligations stay open.
+  Calibrated: with the old argv classifier reinstated in `_receipt_kinds`, that
+  fixture fails ("AssertionError: 'design completeness check' not found in
+  '\n  clean. scope: declared tier T2 from ...00-intake.json\n\n' : a command
+  that ran no check cleared the design completeness check obligation by naming
+  it in a filename"), along with three others in the same class; the file was
+  restored and its SHA256 matches the version before the break
+  (`cff8a5c75631f48f843352e8adf6e43ec41a42aba387ecea5cb711390d3059cf`). Three
+  more calibrations on the generator side, each restored and hash-verified
+  against `221e8878af0cffe6e8fcdec54010ef3aab4b5b64d66b80da7db909f131652c8b`:
+  removing `checkKinds` from `SEALED_FIELDS` makes the forged-kind fixture read
+  PASS where FAIL is asserted; removing `checkKindsSource` from
+  `REQUIRED_FIELDS` makes the missing-provenance fixture read PASS; and
+  reverting `_fields_for` to the pre-`1.2` timeline fails an honest `1.1`
+  receipt for a field its version never had.
+  `sbe status --json` and the rendered text now name a receipt's declared kinds
+  on its own line, and `sbe evidence show` prints them with the provenance
+  sentence, so a reader never has to infer the identity from a command line
+  again. Documented in `docs/CLI.md` under both `sbe evidence` and `sbe
+  status`.
+
+- The task registry (`src/brothersbe/tasks.py`) no longer loses an open task
+  to a race: `cmd_open` and `cmd_close` used to call `load_registry` and
+  `save_registry` with nothing serializing the two, so two concurrent `sbe
+  task open` calls could both read the same tasks list, both append their
+  own record to their own in-memory copy, and the second `save_registry`
+  call would silently rewrite the file with a blob that never saw the
+  first writer's task at all. Both commands now hold one exclusive lock for
+  the whole read-modify-write (`_registry_lock`, an `fcntl.flock` on a
+  `.sbe/tasks.json.lock` sidecar beside the registry, mirroring the writer
+  lock `tools/sbe_telemetry.py` already ships and the store lock this same
+  loop added to `brothersbe.decisions`, so the codebase carries one locking
+  style rather than a second one invented here). `save_registry`'s own
+  on-disk format is untouched, byte for byte: this is not a schema change,
+  and a registry written before this change still parses the same way. The
+  lock sidecar is exempted, by exact name alongside the registry file
+  itself, from the diff `sbe task close` reads for its own postcondition,
+  for the same reason the registry file already was: opening a task now
+  touches both, and counting either would make an ordinary single-writer
+  flow unable to close clean without --force. `tools/test_sbe_tasks.py::
+  TestConcurrentWriters::
+  test_twenty_concurrent_writers_open_distinct_tasks_all_survive` spawns 20
+  real `sbe task open` subprocesses against one temp registry, releases
+  them from a filesystem barrier so the 20 writes genuinely overlap, and
+  asserts all 20 land as 20 distinct open tasks, 0 lost. Calibrated: with
+  the lock turned into a no-op the same fixture fails reliably, losing more
+  than half the writes in the run that produced this line ("expected 20
+  distinct open tasks, got 10: ['w0', 'w10', 'w11', 'w13', 'w19', 'w4',
+  'w5', 'w6', 'w8', 'w9']"); the file was restored afterward and its
+  `git hash-object` matches the version before the break
+  (`24d3071fba569a0b508f6ada23689dce6d0cd481`). Left out of scope for this
+  change: `src/brothersbe/work.py`'s `cmd_remove` also calls `load_registry`
+  and `save_registry` directly, its own read-modify-write outside this
+  lock, so that path is a real residual race this change does not close;
+  `work.py` is not a file this change touches, and the gap is named here
+  rather than silently left unsaid.
+
+- Decision packages (`src/brothersbe/decisions.py`) no longer lose a package
+  to a race: `next_id` was a plain, unlocked directory scan, and a
+  `DECISION.md` already bound to the SAME commit as an incoming write was
+  treated as "rewrite in place", so two writers that both read "the next id
+  is 001" both wrote it and the second landed on the first in silence.
+  `write_package` now holds one exclusive lock per store (`_store_lock`, an
+  `fcntl.flock` on a `.lock` sidecar beside the store directory, mirroring
+  the writer lock `tools/sbe_telemetry.py` already ships) across the whole
+  append-only check, id allocation and file write. A `DECISION.md` bound to a
+  DIFFERENT commit is still refused exactly as before: that is the
+  append-only law and this change does not touch it. A collision bound to
+  the SAME commit is now itself refused as a write target and reallocated to
+  a fresh id under the same lock instead of being overwritten, so the
+  incoming package survives as its own directory rather than erasing the
+  one that got there first. The docstring's old caveat, "build and write one
+  package at a time", is removed: the code that made it true is gone, and
+  every production caller (`record_from_run`, `record_tier_decision`,
+  `record_forced_close`) already built and wrote in the same call, so this
+  closes a real race between separate `sbe` processes rather than changing
+  any caller's own code. `tools/test_sbe_decisions.py::
+  TestConcurrentWriters::
+  test_fifty_concurrent_writers_against_one_store_lose_none` spawns 50 real
+  subprocesses against one temp store, releases them from a filesystem
+  barrier so the 50 writes genuinely overlap, and asserts all 50 land as 50
+  distinct, durable packages naming their own worker, 0 lost. Calibrated:
+  with the lock removed the same fixture fails reliably, in different
+  concrete ways across repeated runs (a silent overwrite, "worker 6's
+  package landed at .../007-gate-race-check-fail/DECISION.md, already
+  claimed by worker 0: one write landed on top of the other", and a bare
+  `DecisionUnwritable` from the unlocked `os.makedirs` race itself, "Errno
+  17 File exists"); the file was restored afterward and its SHA-256 matches
+  the version before the removal.
+
 - `sbe pr verify` (`src/brothersbe/prverify.py`) no longer trusts an owner or
   repo segment shaped like `.` or `..`: `REPO_SHAPE_RE`'s character class
   allows periods (real names carry them), so it matched `../repo` and
