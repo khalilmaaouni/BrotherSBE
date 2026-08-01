@@ -49,3 +49,30 @@ The master plan is a delivery blueprint, not a release announcement. No public
 release is authorized until every condition in its no-release covenant
 (section 2) and every release gate (section 11) passes. A documented no-go is
 a valid program outcome.
+
+## Branch inventory, recorded 2026-08-01 at main f7191de
+
+Read this before assuming an unmerged branch is a backlog item. Counts were
+measured with `git rev-list --count`, not estimated.
+
+Merged into main and safe to leave or delete: `feature/beginner-finalization`,
+`release/v1.0.0-rc.2`, `fix/impact-strict-no-data`, `feature/dummies-book`,
+`claude/agitated-gould-0866f5`.
+
+Parked work in progress, KEPT deliberately, nothing deleted:
+
+| Branch | Ahead | Behind | What it holds |
+|---|---:|---:|---|
+| `claude/happy-kilby-c38f6c` | 3 | 48 | docs, eval and `test_sbe_work` work parked from a pruned worktree |
+| `claude/funny-kirch-1a11c1` | 1 | 24 | replay work parked from a pruned worktree |
+| `fix/version-marker-namespace` | 1 | 44 | update-marker naming; an earlier session recorded this as already re-landed on main, unverified here |
+| `worktree-agent-a1563a6925670c1ca` | 1 | 28 | Loop 2 task 3 work in progress, pre-rebase |
+
+Not a backlog at all: `v2-systems-design`, `backup/pre-identity-rewrite-2026-07-28`,
+`port-fence-hook` and `v2-lazy-core` each share NO merge base with main. They
+predate the identity rewrite and are archaeology, not pending work. A planner
+reading their commit counts as work owed would be wrong.
+
+Remote branches with no local counterpart (`plugin-conversion`,
+`fix/py314-replay-excerpts`, `fix/replay-doctor-python-version`) were merged
+long ago and are housekeeping only.
