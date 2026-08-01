@@ -23,7 +23,7 @@ Five answers, for a change that adds a new interface but changes no
 existing contract's behavior and breaks nothing reversible:
 
 ```bash
-rm -rf /tmp/sbe-book-ch13 /private/tmp/sbe-book-ch13-repo-sbe-T01
+rm -rf /tmp/sbe-book-ch13 /tmp/sbe-book-ch13-repo-sbe-T01
 mkdir -p /tmp/sbe-book-ch13/dossier
 printf 'y\nn\ny\nn\nsome\n' | bin/sbe intake /tmp/sbe-book-ch13/dossier
 ```
@@ -342,7 +342,7 @@ first, the same reason as every scratch demo in this book:
 
 ```bash
 ROOT="$(pwd)"
-rm -rf /tmp/sbe-book-ch13/repo /private/tmp/sbe-book-ch13/repo-sbe-T01
+rm -rf /tmp/sbe-book-ch13/repo /tmp/sbe-book-ch13/repo-sbe-T01
 mkdir -p /tmp/sbe-book-ch13/repo
 cd /tmp/sbe-book-ch13/repo
 git init -q
@@ -386,7 +386,7 @@ edit itself, in that worktree: `export_totals_csv`, calling the existing
 `get_totals` and reformatting its rows, plus two new tests:
 
 ```bash
-WT=/private/tmp/sbe-book-ch13/repo-sbe-T01
+WT=/tmp/sbe-book-ch13/repo-sbe-T01
 python3 - "$WT" <<'PATCH'
 import sys
 path = sys.argv[1] + "/api.py"
@@ -501,7 +501,7 @@ seven's stray `rogue-note.txt` was refused. The fix is the same one: remove
 what the task never claimed, then ask again.
 
 ```bash
-rm -f /private/tmp/sbe-book-ch13/repo-sbe-T01/daily_totals.json /private/tmp/sbe-book-ch13/repo-sbe-T01/orders.csv
+rm -f /tmp/sbe-book-ch13/repo-sbe-T01/daily_totals.json /tmp/sbe-book-ch13/repo-sbe-T01/orders.csv
 "$ROOT/bin/sbe" work finish T01 --cwd /tmp/sbe-book-ch13/repo
 ```
 
@@ -531,7 +531,7 @@ The engineer commits on the branch and merges it in, a plain git operation
 this tool does not perform and never will:
 
 ```bash
-cd /private/tmp/sbe-book-ch13/repo-sbe-T01
+cd /tmp/sbe-book-ch13/repo-sbe-T01
 git add api.py test_estate.py
 export GIT_AUTHOR_NAME="Engineer A" GIT_AUTHOR_EMAIL="engineer-a@example.invalid"
 export GIT_COMMITTER_NAME="Engineer A" GIT_COMMITTER_EMAIL="engineer-a@example.invalid"
