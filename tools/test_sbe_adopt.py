@@ -73,14 +73,23 @@ def tree_hash(root):
     files this module happens to propose today.
     """
     digest = hashlib.sha256()
-    for dirpath, dirnames, filenames in sorted(os.walk(root)):
+    # os.walk is walked DIRECTLY, never wrapped in sorted(): sorted() drains the
+    # generator before the loop body runs, so assigning dirnames[:] prunes
+    # nothing and the .git exclusion below was inert. It read as excluded and
+    # hashed git's internals anyway, which made this instrument measure git's
+    # own bookkeeping: a maintenance.lock that git created and removed mid-walk
+    # crashed the macOS legs of CI with FileNotFoundError. Determinism comes
+    # from sorting the collected paths afterwards instead.
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d != ".git")
         for name in sorted(filenames):
             full = os.path.join(dirpath, name)
-            rel = os.path.relpath(full, root).replace(os.sep, "/")
-            digest.update(rel.encode("utf-8"))
-            with open(full, "rb") as fh:
-                digest.update(fh.read())
+            found.append((os.path.relpath(full, root).replace(os.sep, "/"), full))
+    for rel, full in sorted(found):
+        digest.update(rel.encode("utf-8"))
+        with open(full, "rb") as fh:
+            digest.update(fh.read())
     return digest.hexdigest()
 
 

@@ -558,6 +558,97 @@ class TestRepoShapeValidation(PrverifyCase):
         self.assertFalse(self.mod.valid_repo_shape(""))
         self.assertFalse(self.mod.valid_repo_shape(None))
 
+    def test_a_bare_dot_or_dot_dot_segment_is_refused_on_either_side(self):
+        """REPO_SHAPE_RE's character class allows periods (real names carry
+        them, e.g. octocat.github.io), so it matches "../repo" and
+        "owner/.." on shape alone. A segment equal to exactly "." or ".."
+        is a path-traversal token, not a name, and must be refused."""
+        for repo in ("../repo", "owner/..", "./repo", "owner/."):
+            self.assertFalse(self.mod.valid_repo_shape(repo),
+                             "%r must be refused: a bare . or .. segment is a "
+                             "path-traversal token, not a repository name" % repo)
+
+    def test_a_bare_dot_or_dot_dot_repo_is_refused_before_any_fetch(self):
+        for repo in ("../repo", "owner/..", "./repo", "owner/."):
+            calls = []
+
+            def spy(method, url, token, calls=calls):
+                calls.append((method, url))
+                return (404, None, None)
+
+            original = self.mod._real_fetch
+            self.mod._real_fetch = spy
+            out, err = io.StringIO(), io.StringIO()
+            old_out, old_err = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = out, err
+            try:
+                exit_code = self.mod.main(["verify", "7", "--repo", repo])
+            finally:
+                sys.stdout, sys.stderr = old_out, old_err
+                self.mod._real_fetch = original
+            self.assertEqual(exit_code, 2,
+                             (repo, exit_code, out.getvalue(), err.getvalue()))
+            self.assertEqual(calls, [], "%r must be refused before any fetch is ever "
+                                        "made: %r" % (repo, calls))
+
+
+class TestHostileBaseRefShape(PrverifyCase):
+    """base_ref is API-sourced (the pull request's base.ref), not
+    user-supplied, but it still reaches a URL path segment: the
+    branch-protection fetch. A shape containing "/" must never introduce an
+    extra path segment into that URL; urlencoding with safe="" is what
+    stops it."""
+
+    def test_a_hostile_base_ref_is_percent_encoded_never_a_raw_path_segment(self):
+        hostile_ref = "main/../../orgs/evil-org/repos"
+        fetch = FakeFetch(
+            routes=dict(baseline_routes(),
+                       **{"/pulls/7/reviews": (200, [], None)}),
+            sequences={"/pulls/7": [(200, pr_body(sha=SHA_A, base_ref=hostile_ref), None),
+                                    (200, pr_body(sha=SHA_A, base_ref=hostile_ref), None)]})
+        self.evaluate(fetch)
+        protection_calls = [url for method, url in fetch.calls if "/branches/" in url]
+        self.assertTrue(protection_calls, fetch.calls)
+        for url in protection_calls:
+            self.assertNotIn("/branches/main/../../orgs/evil-org/repos/protection",
+                             url, url)
+            self.assertIn("%2F", url,
+                         "a base_ref containing / must be percent-encoded, never left "
+                         "as a raw path separator that could add path segments: %r" % url)
+
+
+class TestHostileHeadShaShape(PrverifyCase):
+    """first_sha is API-sourced (the pull request's head.sha), not
+    user-supplied, but it still reaches a URL path segment: the check-runs
+    fetch. A value that does not look like a commit sha must never be
+    composed into that URL at all."""
+
+    def test_a_hostile_head_sha_never_reaches_the_check_runs_url(self):
+        hostile_sha = "deadbeef/../../evil"
+        fetch = FakeFetch(
+            routes={"/protection": (200, protection(required_contexts=["ci/build"]), None),
+                   "/pulls/7/reviews": (200, [], None)},
+            sequences={"/pulls/7": [(200, pr_body(sha=hostile_sha), None),
+                                    (200, pr_body(sha=hostile_sha), None)]})
+        report = self.evaluate(fetch)
+        check_run_calls = [url for method, url in fetch.calls if "/check-runs" in url]
+        self.assertEqual(check_run_calls, [],
+                         "a head sha that does not look like a commit sha must never "
+                         "be composed into the check-runs URL: %r" % check_run_calls)
+        control = self.control(report, "REQUIRED CHECKS")
+        self.assertEqual(control["verdict"], "UNVERIFIABLE", control)
+        self.assertIn("does not look like a commit sha", control["detail"], control)
+
+    def test_valid_sha_shape_accepts_hex_and_rejects_hostile_shapes(self):
+        self.assertTrue(self.mod.valid_sha_shape("a" * 40))
+        self.assertTrue(self.mod.valid_sha_shape("a" * 7))
+        self.assertFalse(self.mod.valid_sha_shape("a" * 6), "shorter than 7 hex chars")
+        self.assertFalse(self.mod.valid_sha_shape("a" * 41), "longer than 40 hex chars")
+        self.assertFalse(self.mod.valid_sha_shape("deadbeef/../../evil"))
+        self.assertFalse(self.mod.valid_sha_shape("DEADBEEF" + "a" * 32), "uppercase hex")
+        self.assertFalse(self.mod.valid_sha_shape(""))
+        self.assertFalse(self.mod.valid_sha_shape(None))
+
 
 class TestForcePushMidRun(PrverifyCase):
     def test_a_force_pushed_head_between_first_and_last_fetch_is_unverifiable(self):

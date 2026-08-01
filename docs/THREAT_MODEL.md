@@ -234,10 +234,24 @@ Gets: whatever that integration could already do. A compromised MCP server, an
 editor extension or a CI action runs with the session's own access.
 
 Stopped by: nothing here, and the honest note is that this project adds no
-integration to compromise. It makes no network call, has no account, no server,
-no analytics and no telemetry endpoint, and the property is drift-tested: a test
-parses every tool and fails if any imports `urllib`, `requests`, `socket` or
-`http`, or if a shell tool invokes `curl` or `wget`.
+integration to compromise.
+
+Tools that run inside a session make no network calls, with two named exceptions: `sbe pr verify` and `install.sh`.
+
+`sbe pr verify` calls the GitHub API, and only when you ask for it: it is
+token-gated (`GITHUB_TOKEN`, `GH_TOKEN`, or a working `gh auth token`) and
+opt-in, documented in `docs/KNOWN-LIMITS.md` (lines 713-731). `install.sh`
+is the one-time installer, not a tool a session invokes: it runs before any
+session starts and calls `git ls-remote` (line 98), and on the clone
+fallback `git -C ... pull --ff-only` or `git clone` (lines 106-110), then
+hands off to `claude plugin marketplace add` and `claude plugin install`.
+
+Outside those two, this project has no account, no server, no analytics and
+no telemetry endpoint, and the property is drift-tested: a test parses
+every tool under `tools/`, `src/brothersbe/`, `hooks/`, `scripts/`,
+`bin/sbe`, and `install.sh`, and fails if any of them, other than the
+allow-listed `src/brothersbe/prverify.py`, imports `urllib`, `requests`,
+`socket` or `http`, or if a shell tool invokes `curl` or `wget`.
 
 Nothing stops: everything else in your session. This project does not change
 what Claude Code itself transmits to Anthropic or to your cloud provider; see

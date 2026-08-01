@@ -40,6 +40,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 API_ROOT = "https://api.github.com"
@@ -47,17 +48,42 @@ TIMEOUT_SECONDS = 10
 GOOD_CONCLUSIONS = ("success", "neutral", "skipped")
 
 #: owner/name, each side [A-Za-z0-9_.-]+ and NOTHING else: no extra slashes,
-#: no path-traversal segments (".." never matches on its own because the
-#: pattern is anchored end to end and a stray "/" inside either side breaks
-#: the match), so a hostile --repo never reaches URL composition.
+#: no stray "/" inside either side (a stray "/" breaks the match, since the
+#: pattern is anchored end to end). The character class allows periods
+#: though, so it matches "../repo" and "owner/.." just as readily as
+#: "octocat.github.io/demo" -- a side that is exactly "." or ".." is a
+#: path-traversal token, not a name, and valid_repo_shape rejects that case
+#: explicitly below rather than leaving it to this regex.
 REPO_SHAPE_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+#: A repo segment equal to exactly one of these is a path-traversal token,
+#: never a real owner or repository name.
+_TRAVERSAL_SEGMENTS = (".", "..")
 
 
 def valid_repo_shape(repo):
-    """True when `repo` is exactly owner/name in the shape above. Called
-    before token discovery and before any fetch, so a malformed --repo is
-    refused as a usage error and never turns into a URL."""
-    return bool(repo) and bool(REPO_SHAPE_RE.match(repo))
+    """True when `repo` is exactly owner/name in the shape above, and
+    neither side is a bare "." or "..". Called before token discovery and
+    before any fetch, so a malformed --repo is refused as a usage error and
+    never turns into a URL."""
+    if not repo or not REPO_SHAPE_RE.match(repo):
+        return False
+    owner, name = repo.split("/", 1)
+    return owner not in _TRAVERSAL_SEGMENTS and name not in _TRAVERSAL_SEGMENTS
+
+
+#: A commit sha exactly as GitHub returns it: lowercase hex, plausible
+#: length. `first_sha` is API-sourced (the pull request's head.sha), not
+#: user-supplied like --repo, but it still reaches a URL path segment (the
+#: check-runs fetch below) -- so it is checked at that one point rather than
+#: trusted as already safe just because it came from a JSON body.
+SHA_SHAPE_RE = re.compile(r"[0-9a-f]{7,40}")
+
+
+def valid_sha_shape(sha):
+    """True when `sha` is a plausible commit sha: lowercase hex, 7 to 40
+    characters, nothing else."""
+    return bool(sha) and bool(SHA_SHAPE_RE.fullmatch(sha))
 
 #: The one-line remedy the spec requires next to every credential-shaped
 #: NO-DATA. Worded without the other two verdict names on purpose: a
@@ -460,38 +486,56 @@ def evaluate(repo, number, token, fetch=None, cwd=None, head=None, policy=None,
         control("REQUIRED CHECKS", "UNVERIFIABLE", msg)
         control("CODEOWNERS", "UNVERIFIABLE", msg)
     else:
-        p_url = "%s/repos/%s/branches/%s/protection" % (API_ROOT, repo, base_ref)
+        # base_ref is API-sourced (the pull request's base.ref) and is about
+        # to be composed into a URL path segment; it is urlencoded with
+        # safe="" so a "/" inside it (a legitimate character in a git ref)
+        # becomes %2F rather than introducing an extra path segment, and per
+        # GitHub's own documented branch-protection endpoint contract a
+        # slash in the branch name must be percent-encoded to be addressed
+        # at all.
+        p_url = "%s/repos/%s/branches/%s/protection" % (
+            API_ROOT, repo, urllib.parse.quote(base_ref, safe=""))
         p_status, p_body, p_err = fetch("GET", p_url, token)
 
         # The check-runs scan survives ONLY as ADVISORY prose folded into
         # REQUIRED CHECKS' detail; it never decides a verdict by itself, and
         # `run_by_name` is the one piece of it REQUIRED CHECKS actually uses,
         # to test each required context named by branch protection.
-        k_url = "%s/repos/%s/commits/%s/check-runs" % (API_ROOT, repo, first_sha)
-        k_status, k_body, k_err = fetch("GET", k_url, token)
-        runs = k_body.get("check_runs") if isinstance(k_body, dict) else None
         run_by_name = {}
-        if k_status == 200 and isinstance(runs, list):
-            for r in runs:
-                if isinstance(r, dict) and r.get("name"):
-                    run_by_name[r["name"]] = r
-            if runs:
-                advisory = "ADVISORY (not verdict-determining), every check run on %s: %s" % (
-                    first_sha, ", ".join(
-                        "%s=%s" % (r.get("name") or "(unnamed)",
-                                  r.get("conclusion") or r.get("status") or "pending")
-                        for r in runs if isinstance(r, dict)))
-            else:
-                advisory = "ADVISORY (not verdict-determining): no check runs are reported on %s" % first_sha
-        elif k_status in (401, 403):
-            advisory = ("ADVISORY (not verdict-determining): the token lacks permission "
-                       "to read check runs (HTTP %d)" % k_status)
-        elif k_status is None:
-            advisory = ("ADVISORY (not verdict-determining): the network did not answer "
-                       "for check runs: %s" % (k_err or "no reason recorded"))
+        if not valid_sha_shape(first_sha):
+            # first_sha is API-sourced and is about to be composed straight
+            # into a URL path segment; a value that does not look like a
+            # commit sha is refused before any request is built, never
+            # composed into one.
+            k_status, runs = None, None
+            advisory = ("ADVISORY (not verdict-determining): the pull request head %r "
+                       "does not look like a commit sha (expected 7 to 40 lowercase hex "
+                       "characters), so check runs were never requested" % first_sha)
         else:
-            advisory = ("ADVISORY (not verdict-determining): the check-runs endpoint "
-                       "answered HTTP %s" % k_status)
+            k_url = "%s/repos/%s/commits/%s/check-runs" % (API_ROOT, repo, first_sha)
+            k_status, k_body, k_err = fetch("GET", k_url, token)
+            runs = k_body.get("check_runs") if isinstance(k_body, dict) else None
+            if k_status == 200 and isinstance(runs, list):
+                for r in runs:
+                    if isinstance(r, dict) and r.get("name"):
+                        run_by_name[r["name"]] = r
+                if runs:
+                    advisory = "ADVISORY (not verdict-determining), every check run on %s: %s" % (
+                        first_sha, ", ".join(
+                            "%s=%s" % (r.get("name") or "(unnamed)",
+                                      r.get("conclusion") or r.get("status") or "pending")
+                            for r in runs if isinstance(r, dict)))
+                else:
+                    advisory = "ADVISORY (not verdict-determining): no check runs are reported on %s" % first_sha
+            elif k_status in (401, 403):
+                advisory = ("ADVISORY (not verdict-determining): the token lacks permission "
+                           "to read check runs (HTTP %d)" % k_status)
+            elif k_status is None:
+                advisory = ("ADVISORY (not verdict-determining): the network did not answer "
+                           "for check runs: %s" % (k_err or "no reason recorded"))
+            else:
+                advisory = ("ADVISORY (not verdict-determining): the check-runs endpoint "
+                           "answered HTTP %s" % k_status)
 
         if p_status in (403, 404):
             msg = ("branch protection for %s is not readable by this token (HTTP %d at "

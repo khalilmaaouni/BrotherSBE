@@ -8,6 +8,65 @@ checklist's own rules.
 
 ## Unreleased
 
+- `sbe pr verify` (`src/brothersbe/prverify.py`) no longer trusts an owner or
+  repo segment shaped like `.` or `..`: `REPO_SHAPE_RE`'s character class
+  allows periods (real names carry them), so it matched `../repo` and
+  `owner/..` on shape alone; `valid_repo_shape` now rejects either side
+  being exactly `.` or `..`, explicitly, before any fetch. Two API-sourced
+  values that reach a URL path segment are now validated before that
+  composition rather than trusted as already safe because they came from a
+  JSON body: the pull request's head sha must match `fullmatch
+  [0-9a-f]{7,40}` before the check-runs URL is built, and the pull
+  request's base ref is urlencoded via `urllib.parse.quote(base_ref,
+  safe="")` before the branch-protection URL is built, so a `/` inside it
+  becomes `%2F` instead of an extra path segment. Adversarial fixtures in
+  `tools/test_sbe_prverify.py` cover `../repo`, `owner/..`, `./repo`,
+  `owner/.`, a hostile base ref (`main/../../orgs/evil-org/repos`), and a
+  hostile head sha (`deadbeef/../../evil`). Calibrated: each guard removed
+  in turn made its own new fixture fail (and only that one), naming the raw
+  unescaped URL the module would otherwise have built; restoring the file
+  made every fixture pass again, and the restored file hashes identical to
+  the original.
+
+- The zero-network claim in `SECURITY.md` and `docs/THREAT_MODEL.md` is now
+  scoped instead of blanket: tools that run inside a session make no network
+  calls, with two named exceptions, `sbe pr verify` (GitHub API, token-gated,
+  opt-in, documented in `docs/KNOWN-LIMITS.md` lines 713-731) and
+  `install.sh` (the one-time installer, not a tool a session invokes; `git
+  ls-remote` at line 98, `git clone` or `pull --ff-only` at lines 106-110,
+  then `claude plugin` commands). `SECURITY.md`'s own suggested audit grep
+  now also walks `src/`, `hooks/`, `scripts/`, and `bin/`, not only `tools/`.
+
+- `tools/test_sbe.py`'s zero-network AST scan (`TestAuditableSurface.
+  test_the_zero_network_property_holds_by_ast`) now parses the same surface
+  `SECURITY.md` claims is auditable: `src/brothersbe/*.py`, `hooks/`,
+  `scripts/`, `bin/sbe` and `install.sh`, not only `tools/`. One exact-path
+  exception, `src/brothersbe/prverify.py`, is allow-listed by name (`sbe pr
+  verify`'s own documented GitHub API client) so no other module can hide
+  behind it. The shell-side pattern check now also flags `nc`, not only
+  `curl` and `wget`. `install.sh`'s own documented `git` network calls stay
+  untouched by this scan; the property under test is the absence of direct
+  network imports and network CLI invocations, not the absence of `git`.
+  Calibrated: `import urllib.request` planted in `src/brothersbe/status.py`
+  fails the test naming that exact file, restoring the file makes it pass
+  again, and the restored file hashes identical to the original.
+
+- `.github/workflows/brothersbe-gates.yml` now runs 13 test suites that
+  existed on disk and passed locally but had never once run on a merge:
+  `test_sbe_adopt.py`, `test_sbe_book.py`, `test_sbe_bypass.py`,
+  `test_sbe_converge.py`, `test_sbe_decisions.py`, `test_sbe_evidence.py`,
+  `test_sbe_install.py`, `test_sbe_plan.py`, `test_sbe_prverify.py`,
+  `test_sbe_status.py`, `test_sbe_status_team.py`, `test_sbe_tasks.py`, and
+  `test_sbe_work.py`. Every `tools/test_sbe_*.py` file now appears in the
+  workflow exactly once, except `test_sbe_prverify_live.py`, which stays
+  deliberately unwired: it is an opt-in script that needs both
+  `SBE_LIVE_GH_REPO` and `SBE_LIVE_GH_PR` plus a discoverable GitHub token,
+  none of which this workflow provides, and the workflow now carries a
+  comment saying so next to the `test_sbe_prverify.py` step it sits beside
+  (that step is the canned, offline suite and needs neither network nor a
+  token). No strictness flag changed and both OS legs still run every step;
+  the diff is purely additive.
+
 - The book grew its persona spine: Part IV, one deep dive each for the
   backend engineer, the data engineer, and the platform lead, and Part V,
   working as one team, the vault opened in Obsidian for real, and the

@@ -748,13 +748,34 @@ class TestAuditableSurface(unittest.TestCase):
         and the pinned number rotted (a count written into prose that nothing
         recomputes). The docs now state the PROPERTY instead, and this test is
         the recomputation the property gets: no tool imports urllib, requests,
-        socket or http, and no shell tool invokes curl or wget outside a
-        comment. The redaction fixture in this file carries curl inside a
-        string on purpose; parsing imports rather than grepping text is what
-        keeps that fixture from being a false hit."""
+        socket or http, and no shell tool invokes curl, wget or nc outside a
+        comment. The scan walks the same surface SECURITY.md's own audit grep
+        names: tools/, src/brothersbe/, hooks/, scripts/, bin/sbe and
+        install.sh, with one allow-listed exception, src/brothersbe/prverify.py,
+        skipped by exact path rather than by directory so no other module can
+        hide behind it: it is `sbe pr verify`'s own documented GitHub API
+        client (SECURITY.md, docs/KNOWN-LIMITS.md lines 713-731). install.sh's
+        own documented git network calls (git ls-remote, git clone, git pull)
+        are not banned by this scan; only urllib/requests/socket/http imports
+        and curl/wget/nc invocations are. The redaction fixture in this file
+        carries curl inside a string on purpose; parsing imports rather than
+        grepping text is what keeps that fixture from being a false hit."""
         import ast
+        ROOT = os.path.abspath(os.path.join(HERE, ".."))
         banned = {"urllib", "requests", "socket", "http"}
-        for p in glob.glob(os.path.join(HERE, "*.py")):
+        # The one documented network module: sbe pr verify's GitHub API
+        # client, named in SECURITY.md and docs/KNOWN-LIMITS.md 713-731.
+        allowlisted = {os.path.join(ROOT, "src", "brothersbe", "prverify.py")}
+        py_files = (
+            glob.glob(os.path.join(HERE, "*.py")) +
+            glob.glob(os.path.join(ROOT, "src", "brothersbe", "*.py")) +
+            glob.glob(os.path.join(ROOT, "hooks", "**", "*.py"), recursive=True) +
+            glob.glob(os.path.join(ROOT, "scripts", "**", "*.py"), recursive=True) +
+            [os.path.join(ROOT, "bin", "sbe")]
+        )
+        for p in py_files:
+            if p in allowlisted:
+                continue
             tree = ast.parse(io.open(p, errors="replace").read())
             for node in ast.walk(tree):
                 mods = []
@@ -765,13 +786,19 @@ class TestAuditableSurface(unittest.TestCase):
                 hit = sorted(set(mods) & banned)
                 self.assertEqual([], hit,
                                  "%s imports %s; the zero-network claim in SECURITY.md "
-                                 "is broken" % (os.path.basename(p), ", ".join(hit)))
-        for p in glob.glob(os.path.join(HERE, "*.sh")):
+                                 "is broken" % (os.path.relpath(p, ROOT), ", ".join(hit)))
+        sh_files = (
+            glob.glob(os.path.join(HERE, "*.sh")) +
+            glob.glob(os.path.join(ROOT, "hooks", "**", "*.sh"), recursive=True) +
+            glob.glob(os.path.join(ROOT, "scripts", "**", "*.sh"), recursive=True) +
+            [os.path.join(ROOT, "install.sh")]
+        )
+        for p in sh_files:
             for i, line in enumerate(io.open(p, errors="replace"), 1):
                 code = line.split("#", 1)[0]
-                self.assertFalse(re.search(r"\b(curl|wget)\b", code),
-                                 "%s:%d invokes curl or wget; the zero-network claim "
-                                 "in SECURITY.md is broken" % (os.path.basename(p), i))
+                self.assertFalse(re.search(r"\b(curl|wget|nc)\b", code),
+                                 "%s:%d invokes curl, wget or nc; the zero-network claim "
+                                 "in SECURITY.md is broken" % (os.path.relpath(p, ROOT), i))
 
 
 class TestAutosaveRecover(unittest.TestCase):

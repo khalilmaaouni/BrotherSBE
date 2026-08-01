@@ -45,15 +45,17 @@ with `BROTHERSBE_VAULT`) carries everything private:
 The line between them is the security guarantee: **the shared repo is reviewed and
 public to the team; the vault never leaves the machine.** `DIGEST.md` states it
 ("Local telemetry never leaves the machine"),
-and `SECURITY.md` lets you verify the zero-network claim yourself:
+and `SECURITY.md` lets you verify the scoped network claim yourself:
 
 ```bash
-grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
+grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/ src/ hooks/ scripts/ bin/
 ```
 
-(Expected result: none of the hits is a network call; every hit is
-subprocess-for-git, a word inside a message string, or a redaction-test
-fixture. The count moves with the code, so no number is stated; `SECURITY.md`
+(Expected result: exactly one real network call, `src/brothersbe/prverify.py`,
+which is the documented `sbe pr verify` exception and reads the GitHub API only
+when you run it. Every other hit is subprocess-for-git, a word inside a message
+string, or a redaction-test fixture. The count moves with the code, so no number
+is stated; `SECURITY.md`
 states the same property beside the command, and a test in
 `tools/test_sbe.py` re-checks the property itself on every run.)
 

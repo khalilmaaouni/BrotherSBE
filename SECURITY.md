@@ -8,32 +8,48 @@ details and ask for a private channel first.
 
 ## What this software does with your data
 
-BrotherSBE makes no network calls. It has no analytics, no account, and no
-server. Everything it writes goes to your vault folder, which you choose with
+Tools that run inside a session make no network calls, with two named exceptions: `sbe pr verify` and `install.sh`.
+
+`sbe pr verify` calls the GitHub API only when you ask for it and only when
+a token is present (`GITHUB_TOKEN`, `GH_TOKEN`, or a working `gh auth
+token`), documented in `docs/KNOWN-LIMITS.md` (lines 713-731). `install.sh`
+runs once, before any session starts, and is not a tool a session invokes:
+it calls `git ls-remote` (line 98) to check whether a release tag is
+published, and on the clone fallback calls `git -C ... pull --ff-only` or
+`git clone` (lines 106-110), then hands off to `claude plugin marketplace
+add` and `claude plugin install`.
+
+Outside those two, BrotherSBE has no analytics, no account, and no server.
+Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
 yourself; the tools are standard-library Python and shell: 22,330 lines measured
-2026-07-31 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather than
-left for you to discover, and a test in `tools/test_sbe.py` fails if it drifts
-more than 15 percent, so the auditability claim degrades loudly instead of
-quietly. This finds every network call:
+2026-07-31 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather
+than left for you to discover, and a test in `tools/test_sbe.py` fails if it
+drifts more than 15 percent, so the auditability claim degrades loudly
+instead of quietly. This finds every network call:
 
 ```bash
-grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/
+grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/ src/ hooks/ scripts/ bin/
 ```
 
-What to expect from that grep, so the check is usable rather than reassuring:
-none of the hits is a network call. The exact count moves with the code and is
+What to expect from that grep, so the check is usable rather than
+reassuring: none of the hits is a network call, with one documented
+exception: `src/brothersbe/prverify.py`, which is `sbe pr verify`'s own
+GitHub API client, named above. The exact count moves with the code and is
 deliberately not stated here (an earlier revision pinned a number and it
-rotted); the PROPERTY is what matters, and every hit is one of three benign
-shapes: `subprocess` running local `git`, the words "socket" or "http"
-inside a refusal message or comment, or a fake credential inside a redaction
-TEST FIXTURE (`tools/test_sbe.py` carries a literal `curl ... Bearer ...`
-string precisely to prove such strings get masked). A hit that actually
-imports `urllib` or `requests`, or opens an `http` URL or a network `socket`,
-is a violation of this document; report it. The property itself is
-drift-tested: `tools/test_sbe.py` parses every tool and fails if any imports
-`urllib`, `requests`, `socket` or `http`, or if a shell tool invokes `curl`
-or `wget`.
+rotted); the PROPERTY is what matters, and every other hit is one of three
+benign shapes: `subprocess` running local `git`, the words "socket" or
+"http" inside a refusal message or comment, or a fake credential inside a
+redaction TEST FIXTURE (`tools/test_sbe.py` carries a literal `curl ...
+Bearer ...` string precisely to prove such strings get masked). A hit
+outside `src/brothersbe/prverify.py` that actually imports `urllib` or
+`requests`, or opens an `http` URL or a network `socket`, is a violation of
+this document; report it. The property itself is drift-tested:
+`tools/test_sbe.py` parses every tool under `tools/`, `src/brothersbe/`,
+`hooks/`, `scripts/`, `bin/sbe`, and `install.sh`, and fails if any of them,
+other than the allow-listed `src/brothersbe/prverify.py`, imports `urllib`,
+`requests`, `socket` or `http`, or if a shell tool invokes `curl` or
+`wget`.
 
 ## Capture is off by default, per category
 

@@ -473,6 +473,47 @@ jobs:
         run: python3 tools/test_sbe_fence_hook.py
       - name: Impact fixtures (a declared tier cannot contradict the diff silently)
         run: python3 tools/test_sbe_impact.py
+      # The suites below are the same "documentation rather than a gate"
+      # condition the comment above names: each one existed on disk and ran
+      # on nobody's merge path until this step wired it in. Listed in the
+      # order tools/test_sbe*.py sorts, so a new suite dropped into tools/
+      # is easy to spot missing from this list.
+      - name: Adopt and init fixtures (sbe adopt, sbe init)
+        run: python3 tools/test_sbe_adopt.py
+      - name: Book estate fixtures (the worked example the book's chapters paste)
+        run: python3 tools/test_sbe_book.py
+      - name: Bypass fixtures (the ways a person or an agent gets past these controls)
+        run: python3 tools/test_sbe_bypass.py
+      - name: Converge fixtures (sbe converge)
+        run: python3 tools/test_sbe_converge.py
+      - name: Decision package fixtures (sbe explain, sbe lineage)
+        run: python3 tools/test_sbe_decisions.py
+      - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
+        run: python3 tools/test_sbe_evidence.py
+      - name: Install script fixtures (dry-run, missing prerequisites)
+        run: python3 tools/test_sbe_install.py
+      - name: Plan fixtures (sbe plan)
+        run: python3 tools/test_sbe_plan.py
+      # This is the canned/offline suite: every GitHub API call is routed
+      # through a fake fetch, so it needs no network and no token, and it
+      # runs on every PR. tools/test_sbe_prverify_live.py is a separate,
+      # deliberately unwired script: it needs BOTH SBE_LIVE_GH_REPO and
+      # SBE_LIVE_GH_PR plus a token discoverable the way `sbe pr verify`
+      # itself discovers one, none of which this workflow provides, and
+      # without them it already prints one NO-DATA line and exits 0 (its
+      # own docstring). Wiring it here would either skip silently on every
+      # normal run or require CI secrets this repository does not carry, so
+      # it stays a manual, opt-in script instead.
+      - name: PR verify fixtures (sbe pr verify, canned GitHub API, offline)
+        run: python3 tools/test_sbe_prverify.py
+      - name: Status fixtures (sbe status)
+        run: python3 tools/test_sbe_status.py
+      - name: Team status fixtures (sbe status --team)
+        run: python3 tools/test_sbe_status_team.py
+      - name: Task fixtures (sbe task)
+        run: python3 tools/test_sbe_tasks.py
+      - name: Work fixtures (sbe work)
+        run: python3 tools/test_sbe_work.py
       # The kill criterion this wave was cut against, verbatim: an install
       # that needs a manual global settings edit. This proves a plain
       # `git archive HEAD` extracts on its own into an empty directory and
@@ -519,7 +560,9 @@ until the receipt is there and consistent.
   `SKILL.md` is the always-on core and its routing table names which file holds which law.
 - `evals/run_evals.py` is the proof: one planted defect per class, each caught by its
   gate. Read the fixtures to see the exact shape of every receipt.
-- `SECURITY.md` documents the zero-network posture: the tools make no network call,
+- `SECURITY.md` documents the network posture: the tools that run inside a session
+  make no network call, with two named exceptions (`sbe pr verify` reads the GitHub
+  API when you run it, and `install.sh` clones once at install time). They
   write only to the vault you point `BROTHERSBE_VAULT` at (default
   `~/BrotherSBEVault`), and the autosave snapshots your work to a local git ref
   without ever pushing.
