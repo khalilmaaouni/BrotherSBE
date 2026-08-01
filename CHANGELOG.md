@@ -8,6 +8,25 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- `sbe impact --strict` no longer fails a run over pure absence. A NO-DATA
+  verdict whose derived answers are all at their lowest values (a docs, data or
+  test-only diff no detector covers, or an empty diff) now exits 0 under
+  `--strict`, with a stderr sentence saying so; a NO-DATA carrying detector
+  hits that propose a tier above T0 with no intake to reconcile them against,
+  and a diff that could not be read at all, both still exit 1. Before this,
+  every docs-or-data pull request through the consumer workflow went red:
+  `bin/sbe impact . --json --strict` exited 1 with verdict NO-DATA and every
+  derived answer at its lowest value, which graded absence, and this project's
+  law is that NO-DATA never decides an exit code. The strict semantics are now
+  documented in full in `docs/CLI.md`'s impact section (they were not written
+  down anywhere before), and the consumer workflow's comment states them where
+  the flag is set, so the change is visible in the workflow diff a human
+  reviews, per L16. Held by `TestStrictOverAbsence` in
+  `tools/test_sbe_impact.py`, four fixtures, calibrated by reinjecting the old
+  exit rule: exactly the two absence fixtures went red, the two
+  evidence-still-blocks fixtures stayed green, and the fixed file was restored
+  with a matching SHA256 before and after.
+
 - A decision can now be read back on demand and traced end to end. `sbe explain
   <id|gate|check>` prints a recorded decision package, or, when no run has
   written one, regenerates a package from the shipped registry with the verdict

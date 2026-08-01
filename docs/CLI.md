@@ -129,8 +129,14 @@ and a tier declared by a human cannot drift apart.
   reason is an off switch rather than a decision.
 - The proposed tier is a **floor**. `consumers` cannot be read from a diff and is assumed at
   its lowest value; every file no detector covers is listed under `unmeasured` by name.
-- `--strict` makes NO-DATA block too, which is what protected CI wants and what a local run
-  usually does not.
+- `--strict` and the exit code, in full. `REVIEW-REQUIRED` and `FAIL` exit 1 with or without
+  the flag. `NO-DATA` exits 0 without it. Under `--strict`, a `NO-DATA` exits 1 only when the
+  tool actually holds something nobody declared: detector hits proposing a tier above T0 with
+  no intake to reconcile them against, or a diff it could not read at all. A `NO-DATA` whose
+  derived answers are all at their lowest values (a docs, data or test-only diff no detector
+  covers, or an empty diff) exits 0 even under `--strict`, and says so on stderr, because this
+  project's law is that NO-DATA never decides an exit code: absence is reported, never graded.
+  Grading it used to fail every docs-only pull request in the consumer workflow.
 
 Verdicts: `PASS` (nothing in the diff contradicts the declared tier), `REVIEW-REQUIRED` (the
 diff shows more than was declared, with no current disposition), `FAIL` (the intake is
