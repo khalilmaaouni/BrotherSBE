@@ -153,16 +153,21 @@ new one to a file named `installed-skill-version-brothersbe`
 (`VERSION_MARK`, `tools/sbe_telemetry.py` line 1306) under the vault's
 telemetry folder. On a first run against a vault that has never seen this
 before, the write happens silently: no output at all, because there is
-nothing to warn about yet, only a fact to record.
+nothing to warn about yet, only a fact to record. One honesty note about the
+block below: it is shown, not replayed, because check-update also compares
+your installed copy against its fetched origin, and that comparison depends
+on the sync state of the machine reading this page. On a synced install
+nothing prints; a copy ahead of or behind its origin gets one warning line
+naming both commits instead.
 
 ```bash
 BROTHERSBE_VAULT=/tmp/sbe-book-ch17/vault python3 "$ROOT/tools/sbe_telemetry.py" check-update
 ```
 
-```
+```text
 ```
 
-Nothing printed, exit code 0. Read `data-show` against the same vault right
+Nothing printed on a synced install, exit code 0. Read `data-show` against the same vault right
 after, and the file that did not exist a moment ago is now there:
 
 ```bash

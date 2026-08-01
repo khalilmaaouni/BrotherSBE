@@ -332,10 +332,17 @@ jobs:
       # client repository that vendors BrotherSBE elsewhere (a submodule, a
       # sparse checkout, a plugin path) points sbe-path there instead.
       # Strict only where a proposed change exists to grade. On a pull request
-      # the diff is the change and NO-DATA there rightly blocks. A push to main
-      # has no proposal: its self-diff is empty, and grading that emptiness
-      # under --strict manufactures a failure out of absence, which this
-      # project's law forbids in both directions. The first real run of this
+      # the diff is the change, and under --strict the impact step blocks a
+      # NO-DATA only when it holds something nobody declared: detector hits
+      # proposing a tier above T0 with no intake to reconcile them against, or
+      # a diff it could not read at all. A NO-DATA whose derived answers are
+      # all at their lowest values (a docs or data only diff no detector
+      # covers) exits 0 even under --strict, because this project's law is
+      # that NO-DATA never decides an exit code. Before 1.0.0-rc.1 it exited 1
+      # there, and every docs-only pull request through this workflow went
+      # red. A push to main has no proposal: its self-diff is empty, and
+      # grading that emptiness under --strict manufactures a failure out of
+      # absence, which the same law forbids. The first real run of this
       # workflow failed exactly that way.
       - uses: ./.github/actions/sbe-consumer
         with:
@@ -354,9 +361,9 @@ grep -n -A3 "^  strict:" .github/actions/sbe-consumer/action.yml
 
 ```
 56:  strict:
-57-    description: "'true' passes --strict to sbe impact and sbe evidence verify, making NO-DATA block too."
-58-    required: false
-59-    default: 'true'
+57-    description: >-
+58-      'true' passes --strict to sbe impact and sbe evidence verify. For
+59-      evidence verify that makes NO-DATA block too. For impact it blocks a
 ```
 
 "Making NO-DATA block too" is two lines of code, not folklore:

@@ -70,9 +70,9 @@ a56069a72a924f4d38425801f6c6588848f22a724b9023197f219fbee3e3a133  docs/book/09-l
 87f59be3e18c43cbd6f54d977d7692bbedb2c0f78f173bc2fd266f206720f756  docs/book/12-cookbook.md
 d89f59b3e9ea43cc284df50594e2b67e88fedc2303d1ba47294ebc1cc4150804  docs/book/13-the-backend-engineers-deep-dive.md
 977c2e7125618af3ba1aab70aa0c4d258b77a35c549a7790dda8339767769da7  docs/book/14-the-data-engineers-deep-dive.md
-7c008328cb95829bd3549c265a70185315c940cf7250355959f6ffb2bc51b98b  docs/book/15-the-platform-lead-deep-dive.md
+06c4d6985058a715bf49eedcaf9b41a2660f6e6c7f26725a1e9ce2cf4c73d2ae  docs/book/15-the-platform-lead-deep-dive.md
 541b88372d9c85daab2d51807d74a401799dc9051675edbbad01ffe0cd3ca025  docs/book/16-working-as-one-team.md
-30f748ff3758f00889191b3bf61046526e7cceaab44b16683afe859f452ac209  docs/book/17-the-vault-in-obsidian.md
+8001ed6014f11a1fb38e43573c953a606a3ceabf35ead719fbfccb3ce74db568  docs/book/17-the-vault-in-obsidian.md
 4a4619f5af6e1cb241ff80bf72bb40180fcf63b2b7227c5a61a6a7d46ea86f26  docs/book/18-from-dummy-to-definitive-expert.md
 61b335a46df05a7ce1c98378f60e5f3e77a7fb608a1056997e8a649304a936d6  docs/book/assets/mermaid.min.js
 2b6023b1c2bd7476d407479e6584d23185565e5a9d1fc2952f1a71ca138d12e3  docs/book/build_book.py
