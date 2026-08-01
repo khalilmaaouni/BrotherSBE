@@ -237,6 +237,67 @@ class TestBypasses(ImpactFixture):
                          "a deletion was classified as adding personal data")
 
 
+class TestStrictOverAbsence(ImpactFixture):
+    """--strict grades what the tool holds, never what is merely absent. The
+    defect this class pins: every docs-or-data pull request went red in the
+    consumer workflow, because a NO-DATA whose derived answers were all at
+    their lowest values still exited 1 under --strict. NO-DATA never decides
+    an exit code; what blocks is undeclared evidence or a broken read."""
+
+    def strict(self, *extra):
+        out = subprocess.run([sys.executable, SBE, "impact", self.repo, "--base",
+                              self.base, "--json", "--strict"] + list(extra),
+                             capture_output=True, text=True)
+        data = json.loads(out.stdout) if out.stdout.strip().startswith("{") else None
+        return out.returncode, data, out.stdout + out.stderr
+
+    def test_a_docs_and_data_only_diff_exits_zero_under_strict(self):
+        write(self.repo, "README.md", "base\nmore words\n")
+        write(self.repo, "notes.yaml", "key: value\n")
+        write(self.repo, "page.html", "<p>hello</p>\n")
+        write(self.repo, "tests/test_page.py", "def test_page():\n    pass\n")
+        self.commit()
+        code, data, text = self.strict()
+        self.assertEqual(data["verdict"], "NO-DATA", text)
+        self.assertEqual(data["detected"], [], text)
+        self.assertEqual(data["proposedTier"], "T0", text)
+        self.assertEqual(code, 0,
+                         "a NO-DATA whose derived answers are all at their lowest values "
+                         "must not fail a --strict run; absence is reported, never graded")
+
+    def test_an_empty_diff_exits_zero_under_strict(self):
+        code, data, text = self.strict()
+        self.assertEqual(data["verdict"], "NO-DATA", text)
+        self.assertEqual(code, 0,
+                        "an empty diff proposes nothing; failing it under --strict "
+                        "manufactures a failure out of absence")
+
+    def test_a_detector_hit_with_no_intake_still_blocks_under_strict(self):
+        write(self.repo, "api/openapi.yaml", "openapi: 3.0.0\n")
+        self.commit()
+        code, data, text = self.strict()
+        self.assertEqual(data["verdict"], "NO-DATA", text)
+        self.assertEqual(data["proposedTier"], "T2", text)
+        self.assertEqual(code, 1,
+                         "a tier-raising diff nobody declared must still block a --strict "
+                         "run; the exemption is for absence, not for evidence")
+
+    def test_an_unreadable_diff_still_blocks_under_strict(self):
+        not_git = tempfile.mkdtemp()
+        try:
+            out = subprocess.run([sys.executable, SBE, "impact", not_git, "--strict"],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1,
+                             "a diff that could not be read is a broken control, not an "
+                             "absence, and must keep blocking under --strict")
+            self.assertIn("NO-DATA", out.stdout + out.stderr)
+            relaxed = subprocess.run([sys.executable, SBE, "impact", not_git],
+                                     capture_output=True, text=True)
+            self.assertEqual(relaxed.returncode, 0, relaxed.stdout + relaxed.stderr)
+        finally:
+            shutil.rmtree(not_git, ignore_errors=True)
+
+
 class TestTheInvariant(ImpactFixture):
     """One sentence, and the whole control is built to keep it true:
     this tool may raise a declared tier, and may never lower one."""

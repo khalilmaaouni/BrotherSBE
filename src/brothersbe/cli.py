@@ -451,7 +451,20 @@ def _cmd_impact(args):
     if data["verdict"] in ("REVIEW-REQUIRED", "FAIL"):
         return EXIT_CONTROL_FAILED
     if data["verdict"] == "NO-DATA" and args.strict:
-        return EXIT_CONTROL_FAILED
+        # NO-DATA never decides an exit code on its own. The only NO-DATA that
+        # blocks a --strict run is one where this tool actually holds something
+        # nobody declared: detector hits proposing a tier above T0 with no
+        # intake to reconcile them against. (An unreadable diff blocks too, in
+        # the DiffUnavailable branch above.) A NO-DATA whose derived answers
+        # are all at their lowest values, a docs or data only diff no detector
+        # covers, exits 0: grading that absence failed every such pull request.
+        if data["proposedTier"] != "T0":
+            return EXIT_CONTROL_FAILED
+        sys.stderr.write(
+            "sbe impact: NO-DATA under --strict, exit 0. Nothing was detected and every "
+            "derived answer is at its lowest value, so there is nothing here for "
+            "strictness to grade. A NO-DATA carrying detector hits, or an unreadable "
+            "diff, still exits 1.\n")
     return EXIT_OK
 
 
