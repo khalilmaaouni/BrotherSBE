@@ -25,7 +25,7 @@ which version it came from; `tools/test_sbe.py` asserts the header matches
 ## Pinning an install to a release
 
 ```bash
-git clone --branch v1.0.0-rc.1 --depth 1 <repository-url> ~/.claude/skills/brothersbe
+git clone --branch v1.0.0-rc.2 --depth 1 <repository-url> ~/.claude/skills/brothersbe
 ```
 
 Then verify the bytes you got against the manifest that release ships:
@@ -63,8 +63,11 @@ regenerated in whatever commit last changed a tracked file, which an eval
 forces on every wave, so it matches THIS TREE rather than the commit that set
 VERSION; run `scripts/verify-install.sh` on a fresh clone to check that for
 yourself instead of taking this sentence's word for it. Steps 5 and 6 were
-executed for `1.0.0-rc.1` on 2026-07-31: the tag was cut as an annotated tag
-and pushed to origin. The tag now sits behind `main`, and a decision on
-cutting a fresh tag is pending with the product owner. This paragraph is
-updated when that changes, because a runbook that presents untested steps as
-proven is the defect class this whole project exists to catch.
+executed for `1.0.0-rc.1` on 2026-07-31 (annotated tag, pushed to origin);
+that tag predates the guided skills and stays behind `main`. Steps 1 to 5
+were executed for `1.0.0-rc.2` on 2026-08-01: version set, manifest
+regenerated, gates green, annotated tag cut at the release commit. Step 6,
+publishing `v1.0.0-rc.2`, is the product owner's, through their own push
+process. This paragraph is updated when that changes, because a runbook that
+presents untested steps as proven is the defect class this whole project
+exists to catch.

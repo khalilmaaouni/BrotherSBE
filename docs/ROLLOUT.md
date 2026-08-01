@@ -100,19 +100,20 @@ never need anything beyond the tree itself:
 - `scripts/test-upgrade-rollback.sh`: finds the most recent tag that is an
   ancestor of `HEAD`, installs it fresh, upgrades to `HEAD` fresh, then rolls
   back to that same tag fresh, verifying with `scripts/verify-install.sh` at
-  every step. **Tag `v1.0.0-rc.1` exists** (commit `dacee900`, cut and
-  published 2026-07-31), and it sits behind `main`, which by now carries the
-  guided skills the tag predates. So the script today finds that previous tag
-  and exercises the real upgrade and rollback path, not the NO-DATA case;
-  pinning to the tag today means missing the guided skills until a fresh tag
-  is cut. `tools/test_sbe.py` does not assert this behavior (that assertion
+  every step. **Two tags exist**: `v1.0.0-rc.1` (commit `dacee900`, cut and
+  published 2026-07-31, predating the guided skills) and `v1.0.0-rc.2` (cut
+  2026-08-01 at the release that carries the guided skills, the beginner
+  explainer, and the help map; it publishes with that release). The script
+  finds the newest ancestor tag and exercises the real upgrade and rollback
+  path, not the NO-DATA case; pin to `v1.0.0-rc.2` once it is published,
+  because `v1.0.0-rc.1` misses the guided skills. `tools/test_sbe.py` does not assert this behavior (that assertion
   lives in the two scripts' own calibration, run directly).
 
 For an adopting organization, once a tag exists to pin to:
 
 ```bash
 # Install, pinned to a specific tag:
-git clone --branch v1.0.0-rc.1 --depth 1 <repository-url> ~/.claude/skills/brothersbe
+git clone --branch v1.0.0-rc.2 --depth 1 <repository-url> ~/.claude/skills/brothersbe
 cd ~/.claude/skills/brothersbe && scripts/verify-install.sh   # must print PASSED
 
 # Upgrade to a newer tag:
@@ -166,9 +167,9 @@ because a limit that is only true and never stated is the same defect class
 
 ## The tag itself
 
-Cutting `v1.0.0-rc.1` is `claude plugin tag` (validates that `plugin.json`
+Cutting a release tag such as `v1.0.0-rc.2` is `claude plugin tag` (validates that `plugin.json`
 and the marketplace entry in `.claude-plugin/marketplace.json` agree before
-tagging) or, equivalently, `git tag -a v1.0.0-rc.1 -m "<one line from
+tagging) or, equivalently, `git tag -a v1.0.0-rc.2 -m "<one line from
 CHANGELOG.md>"`, exactly as `docs/RELEASE.md` already documents for a
 maintainer cutting any release. **This command is not executed by this
 page or by whoever wrote it.** It is executed by whoever owns the release,

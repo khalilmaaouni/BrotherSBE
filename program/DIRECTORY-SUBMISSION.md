@@ -59,7 +59,7 @@ research file):
 - [ ] `README.md` with installation and usage instructions. BrotherSBE has
   this (this file's own repository root README.md).
 - [ ] A versioning strategy chosen: explicit `version` field, or rely on git
-  commit SHA. BrotherSBE uses an explicit version (`1.0.0-rc.1`, see below).
+  commit SHA. BrotherSBE uses an explicit version (`1.0.0-rc.2`, see below).
 - [ ] Distributed through a plugin marketplace for installation. BrotherSBE
   already ships `.claude-plugin/marketplace.json` (see below).
 - [ ] Team members test the plugin before wider distribution.
@@ -86,7 +86,7 @@ From `.claude-plugin/plugin.json`:
 |---|---|
 | `name` | `brothersbe` (immutable slug once published, per the repo README quoted in the research file) |
 | `description` | A senior backend and data engineering colleague. Designs systems in the order the work runs (purpose, process, architecture, data, expression, verification), produces a design dossier sized by a scored intake, and holds the result to mechanical gates where absent evidence is NO-DATA and never a pass. |
-| `version` | `1.0.0-rc.1` |
+| `version` | `1.0.0-rc.2` |
 | `author` | Khalil Maaouni |
 | `repository` | https://github.com/khalilmaaouni/BrotherSBE |
 | `license` | MIT |

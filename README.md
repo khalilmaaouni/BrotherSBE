@@ -172,12 +172,12 @@ bin/sbe doctor
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /path/to/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.1, VERSION 1.0.0-rc.1
+plugin-manifest  PASS     manifest 1.0.0-rc.2, VERSION 1.0.0-rc.2
 git              PASS     working directory is inside a git tree
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.1, evidence schema 1.0. 6 check(s): 4 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.2, evidence schema 1.0. 6 check(s): 4 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 That block is a real run on a fresh install (no vault exported, no private-name list configured), with only the absolute installation path replaced by `/path/to/BrotherSBE`. The two NO-DATA lines are the point: an unanswered environment question is reported as unanswered, never folded into the passes.

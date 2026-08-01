@@ -6,7 +6,11 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## 1.0.0-rc.1 (unreleased)
+## 1.0.0-rc.2 (2026-08-01)
+
+Everything below accumulated in one pre-release stretch. `v1.0.0-rc.1`
+(commit `dacee900`, 2026-07-31) was cut partway through this list and is
+superseded by this release before any general announcement.
 
 - The explainer grew from a leaflet into a field guide, and help learned to
   draw a map. `docs/explainer/index.html` is now twelve sections behind a
