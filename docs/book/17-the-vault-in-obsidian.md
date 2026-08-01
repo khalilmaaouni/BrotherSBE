@@ -30,8 +30,14 @@ ROOT="$(pwd)"
 rm -rf /tmp/sbe-book-ch17 && mkdir -p /tmp/sbe-book-ch17
 cp -R "$ROOT/memory-template" /tmp/sbe-book-ch17/vault
 cd /tmp/sbe-book-ch17
-find vault -type f -not -name '.DS_Store' | sort
+find vault -type f -not -name '.DS_Store' | LC_ALL=C sort
 ```
+
+`LC_ALL=C` is not decoration. Plain `sort` orders by whatever language settings
+the machine happens to carry, so `OUTCOMES.md` and `Open-Items.md` swap places
+between two computers that hold identical files. Pinning the locale makes the
+listing the same everywhere, which is the only way a printed listing can stay
+honest.
 
 ```
 vault/.gitignore

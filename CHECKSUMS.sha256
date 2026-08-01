@@ -72,7 +72,7 @@ d89f59b3e9ea43cc284df50594e2b67e88fedc2303d1ba47294ebc1cc4150804  docs/book/13-t
 977c2e7125618af3ba1aab70aa0c4d258b77a35c549a7790dda8339767769da7  docs/book/14-the-data-engineers-deep-dive.md
 06c4d6985058a715bf49eedcaf9b41a2660f6e6c7f26725a1e9ce2cf4c73d2ae  docs/book/15-the-platform-lead-deep-dive.md
 541b88372d9c85daab2d51807d74a401799dc9051675edbbad01ffe0cd3ca025  docs/book/16-working-as-one-team.md
-8001ed6014f11a1fb38e43573c953a606a3ceabf35ead719fbfccb3ce74db568  docs/book/17-the-vault-in-obsidian.md
+a07409950248dd3ad02bbc954856949b6931d183af819d4ffda5f213fe95d95f  docs/book/17-the-vault-in-obsidian.md
 4a4619f5af6e1cb241ff80bf72bb40180fcf63b2b7227c5a61a6a7d46ea86f26  docs/book/18-from-dummy-to-definitive-expert.md
 61b335a46df05a7ce1c98378f60e5f3e77a7fb608a1056997e8a649304a936d6  docs/book/assets/mermaid.min.js
 2b6023b1c2bd7476d407479e6584d23185565e5a9d1fc2952f1a71ca138d12e3  docs/book/build_book.py
