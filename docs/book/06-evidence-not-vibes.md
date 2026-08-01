@@ -133,15 +133,23 @@ shape is not one you are certain this list would catch.
 
 ## LOCAL-ADVISORY versus PROTECTED-CI
 
-Every receipt on this page has read `Trust LOCAL-ADVISORY`, and that is not
-an accident of the demo, it is the honest state of this repository right now.
+Every receipt on this page has read `Trust LOCAL-ADVISORY`.
 `trust_level` (`src/brothersbe/evidence.py`, starting at line 274) grants
 `PROTECTED-CI` only when both halves hold: a CI run id minted by an
 environment the agent does not control, and a clean working tree at the
-moment the command ran. Setting the CI id alone is not enough:
+moment the command ran. Setting the CI id alone is not enough, and rather
+than depending on whatever state this repository happens to be in while you
+read, the next block builds a scratch repository and dirties it on purpose,
+so both halves can be watched deciding:
 
 ```bash
-SBE_CI_RUN_ID=demo-ci-run-0001 bin/sbe evidence run --out /tmp/sbe-book-ch06/ci-receipt.json --covers pipeline.py --cwd docs/book/estate -- python3 pipeline.py --date 2026-07-01 2>/dev/null | sed -E 's/[0-9]+\.[0-9]+s/<N.NNNs>/'
+rm -rf /tmp/sbe-book-ch06-ci
+git init -q /tmp/sbe-book-ch06-ci
+cp docs/book/estate/pipeline.py docs/book/estate/orders.csv /tmp/sbe-book-ch06-ci/
+git -C /tmp/sbe-book-ch06-ci add pipeline.py orders.csv
+git -C /tmp/sbe-book-ch06-ci -c user.name=reader -c user.email=reader@book.local commit -qm "estate copy"
+echo "# an uncommitted scratch note" >> /tmp/sbe-book-ch06-ci/pipeline.py
+SBE_CI_RUN_ID=demo-ci-run-0001 bin/sbe evidence run --out /tmp/sbe-book-ch06-ci/receipt.json --covers pipeline.py --cwd /tmp/sbe-book-ch06-ci -- python3 pipeline.py --date 2026-07-01 2>/dev/null | sed -E 's/[0-9]+\.[0-9]+s/<N.NNNs>/'
 ```
 
 ```
@@ -149,17 +157,35 @@ read 3 orders from orders.csv
 aggregated 2 region(s) for 2026-07-01
 wrote 3 rows to daily_totals
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch06/ci-receipt.json. Trust LOCAL-ADVISORY (a CI run id is recorded (demo-ci-run-0001) but the working tree was dirty or unreadable at generation time, and a run over uncommitted edits is not protected by being CI). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: receipt written to /tmp/sbe-book-ch06-ci/receipt.json. Trust LOCAL-ADVISORY (a CI run id is recorded (demo-ci-run-0001) but the working tree was dirty or unreadable at generation time, and a run over uncommitted edits is not protected by being CI). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
-Still `LOCAL-ADVISORY`, for an honest reason stated in the line itself: this
-repository, mid-loop, with this very chapter still being written a few
-directories over, has a dirty working tree, and a run over uncommitted edits
-is not protected by being CI. That is not a demo contrivance; it is this
-book's own repository, caught telling the truth about its own state, which is
-the entire thesis chapter one opened with, applied to itself. A receipt made
-here today can only ever be advisory, and the tool says so on every single
-line rather than letting the reader assume otherwise.
+The CI id is present and the trust still reads `LOCAL-ADVISORY`, for the
+reason the line itself states: one uncommitted edit sits in that tree, and a
+run over uncommitted edits is not protected by being CI. Commit the edit,
+sweep out the artifacts the first run left behind (an untracked file is
+still an uncommitted change, and the trust check counts it), keep the next
+receipt outside the repository, and the second half finally holds:
+
+```bash
+git -C /tmp/sbe-book-ch06-ci -c user.name=reader -c user.email=reader@book.local commit -qam "the scratch edit is committed"
+rm -f /tmp/sbe-book-ch06-ci/daily_totals.json /tmp/sbe-book-ch06-ci/receipt.json
+SBE_CI_RUN_ID=demo-ci-run-0001 bin/sbe evidence run --out /tmp/sbe-book-ch06-receipt2.json --covers pipeline.py --cwd /tmp/sbe-book-ch06-ci -- python3 pipeline.py --date 2026-07-01 2>/dev/null | sed -E 's/[0-9]+\.[0-9]+s/<N.NNNs>/'
+```
+
+```
+read 3 orders from orders.csv
+aggregated 2 region(s) for 2026-07-01
+wrote 3 rows to daily_totals
+
+sbe evidence run: receipt written to /tmp/sbe-book-ch06-receipt2.json. Trust PROTECTED-CI (minted under CI run id demo-ci-run-0001 on a clean tree, by an environment the agent does not set for itself). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+```
+
+A historical note that was true when this chapter was first written: the
+book's own repository printed the same `LOCAL-ADVISORY` for the same reason,
+because this very chapter sat uncommitted a few directories over. A receipt
+made over uncommitted edits can only ever be advisory, and the tool says so
+on every single line rather than letting the reader assume otherwise.
 
 ## Diagram: from a run to a trust level
 

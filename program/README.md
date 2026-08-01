@@ -25,6 +25,9 @@ which release gates.
   - `BR-0301`: install path, marketplace primary. Status: partially done;
     see the file for what shipped and what has not.
   - `BR-0310`: beginner explainer page. Status: done.
+  - `BR-0520`: Jira and Confluence one-way exporters. Status: not started, designed.
+  - `BR-0521`: Asana exporter. Status: not started, designed.
+  - `BR-0522`: Teams notifications now, actionable bot later. Status: not started, designed.
 
 ## What updates it
 

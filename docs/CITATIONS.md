@@ -311,3 +311,291 @@ captured.
 - population: the submission entry point the documentation names for organizations
 - date: named by the documentation opened on 2026-08-01; requires an organization login this research did not hold
 - limit: entry point only, recorded from the documentation rather than from a page this machine could open; nothing was submitted and no acceptance is implied
+
+## https://agilealliance.org/glossary/information-radiators/
+- claim: the term "information radiator" (interchangeable with "Big Visible Chart") names any handwritten, printed or electronic display placed where the team and passersby see it at a glance, tracing to Kent Beck's 1999 coinage and Alistair Cockburn's 2001 term
+- population: docs/TEAM-PLAYBOOK.md, in the section on keeping status visible without a status meeting
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: a glossary entry defining a term, not a measurement that this repository's own displays work as described; recorded from the research file's summary, not a page this machine reopened
+
+## https://basecamp.com/shapeup/2.2-chapter-08
+- claim: Basecamp's Shape Up "betting table" is a small, fixed-membership ritual held once per six-week cycle, reviews only pitches that were written up with no running backlog, rarely runs past one to two hours, and its decision is final
+- population: docs/TEAM-PLAYBOOK.md's description of the periodic prioritization ritual it borrows the shape from
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: describes one company's named process, not evidence that adopting the shape produces the same outcome here; recorded from the research file's summary, not a page this machine reopened
+
+## https://businessmap.io/kanban-resources/getting-started/what-is-wip
+- claim: work-in-progress limits are what convert a board into a pull system, with a practical starting formula of team-member-count plus one
+- population: docs/TEAM-PLAYBOOK.md's WIP-limit guidance
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: a vendor how-to page's own framing and rule of thumb, not a measured outcome for this repository's board; recorded from the research file's summary, not a page this machine reopened
+
+## https://cloud.google.com/blog/products/devops-sre/using-the-four-keys-to-measure-your-devops-performance
+- claim: Google Cloud's own blog states the "Elite" DORA performance tier stopped appearing in DORA's clustering after the 2022 report
+- population: design/team-operating-model/07-verification.md and docs/TEAM-PLAYBOOK.md, both citing it alongside dora.dev when describing the current DORA metric set
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md, cross-checked against dora.dev)
+- limit: one vendor blog's framing of another organization's research; it does not establish that this repository's own delivery reaches, or should target, any DORA tier
+
+## https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions
+- claim: Michael Nygard's original 2011 post defines ADRs as small, numbered, append-only decision records that are superseded rather than edited
+- population: design/team-operating-model/03-adr.md and design/team-operating-model/05-data-model.md, both citing it for the append-only ADR pattern this repository adopts
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md)
+- limit: describes the pattern's original definition, not a claim that this repository's own ADR practice matches it in every particular
+
+## https://confluence.atlassian.com/doc/page-properties-macro-184550024.html
+- claim: Atlassian's own documentation states Page Properties macro metadata "is not possible to reference... from within the page, or anywhere else," meaning it is not exposed as queryable data through the REST API
+- population: design/team-operating-model/03-adr.md and design/team-operating-model/05-data-model.md, both citing it to justify not relying on Page Properties for structured evidence storage
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: vendor documentation of a current product limitation Atlassian could change without notice; not independently reverified by this machine
+
+## https://cucumber.io/blog/bdd/five-roles-in-a-healthy-mob/
+- claim: a healthy mob has five distinct roles (Navigator, Driver, Facilitator, Scout, Housekeeper), and the Facilitator's job is explicitly not technical: keep time, manage rotation, enforce breaks, prompt reflection, watch for kindness under stress
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/02-process.md, both citing it for the facilitator role definition
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: one blog's role taxonomy for mob programming, not a controlled study; adopting the taxonomy does not guarantee the described dynamics
+
+## https://dev.to/hiclab/push-vs-pull-in-task-assignment-lfg
+- claim: push assignment (a lead hands out tickets) creates silos and uneven load, while pull assignment (anyone takes the next queue item within their skill) forces shared understanding of the whole queue
+- population: docs/TEAM-PLAYBOOK.md's task-assignment guidance
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: an opinion blog post's argument, not a measured comparison of the two assignment styles
+
+## https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content-restrictions/
+- claim: Confluence's content restrictions API (GET, PUT, POST, DELETE on /content/{id}/restriction, restriction types read and update) is the mechanism for making a generated page read-only to everyone except the publishing identity
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/07-verification.md, all citing it for the read-only publish guarantee
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: vendor API documentation of current behavior; this repository's own use of the endpoint is not verified against a live Confluence instance by this citation
+
+## https://developer.atlassian.com/cloud/jira/software/integrate-jsw-cloud-with-onpremises-tools/
+- claim: Jira's Development Information API bridge is designed for on-prem tools to push data one-way outbound to Jira Cloud without opening inbound firewall ports
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/03-adr.md and design/team-operating-model/04-technology-map.md, all citing it for the outbound-only export design
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: vendor documentation of an API's intended use case, not a working integration this repository has built and tested against it
+
+## https://developers.asana.com/docs/webhooks
+- claim: Asana's webhook filters can scope by resource_type, resource_subtype and action, and for "changed" actions can whitelist specific fields, though higher-level resources (Workspace, Team, Portfolio) do not support the fields restriction
+- population: design/team-operating-model/03-adr.md's discussion of two-way sync built on Asana webhooks
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md)
+- limit: vendor API documentation of current filtering options, not a built integration verified against a live Asana workspace
+
+## https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds
+- claim: GitHub artifact attestations sign build provenance through GitHub-run Sigstore, verified with `gh attestation verify`
+- population: design/team-operating-model/04-technology-map.md's AttestationSigner row
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md, cross-checked against a second GitHub-authored page)
+- limit: vendor documentation of the mechanism, not evidence that this repository's own release pipeline has attestation wired up and verified
+
+## https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects
+- claim: GitHub Projects v2 has a 50-field cap, ships table, board and roadmap views with built-in workflows, and exposes GraphQL plus Actions for custom automation beyond those workflows
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/04-technology-map.md, both citing it for the ProjectsBoard automation approach
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md)
+- limit: vendor documentation of current product limits and capabilities, which GitHub can change without notice
+
+## https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue
+- claim: GitHub's merge queue builds merge groups on temporary branches that test each pull request plus everything ahead of it, and requires workflows to declare the merge_group trigger to run in the queue
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/04-technology-map.md's MergeQueue row
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md)
+- limit: vendor documentation of the mechanism, not confirmation that this repository's own CI workflows already declare the trigger
+
+## https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
+- claim: GitHub branch protection can require approval from someone other than the most recent pusher and dismiss stale approvals on new commits, and GitHub's own docs describe rulesets as the forward-looking alternative to it
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/06-diagrams.md, both citing it for the branch-protection baseline
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md and team-research/r3-github-enterprise.md)
+- limit: vendor documentation of current settings, not evidence of which of the two overlapping systems this repository has actually configured
+
+## https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository
+- claim: GitHub rulesets target branches or tags by fnmatch pattern, can apply org-wide by name, topic or repository property, carry a bypass list, and have Active, Evaluate (dry-run) and Disabled enforcement states
+- population: docs/TEAM-PLAYBOOK.md's ruleset guidance
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md)
+- limit: vendor documentation of current ruleset mechanics, not confirmation of which rules this repository has actually turned on
+
+## https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+- claim: GitHub CODEOWNERS routes review to designated owners, any one listed owner's approval satisfies the requirement (OR semantics, never AND), and the last matching pattern in the file wins
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/07-verification.md, both citing it to state the OR-only limit of CODEOWNERS routing
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md and team-research/r3-github-enterprise.md)
+- limit: vendor documentation of current matching rules, not a count of how many reviewers this repository's own CODEOWNERS file actually requires
+
+## https://docs.github.com/en/rest/orgs/rule-suites
+- claim: bypass and pass-or-fail auditing for rulesets lives in the rule-suites API, whose result is pass, fail or bypass, and this data does not appear in GitHub's general audit log
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/01-purpose.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/07-verification.md, all citing it for the bypass-visibility design
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md, cross-checked against a GitHub changelog post)
+- limit: vendor API documentation of current behavior, not confirmation that this repository has a scheduled job actually reading that endpoint today
+
+## https://docs.obsidian.md/plugins/guides/bases-view
+- claim: Obsidian's own developer guide for the Bases plugin warns that an unfiltered Base "will provide an entry for every file in the vault," and tells view authors to virtualize rendering for that reason
+- population: docs/TEAM-PLAYBOOK.md and memory-template/TEAM-VAULT.md, both citing it to justify scoping every shared Base with a filter
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: vendor documentation of the plugin's current behavior, not a measurement of this repository's own vault size or render time
+
+## https://dora.dev/guides/dora-metrics/
+- claim: DORA's own current guide states its metric set is now five metrics (throughput plus stability), not the original four
+- population: design/team-operating-model/07-verification.md's DORA metric reference
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md, cross-checked against Google Cloud's blog and a second source on the 4-to-5 change)
+- limit: describes DORA's own current framework, not a measurement of this repository's delivery performance against it
+
+## https://engineering.squarespace.com/blog/2019/the-power-of-yes-if
+- claim: Squarespace's engineering RFC process names specific approvers whose sign-off is required before implementation starts
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/02-process.md, both citing it for the named-approver pattern
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md)
+- limit: one company's blog post describing its own process, not a study of whether named approvers improve outcomes generally
+
+## https://eu.36kr.com/en/p/3755031628005892
+- claim: the Obsidian company (7 full-time staff at the time reported) runs its own internal task planning, PRDs, roadmaps and checklists from one shared Obsidian vault, alongside GitHub for code review and separate chat software for day-to-day talk
+- population: memory-template/TEAM-VAULT.md's framing of the vault as a planning and knowledge layer, not a replacement for issue tracking or chat
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: a single company's reported practice at one point in time, not a claim about how any other team should run its vault
+
+## https://forum.asana.com/t/mark-task-as-approval-via-api/798803
+- claim: an Asana community moderator confirms on the developer forum that converting a task to an approval via the API requires setting resource_subtype to "approval" in the update body; setting approval_status alone does not convert it
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/07-verification.md, all citing it for the approval-conversion verification step
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md)
+- limit: a forum post from a community moderator, not Asana's own formal API reference; treated as corroborating rather than primary documentation
+
+## https://forum.obsidian.md/t/slow-performance-with-large-vaults/16633
+- claim: community forum reports document unusable link-autocomplete latency, slow cache loading and slow search once an Obsidian vault reaches roughly the 1,000 to 40,000-plus note range
+- population: memory-template/TEAM-VAULT.md's guidance against building one mega-vault
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md, cross-checked against a second forum thread)
+- limit: anecdotal forum reports, not a controlled performance benchmark; note counts and device specs vary across reporters
+
+## https://forum.obsidian.md/t/team-colaboration/69608
+- claim: a `.gitattributes` union-merge driver for `*.md` files plus a gitignored `.obsidian/` folder is the practitioner-reported fix for git-synced team vault merge conflicts, appropriate for mostly-additive notes but wrong for notes where two people might edit the same sentence
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/05-data-model.md and memory-template/TEAM-VAULT.md, all citing it for the union-merge tradeoff
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: a single community forum thread's reported practice, not a formal git or Obsidian specification
+
+## https://github.blog/changelog/2026-02-17-required-reviewer-rule-is-now-generally-available/
+- claim: GitHub's required-reviewer ruleset rule (per-path minimum approvals from up to 15 named teams, with gitignore-style negation) reached general availability in February 2026
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/01-purpose.md and design/team-operating-model/07-verification.md, all citing it as the only mechanism that gives an approval count, unlike CODEOWNERS
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md, cross-checked against the preview announcement for the GA timeline)
+- limit: a changelog entry describing a shipped feature, not confirmation that this repository's own rulesets have the rule turned on
+
+## https://github.blog/engineering/infrastructure/ship-code-faster-safer-feature-flags/
+- claim: GitHub's own account of running feature flags on itself describes shipping every potentially risky change behind a flag, then enabling it for everyone or a percentage of actors, with the ability to disable in seconds rather than rolling back a deployment that takes minutes
+- population: docs/TEAM-PLAYBOOK.md's feature-flag rollout guidance
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md)
+- limit: one company's account of its own practice, not evidence that this repository's own deployments use feature flags today
+
+## https://github.blog/enterprise-software/devsecops/enhance-build-security-and-reach-slsa-level-3-with-github-artifact-attestations/
+- claim: GitHub artifact attestations reach SLSA Build Level 3 through separated signing hardware plus ephemeral build runners
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/07-verification.md, both citing it for the SLSA level the platform claims
+- date: opened by the research pass on 2026-08-01 (team-research/r3-github-enterprise.md, cross-checked against a second GitHub-authored page)
+- limit: vendor documentation of the platform's own claimed compliance level, not an independent SLSA audit of this repository's release artifacts
+
+## https://github.com/Vinzent03/obsidian-git
+- claim: the obsidian-git community plugin auto-commits, pulls and pushes from inside Obsidian, but its own docs flag mobile support as "highly unstable," with no SSH auth on mobile, no rebase, no submodules, and warn it may crash on clone or pull on large repositories
+- population: memory-template/TEAM-VAULT.md's statement that desktop is the supported case
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: a third-party community plugin's own documentation of its current limitations, which can change with future releases
+
+## https://github.com/blacksmithgu/obsidian-dataview
+- claim: Dataview is a third-party community plugin, not core, that indexes YAML frontmatter and inline key-value fields across the vault and exposes a query language plus a JavaScript API for live tables, lists and task views
+- population: memory-template/TEAM-VAULT.md's description of the plugin used for the vault's live views
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: vendor documentation of the plugin's current feature set, not a measurement of this repository's own dashboard performance
+
+## https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/universal-actions-for-adaptive-cards/overview
+- claim: a working Approve/Reject button that calls a service requires a real Teams bot using Adaptive Card Universal Actions (Action.Execute), which sends an adaptiveCard/action Invoke activity to the bot and supersedes Action.Submit for Teams
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/03-adr.md, both citing it for the Teams approval-button mechanism
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md)
+- limit: vendor documentation of current card mechanics, not a working bot this repository has built and tested against a live Teams tenant
+
+## https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
+- claim: the Workflows app (Power Automate) replacement for incoming webhooks generates a webhook URL to POST JSON to, caps message size at 28 KB, and states Workflows-based webhooks support Adaptive Cards and Message Card format but not button rendering
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/03-adr.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/06-diagrams.md, all citing it for the Workflows-based notifier design
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md)
+- limit: vendor documentation of current limits, not confirmation that this repository's own notifier stays under the 28 KB cap in practice
+
+## https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/what-are-webhooks-and-connectors
+- claim: Office 365/Microsoft 365 connectors and their incoming webhook creation flow are being retired, with a final rollout window of May 18 to May 22, 2026 to disable them, and webhooks/connectors are unavailable in GCC High, DoD and 21Vianet-operated Teams
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/03-adr.md, both citing it for the legacy-connector retirement date
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md, cross-checked against a Microsoft 365 developer blog post)
+- limit: a retirement schedule as published on the date checked; Microsoft has already extended this deadline more than once and could move it again
+
+## https://learn.microsoft.com/en-us/microsoftteams/teams-app-permission-policies
+- claim: Teams admin center app permission policies (or the newer app-centric management) gate whether a custom Teams app or bot can run for a given user independent of whether the app itself works, and policy changes can take a few hours to propagate
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/07-verification.md, all citing it for the per-tenant governance step before a bot launch
+- date: opened by the research pass on 2026-08-01 (team-research/r2-asana-teams.md)
+- limit: vendor documentation of current admin controls, not confirmation of any specific tenant's actual policy configuration
+
+## https://obsidian.md/help/sync/collaborate
+- claim: Obsidian's own help page states plainly that Obsidian "does not yet support collaborative live editing on the same file," with no live cursors or presence indicators, and Sync merges offline edits automatically or falls back to version history when it cannot auto-merge
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/01-purpose.md, design/team-operating-model/05-data-model.md and memory-template/TEAM-VAULT.md, all citing it for the no-live-co-editing limit the design works around
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: vendor documentation of current product behavior, which Obsidian could change in a future release
+
+## https://obsidian.md/sync
+- claim: Obsidian's own official Sync marketing copy uses the phrase "real-time note updates across team devices," which the research file treats as "propagates fast once synced" rather than literal simultaneous editing, since it is in tension with Obsidian's own Collaboration help page
+- population: memory-template/TEAM-VAULT.md's note that the two official Obsidian pages are in tension
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md)
+- limit: marketing copy read against a second official page from the same vendor, not an independent test of sync latency
+
+## https://ravoid.com/blog/obsidian-vs-confluence-knowledge-stack-decision/
+- claim: Obsidian's collaboration features are missing standard enterprise controls outright: no native comments, no at-mentions, no per-folder or per-file permissions, no audit log, no SSO or SCIM
+- population: design/team-operating-model/01-purpose.md and memory-template/TEAM-VAULT.md, both citing it for the enterprise-control gap list
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md, corroborated against a second comparison piece describing the same gaps)
+- limit: a comparison blog post's characterization of a moving product, not Obsidian's own documentation of the gap list
+
+## https://schemas.getdbt.com/dbt/manifest/v12.json
+- claim: none; the URL is a schema-version identifier used as a literal string value inside an illustrative JSON `manifest.json` example in the book text, not a claim the prose rests on
+- population: docs/book/14-the-data-engineers-deep-dive.md's worked example of dbt manifest shape
+- date: not opened by the 2026-08-01 research pass; no team-research file traces this URL, and this machine did not reopen it during this citation pass
+- limit: this entry records the string's presence and use as sample data only; it establishes nothing about what page currently lives at that address or whether v12 is dbt's current schema version
+
+## https://sre.google/sre-book/incident-document/
+- claim: Google's SRE incident document is a single live, collaboratively-edited state document, not a chat log, naming the Incident Commander, Operations Lead, Planning Lead and Communications Lead, tracking a running TODO list with bug numbers, and required to be updated at least every four hours and at Comms Lead handoff
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/02-process.md, both citing it for the incident-document shape
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: describes Google's own published SRE practice, not a claim that this repository runs incidents at the same scale or with the same staffing
+
+## https://sre.google/sre-book/managing-incidents/
+- claim: Google SRE's command handoff is a verbal ritual with a mandatory explicit acknowledgment, where the outgoing commander states "You're now the incident commander, okay?" and does not disconnect until the incoming commander confirms, built on the fire-service Incident Command System
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/02-process.md, both citing it for the explicit handoff-acknowledgment requirement
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md and team-research/r6-facilitation-handover.md)
+- limit: describes Google's own published SRE practice, not a claim that this repository has run an incident using it
+
+## https://support.atlassian.com/cloud-automation/docs/configure-the-incoming-webhook-trigger-in-atlassian-automation/
+- claim: Jira Automation's incoming webhook trigger fires a flow from an external POST, auto-generates a URL plus a secret token verified via a header or a URL-path secret, and the token never expires unless manually regenerated
+- population: design/team-operating-model/03-adr.md's discussion of the inbound automation trigger
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: vendor documentation of current trigger behavior, not confirmation that this repository has configured and tested such a trigger
+
+## https://support.atlassian.com/jira-service-management-cloud/docs/designate-your-approvers/
+- claim: Jira Service Management's IT Service project ships a change-management workflow with change types Standard, Normal and Emergency, an Approvers field, and Change Advisory Board approval steps attached to a workflow status
+- population: design/team-operating-model/01-purpose.md and design/team-operating-model/03-adr.md, both citing it for the change-approval workflow shape
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: vendor documentation of a Jira Service Management feature, not confirmation that any specific project in this repository's scope has that workflow configured
+
+## https://support.atlassian.com/jira/kb/jira-software-rest-api-essential-parameters-for-custom-field-creation/
+- claim: a dedicated URL-typed custom field ships out of the box in Jira (type com.atlassian.jira.plugin.system.customfieldtypes:url, created via POST /rest/api/2/field), the natural home for an evidence link back to an external system
+- population: docs/TEAM-PLAYBOOK.md, design/team-operating-model/04-technology-map.md and design/team-operating-model/06-diagrams.md, all citing it for the evidence-link field
+- date: opened by the research pass on 2026-08-01 (team-research/r1-jira-confluence.md)
+- limit: the exact type and searcherKey pairing is documented for Data Center; the research file notes it is the same field type shipped on Cloud but this was not independently reverified by this machine
+
+## https://toolkitx.com/blogsdetails.aspx?title=Shift-handover%3A-a-practical-guide-to-doing-it-right-in-PTW
+- claim: high-hazard industrial shift handover requires seven mandatory fields (personnel and roles, operational status, open permits, isolation and lockout-tagout state, alarms and deviations, residual hazards and active controls, and pending actions with a named owner and deadline), and uses a hybrid format because verbal-only handover loses information while written-only handover loses context
+- population: design/team-operating-model/02-process.md's handover-content requirements
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md)
+- limit: describes a different industry's (process-plant, permit-to-work) safety practice, adapted rather than a claim that software delivery carries the same hazard profile
+
+## https://www.atlassian.com/blog/confluence/unlocking-the-secrets-to-outstanding-teamwork-in-2025
+- claim: Atlassian's State of Teams research (12,000 knowledge workers) found high-performing teams use meetings to make decisions rather than to report status, and most respondents say a meeting is the only reliable way to get colleagues to decide something as a group
+- population: docs/TEAM-PLAYBOOK.md's argument for decision-oriented meetings
+- date: opened by the research pass on 2026-08-01 (team-research/r6-facilitation-handover.md, cross-checked against a second source on the reported percentage)
+- limit: a vendor-commissioned survey of self-reported behavior, not an independent measurement of this repository's own meetings
+
+## https://www.dsebastien.net/the-complete-guide-to-obsidian-properties/
+- claim: inconsistent frontmatter property names or types (a string in one note, a list in another) is the single most common reason team dashboards silently miss rows, so properties should be treated as a schema enforced through a template rather than typed freehand
+- population: memory-template/TEAM-VAULT.md's guidance on enforcing property schemas
+- date: opened by the research pass on 2026-08-01 (team-research/r4-obsidian-teams.md, alongside a second practical guide making the same point)
+- limit: practitioner guidance rather than a measured failure rate; the "single most common reason" framing is the source's own claim, not independently counted by this repository
+
+## https://www.harness.io/harness-devops-academy/sox-compliance-for-software-delivery-explained
+- claim: SOX-style control requires the person who develops a change not be the person who deploys it, with an automated pipeline accepted as a compensating control provided the pipeline enforces the separation
+- population: docs/TEAM-PLAYBOOK.md's mapping of its four approval gates onto SOX-style review expectations
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md, cross-checked against GitHub's own control documentation)
+- limit: vendor content (Harness sells a delivery platform) describing a compliance requirement, not legal advice and not confirmation that this repository is itself in scope for SOX
+
+## https://www.microsoft.com/en-us/research/publication/the-space-of-developer-productivity-theres-more-to-it-than-you-think/
+- claim: the SPACE framework explicitly states developer productivity "cannot be measured by a single metric or dimension"
+- population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/07-verification.md, both citing it against relying on any single velocity number
+- date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md); note the underlying ACM Queue page returned HTTP 403 on fetch, so the Microsoft Research abstract page is the primary text actually read
+- limit: the five per-dimension SPACE definitions come from secondary summaries cross-referencing the paper, not the full paper text, per the research file's own note

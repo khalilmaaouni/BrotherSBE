@@ -6,6 +6,26 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## Unreleased
+
+- The book grew its persona spine: Part IV, one deep dive each for the
+  backend engineer, the data engineer, and the platform lead, and Part V,
+  working as one team, the vault opened in Obsidian for real, and the
+  mastery ladder. Six new chapters, roughly twenty two thousand words,
+  every terminal excerpt re-executed by the replay harness (142 blocks,
+  0 differ) and the two blocks the day's other changes made stale patched
+  from live runs, never by hand. The cover and the explainer route each
+  persona to their chapter.
+
+- The team operating model is designed end to end and recorded the tool's
+  own way: a full dossier at design/team-operating-model (real intake, a
+  deliberate recorded raise to T3, strict design check green on all five
+  gates), the human-facing docs/TEAM-PLAYBOOK.md, three integration work
+  items (Jira and Confluence, Asana, Teams) designed against research from
+  opened vendor pages with every unverifiable limit named, and the team
+  vault pattern shipped in memory-template/TEAM-VAULT.md. Zero engine code
+  changed; the stance is one way: the ledger broadcasts, it never obeys.
+
 ## 1.0.0-rc.2 (2026-08-01)
 
 Everything below accumulated in one pre-release stretch. `v1.0.0-rc.1`

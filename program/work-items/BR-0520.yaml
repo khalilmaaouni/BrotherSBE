@@ -1,0 +1,69 @@
+id: BR-0520
+title: Jira and Confluence one-way exporters
+why: >
+  The team operating model puts the truth in git and feeds every coordination
+  surface from it, one way. This item builds the Atlassian half: a Confluence
+  publish of the generated status with read-only restrictions applied, a
+  URL-typed Evidence field on Jira issues, and a thin exporter that reads the
+  append-only event stream and writes issues or development information. The
+  exporter holds no credential that can write to the repository, and a failed
+  export leaves a stale board and a correct ledger, never the reverse. Design
+  and acceptance come from design/team-operating-model, and the exporter rows
+  of 07-verification.md are the source of the criteria below.
+owner: product-engineer
+reviewer: independent-reviewer
+status: not started
+wave: team-control
+depends_on:
+  - BR-0000
+spec: design/team-operating-model/03-adr.md
+acceptance:
+  - the exporter runs to success with a read-only ledger credential and holds no repository write token
+  - "replaying a fixed event stream twice produces one issue per event, proven by an idempotency test that diffs target state after each pass"
+  - "a deliberately failed export leaves the merge path unaffected, proven by a test that fails the exporter and asserts no gate changed verdict"
+  - "a published Confluence page has its update restriction set to the publishing identity, so humans can read it and cannot hand-edit it"
+  - "an issue created from a known event carries the evidence link in the URL-typed custom field, asserted by field id rather than by rendered text"
+  - "the Confluence publish and the Jira write are separately failable, proven by a test that breaks one and asserts the other still completes"
+  - "python3 tools/sbe_design.py design/team-operating-model reports no FAIL after any dossier change this item makes"
+  - dash scan over every new and edited file returns 0 matches
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - >
+    Atlassian is mid-migration on rate limiting. A points-based per-tenant quota
+    rolls out from 2026-03-02, and plain API-token traffic is currently carved
+    out of it and left on the older burst limits. An exporter that authenticates
+    with a service API token today may land inside the points system later
+    without any change on our side.
+  - >
+    Confluence Page Properties metadata is not exposed as structured data
+    through the REST API, so a published mirror cannot be read back for
+    reconciliation. Mirrors are verified by re-export instead, which is a weaker
+    check and is recorded as such in 07-verification.md.
+  - >
+    The bulk issue create limits quoted in research (1000 issues and 200 fields
+    per request, 5 concurrent bulk requests site-wide) were not confirmed on a
+    vendor page opened directly. Treat them as unverified until the batching
+    strategy is fixed against a real tenant.
+alerts:
+  - >
+    Governance step, before any code ships: creating the URL-typed Evidence
+    custom field is a one-time administrative act and needs a named owner on the
+    Jira side. Field creation requires the relevant Jira administration rights,
+    and whether a plain API token may register admin webhooks is ambiguous in
+    the vendor documentation, so this must be tested against the real tenant
+    rather than assumed.
+  - >
+    Governance step: the publishing identity for Confluence must exist as a
+    service account before the read-only restriction pattern works at all,
+    because the restriction is set TO that identity. Decide and provision it in
+    the same change that turns publishing on.
+  - >
+    Network posture check: the Development Information API is the vendor's own
+    supported path for tools behind a firewall pushing outbound with no inbound
+    ports opened. If the deployment cannot expose a public receiver, that is the
+    bridge to build, not admin webhooks.
