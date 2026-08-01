@@ -321,7 +321,10 @@ moved. What that does NOT establish, stated where the behavior is:
   printed something different.
 - Coverage is what the caller named, or the diff between base and head. A change
   to a file the receipt does not cover is invisible to `verify`, and a receipt
-  covering no file at all is NO-DATA rather than a pass, naming why.
+  covering no file at all is NO-DATA rather than a pass, naming why. A diff
+  cannot tell code under test from another evidence receipt that happened to
+  land in the same range; see "Evidence covering evidence" below for the
+  narrower limit that leaves open.
 - The staleness check is deliberately strict in one direction: a covered file
   written after the run ended FAILs even when its bytes are unchanged, so a
   checkout or a formatter that rewrites a file identically invalidates the
@@ -338,6 +341,63 @@ moved. What that does NOT establish, stated where the behavior is:
   `tools/test_sbe_evidence.py` that build real git repositories and run real
   commands, on this repository and on no other estate.
 Full text: `src/brothersbe/evidence.py`, `docs/CLI.md`.
+
+## Evidence covering evidence (T6)
+
+A receipt's `coveredFiles`, when computed from a diff rather than an explicit
+`--covers` list, is every file that changed in `base..head`, and that diff
+cannot distinguish "the code this run tested" from "another evidence receipt
+that happened to land in the same range". A receipt regenerated at a fixed
+`--out` path is the ordinary shape of a CI re-run (the design, gate and score
+checks all write to well-known paths on every push), not an edit to any code
+under test. Reproduced: generate `design.json` with `--covers app.py`, commit
+it; generate `gate.json` with the default diff-based coverage, which then
+names `design.json` alongside `app.py` purely because of where it landed;
+regenerate `design.json` in place. Before this fix, `gate.json` FAILed with
+"covered file .sbe/evidence/design.json now hashes to ...: the code changed
+after the evidence was made", for a check that never claimed to test
+`design.json` and whose own covered code (`app.py`) never moved: the evidence
+store poisoning itself.
+
+The fix is scoped to interpretation, not to what a receipt records:
+`evidence.verify` gained an `exclude_dirs` parameter (default: none, so every
+existing caller keeps today's behavior unchanged) naming path prefixes whose
+`coveredFiles` entries are still recorded and shown in the note, but never
+hashed, timed, or allowed to fail or pass a verdict. `status.py`'s
+`_scan_evidence`, the one place this repository reads every receipt in the
+store to build BROKEN CLAIMS and COMPLETED EVIDENCE, passes the evidence
+store itself. A receipt whose ENTIRE coverage sits under an excluded path
+reads NO-DATA, never a silent PASS built on nothing.
+
+What this does NOT close, stated where the behavior is:
+- The exclusion is per-caller, not global. `src/brothersbe/decisions.py` and
+  `src/brothersbe/work.py` also call `evidence.verify` (for a decision
+  package's judged receipts and a task's close postcondition) and neither
+  passes `exclude_dirs`; the same accidental coupling can still reach them
+  through the identical diff-based mechanism. Closing every caller was out of
+  this stage's scope, named here rather than silently left open.
+- This does not touch `generate()`: a receipt's own `coveredFiles` field
+  still lists an evidence-store path when the diff found one, faithfully, as
+  a record of what the diff actually contained. Only what that record is
+  allowed to PROVE changed.
+- This does not touch the commit-binding check (`headCommit` must equal the
+  current HEAD). A receipt that is itself committed to the repository is, by
+  construction, generated before the commit that adds it exists, so its
+  recorded `headCommit` can never equal that commit's own SHA; the very next
+  commit of any kind, evidence or not, makes it stale under the rule two
+  entries above ("`verify` compares against the CURRENT head..."). That is
+  the pre-existing, already-tested behavior
+  (`tools/test_sbe_status.py::TestBrokenClaims::test_a_stale_receipt_is_named_under_broken_claims_and_exits_1`),
+  and this fix leaves it exactly as it was: a receipt that is committed and
+  then followed by any further commit is still named under BROKEN CLAIMS for
+  that separate, unrelated reason.
+- The exclusion is a path-prefix match against `coveredFiles` entries as
+  RECORDED (POSIX-style, relative to the repository root). A receipt covering
+  an absolute path, or a path spelled with backslashes, is not matched and
+  not excluded; this repository's own receipts never record either shape.
+Full text: `src/brothersbe/evidence.py` (`_check_covered`, `verify`),
+`src/brothersbe/status.py` (`_scan_evidence`),
+`tools/test_sbe_status.py::TestEvidenceStoreSelfPoisoning`.
 
 ## The privacy controls are defaults and patterns, not guarantees
 
@@ -834,3 +894,81 @@ beside. No strictness flag changed to get here; the diff is purely
 additive.
 
 Full text: `.github/workflows/brothersbe-gates.yml`.
+
+## A hard-gate receipt with no headCommit still passes unbound
+
+`tools/sbe_gate.py`'s `gate_numbers`, `gate_migration` and `gate_ran` now read
+an optional `headCommit` field, the same field name and comparison
+`src/brothersbe/evidence.py`'s own `sbe evidence` receipt store already
+carries (`_check_commit`). When the field is present and names a commit that
+is not the directory's current `git rev-parse HEAD`, the receipt is stale
+evidence for the change that is actually checked out and the gate FAILs
+rather than PASSing over it: a `numbers-manifest.json`,
+`migration-receipt.json` or `ran-receipt.json` copied forward from an earlier
+commit no longer clears the gate at a later one. Calibrated, in
+`evals/run_evals.py`'s
+`a-stale-headcommit-ran-receipt-no-longer-passes`,
+`a-stale-headcommit-numbers-manifest-no-longer-passes` and
+`a-stale-headcommit-migration-receipt-no-longer-passes`, each of which pins a
+receipt sound in every other field to an old commit, moves HEAD on with a
+second, unrelated commit, and asserts FAIL; with `_commit_problem` in
+`tools/sbe_gate.py` neutralized to always return `None`, the same three cases
+read `want=FAIL got=PASS REGRESSION`, and a fourth
+(`a-non-string-headcommit-is-caught`) regresses the same way, confirming the
+check is what makes each one red.
+
+What this does NOT do, stated because a control that oversells itself is
+worse than none: a receipt that records no `headCommit` at all is not judged
+by this check either way, and still PASSes exactly as it did before this
+field existed. This gate cannot tell "a receipt written before this field
+existed" apart from "an operator who chose not to record one", and every
+worked receipt this repository ships today is the first kind: the shipped
+example receipts under `docs/for-engineers/examples/`, the worked receipts
+`docs/guides/05-a-worked-engagement.md` writes and `evals/replay_guide05.py`
+replays verbatim, and every eval case in `evals/run_evals.py` written before
+this change all carry no `headCommit` field, and none of those quoted PASS
+lines are files this change is scoped to rewrite. Closing that second gap
+(making an unbound receipt something other than a silent PASS once a
+directory has real git history to bind against) needs those shipped receipts
+and worked-engagement blocks updated together with the code in one pass, so
+the doc-quote guards that replay them do not go stale on landing; that pass
+is future work, named here rather than left implicit. The mismatch case this
+change closes is the one actually reproduced and asked for: a passing receipt
+copied forward from a commit that is no longer HEAD.
+
+A second, smaller side effect of the same change: adding new fixture-backed
+eval cases moved `evals/run_evals.py`'s own case count, and a handful of
+shipped docs outside this change's scope (`README.md`, `docs/SETUP.md`,
+`docs/guides/01-quickstart.md`, `docs/guides/04-teams-and-evolution.md`)
+quote that exact count the way `CHECKSUMS.sha256` quotes tracked file hashes.
+Regenerating those counts is the same kind of whole-tree pass as regenerating
+`CHECKSUMS.sha256`, and is left to it rather than forced through a file this
+change was not scoped to touch.
+
+Full text: `tools/sbe_gate.py` (`_current_head`, `_commit_problem`,
+`gate_numbers`, `gate_migration`, `gate_ran`), `src/brothersbe/evidence.py`
+(`_check_commit`), `evals/run_evals.py` (the commit-binding cases).
+
+## check-update follows a linked worktree, not a broken one
+
+`tools/sbe_telemetry.py::_resolve_git_dirs` follows a linked worktree's
+`.git` file (`gitdir: <path>`) to the per-worktree directory git created for
+it, then reads that directory's own `commondir` file to find the COMMON
+directory where refs/heads and refs/remotes actually live (a linked
+worktree does not duplicate them). This covers every worktree `git
+worktree add` produces and every one `git worktree prune` has not yet torn
+down: the case reproduced and fixed. It does not cover a worktree whose
+per-worktree directory survives but whose `commondir` file is itself
+missing, unreadable, or points at a directory that no longer exists, the
+shape of a hand-edited or partially corrupted `.git/worktrees/<name>`
+rather than anything an ordinary `git worktree` command leaves behind. In
+that narrower case the helper falls back to treating the per-worktree
+directory as the refs source, refs/heads is normally empty there, the
+branch ref fails to resolve, and `cmd_check_update` exits at its existing
+`if not local: return` exactly as before this change, silently. That is a
+narrower silence than the one this change closes (a per-worktree directory
+that is itself intact but missing its link to the common dir, not any
+linked worktree git actually creates), and is named here rather than
+guarded against speculatively for a shape not reproduced. Full text:
+`tools/sbe_telemetry.py` (`_resolve_git_dirs`, `cmd_check_update`),
+`tools/test_sbe.py` (`TestCheckUpdateFindsAWorktreeGitdir`).

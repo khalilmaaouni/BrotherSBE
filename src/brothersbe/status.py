@@ -37,20 +37,36 @@ ACTIVE CONFLICTS reuses wave 5's overlap scan by calling `tasks.load_registry`,
 functions `sbe task check` itself calls; there is no second copy of the
 overlap rule in this file.
 
-HOW A DESIGN/GATE/SCORE FAIL IS RECOGNIZED, stated as the heuristic it is:
-a receipt whose `sbe evidence verify` verdict is PASS (the receipt itself is
-trustworthy: sealed, current, every covered file intact) is inspected for
-which of design/gate/score its `argv` names, by substring match on the
-recorded command line (`verify` counts as all three, `review` counts as
-gate and score, and each of `design`/`gate`/`score` counts for itself). A
-receipt whose recorded `exitCode` is nonzero is a MERGE BLOCKER: the run was
-made, it failed, and evidence of that failure already exists. A receipt this
-module cannot classify into any kind still counts toward MERGE BLOCKERS or
-the clean-evidence tally by its exit code; it just cannot clear a MISSING
-EVIDENCE entry for a kind it does not name. A receipt whose own verify() is
-NO-DATA (advisory: a dirty tree at generation time, or no covered file) is
-neither a broken claim nor clean evidence, and is not otherwise pinned in a
-section; it is counted in the evidence scope note.
+HOW A DESIGN/GATE/SCORE OBLIGATION IS CLEARED, and this changed because the
+old answer was a bypass. A receipt whose `sbe evidence verify` verdict is PASS
+(the receipt itself is trustworthy: sealed, current, every covered file intact)
+clears an obligation only when the receipt DECLARES that kind in its own
+`checkKinds` field, read through `evidence.declared_kinds`, which is the single
+reader of that field. Nothing here looks at the recorded command line any more.
+It used to: the kind was inferred by substring-matching the joined argv, so a
+receipt recording `/bin/cat tests/test_design_of_gate_score.txt` named three
+obligations and cleared all three, for a command that ran no check at all. That
+was reproduced, not theorized.
+
+A receipt that declares no kind is NO-DATA for obligation purposes, never a
+silent pass, and the three shapes of that (a receipt older than the field, a
+field that does not parse as a kind list, and an honest run that declared
+nothing) are each named where MISSING EVIDENCE is reported, so a reader is
+never told "no evidence exists" when the truth is "evidence exists and says
+nothing about which check it was". A receipt whose recorded `exitCode` is
+nonzero is a MERGE BLOCKER whether or not it declares a kind: the run was made,
+it failed, and evidence of that failure already exists. A receipt whose own
+verify() is NO-DATA (advisory: a dirty tree at generation time, or no covered
+file) is neither a broken claim nor clean evidence, and is not otherwise pinned
+in a section; it is counted in the evidence scope note.
+
+WHAT A DECLARED KIND IS NOT: a proof that the command performed that check.
+`sbe evidence run --kind gate` binds the declaration to a run that actually
+happened and seals it, so it cannot be typed into a receipt afterwards, and the
+recorded argv sits beside it for a reader to compare. An operator who declares
+a kind over a command that checks nothing has written a false statement rather
+than exploited an inference, which is the whole of the improvement and is
+stated here rather than oversold.
 
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. Maturity: INTERNAL-EVAL, exercised on this repository's
@@ -68,14 +84,23 @@ from . import tasks as tasks_mod
 from . import work as work_mod
 from .impact import DiffUnavailable, _git  # noqa: E402  (the same private helper evidence.py reuses)
 
-#: The three checks `sbe verify` runs, and the command line that would record
-#: evidence for each. Named here once so MISSING EVIDENCE and the receipt
-#: classifier read from the same table.
-CHECK_KINDS = (
-    ("design", "design completeness check", "bin/sbe design --strict <dossier>"),
-    ("gate", "hard gate", "bin/sbe gate <dossier>"),
-    ("score", "scored surface", "bin/sbe score --strict <dossier>"),
-)
+#: How each kind reads in a report, and the command line that would record
+#: evidence for it. The NAMES are not defined here: they come from
+#: `evidence.CHECK_KIND_NAMES`, the vocabulary receipts are written in, so this
+#: module can never recognize a kind the generator cannot write or miss one it
+#: can. A name with no row below still appears, under a generic label, because
+#: a kind this table has not been taught about is still an obligation and
+#: dropping it would be the silent gap this project refuses everywhere else.
+CHECK_KIND_DETAIL = {
+    "design": ("design completeness check", "bin/sbe design --strict <dossier>"),
+    "gate": ("hard gate", "bin/sbe gate <dossier>"),
+    "score": ("scored surface", "bin/sbe score --strict <dossier>"),
+}
+
+CHECK_KINDS = tuple(
+    (kind,) + CHECK_KIND_DETAIL.get(
+        kind, ("%s check" % kind, "the command that runs the %s check" % kind))
+    for kind in evidence_mod.CHECK_KIND_NAMES)
 
 INTAKE_REL = "00-intake.json"
 DISPOSITION_REL = "disposition.json"
@@ -105,25 +130,19 @@ def _git_head(root):
 
 
 def _receipt_kinds(receipt):
-    """Which of design/gate/score this receipt's recorded argv names.
+    """Which of design/gate/score this receipt DECLARES, read from its own
+    `checkKinds` field and from nothing else.
 
-    Substring match on the joined, lowered argv, stated as a heuristic in the
-    module docstring: `verify` covers all three (it runs all three), `review`
-    covers gate and score (it runs those two), and each of design/gate/score
-    covers itself. A receipt whose command names none of these clears no
-    MISSING EVIDENCE entry, which is the honest outcome for a command this
-    module cannot read as one of the three named checks.
+    One line of delegation on purpose: `evidence.declared_kinds` is the single
+    reader of that field, so this module cannot drift into a second
+    interpretation of it. What this function no longer does is the point. It
+    used to substring-match the joined argv, which meant a receipt for
+    `/bin/cat tests/test_design_of_gate_score.txt` cleared the design, gate and
+    score obligations at once, on a command that ran no check. A receipt that
+    declares nothing now clears nothing, and `_scan_evidence` records WHY so
+    the absence is reported rather than assumed.
     """
-    argv = " ".join(str(a) for a in (receipt.get("argv") or [])).lower()
-    kinds = set()
-    if "verify" in argv:
-        kinds |= set(("design", "gate", "score"))
-    if "review" in argv:
-        kinds |= set(("gate", "score"))
-    for kind, _label, _cmd in CHECK_KINDS:
-        if kind in argv:
-            kinds.add(kind)
-    return kinds
+    return evidence_mod.declared_kinds(receipt)
 
 
 def _scan_evidence(root, evidence_dir):
@@ -133,15 +152,33 @@ def _scan_evidence(root, evidence_dir):
     that verify PASS with a zero exit code), `failing` (MERGE BLOCKERS items,
     a verified receipt recording a nonzero exit code), `kindsCovered` (the
     set of design/gate/score kinds ANY verified receipt, passing or failing,
-    names), `count`, `inspected` (whether the store existed to look at) and
+    DECLARES), `kindless` (one sentence per verified receipt that declares no
+    kind, so a reader is told that evidence exists and says nothing about
+    which check it was, rather than left to read the absence as no evidence at
+    all), `count`, `inspected` (whether the store existed to look at) and
     `note` (the scope sentence every caller prints, either way).
+
+    Every receipt verifies with the evidence store ITSELF excluded from its
+    covered files: `evidence_mod.verify` is called with `exclude_dirs` set to
+    `evidence_dir`'s path relative to `root`, the same spelling `coveredFiles`
+    entries use. A receipt's `coveredFiles` normally comes from a diff, not a
+    hand-picked list, and that diff cannot distinguish "code this run tested" from
+    "another receipt that happened to land in the same base..HEAD range". A
+    receipt regenerated at a fixed `--out` path (the ordinary shape of a CI
+    re-run) is not a change to the code under test, and without this
+    exclusion an unrelated receipt that merely covered its OLD bytes by
+    diff-range accident would FAIL the moment it refreshed: the evidence
+    store poisoning itself. See docs/KNOWN-LIMITS.md ("Evidence covering
+    evidence") for exactly what this closes and does not.
     """
-    broken, clean, failing = [], [], []
+    broken, clean, failing, kindless = [], [], [], []
     kinds_covered = set()
     if not os.path.isdir(evidence_dir):
         return {"broken": broken, "clean": clean, "failing": failing,
+                "kindless": kindless,
                 "kindsCovered": kinds_covered, "count": 0, "inspected": False,
                 "note": "no evidence store found at %s" % evidence_dir}
+    exclude_rel = os.path.relpath(evidence_dir, root)
     paths = []
     for dirpath, _dirnames, filenames in os.walk(evidence_dir):
         for name in filenames:
@@ -150,7 +187,7 @@ def _scan_evidence(root, evidence_dir):
     paths.sort()
     for full in paths:
         rel = os.path.relpath(full, root)
-        result = evidence_mod.verify(full, cwd=root)
+        result = evidence_mod.verify(full, cwd=root, exclude_dirs=(exclude_rel,))
         verdict = result["verdict"]
         if verdict == "FAIL":
             broken.append({
@@ -165,17 +202,23 @@ def _scan_evidence(root, evidence_dir):
             # only, per the module docstring, never silently dropped.
             continue
         receipt = result["receipt"] or {}
-        kinds_covered |= _receipt_kinds(receipt)
+        kinds = _receipt_kinds(receipt)
+        kinds_covered |= kinds
+        gap = evidence_mod.kind_declaration_gap(receipt)
+        if gap:
+            kindless.append("receipt %s declares no check kind: %s" % (rel, gap))
         trust = result["trust"]
         exit_code = receipt.get("exitCode")
         argv_text = " ".join(str(a) for a in (receipt.get("argv") or []))
+        kinds_text = (", ".join(sorted(kinds)) if kinds
+                      else "none declared, so it clears no obligation")
         if exit_code == 0:
             head = _git_head(root)
             clean.append({
-                "finding": "receipt %s verifies as sound evidence, trust %s (command: %s; "
-                          "scope: this receipt's covered files against HEAD %s, nothing "
-                          "beyond them)"
-                          % (rel, trust, argv_text or "not recorded",
+                "finding": "receipt %s verifies as sound evidence, trust %s (declared check "
+                          "kind(s): %s; command: %s; scope: this receipt's covered files "
+                          "against HEAD %s, nothing beyond them)"
+                          % (rel, trust, kinds_text, argv_text or "not recorded",
                              head[:7] if head else "unknown"),
                 "remedy": "no action; this receipt is sound evidence",
                 "path": rel, "trust": trust,
@@ -183,8 +226,9 @@ def _scan_evidence(root, evidence_dir):
         else:
             failing.append({
                 "finding": "receipt %s verifies as trustworthy but records exit code %s for "
-                          "`%s`, trust %s" % (rel, exit_code, argv_text or "(argv not recorded)",
-                                              trust),
+                          "`%s`, trust %s, declared check kind(s) %s"
+                          % (rel, exit_code, argv_text or "(argv not recorded)", trust,
+                             kinds_text),
                 "remedy": "fix the underlying failure and re-run to produce a new passing "
                          "receipt; see %s" % rel,
                 "path": rel,
@@ -193,7 +237,10 @@ def _scan_evidence(root, evidence_dir):
             })
     note = (("%d receipt(s) found under %s" % (len(paths), evidence_dir)) if paths
            else "evidence store %s exists and holds no receipt" % evidence_dir)
-    return {"broken": broken, "clean": clean, "failing": failing,
+    if kindless:
+        note += ("; %d verified receipt(s) declare no check kind and clear no obligation"
+                 % len(kindless))
+    return {"broken": broken, "clean": clean, "failing": failing, "kindless": kindless,
             "kindsCovered": kinds_covered, "count": len(paths), "inspected": True, "note": note}
 
 
@@ -368,13 +415,24 @@ def build_report(path, base=None, now=None):
             })
 
     # ---- MISSING EVIDENCE: only when a tier is known and owes something. ----
+    #
+    # An obligation is cleared by a receipt that DECLARES its kind, never by
+    # one whose command line happens to spell it. Receipts that declare
+    # nothing are named in the same finding rather than left out of it: a
+    # reader told "no receipt records a hard gate run" while four receipts sit
+    # in the store would reasonably conclude the tool cannot see them.
     if human_tier not in (None, "T0"):
+        kindless_note = ""
+        if ev["kindless"]:
+            kindless_note = ("; %d receipt(s) in the store declare no check kind and clear no "
+                             "obligation: %s" % (len(ev["kindless"]), "; ".join(ev["kindless"])))
         for kind, label, cmdline in CHECK_KINDS:
             if kind not in ev["kindsCovered"]:
                 missing_evidence.append({
-                    "finding": "no evidence receipt records a %s run, and declared tier %s "
-                              "owes one" % (label, human_tier),
-                    "remedy": "run `%s` through `sbe evidence run` to record it" % cmdline,
+                    "finding": "no evidence receipt declares a %s run, and declared tier %s "
+                              "owes one%s" % (label, human_tier, kindless_note),
+                    "remedy": "run `%s` through `sbe evidence run --kind %s` to record it"
+                             % (cmdline, kind),
                 })
 
     sections = (broken_claims, merge_blockers, active_conflicts, missing_evidence,

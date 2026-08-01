@@ -80,6 +80,7 @@ library only. Maturity: INTERNAL-EVAL, exercised on this repository's fixtures
 and on no other estate.
 """
 import argparse
+import contextlib
 import inspect
 import io
 import os
@@ -89,6 +90,12 @@ import sys
 import tempfile
 import time
 from importlib.machinery import SourceFileLoader
+
+try:
+    import fcntl
+except ImportError:  # a platform with no fcntl (untested elsewhere anyway;
+    fcntl = None      # `write_package` refuses to write unlocked rather than
+                       # reopen the race the lock exists to close)
 
 # `_git` is the same private helper `status.py` reuses. `_tier_index` is
 # imported for the same reason rather than re-spelled: the tier ORDER is
@@ -265,10 +272,91 @@ def package_location(top, dossier):
                       "no project to name and nothing invents one"}
 
 
+#: The lock sidecar's own suffix. A SIBLING of the store directory, never a
+#: file placed INSIDE it: `list_packages` treats every entry of a decisions
+#: directory that is not a `NNN-<slug>` directory as a NO-DATA problem to
+#: report, so a lock file living inside the store would show up as one on
+#: every browse. `decisions_dir + _LOCK_SUFFIX` sits beside it instead.
+_LOCK_SUFFIX = ".lock"
+
+#: How long `_store_lock` waits for the exclusive lock before giving up.
+#: Bounded rather than infinite so a stuck holder cannot wedge every later
+#: writer forever.
+_LOCK_TIMEOUT_S = 30.0
+
+
+@contextlib.contextmanager
+def _store_lock(decisions_dir):
+    """Exclusive advisory lock serializing every writer of ONE decision
+    store, held for a whole id-allocate-and-write critical section rather
+    than only the final write.
+
+    This mirrors `tools/sbe_telemetry.py`'s `_writer_lock`: an `fcntl.flock`
+    taken on a sidecar file beside the thing being protected, spun for up to
+    `_LOCK_TIMEOUT_S` before giving up. It is not the SAME function, because
+    the two callers want opposite failure behavior. Telemetry's writer must
+    never drop a row, so a timeout or a missing `fcntl` yields an UNLOCKED
+    pass and the caller proceeds anyway. This lock exists so two writers can
+    no longer claim the same decision id, and proceeding unlocked would
+    reopen exactly that race, so a timeout or a missing `fcntl` here raises
+    `DecisionUnwritable` instead of yielding: nothing is recorded rather than
+    recorded unprotected.
+    """
+    if fcntl is None:
+        raise DecisionUnwritable(
+            "this platform has no fcntl, so the decision store at %s cannot be locked "
+            "for a safe write; nothing was recorded rather than writing unprotected "
+            "against a concurrent writer" % decisions_dir)
+    try:
+        os.makedirs(decisions_dir, exist_ok=True)
+    except OSError as exc:
+        raise DecisionUnwritable("%s cannot be created (%s); nothing was recorded"
+                                 % (decisions_dir, exc))
+    lock_path = decisions_dir.rstrip(os.sep) + _LOCK_SUFFIX
+    try:
+        fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise DecisionUnwritable(
+            "the lock sidecar %s could not be opened (%s); nothing was recorded rather "
+            "than writing unprotected against a concurrent writer" % (lock_path, exc))
+    try:
+        held = False
+        deadline = time.time() + _LOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = True
+                break
+            except OSError:
+                if time.time() >= deadline:
+                    break
+                time.sleep(0.02)
+        if not held:
+            raise DecisionUnwritable(
+                "the decision store at %s stayed locked by another writer past %.0fs; "
+                "nothing was recorded rather than writing unprotected against it"
+                % (decisions_dir, _LOCK_TIMEOUT_S))
+        yield
+    finally:
+        # No explicit `flock(fd, LOCK_UN)`: POSIX releases every lock held
+        # through a descriptor the instant that descriptor is closed (`man 2
+        # flock`), this fd is never reused past this point, and an explicit
+        # unlock call here would need its own failure handling for no
+        # behavioral gain. One syscall does the whole job.
+        os.close(fd)
+
+
 def next_id(decisions_dir):
     """The next NNN, allocated by READING the directory. An unreadable
     directory raises rather than restarting at 001: restarting would write a
-    second 001 over somebody's first one."""
+    second 001 over somebody's first one.
+
+    A plain, unlocked read: safe to call from anywhere, including from inside
+    `write_package`'s own `_store_lock`, where it is the AUTHORITATIVE read
+    (nothing else can be writing to `decisions_dir` while that lock is held).
+    Called unlocked, from `build_package`, it is a best-effort guess instead;
+    `write_package` is what makes the eventual write safe regardless.
+    """
     if not os.path.isdir(decisions_dir):
         return "001"
     try:
@@ -1141,7 +1229,11 @@ def write_package(root, package):
     """Write the package and return the absolute path of the file written.
 
     Atomic the way `tasks.save_registry` is atomic: a temp file in the same
-    directory, then `os.replace`, so the file is never half written.
+    directory, then `os.replace`, so the file is never half written. The
+    whole id-check-and-write sequence below now runs inside `_store_lock`,
+    held from before the append-only check through the final `os.replace`,
+    so two writers racing for the same store can no longer both decide the
+    next id is 005 and both write it: two writers cannot claim one id.
 
     A `DECISION.md` already sitting there and bound to a DIFFERENT commit is
     never overwritten. Packages are append-only, because the older package
@@ -1149,44 +1241,83 @@ def write_package(root, package):
     would delete that with no record of the deletion. The refusal raises
     `DecisionUnwritable` naming both commits.
 
-    A package bound to the SAME commit is rewritten in place, so regenerating
-    a package at the same head is idempotent rather than a second directory.
-    The residual is stated rather than hidden: ids are allocated by reading
-    the store, so a caller that BUILDS two packages before WRITING either
-    reads the same store twice, allocates the same id twice, and the second
-    write lands on top of the first. Build and write one package at a time.
+    A `DECISION.md` already sitting there and bound to the SAME commit is now
+    ALSO never overwritten, which is the one behavior this lock changes: id
+    allocation used to be a plain, unlocked directory scan (`next_id`, called
+    by `build_package`), so a caller that built two packages before writing
+    either read the same store twice, allocated the same id twice, and the
+    second write landed on top of the first, silently, because "same commit"
+    used to read as "this is the same decision, rewrite it in place". Held
+    under this lock, that collision is instead caught before a single byte of
+    the second write lands: the id is reallocated fresh, from the store this
+    lock guarantees is not moving under it, and the second package is filed
+    under its own new id rather than erasing the first. Build and write need
+    no longer happen one at a time; the lock is what makes that safe now.
     """
     directory = package["dir"]
-    target = os.path.join(directory, PACKAGE_FILENAME)
-    existing = bound_commit_in(target)
-    if existing["exists"] and existing["commit"] != package["boundCommit"]:
-        raise DecisionUnwritable(
-            "%s is already bound to commit %s and this package is bound to %s; refusing "
-            "to overwrite it. A package records what was decided about the program at "
-            "its own commit, and packages are append-only: allocate the next id instead."
-            % (target, existing["commit"] or "(unreadable)",
-               package["boundCommit"] or "(none resolved)"))
-    try:
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
-    except OSError as exc:
-        raise DecisionUnwritable("%s cannot be created (%s); nothing was recorded"
-                                 % (directory, exc))
-    body = render_package(package)
-    try:
-        fd, tmp = tempfile.mkstemp(prefix="DECISION.", suffix=".tmp", dir=directory)
-    except OSError as exc:
-        raise DecisionUnwritable("no temp file could be made in %s (%s); nothing was "
-                                 "recorded" % (directory, exc))
-    try:
-        with io.open(fd, "w", encoding="utf-8") as fh:
-            fh.write(body)
-        os.replace(tmp, target)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
-    return os.path.abspath(target)
+    decisions_dir = os.path.dirname(directory)
+    with _store_lock(decisions_dir):
+        target = os.path.join(directory, PACKAGE_FILENAME)
+        existing = bound_commit_in(target)
+        if existing["exists"] and existing["commit"] != package["boundCommit"]:
+            raise DecisionUnwritable(
+                "%s is already bound to commit %s and this package is bound to %s; "
+                "refusing to overwrite it. A package records what was decided about "
+                "the program at its own commit, and packages are append-only: "
+                "allocate the next id instead."
+                % (target, existing["commit"] or "(unreadable)",
+                   package["boundCommit"] or "(none resolved)"))
+        if existing["exists"]:
+            # Same commit, same slot: another writer reached this exact id
+            # before this write did, most likely a concurrent one, since the
+            # store `build_package` read to compute `package["dir"]` is stale
+            # the instant a second writer starts. Reallocating here is race
+            # free: nothing else can write to `decisions_dir` while this lock
+            # is held, so a fresh `next_id` read is authoritative.
+            old_name = os.path.basename(directory)
+            stale_id = package["id"]
+            # Split on the first "-", not on `len(stale_id)`: an identifier
+            # is always digits-only (`next_id` mints it with "%03d"), so this
+            # reads the real slug off the directory name itself and does not
+            # depend on `package["id"]` actually matching it.
+            slug = old_name.split("-", 1)[1] if "-" in old_name else old_name
+            fresh_id = next_id(decisions_dir)
+            directory = os.path.join(decisions_dir, "%s-%s" % (fresh_id, slug))
+            target = os.path.join(directory, PACKAGE_FILENAME)
+            still = bound_commit_in(target)
+            if still["exists"]:
+                raise DecisionUnwritable(
+                    "%s was freshly allocated under the store lock and already exists "
+                    "(%s); refusing to guess a further id. Nothing was recorded."
+                    % (target, still["commit"] or "(unreadable)"))
+            package = dict(package, id=fresh_id)
+            package["notes"] = list(package["notes"]) + [
+                "This package was reallocated from id %s to id %s at write time: %s "
+                "already held a package bound to this same commit, written by another "
+                "writer between this package being built and this one being written. "
+                "Never overwritten; filed under its own id instead."
+                % (stale_id, fresh_id, old_name)]
+        try:
+            if not os.path.isdir(directory):
+                os.makedirs(directory)
+        except OSError as exc:
+            raise DecisionUnwritable("%s cannot be created (%s); nothing was recorded"
+                                     % (directory, exc))
+        body = render_package(package)
+        try:
+            fd, tmp = tempfile.mkstemp(prefix="DECISION.", suffix=".tmp", dir=directory)
+        except OSError as exc:
+            raise DecisionUnwritable("no temp file could be made in %s (%s); nothing was "
+                                     "recorded" % (directory, exc))
+        try:
+            with io.open(fd, "w", encoding="utf-8") as fh:
+                fh.write(body)
+            os.replace(tmp, target)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        return os.path.abspath(target)
 
 
 def parse_verdict_lines(text):

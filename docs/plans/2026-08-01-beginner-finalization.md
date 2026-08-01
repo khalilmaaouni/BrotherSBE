@@ -8,7 +8,8 @@
 
 - The two-command install from the public repository works end to end in an isolated config directory: `claude plugin marketplace add khalilmaaouni/BrotherSBE` then `claude plugin install brothersbe@brothersbe` installed 1.0.0-rc.1, enabled, scope user.
 - `scripts/test-install-artifact.sh` PASSED for HEAD 71f4d3f.
-- Baseline battery at 71f4d3f: 521 evals 0 regressions, test_sbe OK, plugin validate passed, replay_book 79 blocks 0 differ, doctor 7 PASS. verify-install reports 1 known EXTRA (`.sbe/decisions/001-explain-numbers-no-data`, an untracked probe byproduct awaiting the founder's keep or delete call).
+- Baseline battery at 71f4d3f, as measured on that commit (the suite has grown since; this is a
+  historical reading, not a current one): the eval suite green with 0 regressions, test_sbe OK, plugin validate passed, replay_book 79 blocks 0 differ, doctor 7 PASS. verify-install reports 1 known EXTRA (`.sbe/decisions/001-explain-numbers-no-data`, an untracked probe byproduct awaiting the founder's keep or delete call).
 
 ## Global constraints (the repo's standing laws)
 

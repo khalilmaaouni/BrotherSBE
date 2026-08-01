@@ -7696,6 +7696,114 @@ def dp4(root):
     return "every-hop-pointed"
 
 
+# ---------------------------------------------------------------------------
+# T4: commit binding for the three hard-gate evidence files (numbers-manifest,
+# migration-receipt, ran-receipt). src/brothersbe/evidence.py's own `sbe
+# evidence` receipt store already binds a receipt to a commit
+# (evidence.py::_check_commit); these three older, unrelated receipt shapes
+# carried no such concept at all, so a receipt that once earned a PASS at an
+# old commit still earned the same PASS after the tree moved on: a passing
+# receipt COPIED FORWARD from an earlier commit cleared the gate at the new
+# one as if it had been produced there. `headCommit`, the same optional field
+# name and comparison the evidence store uses, is now read by gate_numbers,
+# gate_migration and gate_ran: present and matching the directory's current
+# HEAD, nothing changes; present and naming a commit that is not HEAD, the
+# receipt is stale and the gate FAILs rather than PASSing over it. A receipt
+# recording no headCommit at all is not judged here, exactly as every receipt
+# on disk before this change already was not: this gate cannot tell a receipt
+# that predates the field apart from an operator who chose not to record one,
+# so every eval case above this section (none of which sets up a git repo)
+# keeps behaving exactly as it did.
+
+
+def _git_head(root):
+    return subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+@case("a-stale-headcommit-ran-receipt-no-longer-passes", "ran", "FAIL")
+def cb1(root):
+    # THE DONE-CHECK DEFECT, reproduced: a ran-receipt.json that would PASS on
+    # its own is bound to the FIRST commit, then a second, unrelated commit
+    # moves HEAD on without touching the receipt at all. The receipt's checks
+    # are sound by every field they carry; only the commit it names is stale.
+    git_init(root)
+    write(root, "x", "1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "first"], check=True)
+    old = _git_head(root)
+    write(root, "ran-receipt.json", {"headCommit": old, "checks": [
+        {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "second"], check=True)
+
+
+@case("a-stale-headcommit-numbers-manifest-no-longer-passes", "numbers", "FAIL")
+def cb2(root):
+    git_init(root)
+    write(root, "x", "1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "first"], check=True)
+    old = _git_head(root)
+    write(root, "numbers-manifest.json", {"headCommit": old, "figures": [{
+        "label": "gmv", "snapshot_id": "snap-1", "query": "SELECT SUM(amount) FROM orders",
+        "second_derivation": "SELECT SUM(qty*price) FROM order_lines",
+        "rerun": {"ran": True, "primary": 17570, "secondary": 17570}}]})
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "second"], check=True)
+
+
+@case("a-stale-headcommit-migration-receipt-no-longer-passes", "migration", "FAIL")
+def cb3(root):
+    git_init(root)
+    write(root, "x", "1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "first"], check=True)
+    old = _git_head(root)
+    write(root, "migration-receipt.json", {
+        "headCommit": old,
+        "forward": {"ran_against_restore": True},
+        "reverse": {"ran_against_restore": True, "rehearsal_run_id": "job-8842"},
+        "row_counts": {"before": 100, "after_reverse": 100}})
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "second"], check=True)
+
+
+@case("a-headcommit-bound-to-the-current-commit-still-passes", "ran", "PASS")
+def cb4(root):
+    # The control: staleness is what this check catches, not presence. A
+    # receipt naming the CURRENT HEAD passes exactly as one naming no commit
+    # at all would.
+    git_init(root)
+    write(root, "x", "1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "first"], check=True)
+    head = _git_head(root)
+    write(root, "ran-receipt.json", {"headCommit": head, "checks": [
+        {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})
+
+
+@case("a-non-string-headcommit-is-caught", "ran", "FAIL")
+def cb5(root):
+    # A container or a number where a commit id belongs pins nothing, the
+    # same rule numbers-manifest.json's snapshot_id already enforces.
+    git_init(root)
+    write(root, "x", "1")
+    subprocess.run(["git", "-C", root, "add", "."], check=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "first"], check=True)
+    write(root, "ran-receipt.json", {"headCommit": 12345, "checks": [
+        {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})
+
+
+@case("no-git-history-leaves-the-receipt-unaffected", "ran", "PASS")
+def cb6(root):
+    # No HEAD to bind against: every eval case in this file before this
+    # section relies on exactly this behavior, since none of them git_init a
+    # repo. This case pins it directly rather than leaving it implicit.
+    write(root, "ran-receipt.json", {"checks": [
+        {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:

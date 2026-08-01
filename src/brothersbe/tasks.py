@@ -22,23 +22,35 @@ worse than none:
     ownership scan order roles INSIDE the registry; a writer who never runs
     `sbe task open` is invisible to both, and only the fence hook (advisory,
     fail-open) stands in front of that writer.
-  - Concurrent writers of the REGISTRY FILE itself are out of scope. The
-    rewrite is atomic (write temp, rename), so the file is never half-written,
-    but two simultaneous `sbe task open` calls are last-write-wins. There is
-    no lock and no daemon on purpose.
+  - Concurrent CALLERS who never go through `cmd_open`/`cmd_close` are out of
+    scope: a caller that reads and rewrites `.sbe/tasks.json` by hand, past
+    this module entirely, is not serialized by anything here, the same way a
+    writer who never runs `sbe task open` is invisible to the ownership scan
+    two bullets up. Both entry points this module ships now hold
+    `_registry_lock` for the whole read-modify-write, the same `fcntl.flock`
+    sidecar pattern `tools/sbe_telemetry.py` and `brothersbe.decisions` use,
+    so two concurrent `sbe task open` (or `close`) calls can no longer both
+    read the same tasks list and have the second write silently erase the
+    first's addition. `save_registry` itself is still the same atomic write
+    (temp file, then rename) it always was; the lock lives around it, in the
+    caller, because the read has to be inside the same critical section as
+    the write for a lost update to be impossible, and `save_registry` alone
+    never saw the read.
   - `expiry` is informational only. Nothing deletes a task on a clock; a stale
     open task is a line a human reads in `sbe task list`, never a record the
     tool silently drops.
-  - The registry file `.sbe/tasks.json` is exempted, by exact name, from the
-    changed-path comparison: opening a task writes it, so counting it would
-    make an ordinary single-writer flow unable to close clean without --force,
-    which is this control's own kill criterion.
+  - The registry file `.sbe/tasks.json` and its lock sidecar
+    `.sbe/tasks.json.lock` are exempted, by exact name, from the changed-path
+    comparison: opening a task writes both, so counting either would make an
+    ordinary single-writer flow unable to close clean without --force, which
+    is this control's own kill criterion.
 
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. Maturity: INTERNAL-EVAL, exercised on this repository's fixtures
 and on no other estate.
 """
 import argparse
+import contextlib
 import io
 import json
 import os
@@ -47,6 +59,12 @@ import subprocess
 import sys
 import tempfile
 import time
+
+try:
+    import fcntl
+except ImportError:  # a platform with no fcntl (untested elsewhere anyway;
+    fcntl = None      # `_registry_lock` refuses to write unlocked rather than
+                       # reopen the race the lock exists to close)
 
 TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
 if os.path.abspath(TOOLS) not in sys.path:
@@ -64,6 +82,13 @@ REGISTRY_VERSION = "1.0"
 
 #: The registry file, repo-relative, POSIX spelling. One file, no service.
 REGISTRY_REL = ".sbe/tasks.json"
+
+#: The lock sidecar's own name, a SIBLING of the registry file, never a
+#: second key inside it: the registry format stays byte-compatible, so a
+#: reader of `.sbe/tasks.json` that predates this lock still parses every
+#: byte the same way. `changed_paths` exempts it by exact name for the same
+#: reason it exempts `REGISTRY_REL` itself; see the module docstring.
+REGISTRY_LOCK_REL = REGISTRY_REL + ".lock"
 
 #: Where receipts live unless the caller says otherwise. A reviewer may not own
 #: any path under this, and a reviewer whose diff touches it cannot close even
@@ -165,8 +190,18 @@ def load_registry(root):
 
 def save_registry(root, data):
     """Atomic rewrite: write a temp file in the same directory, then rename.
-    The file is never half-written; two concurrent rewriters are last-write-
-    wins, which is a stated limit, not a lock."""
+    The file is never half-written.
+
+    This function alone still says nothing about two concurrent WRITERS: it
+    only ever sees the `data` dict its caller already built in memory, so a
+    caller that read the registry, mutated its own copy, and called this
+    with a stale copy would still silently erase whatever a second writer
+    added in between. That is why the lock lives one level up, in
+    `cmd_open`/`cmd_close`, wrapped around the read AND this write as one
+    critical section (`_registry_lock`, below): a lock only inside this
+    function would still let two callers each build a version of `data`
+    that never saw the other's task and race to write it, unprotected.
+    """
     directory = os.path.join(root, ".sbe")
     if not os.path.isdir(directory):
         os.makedirs(directory)
@@ -179,6 +214,79 @@ def save_registry(root, data):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+#: How long `_registry_lock` waits for the exclusive lock before giving up.
+#: Bounded rather than infinite so a stuck holder cannot wedge every later
+#: writer forever.
+_LOCK_TIMEOUT_S = 30.0
+
+
+@contextlib.contextmanager
+def _registry_lock(root):
+    """Exclusive advisory lock serializing every read-modify-write of ONE
+    task registry, held from the registry's read through its rewrite so two
+    concurrent `sbe task open` (or `close`) calls can no longer both read the
+    same tasks list, both mutate their own in-memory copy, and have the
+    second `save_registry` call silently overwrite the first's addition with
+    a JSON blob that never saw it.
+
+    This mirrors `tools/sbe_telemetry.py`'s `_writer_lock` and
+    `brothersbe.decisions._store_lock`: an `fcntl.flock` taken on a sidecar
+    file beside the thing being protected, spun for up to `_LOCK_TIMEOUT_S`
+    before giving up, so the codebase has one locking style rather than a
+    second one invented here. It is not the SAME function, because the two
+    other callers want a timeout or a missing `fcntl` to yield an UNLOCKED
+    pass so a telemetry row or a decision package is never dropped outright;
+    this lock exists so two writers can no longer both win the same
+    read-modify-write, and proceeding unlocked would reopen exactly that
+    race, so a timeout or a missing `fcntl` here raises `RegistryUnusable`
+    instead of yielding: nothing is written rather than written unprotected
+    against a concurrent writer.
+    """
+    if fcntl is None:
+        raise RegistryUnusable(
+            "this platform has no fcntl, so the task registry cannot be locked for a "
+            "safe read-modify-write; nothing was recorded rather than writing "
+            "unprotected against a concurrent writer")
+    directory = os.path.join(root, ".sbe")
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError as exc:
+        raise RegistryUnusable("%s cannot be created (%s); nothing was recorded"
+                               % (directory, exc))
+    lock_path = os.path.join(root, REGISTRY_LOCK_REL)
+    try:
+        fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise RegistryUnusable(
+            "the lock sidecar %s could not be opened (%s); nothing was recorded rather "
+            "than writing unprotected against a concurrent writer" % (lock_path, exc))
+    try:
+        held = False
+        deadline = time.time() + _LOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = True
+                break
+            except OSError:
+                if time.time() >= deadline:
+                    break
+                time.sleep(0.02)
+        if not held:
+            raise RegistryUnusable(
+                "the task registry at %s stayed locked by another writer past %.0fs; "
+                "nothing was recorded rather than writing unprotected against it"
+                % (registry_path(root), _LOCK_TIMEOUT_S))
+        yield
+    finally:
+        # No explicit `flock(fd, LOCK_UN)`: POSIX releases every lock held
+        # through a descriptor the instant that descriptor is closed (`man 2
+        # flock`), this fd is never reused past this point, and an explicit
+        # unlock call here would need its own failure handling for no
+        # behavioral gain. One syscall does the whole job.
+        os.close(fd)
 
 
 def open_tasks(data):
@@ -216,8 +324,9 @@ def changed_paths(tree, base):
     """The union of `git diff --name-only <base>...HEAD` and the porcelain
     status: committed AND uncommitted edits count, and a rename counts both
     sides (--no-renames splits it into its delete and its add on purpose).
-    The registry file itself is exempted by exact name; see the module
-    docstring for why. A base that does not resolve raises, never passes."""
+    The registry file and its lock sidecar are exempted by exact name; see
+    the module docstring for why. A base that does not resolve raises,
+    never passes."""
     code, _out, err = _git(["rev-parse", "--verify", "--quiet", base + "^{commit}"], tree)
     if code != 0:
         raise DiffUnavailable("base commit %s does not resolve in %s (%s); nothing was "
@@ -227,7 +336,7 @@ def changed_paths(tree, base):
         raise DiffUnavailable("git diff failed in %s: %s" % (tree, err.strip()))
     seen, ordered = set(), []
     for p in [f.strip().strip('"') for f in out.splitlines()] + _porcelain_paths(tree):
-        if p and p != REGISTRY_REL and p not in seen:
+        if p and p not in (REGISTRY_REL, REGISTRY_LOCK_REL) and p not in seen:
             seen.add(p)
             ordered.append(p)
     return ordered
@@ -275,7 +384,6 @@ def _find_open(data, task_id):
 
 def cmd_open(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
-    data = load_registry(root)
     if not _SLUG_RE.match(args.id or ""):
         sys.stderr.write("sbe task open: %r is not a usable task id (letters, digits, "
                          "dot, dash, underscore)\n" % args.id)
@@ -290,48 +398,54 @@ def cmd_open(args, exit_ok, exit_failed, exit_usage):
                          "postcondition against a moving base compares against nothing.\n"
                          % args.base)
         return exit_usage
-    if _find_open(data, args.id):
-        sys.stderr.write("sbe task open: refused. Task id %r already exists and is open; "
-                         "close it or pick another id.\n" % args.id)
-        return exit_usage
     owns = list(args.owns or [])
-    for other in open_tasks(data):
-        for mine in owns:
-            for theirs in other.get("ownedPaths") or []:
-                if claims_overlap(mine, theirs, root):
+    # From here down is the read-modify-write: the registry is read, checked
+    # against every other open task, and (on success) rewritten, all under
+    # one lock, so a second `sbe task open` racing this one cannot read the
+    # same tasks list before this write lands and silently overwrite it.
+    with _registry_lock(root):
+        data = load_registry(root)
+        if _find_open(data, args.id):
+            sys.stderr.write("sbe task open: refused. Task id %r already exists and is open; "
+                             "close it or pick another id.\n" % args.id)
+            return exit_usage
+        for other in open_tasks(data):
+            for mine in owns:
+                for theirs in other.get("ownedPaths") or []:
+                    if claims_overlap(mine, theirs, root):
+                        sys.stderr.write(
+                            "sbe task open: refused. Owned path %r overlaps %r, owned by open "
+                            "task %r (agent %s). One writer per file; queue behind it or "
+                            "narrow the claim.\n"
+                            % (mine, theirs, other["id"], other.get("agent", "(unnamed)")))
+                        return exit_usage
+        if args.role == "reviewer":
+            for mine in owns:
+                if claims_overlap(mine, args.evidence_dir, root):
                     sys.stderr.write(
-                        "sbe task open: refused. Owned path %r overlaps %r, owned by open "
-                        "task %r (agent %s). One writer per file; queue behind it or "
-                        "narrow the claim.\n"
-                        % (mine, theirs, other["id"], other.get("agent", "(unnamed)")))
+                        "sbe task open: refused. A reviewer task may not own %r: it overlaps "
+                        "the evidence store %s it would review. A reviewer who writes the "
+                        "receipts it reviews is the defect reviewer separation exists to "
+                        "stop. This separates roles inside the registry only; it cannot stop "
+                        "an actor who never registers.\n" % (mine, args.evidence_dir))
                     return exit_usage
-    if args.role == "reviewer":
-        for mine in owns:
-            if claims_overlap(mine, args.evidence_dir, root):
-                sys.stderr.write(
-                    "sbe task open: refused. A reviewer task may not own %r: it overlaps "
-                    "the evidence store %s it would review. A reviewer who writes the "
-                    "receipts it reviews is the defect reviewer separation exists to "
-                    "stop. This separates roles inside the registry only; it cannot stop "
-                    "an actor who never registers.\n" % (mine, args.evidence_dir))
-                return exit_usage
-    record = {
-        "id": args.id,
-        "agent": args.agent,
-        "role": args.role,
-        "worktree": os.path.abspath(args.worktree) if args.worktree else None,
-        "ownedPaths": owns,
-        "readOnlyPaths": list(args.read_only or []),
-        "baseCommit": args.base,
-        "expiry": args.expiry,
-        "status": "open",
-        "verifyCommand": args.verify,
-        "evidenceId": args.evidence_id,
-        "openedAt": _iso(time.time()),
-        "closedAt": None,
-    }
-    data["tasks"].append(record)
-    save_registry(root, data)
+        record = {
+            "id": args.id,
+            "agent": args.agent,
+            "role": args.role,
+            "worktree": os.path.abspath(args.worktree) if args.worktree else None,
+            "ownedPaths": owns,
+            "readOnlyPaths": list(args.read_only or []),
+            "baseCommit": args.base,
+            "expiry": args.expiry,
+            "status": "open",
+            "verifyCommand": args.verify,
+            "evidenceId": args.evidence_id,
+            "openedAt": _iso(time.time()),
+            "closedAt": None,
+        }
+        data["tasks"].append(record)
+        save_registry(root, data)
     sys.stdout.write("sbe task open: %s is open. %s (%s) owns %d path(s): %s. Base %s. "
                      "Close runs the diff postcondition against exactly this "
                      "declaration.\n"
@@ -377,78 +491,86 @@ def _record_forced_close(root, task):
 
 def cmd_close(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
-    data = load_registry(root)
-    task = _find_open(data, args.id)
-    if task is None:
-        sys.stderr.write("sbe task close: no OPEN task with id %r in %s\n"
-                         % (args.id, registry_path(root)))
-        return exit_usage
-    try:
-        result = postcondition(root, task, evidence_dir=args.evidence_dir)
-    except DiffUnavailable as exc:
-        result = None
-        sys.stdout.write("sbe task close %s: NO-DATA. %s. NO-DATA is not a pass; the "
-                         "task stays open.\n" % (args.id, exc))
-        if not args.force:
-            return exit_failed
-    if result is not None:
-        for p in result["inScope"]:
-            sys.stdout.write("  IN-SCOPE   %s\n" % p)
-        for p in result["violations"]:
-            flag = " (declared READ-ONLY, was written)" if p in result["readOnlyWrites"] \
-                else ""
-            sys.stdout.write("  VIOLATION  %s%s\n" % (p, flag))
-        for p in result["receiptViolations"]:
-            sys.stdout.write("  RECEIPT-VIOLATION %s (a reviewer wrote under the "
-                             "evidence store)\n" % p)
-        if result["receiptViolations"]:
-            sys.stdout.write(
-                "sbe task close %s: FAIL. A reviewer task's diff touches the evidence "
-                "store, and --force may NOT waive this class: a reviewer who writes "
-                "receipts is not reviewing them. The task stays open.\n" % args.id)
-            return exit_failed
-        if result["verdict"] == "PASS":
-            task["status"] = "closed"
-            task["closedAt"] = _iso(time.time())
-            if args.evidence_id:
-                task["evidenceId"] = args.evidence_id
-            save_registry(root, data)
-            sys.stdout.write("sbe task close %s: PASS. %d changed path(s), all inside "
-                            "the declaration. Closed clean.\n"
-                             % (args.id, len(result["changed"])))
-            return exit_ok
-        if not args.force:
-            sys.stdout.write(
-                "sbe task close %s: FAIL. %d changed path(s) outside the declaration, "
-                "listed above by name. The shell was never parsed; the diff was read. "
-                "The task stays open. Close with --force --who --why to record a "
-                "disposition, never to make this clean.\n"
-                % (args.id, len(result["violations"])))
-            return exit_failed
-    # --force from here: a recorded human decision, marked FORCED, never clean.
-    if not (args.who or "").strip() or not (args.why or "").strip():
-        sys.stderr.write("sbe task close: --force requires --who and --why. A forced "
-                         "close with no author and no reason is an off switch, not a "
-                         "decision.\n")
-        return exit_usage
-    task["status"] = "closed"
-    task["closedAt"] = _iso(time.time())
-    if args.evidence_id:
-        task["evidenceId"] = args.evidence_id
-    task["forced"] = {
-        "who": args.who,
-        "why": args.why,
-        "at": _iso(time.time()),
-        "verdict": result["verdict"] if result is not None else "NO-DATA",
-        "violations": result["violations"] if result is not None else [],
-    }
-    save_registry(root, data)
-    sys.stdout.write("sbe task close %s: FORCED by %s (%s). The record carries the "
-                     "disposition and the violation list; this close is never read as "
-                     "clean.\n" % (args.id, args.who, args.why))
-    # A bare statement, after the registry is saved and before the exit code is
-    # returned unchanged: a forced close is one of the four moments that write a
-    # decision package, and writing one may not move what this close decided.
+    # The whole read-modify-write, including the postcondition read of the
+    # tree, runs under one lock for the same reason `cmd_open` does: a second
+    # `sbe task close` (or `open`) racing this one must not be able to read
+    # the registry before this write lands and silently overwrite it. Only
+    # `_record_forced_close`, below, runs after this block ends: it writes to
+    # a DIFFERENT store under its own lock, and it must run after this close
+    # is durable, not merely after this lock is taken.
+    with _registry_lock(root):
+        data = load_registry(root)
+        task = _find_open(data, args.id)
+        if task is None:
+            sys.stderr.write("sbe task close: no OPEN task with id %r in %s\n"
+                             % (args.id, registry_path(root)))
+            return exit_usage
+        try:
+            result = postcondition(root, task, evidence_dir=args.evidence_dir)
+        except DiffUnavailable as exc:
+            result = None
+            sys.stdout.write("sbe task close %s: NO-DATA. %s. NO-DATA is not a pass; the "
+                             "task stays open.\n" % (args.id, exc))
+            if not args.force:
+                return exit_failed
+        if result is not None:
+            for p in result["inScope"]:
+                sys.stdout.write("  IN-SCOPE   %s\n" % p)
+            for p in result["violations"]:
+                flag = " (declared READ-ONLY, was written)" if p in result["readOnlyWrites"] \
+                    else ""
+                sys.stdout.write("  VIOLATION  %s%s\n" % (p, flag))
+            for p in result["receiptViolations"]:
+                sys.stdout.write("  RECEIPT-VIOLATION %s (a reviewer wrote under the "
+                                 "evidence store)\n" % p)
+            if result["receiptViolations"]:
+                sys.stdout.write(
+                    "sbe task close %s: FAIL. A reviewer task's diff touches the evidence "
+                    "store, and --force may NOT waive this class: a reviewer who writes "
+                    "receipts is not reviewing them. The task stays open.\n" % args.id)
+                return exit_failed
+            if result["verdict"] == "PASS":
+                task["status"] = "closed"
+                task["closedAt"] = _iso(time.time())
+                if args.evidence_id:
+                    task["evidenceId"] = args.evidence_id
+                save_registry(root, data)
+                sys.stdout.write("sbe task close %s: PASS. %d changed path(s), all inside "
+                                "the declaration. Closed clean.\n"
+                                 % (args.id, len(result["changed"])))
+                return exit_ok
+            if not args.force:
+                sys.stdout.write(
+                    "sbe task close %s: FAIL. %d changed path(s) outside the declaration, "
+                    "listed above by name. The shell was never parsed; the diff was read. "
+                    "The task stays open. Close with --force --who --why to record a "
+                    "disposition, never to make this clean.\n"
+                    % (args.id, len(result["violations"])))
+                return exit_failed
+        # --force from here: a recorded human decision, marked FORCED, never clean.
+        if not (args.who or "").strip() or not (args.why or "").strip():
+            sys.stderr.write("sbe task close: --force requires --who and --why. A forced "
+                             "close with no author and no reason is an off switch, not a "
+                             "decision.\n")
+            return exit_usage
+        task["status"] = "closed"
+        task["closedAt"] = _iso(time.time())
+        if args.evidence_id:
+            task["evidenceId"] = args.evidence_id
+        task["forced"] = {
+            "who": args.who,
+            "why": args.why,
+            "at": _iso(time.time()),
+            "verdict": result["verdict"] if result is not None else "NO-DATA",
+            "violations": result["violations"] if result is not None else [],
+        }
+        save_registry(root, data)
+        sys.stdout.write("sbe task close %s: FORCED by %s (%s). The record carries the "
+                         "disposition and the violation list; this close is never read as "
+                         "clean.\n" % (args.id, args.who, args.why))
+    # A bare statement, after the registry is saved AND this lock released: a
+    # forced close is one of the four moments that write a decision package,
+    # and writing one may not move what this close decided.
     _record_forced_close(root, task)
     return exit_ok
 

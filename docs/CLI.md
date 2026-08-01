@@ -185,6 +185,27 @@ masked. This narrows the old limit, it does not close it: the pattern list is fi
 secret in a shape none of these patterns know still reaches the receipt whole. Full statement:
 `docs/KNOWN-LIMITS.md`.
 
+**`--kind {design,gate,score}` records WHICH obligation this run is evidence for.** Repeatable,
+and written into the receipt as `checkKinds`, sealed with everything else. Without it the
+receipt declares no kind, and `sbe status` will not let it clear a design, gate or score
+obligation. This replaced an inference that was a live bypass: the consumer used to work the
+identity out by substring-matching the recorded command line, so a receipt for `/bin/cat
+tests/test_design_of_gate_score.txt` named all three words and cleared all three obligations,
+for a command that ran no check at all.
+
+What the field is: a declaration bound to a run that actually happened, sealed so it cannot be
+typed into a receipt afterwards. What it is not: proof of what the command did. This wrapper
+starts a process and times it; it does not understand it. An operator who declares `--kind
+design` over a command that checks nothing has written a false statement, and the receipt
+records the argv beside the declaration so a reader can see the two disagree. That residual is
+the reason `show` prints the provenance sentence on every receipt.
+
+Receipts written before this field existed stay readable: `1.2` adds `checkKinds` and
+`checkKindsSource` and is judged only against receipts that declare `1.2`, the same way `1.1`
+added `argvRedactions`. The bump is forward only. Nothing rewrites a receipt already on disk,
+and a `1.0` or `1.1` receipt still verifies. It just clears no obligation, because it says
+nothing about which check it was, and that is NO-DATA rather than a silent pass.
+
 `--covers <path>` is repeatable and names the files this run is evidence for. Without it, the
 files changed between base and head are used. `verify` re-hashes those files, which is how it
 tells you the code moved after the evidence was made.
@@ -212,7 +233,7 @@ encouraged to share.
 | Verdict | When |
 |---|---|
 | `PASS` | the seal matches, the head commit is current, every covered file still holds the bytes recorded, and the tree was clean at generation time |
-| `FAIL` | the receipt path could not be safely opened (a FIFO, socket, device or unreadable file), the receipt does not parse, its schema version is unknown, a required field records nothing, the seal does not match, the head commit has moved, or a covered file changed or vanished |
+| `FAIL` | the receipt path could not be safely opened (a FIFO, socket, device or unreadable file), the receipt does not parse, its schema version is unknown, a required field records nothing, its `checkKinds` is not a list of kinds this build knows, the seal does not match, the head commit has moved, or a covered file changed or vanished |
 | `NO-DATA` | the receipt is sound but was generated on a dirty tree, or covers no file at all. Advisory is NO-DATA here, never a pass |
 
 `--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
@@ -340,7 +361,10 @@ Six sections, blocker-first, and **every positive or empty line names what it in
    directly, the same functions `sbe task check` itself runs; there is no second copy of
    the overlap rule here.
 4. **MISSING EVIDENCE**: for a declared tier above T0, a design/gate/score kind no
-   verified receipt's `argv` names, each naming the command that would fill it.
+   verified receipt DECLARES in its own `checkKinds` field, each naming the command that
+   would fill it. Receipts in the store that declare no kind are named in the same
+   finding, so a reader is never told an obligation is unmet without being told that
+   evidence exists which says nothing about which check it was.
 5. **COMPLETED EVIDENCE**: receipts that verify clean with a zero exit code, printed with
    their trust label (`LOCAL-ADVISORY` or `PROTECTED-CI`) every time.
 6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
@@ -352,12 +376,23 @@ These are flat, single-dossier conventions, the same ones `tools/test_sbe_impact
 fixtures write to; a dossier nested under `design/<change>/` is not discovered by this
 wave, and every section reads NO-DATA rather than guessing at a path it was never told.
 
-A design/gate/score FAIL is recognized only from a receipt whose `sbe evidence verify`
-verdict is PASS (sealed, current, every covered file intact): its `argv` is read for the
-substring `design`, `gate` or `score` (`verify` counts as all three, `review` counts as
-gate and score), and a nonzero recorded `exitCode` on such a receipt is the MERGE BLOCKER.
-A receipt whose command names none of the three still counts by its exit code but clears
-no MISSING EVIDENCE entry for a kind it does not name.
+A design/gate/score obligation is cleared only by a receipt whose `sbe evidence verify`
+verdict is PASS (sealed, current, every covered file intact) AND which declares that kind
+in its own `checkKinds` field, written by `sbe evidence run --kind`. A nonzero recorded
+`exitCode` on such a receipt is the MERGE BLOCKER, declared kind or not: the run was made
+and it failed.
+
+**Nothing here reads the command line to decide which check ran, and that is a fix, not a
+preference.** It used to: the kind was inferred by substring-matching the joined `argv`
+(`verify` counted as all three, `review` as gate and score), so a receipt recording
+`/bin/cat tests/test_design_of_gate_score.txt` cleared the design, gate and score
+obligations at once, on a command that ran no check. A receipt that declares no kind is
+NO-DATA for obligation purposes, never a silent pass, and each shape of that (a receipt
+older than the field, a field that does not parse as a kind list, an honest run that
+declared nothing) is named in the MISSING EVIDENCE finding rather than dropped. The limit
+that remains, stated rather than papered over: a declared kind is the operator's
+statement, bound to a real run and sealed against later editing, and not a proof that the
+command performs the check it names.
 
 Exit codes: `0` when BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS and MISSING EVIDENCE
 are all empty, `1` when any of them carries an item, `2` usage. Exit 0 is never printed as

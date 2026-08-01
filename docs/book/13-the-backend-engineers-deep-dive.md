@@ -585,7 +585,7 @@ rm -f /tmp/sbe-book-ch13/repo/daily_totals.json /tmp/sbe-book-ch13/repo/orders.c
 
 ```
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch13/repo/.sbe/evidence/export-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: receipt written to /tmp/sbe-book-ch13/repo/.sbe/evidence/export-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 `sbe evidence show` prints the receipt back verbatim; the lines below are

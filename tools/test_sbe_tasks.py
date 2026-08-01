@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import shutil
 import unittest
 
@@ -276,6 +277,107 @@ class TestTheOneOverlapRule(TaskFixture):
         finally:
             sys.path.pop(0)
             sys.path.pop(0)
+
+
+class TestConcurrentWriters(TaskFixture):
+    """T2's own defect, reproduced rather than assumed: `save_registry` used
+    to be called straight off a plain, unlocked `load_registry`, so two
+    concurrent `sbe task open` calls could both read the same tasks list,
+    both append their own record to their OWN in-memory copy, and the second
+    `save_registry` call would silently rewrite the file with a blob that
+    never saw the first writer's task at all.
+
+    These fixtures spawn REAL, separate processes, never threads inside one
+    interpreter: the lock this task adds is an `fcntl.flock`, a cross-process
+    primitive, and the defect only ever showed up across processes, two `sbe`
+    invocations racing each other. Each worker is released from a filesystem
+    barrier (an `O_CREAT|O_EXCL` marker per worker, then one shared "go" file
+    the parent creates only once every marker exists) so the writes genuinely
+    overlap rather than trickle in one interpreter start at a time, which is
+    what this test's own precondition (a machine fast enough to schedule N
+    process starts within a few milliseconds of each other) would otherwise
+    require. The barrier removes that precondition: this test states it, and
+    builds it, rather than depending on it.
+    """
+
+    def _worker_script(self):
+        # A worker: prove it reached the barrier by planting its own ready
+        # marker, wait for the shared go marker, then run the REAL `sbe
+        # task open` CLI, exactly the way an agent would invoke it, against
+        # its OWN distinct id and owned path. Every worker opens a DIFFERENT
+        # task (no id collision, no owned-path overlap), so nothing here
+        # depends on the overlap or reallocation logic; it isolates exactly
+        # the lost-update race `save_registry` used to be exposed to.
+        return (
+            "import sys, os, time, subprocess\n"
+            "sbe, root, ready_path, go_path, idx, base = sys.argv[1:7]\n"
+            "fd = os.open(ready_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)\n"
+            "os.close(fd)\n"
+            "deadline = time.time() + 60\n"
+            "while not os.path.exists(go_path):\n"
+            "    if time.time() > deadline:\n"
+            "        sys.stderr.write('TIMEOUT-WAITING-FOR-GO\\n')\n"
+            "        sys.exit(1)\n"
+            "    time.sleep(0.005)\n"
+            "out = subprocess.run([sys.executable, sbe, 'task', 'open',\n"
+            "    '--id', 'w%s' % idx, '--agent', 'agent%s' % idx, '--role', 'writer',\n"
+            "    '--base', base, '--verify', 'true',\n"
+            "    '--owns', 'src/owned-%s.py' % idx, '--cwd', root],\n"
+            "    capture_output=True, text=True)\n"
+            "sys.stdout.write(out.stdout)\n"
+            "sys.stderr.write(out.stderr)\n"
+            "sys.exit(out.returncode)\n"
+        )
+
+    def _run_concurrent_writers(self, n, root, base):
+        """Launch `n` real `sbe task open` subprocesses against `root`'s task
+        registry, all released at once from a shared filesystem barrier.
+        Returns a list of `(index, stdout, stderr, returncode)`, one per
+        worker."""
+        barrier = tempfile.mkdtemp(prefix="sbe-tasks-barrier-")
+        go_path = os.path.join(barrier, "go")
+        script = self._worker_script()
+        procs = []
+        for i in range(n):
+            ready_path = os.path.join(barrier, "ready-%03d" % i)
+            proc = subprocess.Popen(
+                [sys.executable, "-c", script, SBE, root, ready_path, go_path, str(i), base],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            procs.append((i, ready_path, proc))
+        deadline = time.time() + 60
+        while not all(os.path.exists(ready) for _, ready, _ in procs):
+            if time.time() > deadline:
+                self.fail("not every one of %d worker(s) reached the barrier within 60s" % n)
+            time.sleep(0.01)
+        fd = os.open(go_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.close(fd)
+        results = []
+        for i, _, proc in procs:
+            out, err = proc.communicate(timeout=120)
+            results.append((i, out, err, proc.returncode))
+        return results
+
+    def test_twenty_concurrent_writers_open_distinct_tasks_all_survive(self):
+        """THE DONE-CHECK: 20 real processes, one temp registry, 20 distinct
+        task ids and owned paths. Every one of the 20 must survive as its own
+        open task in the final registry: 0 lost, 20 records on disk."""
+        n = 20
+        results = self._run_concurrent_writers(n, self.repo, self.base)
+        for i, out, err, code in results:
+            self.assertEqual(code, 0, "worker %d exited %s: stdout=%r stderr=%r"
+                             % (i, code, out, err))
+        data = self.registry()
+        ids = sorted(t["id"] for t in data["tasks"])
+        expected = sorted("w%d" % i for i in range(n))
+        self.assertEqual(ids, expected,
+                         "expected %d distinct open tasks, got %d: %r"
+                         % (n, len(ids), ids))
+        for i in range(n):
+            matches = [t for t in data["tasks"] if t["id"] == "w%d" % i]
+            self.assertEqual(len(matches), 1, "task w%d must appear exactly once" % i)
+            record = matches[0]
+            self.assertEqual(record["status"], "open", record)
+            self.assertEqual(record["ownedPaths"], ["src/owned-%d.py" % i], record)
 
 
 class TestHelpMeansHelp(unittest.TestCase):
