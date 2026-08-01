@@ -782,3 +782,55 @@ list because sbe design owns that gate; run design before plan and CI runs
 both. sbe adopt still proposes this repository's own layout to foreign
 trees; the existence-filtered proposal is designed and lands with its suite
 rewrite, not before.
+
+
+## The zero-network scan now walks the whole tree, not only tools/
+
+`TestAuditableSurface.test_the_zero_network_property_holds_by_ast` in
+`tools/test_sbe.py` used to parse only `tools/*.py` and `tools/*.sh`. It now
+parses `src/brothersbe/*.py`, `hooks/**/*.py`, `scripts/**/*.py`, `bin/sbe`,
+and `install.sh` too, the same surface `SECURITY.md`'s own suggested audit
+grep names (`grep -rnE "urllib|requests|socket|http|curl|wget|subprocess"
+tools/ src/ hooks/ scripts/ bin/`). One exact path is allow-listed rather
+than a directory, so no sibling module can hide behind it:
+`src/brothersbe/prverify.py`, `sbe pr verify`'s own documented GitHub API
+client (see "pr verify reads GitHub, it does not police it" above). The
+shell side of the same test now also flags `nc`, not only `curl` and
+`wget`. `install.sh`'s own documented `git` network calls (`git ls-remote`
+at line 98, `git clone` or `git pull --ff-only` at lines 106 to 110) are not
+what this scan bans; the property under test is the absence of a direct
+`urllib`, `requests`, `socket` or `http` import and the absence of a
+`curl`, `wget` or `nc` invocation, not the absence of `git` as a local
+subprocess call, which the test's own docstring already names as one of the
+three benign shapes a hit is allowed to be.
+
+Full text: `SECURITY.md`, `docs/THREAT_MODEL.md`,
+`tools/test_sbe.py::TestAuditableSurface`.
+
+
+## Every suite that existed now runs in CI, except one, and that is a choice
+
+`.github/workflows/brothersbe-gates.yml` used to run a handful of suites by
+name while thirteen others sat in `tools/` passing locally on nobody's
+merge. It now runs all of them on both OS legs: `test_sbe_adopt.py`,
+`test_sbe_book.py`, `test_sbe_bypass.py`, `test_sbe_converge.py`,
+`test_sbe_decisions.py`, `test_sbe_evidence.py`, `test_sbe_install.py`,
+`test_sbe_plan.py`, `test_sbe_prverify.py`, `test_sbe_status.py`,
+`test_sbe_status_team.py`, `test_sbe_tasks.py`, and `test_sbe_work.py`,
+alongside the suites already wired before this pass. Every
+`tools/test_sbe_*.py` file now appears in the workflow exactly once, with
+one deliberate exception: `test_sbe_prverify_live.py` stays unwired. It is
+not the same suite as `test_sbe_prverify.py` (that one is canned and
+offline, every GitHub API call routed through a fake fetch, and it is the
+one that runs in CI); the live script needs both `SBE_LIVE_GH_REPO` and
+`SBE_LIVE_GH_PR` set, plus a token discoverable the same way `sbe pr
+verify` itself discovers one, none of which this workflow provides. Without
+those, the live script already prints one NO-DATA line and exits 0 by its
+own docstring, so wiring it in would either skip silently on every normal
+run or force this repository to carry a GitHub token as a CI secret for a
+script most runs would never exercise. The workflow carries a comment
+stating this reasoning next to the `test_sbe_prverify.py` step it sits
+beside. No strictness flag changed to get here; the diff is purely
+additive.
+
+Full text: `.github/workflows/brothersbe-gates.yml`.

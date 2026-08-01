@@ -139,6 +139,47 @@ Cloning the skill gives you the tools. It does not stop a bad merge until you wi
         run: sh scripts/test-install-artifact.sh
       - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
         run: sh scripts/test-upgrade-rollback.sh
+      - name: Adopt and init fixtures (sbe adopt, sbe init)
+        run: python3 tools/test_sbe_adopt.py
+      - name: Book estate fixtures (the worked example the book's chapters paste)
+        run: python3 tools/test_sbe_book.py
+      - name: Bypass fixtures (the ways a person or an agent gets past these controls)
+        run: python3 tools/test_sbe_bypass.py
+      - name: Converge fixtures (sbe converge)
+        run: python3 tools/test_sbe_converge.py
+      - name: Decision package fixtures (sbe explain, sbe lineage)
+        run: python3 tools/test_sbe_decisions.py
+      - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
+        run: python3 tools/test_sbe_evidence.py
+      - name: Install script fixtures (dry-run, missing prerequisites)
+        run: python3 tools/test_sbe_install.py
+      - name: Plan fixtures (sbe plan)
+        run: python3 tools/test_sbe_plan.py
+      # This is the canned/offline suite: every GitHub API call is routed
+      # through a fake fetch, so it needs no network and no token, and it
+      # runs on every PR. tools/test_sbe_prverify_live.py is a separate,
+      # deliberately unwired script: it needs BOTH SBE_LIVE_GH_REPO and
+      # SBE_LIVE_GH_PR plus a token discoverable the way `sbe pr verify`
+      # itself discovers one, none of which this workflow provides, and
+      # without them it already prints one NO-DATA line and exits 0 (its
+      # own docstring). Wiring it here would either skip silently on every
+      # normal run or require CI secrets this repository does not carry, so
+      # it stays a manual, opt-in script instead.
+      - name: PR verify fixtures (sbe pr verify, canned GitHub API, offline)
+        run: python3 tools/test_sbe_prverify.py
+      - name: Status fixtures (sbe status)
+        run: python3 tools/test_sbe_status.py
+      - name: Team status fixtures (sbe status --team)
+        run: python3 tools/test_sbe_status_team.py
+      - name: Task fixtures (sbe task)
+        run: python3 tools/test_sbe_tasks.py
+      - name: Work fixtures (sbe work)
+        run: python3 tools/test_sbe_work.py
+      # The kill criterion this wave was cut against, verbatim: an install
+      # that needs a manual global settings edit. This proves a plain
+      # `git archive HEAD` extracts on its own into an empty directory and
+      # verifies clean there (scripts/verify-install.sh, bin/sbe doctor),
+      # nothing written outside that one directory.
 ```
 
 Seven steps, not three. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The waiver step (third of the seven) surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
