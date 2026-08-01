@@ -121,6 +121,7 @@ find /tmp/sbe-book-ch10-repo/vault -type f -not -name '.DS_Store' | sort
 /tmp/sbe-book-ch10-repo/vault/50-Reference/operator-model.md
 /tmp/sbe-book-ch10-repo/vault/LEARNED.md
 /tmp/sbe-book-ch10-repo/vault/README.md
+/tmp/sbe-book-ch10-repo/vault/TEAM-VAULT.md
 ```
 
 ## What each file is actually for

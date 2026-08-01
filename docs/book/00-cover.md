@@ -39,4 +39,8 @@ status without opening a terminal. Part II is the engineer core: one worked
 example, a small nightly pipeline and its API, followed end to end through
 an install, a loop, a gate, and the team coordinating around it. Part III is
 a cookbook: one page per common task, with the exact commands and what the
-gates will refuse.
+gates will refuse. Part IV is one deep dive per persona, dummy to definitive
+expert: the backend engineer, the data engineer, and the platform lead, each
+a complete engagement with real commands. Part V is the team: working as one
+team in practice, the vault opened in Obsidian for real, and the mastery
+ladder that closes the book.
