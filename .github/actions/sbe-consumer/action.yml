@@ -54,7 +54,13 @@ inputs:
     required: false
     default: ''
   strict:
-    description: "'true' passes --strict to sbe impact and sbe evidence verify, making NO-DATA block too."
+    description: >-
+      'true' passes --strict to sbe impact and sbe evidence verify. For
+      evidence verify that makes NO-DATA block too. For impact it blocks a
+      NO-DATA only when the diff proposes a tier above T0 with no intake to
+      reconcile it against, or could not be read at all; a NO-DATA with
+      nothing detected exits 0 even under --strict, because NO-DATA never
+      decides an exit code.
     required: false
     default: 'true'
 runs:
