@@ -141,7 +141,7 @@ class TestTheDefect(EvidenceFixture):
         return {
             "schemaVersion": "1.0",
             "generator": "sbe evidence run",
-            "generatorVersion": "1.0.0-rc.1",
+            "generatorVersion": "1.0.0-rc.2",
             "repository": {"remote": None, "remoteNote": "none", "root": self.repo},
             "baseCommit": self.base,
             "headCommit": self.head,
@@ -152,7 +152,7 @@ class TestTheDefect(EvidenceFixture):
             "endedAtEpoch": 1785315612.0,
             "durationSeconds": 12.0,
             "exitCode": 0,
-            "toolVersions": {"python": "3.9.6", "sbe": "1.0.0-rc.1"},
+            "toolVersions": {"python": "3.9.6", "sbe": "1.0.0-rc.2"},
             "environment": "macOS-26.5.2-arm64-arm-64bit",
             "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785"
                             "2b855",

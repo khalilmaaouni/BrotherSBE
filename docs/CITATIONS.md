@@ -293,3 +293,21 @@ captured.
 - population: the plan's ecosystem reference list, section 15
 - date: checked by the plan's author on 2026-07-31
 - limit: integration target only; no adapter exists and no compatibility is claimed
+
+## https://code.claude.com/docs/en/plugins
+- claim: the official plugin directory is curated by Anthropic with no application process, and the community marketplace accepts submissions through a web form gated on plugin validation and automated safety screening
+- population: the plugins page of the official Claude Code documentation, opened and quoted in the directory submission packet
+- date: opened by the research pass on 2026-08-01
+- limit: process and coverage as stated on that date; Anthropic can change either without notice, and this repository controls neither
+
+## https://platform.claude.com/plugins/submit
+- claim: the community marketplace submission form for individual accounts
+- population: the submission entry point the documentation names for individuals
+- date: opened by the research pass on 2026-08-01
+- limit: entry point only; nothing was submitted through it and no acceptance is implied
+
+## https://claude.ai/admin-settings/directory/submissions/plugins/new
+- claim: the community marketplace submission form for Team and Enterprise organizations
+- population: the submission entry point the documentation names for organizations
+- date: named by the documentation opened on 2026-08-01; requires an organization login this research did not hold
+- limit: entry point only, recorded from the documentation rather than from a page this machine could open; nothing was submitted and no acceptance is implied

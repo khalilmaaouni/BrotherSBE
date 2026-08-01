@@ -1,5 +1,7 @@
 # BrotherSBE: setup
 
+This page documents the original manual path, still supported: cloning the skill by hand and wiring the hooks yourself. The recommended install today is the plugin path in the main [README.md](../README.md), and [docs/MIGRATION.md](MIGRATION.md) covers moving from this manual path to that one.
+
 Install is a few minutes. Turning the gates from advisory into blocking is real CI work, and this document is honest about which is which.
 
 ## Prerequisites

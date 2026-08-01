@@ -225,5 +225,60 @@ class TestChapterCapabilities(unittest.TestCase):
                             "is content and must still bite")
 
 
+class TestExplainerSelfContained(unittest.TestCase):
+    """The beginner explainer is a single offline page: this guards that it
+    stays large enough to be real content, carries no external script,
+    image, stylesheet, or media reference anywhere (plain anchor links to
+    GitHub are the one allowed exception), stays free of the two banned
+    dash characters, and declares both a light and a dark theme so an
+    explicit toggle can win either way."""
+
+    EXPLAINER = os.path.join(ROOT, "docs", "explainer", "index.html")
+
+    def _load(self):
+        with io.open(self.EXPLAINER, encoding="utf-8") as handle:
+            html = handle.read()
+        size = os.path.getsize(self.EXPLAINER)
+        return self.EXPLAINER, html, size
+
+    def test_the_file_exists_and_is_substantial(self):
+        path, html, size = self._load()
+        self.assertTrue(os.path.exists(path), "docs/explainer/index.html is missing")
+        self.assertGreater(size, 5000,
+                           "the explainer is suspiciously thin: %d bytes" % size)
+
+    def test_no_external_script_image_link_or_source_references(self):
+        import re
+        path, html, size = self._load()
+        tag_pattern = re.compile(r"<(script|img|link|source)\b([^>]*)>", re.IGNORECASE)
+        attr_pattern = re.compile(r"(src|href)\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+        offenders = []
+        for tag_match in tag_pattern.finditer(html):
+            tag_name = tag_match.group(1)
+            for attr_name, value in attr_pattern.findall(tag_match.group(2)):
+                if value.lower().startswith("http://") or value.lower().startswith("https://"):
+                    offenders.append("<%s %s=%s>" % (tag_name, attr_name, value))
+        self.assertEqual(offenders, [],
+                         "external script/img/link/source reference(s) found: %s" % offenders)
+        css_import = re.search(r"@import\s+[\"']?https?://", html, re.IGNORECASE)
+        css_url = re.search(r"url\(\s*[\"']?https?://", html, re.IGNORECASE)
+        self.assertIsNone(css_import, "an @import pulls from an external http(s) URL")
+        self.assertIsNone(css_url, "a CSS url() points at an external http(s) URL")
+
+    def test_zero_banned_dash_characters(self):
+        path, html, size = self._load()
+        em_dash_count = html.count(u"\u2014")
+        en_dash_count = html.count(u"\u2013")
+        self.assertEqual(em_dash_count, 0, "an em dash (U+2014) slipped into the explainer")
+        self.assertEqual(en_dash_count, 0, "an en dash (U+2013) slipped into the explainer")
+
+    def test_declares_both_light_and_dark_themes(self):
+        path, html, size = self._load()
+        self.assertIn("prefers-color-scheme", html,
+                     "no system-preference dark theme rule found")
+        self.assertIn("data-theme=", html,
+                     "no explicit data-theme toggle override found")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

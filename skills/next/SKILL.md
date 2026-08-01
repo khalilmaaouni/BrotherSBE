@@ -39,8 +39,10 @@ run the probe, read the result, and stop at the first rung that matches.
 ## How to answer
 
 State the one recommended action, then why in exactly one sentence grounded in the probe
-result you actually saw (for example, quoting the failing doctor line or naming the missing
-artifact). Do not speculate about rungs you did not probe.
+result you actually saw: name the missing or failing thing in plain words first, then append
+the raw artifact name or doctor line afterward as supporting detail (for example, "no intake
+has been recorded yet, there is no 00-intake.json in the dossier root" rather than the
+filename alone). Do not speculate about rungs you did not probe.
 
 ## Always close with the response contract
 

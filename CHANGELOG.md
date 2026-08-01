@@ -6,7 +6,49 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## 1.0.0-rc.1 (unreleased)
+## 1.0.0-rc.2 (2026-08-01)
+
+Everything below accumulated in one pre-release stretch. `v1.0.0-rc.1`
+(commit `dacee900`, 2026-07-31) was cut partway through this list and is
+superseded by this release before any general announcement.
+
+- The explainer grew from a leaflet into a field guide, and help learned to
+  draw a map. `docs/explainer/index.html` is now twelve sections behind a
+  table of contents: a ninety second story, the whole journey end to end
+  with real excerpts lifted from the replay-tested book and labeled as real,
+  loop advice, an honest good-at and not-good-at table, six use cases, three
+  follow-along tutorials on the book's estate, and a co-writing section for
+  developers; its self-containment guard is unchanged and still bites. The
+  help skill gained a build-the-map flow with a shipped template
+  (`skills/help/map-template.html`, eleven slots, honest absent-sentences,
+  held by `TestHelpMapTemplate`); filling it writes an offline
+  `brothersbe-map.html` into the user's project. The README names the
+  session-start version-change announcement beside the update command, and
+  `program/DIRECTORY-SUBMISSION.md` records the verified truth about
+  listing: the official directory is curated with no application process,
+  the community marketplace takes submissions through a web form, packet
+  prepared for the product owner's click.
+
+- Install docs now teach only the paths that were run, not the paths that
+  seemed plausible. README, `docs/SETUP.md`, `docs/ROLLOUT.md`, and
+  `docs/RELEASE.md` name the marketplace add plus install pair as the
+  primary path, because that pair was executed end to end in an isolated
+  config directory on 2026-08-01 (marketplace add exit 0, install exit 0,
+  plugin listed 1.0.0-rc.1 enabled, content verified at main head 71f4d3f
+  with all ten skills), and `scripts/test-install-artifact.sh` passed for
+  that same commit. Stale tag claims in `docs/ROLLOUT.md` and
+  `docs/RELEASE.md` are corrected: `v1.0.0-rc.1` lags main by 9 commits and
+  a fresh tag is a decision for the product owner, not a fact to assert.
+  Two guided skills are fixed to match what they actually do: `adopt` now
+  runs its own command instead of describing one, and `next` explains its
+  recommendation in plain words before the command. A new beginner
+  explainer page ships at `docs/explainer/index.html`, a single
+  self-contained file held by a new guard, `TestExplainerSelfContained`,
+  that proves it carries no external reference and no em or en dash. The
+  program ledger gains three work items (`BR-0201`, `BR-0301`, `BR-0310`)
+  alongside `BR-0000`, each recording what shipped this train and what is
+  still open by name. Held by `python3 tools/test_sbe_book.py` and a dash
+  scan over every file this entry touches.
 
 - `sbe impact --strict` no longer fails a run over pure absence. A NO-DATA
   verdict whose derived answers are all at their lowest values (a docs, data or

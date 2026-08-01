@@ -36,9 +36,11 @@ claude plugin validate /path/to/BrotherSBE
 ```
 
 That must exit cleanly before you install anything. Then either add the repository as a
-marketplace source and install from it, or point a session at the directory with
-`--plugin-dir`. Team distribution through an internal marketplace entry pinned to a release is
-a later step and is not claimed as available yet.
+marketplace source (`claude plugin marketplace add khalilmaaouni/BrotherSBE`, then
+`claude plugin install brothersbe@brothersbe`), which is the persistent install, or point a
+session at the directory with `--plugin-dir`, which loads it for that session only. The public
+repository itself is the marketplace source today, verified working; a signed release pinned in
+a directory listing is still ahead, see [docs/ROLLOUT.md](ROLLOUT.md).
 
 ## If you already installed the old way
 

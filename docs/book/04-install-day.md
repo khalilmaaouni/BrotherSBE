@@ -35,7 +35,7 @@ sh install.sh --dry-run
 would: check git is on PATH
 would: check python3 is on PATH and is version 3.9 or newer
 would: check claude is on PATH (the Claude Code CLI)
-would: install the brothersbe plugin: claude plugin marketplace add https://github.com/khalilmaaouni/BrotherSBE.git then claude plugin install brothersbe@brothersbe, if tag v1.0.0-rc.1 is published on https://github.com/khalilmaaouni/BrotherSBE.git; otherwise take the clone fallback (git clone https://github.com/khalilmaaouni/BrotherSBE.git /Users/khalil.maaouni/.claude/skills/brothersbe, or update it if it is already there, then claude plugin marketplace add /Users/khalil.maaouni/.claude/skills/brothersbe, then claude plugin install brothersbe@brothersbe)
+would: install the brothersbe plugin: claude plugin marketplace add https://github.com/khalilmaaouni/BrotherSBE.git then claude plugin install brothersbe@brothersbe, if tag v1.0.0-rc.2 is published on https://github.com/khalilmaaouni/BrotherSBE.git; otherwise take the clone fallback (git clone https://github.com/khalilmaaouni/BrotherSBE.git /Users/khalil.maaouni/.claude/skills/brothersbe, or update it if it is already there, then claude plugin marketplace add /Users/khalil.maaouni/.claude/skills/brothersbe, then claude plugin install brothersbe@brothersbe)
 would: apply the team profile with python3 bin/sbe init . --apply, reading .sbe/team-profile.json for dossierRoot, vaultPathPattern, ci, codeGuideDepth, and schemaVersion
 would: run bin/sbe doctor and confirm it agrees before printing the PASS line
 install: dry run, nothing written.

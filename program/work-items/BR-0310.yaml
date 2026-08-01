@@ -1,0 +1,31 @@
+id: BR-0310
+title: Beginner explainer page
+why: >
+  A beginner arriving at the product needs a plain-language explanation of
+  what it is and why it matters before the engineering reference. This item
+  ships that page as a single self-contained file, guarded by a test so it
+  cannot silently grow an external dependency or a stray dash.
+owner: product-engineer
+reviewer: independent-reviewer
+status: done
+wave: guided-experience
+depends_on:
+  - BR-0000
+spec: docs/specs/2026-07-31-guided-layer.md
+acceptance:
+  - docs/explainer/index.html exists as one self-contained HTML page
+  - TestExplainerSelfContained proves the page has no external references
+  - the same test proves the page carries no em or en dashes
+  - python3 tools/test_sbe_book.py OK
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: 2026-08-01
+completed_at: 2026-08-01
+evidence:
+  - "docs/explainer/index.html added as a single self-contained HTML page"
+  - "TestExplainerSelfContained added, proving self-containment and the
+    dash rules"
+  - "python3 tools/test_sbe_book.py printed: OK"
+risks: []
+alerts: []

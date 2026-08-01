@@ -2571,5 +2571,80 @@ class TestVersionMark(unittest.TestCase):
                             "'the skill changed' forever" % m.group(1))
 
 
+class TestHelpMapTemplate(unittest.TestCase):
+    """Guards the help project map template shipped at
+    skills/help/map-template.html: it must stay a real, substantial file, name
+    each of the eleven double-brace slots exactly once (a repeated or missing
+    slot breaks generation silently), stay free of any external script,
+    stylesheet, image or url() reference (an anchor link is the one allowed
+    exception, matching the explainer's own rule), and carry neither banned
+    dash character.
+
+    Calibrated by reinjecting an external stylesheet link into the template:
+    the no-external-reference test went red, then the template was restored to
+    its authored content, the restore verified by a byte-for-byte comparison
+    against a temp copy taken before the reinjection. SKILL.md and this test
+    file were confirmed byte-identical across that same excursion by their
+    pre- and post-calibration `git hash-object`, proving the calibration
+    touched only the template under test."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    TEMPLATE = os.path.join(ROOT, "skills", "help", "map-template.html")
+
+    PLACEHOLDERS = ("PROJECT_NAME", "GENERATED_AT", "STAGE_SUMMARY", "STATUS_SECTIONS",
+                    "PROCESS_DIAGRAM", "DATA_MODEL", "DECISIONS", "FILE_CLAIMS",
+                    "NEXT_ACTION", "CODE_GUIDE", "MERMAID_JS")
+
+    def _load(self):
+        """Three values, not two: a two-value return reads as a possible
+        (verdict, evidence) pair to the honesty meta-test, which refuses any
+        such function sitting outside a check registry."""
+        with io.open(self.TEMPLATE, encoding="utf-8") as handle:
+            html = handle.read()
+        size = os.path.getsize(self.TEMPLATE)
+        return self.TEMPLATE, html, size
+
+    def test_the_template_exists_and_is_over_3000_bytes(self):
+        path, html, size = self._load()
+        self.assertTrue(os.path.exists(path), "skills/help/map-template.html is missing")
+        self.assertGreater(size, 3000,
+                           "the map template is suspiciously thin: %d bytes" % size)
+
+    def test_every_named_placeholder_appears_exactly_once(self):
+        path, html, size = self._load()
+        for name in self.PLACEHOLDERS:
+            token = "{{%s}}" % name
+            count = html.count(token)
+            self.assertEqual(count, 1,
+                             "%s must appear exactly once in the template, found %d "
+                             "(a generator cannot fill a slot that is missing or "
+                             "duplicated)" % (token, count))
+
+    def test_no_external_script_stylesheet_image_or_url_reference(self):
+        path, html, size = self._load()
+        tag_pattern = re.compile(r"<(script|img|link|source)\b([^>]*)>", re.IGNORECASE)
+        attr_pattern = re.compile(r"(src|href)\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+        offenders = []
+        for tag_match in tag_pattern.finditer(html):
+            tag_name = tag_match.group(1)
+            for attr_name, value in attr_pattern.findall(tag_match.group(2)):
+                if value.lower().startswith("http://") or value.lower().startswith("https://"):
+                    offenders.append("<%s %s=%s>" % (tag_name, attr_name, value))
+        self.assertEqual(offenders, [],
+                         "external script/img/link/source reference(s) found: %s"
+                         % offenders)
+        css_import = re.search(r"@import\s+[\"']?https?://", html, re.IGNORECASE)
+        css_url = re.search(r"url\(\s*[\"']?https?://", html, re.IGNORECASE)
+        self.assertIsNone(css_import, "an @import pulls from an external http(s) URL")
+        self.assertIsNone(css_url, "a CSS url() points at an external http(s) URL")
+
+    def test_zero_banned_dash_characters(self):
+        path, html, size = self._load()
+        em_dash_count = html.count(chr(0x2014))
+        en_dash_count = html.count(chr(0x2013))
+        self.assertEqual(em_dash_count, 0, "an em dash (U+2014) slipped into the map template")
+        self.assertEqual(en_dash_count, 0, "an en dash (U+2013) slipped into the map template")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

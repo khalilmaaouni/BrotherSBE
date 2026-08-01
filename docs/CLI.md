@@ -85,7 +85,7 @@ so a consumer can tell which contract it is reading:
 ```json
 {
   "tool": "sbe",
-  "toolVersion": "1.0.0-rc.1",
+  "toolVersion": "1.0.0-rc.2",
   "schemaVersion": "1.0",
   "command": "doctor",
   "result": "PASS",

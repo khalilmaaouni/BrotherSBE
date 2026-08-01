@@ -16,7 +16,15 @@ which release gates.
 - `work-items/`: one YAML file per work item, each with owner, reviewer,
   reason, acceptance criteria, status, and evidence. `BR-0000.yaml` records
   the guided layer slice that created this ledger, so the ledger starts
-  truthful rather than aspirational.
+  truthful rather than aspirational. Work items on file so far (status
+  taken from each file, see the file for evidence):
+  - `BR-0000`: guided layer vertical slice (start, next, status, help,
+    README opening, program ledger). Status: done.
+  - `BR-0201`: guided project navigator, Claude slice. Status: partially
+    done; see the file for what shipped and what has not.
+  - `BR-0301`: install path, marketplace primary. Status: partially done;
+    see the file for what shipped and what has not.
+  - `BR-0310`: beginner explainer page. Status: done.
 
 ## What updates it
 
