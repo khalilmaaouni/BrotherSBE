@@ -11,7 +11,7 @@ claude plugin marketplace add khalilmaaouni/BrotherSBE
 claude plugin install brothersbe@brothersbe
 ```
 
-That is the persistent install: it stays across sessions, and the pair was executed end to end against this public repository on 2026-08-01. Update it with `claude plugin update brothersbe` (restart to apply) and remove it with `claude plugin uninstall brothersbe`.
+That is the persistent install: it stays across sessions, and the pair was executed end to end against this public repository on 2026-08-01. Update it with `claude plugin update brothersbe` (restart to apply) and remove it with `claude plugin uninstall brothersbe`. Once installed, every session start checks your copy against the version it already has on disk and tells you plainly when something changed, with no network call made to do it.
 
 Prefer to inspect the package before you trust it? Clone and validate first, then load it for one session only:
 

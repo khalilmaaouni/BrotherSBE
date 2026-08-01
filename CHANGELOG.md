@@ -8,6 +8,23 @@ checklist's own rules.
 
 ## 1.0.0-rc.1 (unreleased)
 
+- The explainer grew from a leaflet into a field guide, and help learned to
+  draw a map. `docs/explainer/index.html` is now twelve sections behind a
+  table of contents: a ninety second story, the whole journey end to end
+  with real excerpts lifted from the replay-tested book and labeled as real,
+  loop advice, an honest good-at and not-good-at table, six use cases, three
+  follow-along tutorials on the book's estate, and a co-writing section for
+  developers; its self-containment guard is unchanged and still bites. The
+  help skill gained a build-the-map flow with a shipped template
+  (`skills/help/map-template.html`, eleven slots, honest absent-sentences,
+  held by `TestHelpMapTemplate`); filling it writes an offline
+  `brothersbe-map.html` into the user's project. The README names the
+  session-start version-change announcement beside the update command, and
+  `program/DIRECTORY-SUBMISSION.md` records the verified truth about
+  listing: the official directory is curated with no application process,
+  the community marketplace takes submissions through a web form, packet
+  prepared for the product owner's click.
+
 - Install docs now teach only the paths that were run, not the paths that
   seemed plausible. README, `docs/SETUP.md`, `docs/ROLLOUT.md`, and
   `docs/RELEASE.md` name the marketplace add plus install pair as the

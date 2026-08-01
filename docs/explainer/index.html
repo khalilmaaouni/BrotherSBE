@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BrotherSBE, explained for beginners</title>
-<meta name="description" content="A plain-language guide to BrotherSBE: what it is, how to install it, and what it honestly does not do yet.">
+<meta name="description" content="A plain-language guide to BrotherSBE: what it is, how a change actually moves through it, and what it honestly does not do yet.">
 <style>
   /* ---------- Tokens: light palette (default) ---------- */
   :root {
@@ -93,7 +93,7 @@
 
   .page {
     width: 100%;
-    max-width: var(--measure);
+    max-width: 1160px;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
@@ -142,12 +142,60 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    max-width: var(--measure);
   }
 
   header.hero p.subtitle {
     font-size: var(--text-md);
     color: var(--color-muted);
     max-width: var(--measure);
+  }
+
+  /* ---------- Layout: table of contents beside the sections above 1100px ---------- */
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    width: 100%;
+  }
+
+  .toc {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+  }
+
+  .toc a {
+    font-size: 0.95em;
+  }
+
+  .sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+
+  @media (min-width: 1100px) {
+    .layout {
+      display: grid;
+      grid-template-columns: 230px 1fr;
+      align-items: start;
+      gap: var(--space-5);
+    }
+    .toc {
+      position: sticky;
+      top: var(--space-3);
+    }
   }
 
   section {
@@ -220,6 +268,20 @@
     .card-grid { grid-template-columns: 1fr; }
   }
 
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 900px) {
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 640px) {
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+
   .card {
     display: flex;
     flex-direction: column;
@@ -234,18 +296,41 @@
     font-size: 0.85em;
   }
 
-  .honest-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+  .stops {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-3);
   }
 
-  @media (max-width: 640px) {
-    .honest-grid { grid-template-columns: 1fr; }
+  .stop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: var(--space-3);
   }
 
-  .refuse-list li::marker {
-    color: var(--color-red);
+  .stop > p, .stop > div {
+    max-width: var(--measure);
+  }
+
+  .tutorial {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .tutorial ol {
+    counter-reset: step;
+  }
+
+  .tutorial ol > li {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-width: var(--measure);
   }
 
   .gap-list li::marker {
@@ -279,175 +364,476 @@
     <p class="eyebrow">A Claude Code plugin</p>
     <h1>BrotherSBE</h1>
     <p class="subtitle">An engineering colleague that designs before it builds and refuses to claim what it did not check.</p>
+    <p class="subtitle">Describe the outcome you want. Follow one action at a time. Get a result that was actually checked, not one it remembers checking.</p>
   </header>
 
-  <section id="what-it-is">
-    <h2>What it is</h2>
-    <p>BrotherSBE runs inside Claude Code, the terminal-based coding assistant that Anthropic makes. You do not learn a new tool or a new syntax. You describe the outcome you want, in ordinary language, the way you would explain it to a colleague sitting next to you.</p>
-    <p>From there, BrotherSBE sizes the risk (how much could go wrong if the change is made carelessly), asks for design work in proportion to that risk (a one-line fix gets none, a change to something central gets a real plan first), and then proves the result with checks that actually ran on your machine, not ones it remembers running from before. Where it could not check something, it says <strong>NO-DATA</strong>, meaning no evidence either way, instead of quietly assuming the best.</p>
-  </section>
+  <div class="layout">
 
-  <section id="install">
-    <h2>Install in two commands</h2>
-    <div class="scroll-x">
-      <pre><code>claude plugin marketplace add khalilmaaouni/BrotherSBE
+    <nav class="toc" aria-label="Table of contents">
+      <p class="eyebrow">On this page</p>
+      <ul>
+        <li><a href="#what-it-is">What it is</a></li>
+        <li><a href="#story">The story in ninety seconds</a></li>
+        <li><a href="#install">Install in two commands</a></li>
+        <li><a href="#first-project">Your first project</a></li>
+        <li><a href="#journey">The whole journey, end to end</a></li>
+        <li><a href="#loops">Riding the loops</a></li>
+        <li><a href="#good-and-not">Good at, and honestly not</a></li>
+        <li><a href="#use-cases">Use cases</a></li>
+        <li><a href="#tutorials">Three tutorials</a></li>
+        <li><a href="#co-writing">Co-writing code with it</a></li>
+        <li><a href="#not-there-yet">Honestly not there yet</a></li>
+        <li><a href="#go-deeper">Go deeper</a></li>
+      </ul>
+    </nav>
+
+    <div class="sections">
+
+      <section id="what-it-is">
+        <p class="eyebrow">The basics</p>
+        <h2>What it is</h2>
+        <p>BrotherSBE runs inside Claude Code, the terminal based coding assistant that Anthropic makes. You do not learn a new tool or a new syntax. You describe the outcome you want, in ordinary language, the way you would explain it to a colleague sitting next to you.</p>
+        <p>From there, BrotherSBE sizes the risk of the change, asks for design work in proportion to that risk (a one line fix gets none, a change to something central gets a real plan first), and proves the result with checks that actually ran on your machine, not ones it remembers running from before. Where it could not check something, it says <strong>NO-DATA</strong>, meaning no evidence either way, instead of quietly assuming the best.</p>
+      </section>
+
+      <section id="story">
+        <p class="eyebrow">Ninety seconds</p>
+        <h2>The story in ninety seconds</h2>
+        <p>The book's running example is small on purpose: "a tiny nightly pipeline plus a read API, real enough to run and small enough to hold in one look" (from <code>docs/book/estate/README.md</code>). Run <code>python3 pipeline.py --date 2026-07-01</code> and it prints three lines. The last one says wrote 3 rows to daily_totals.</p>
+        <p>Open the file it just wrote and count what is actually there. Two rows: one for EU, one for US. Not three.</p>
+        <p>Nobody built the pipeline to lie. The printed line and the file on disk come from the same run, seconds apart, and they still disagree. That gap is the whole reason BrotherSBE exists: absent evidence is NO-DATA, and NO-DATA is never PASS.</p>
+        <p>Nine chapters later, the fix is one changed line in <code>pipeline.py</code>, landed only after a new test watched the old code fail first, then watched the fix pass. Section 5 below (<a href="#journey">the whole journey</a>) walks that same fix stop by stop, with the real commands and the real output. Tutorial 1 (<a href="#tutorials">below</a>) lets you run every step of it yourself.</p>
+      </section>
+
+      <section id="install">
+        <p class="eyebrow">Getting it running</p>
+        <h2>Install in two commands</h2>
+        <div class="scroll-x">
+          <pre><code>claude plugin marketplace add khalilmaaouni/BrotherSBE
 claude plugin install brothersbe@brothersbe</code></pre>
+        </div>
+        <p><span class="verified">Verified working on <span class="nums">2026-08-01</span>.</span> To update later, run <code>claude plugin update brothersbe</code>.</p>
+        <p class="muted">Prefer to look before you trust? Clone the repository and run <code>claude plugin validate BrotherSBE</code> first.</p>
+
+        <h3>Keeping it fresh</h3>
+        <p>Two commands cover it, and they do two different things. <code>claude plugin update brothersbe</code> pulls the newest release of the plugin itself; restart Claude Code for it to apply. <code>claude plugin marketplace update brothersbe</code> refreshes where that release comes from, which is a separate step from updating the plugin.</p>
+        <p>You should not have to remember to check by hand. BrotherSBE announces at the start of a session when the installed version has changed since the last one you ran, so a stale install gets named out loud instead of silently carried forward.</p>
+        <p class="muted">A submission packet for the community plugin marketplace is prepared but not yet sent; the official directory itself is curated by Anthropic with no application process. The two commands above are the real install path today, not a placeholder for one still to come.</p>
+      </section>
+
+      <section id="first-project">
+        <p class="eyebrow">Your first move</p>
+        <h2>Your first project</h2>
+        <p>Open Claude Code in any project and type:</p>
+        <p><code class="code-chip">/brothersbe:start</code></p>
+        <p>That one command is the only one you truly need. It is part of a guided set of four:</p>
+        <div class="card-grid">
+          <article class="card">
+            <h3><code>/brothersbe:start</code></h3>
+            <p>Begin or resume. It finds where you are, so you never have to hunt for it yourself.</p>
+          </article>
+          <article class="card">
+            <h3><code>/brothersbe:next</code></h3>
+            <p>Exactly one recommended action, and why it is the right one right now.</p>
+          </article>
+          <article class="card">
+            <h3><code>/brothersbe:status</code></h3>
+            <p>Where things stand, in plain words, with nothing left to decode.</p>
+          </article>
+          <article class="card">
+            <h3><code>/brothersbe:help</code></h3>
+            <p>The whole map, for when you want to see everything at once.</p>
+          </article>
+        </div>
+        <p class="muted">You never have to memorize the machinery. Just take one action at a time.</p>
+      </section>
+
+      <section id="journey">
+        <p class="eyebrow">End to end</p>
+        <h2>The whole journey, end to end</h2>
+        <p>Every change, big or small, passes through the same six stops. What follows is the estate fix from the story above, walked through stop by stop, each one with the real command and a real, labeled excerpt of what it printed.</p>
+        <div class="scroll-x">
+          <svg class="diagram-svg" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lifecycle diagram: describe the outcome, size the risk, design in proportion, build against the design, prove with real checks, a person decides the merge.">
+            <style>
+              .node-box { fill: none; stroke: var(--color-accent); stroke-width: 2; }
+              .node-num { fill: var(--color-accent); }
+              .node-num-text { fill: var(--color-page); font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; text-anchor: middle; }
+              .node-label { fill: var(--color-ink); font-family: system-ui, sans-serif; font-size: 14px; text-anchor: middle; }
+              .arrow { stroke: var(--color-muted); stroke-width: 2; fill: none; }
+              .arrow-head { fill: var(--color-muted); }
+            </style>
+
+            <!-- boxes: x=0,154,308,462,616,770 width=130 height=90 y=65 -->
+            <g>
+              <rect class="node-box" x="0" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="18" cy="65" r="12"></circle>
+              <text class="node-num-text" x="18" y="70">1</text>
+              <text class="node-label" x="65" y="108"><tspan x="65" dy="0">Describe</tspan><tspan x="65" dy="18">the outcome</tspan></text>
+            </g>
+
+            <g>
+              <rect class="node-box" x="154" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="172" cy="65" r="12"></circle>
+              <text class="node-num-text" x="172" y="70">2</text>
+              <text class="node-label" x="219" y="108"><tspan x="219" dy="0">Size the</tspan><tspan x="219" dy="18">risk</tspan></text>
+            </g>
+
+            <g>
+              <rect class="node-box" x="308" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="326" cy="65" r="12"></circle>
+              <text class="node-num-text" x="326" y="70">3</text>
+              <text class="node-label" x="373" y="108"><tspan x="373" dy="0">Design in</tspan><tspan x="373" dy="18">proportion</tspan></text>
+            </g>
+
+            <g>
+              <rect class="node-box" x="462" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="480" cy="65" r="12"></circle>
+              <text class="node-num-text" x="480" y="70">4</text>
+              <text class="node-label" x="527" y="108"><tspan x="527" dy="0">Build against</tspan><tspan x="527" dy="18">the design</tspan></text>
+            </g>
+
+            <g>
+              <rect class="node-box" x="616" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="634" cy="65" r="12"></circle>
+              <text class="node-num-text" x="634" y="70">5</text>
+              <text class="node-label" x="681" y="108"><tspan x="681" dy="0">Prove with</tspan><tspan x="681" dy="18">real checks</tspan></text>
+            </g>
+
+            <g>
+              <rect class="node-box" x="770" y="65" width="130" height="90" rx="10"></rect>
+              <circle class="node-num" cx="788" cy="65" r="12"></circle>
+              <text class="node-num-text" x="788" y="70">6</text>
+              <text class="node-label" x="835" y="100"><tspan x="835" dy="0">A person</tspan><tspan x="835" dy="18">decides the</tspan><tspan x="835" dy="18">merge</tspan></text>
+            </g>
+
+            <!-- arrows between boxes, y=110 -->
+            <g class="arrow">
+              <line x1="130" y1="110" x2="150" y2="110"></line>
+              <line x1="284" y1="110" x2="304" y2="110"></line>
+              <line x1="438" y1="110" x2="458" y2="110"></line>
+              <line x1="592" y1="110" x2="612" y2="110"></line>
+              <line x1="746" y1="110" x2="766" y2="110"></line>
+            </g>
+            <g class="arrow-head">
+              <polygon points="150,110 141,105 141,115"></polygon>
+              <polygon points="304,110 295,105 295,115"></polygon>
+              <polygon points="458,110 449,105 449,115"></polygon>
+              <polygon points="612,110 603,105 603,115"></polygon>
+              <polygon points="766,110 757,105 757,115"></polygon>
+            </g>
+          </svg>
+        </div>
+
+        <div class="stops">
+          <article class="stop" id="stop-1">
+            <h3>1. Describe and size</h3>
+            <p class="muted">Real run, from <code>docs/book/05-the-first-loop.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>printf 'y\nn\ny\nn\nsome\n' | bin/sbe intake /tmp/sbe-book-ch05-dossier</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>tier T2 (artifacts required: 01, 02, 03, 05, 06, 07) written to /tmp/sbe-book-ch05-dossier/00-intake.json</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> five yes, no, and count answers become one tier, mechanically. A decision table, not a judgment call.</p>
+          </article>
+
+          <article class="stop" id="stop-2">
+            <h3>2. Design in proportion</h3>
+            <p class="muted">Real run, from <code>docs/book/05-the-first-loop.md</code> and <code>docs/book/09-loops-that-converge.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>bin/sbe design /tmp/sbe-book-ch05-dossier --strict</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>artifacts  FAIL     tier T2 requires 01, 02, 03, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; examined . under /tmp/sbe-book-ch05-dossier [severity: gate]</code></pre>
+            </div>
+            <p class="muted">Contrast: a T1 dossier that owes one file and has it.</p>
+            <div class="scroll-x">
+              <pre><code>artifacts  PASS     tier T1: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names; except 01-purpose.md, which this dossier has nothing else to be coherent with, so that was not checked; examined . under /tmp/sbe-book-ch09-dossier [severity: gate]</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> the same command FAILs a T2 dossier that owes six files and has none of them, and PASSes a T1 dossier that owes one and has it. The tier decides how much design is owed; nobody negotiates it by hand.</p>
+          </article>
+
+          <article class="stop" id="stop-3">
+            <h3>3. Plan and build</h3>
+            <p class="muted">Real run, from <code>docs/book/07-the-task-registry.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>python3 "$ROOT/bin/sbe" task open --id fix-totals --agent engineer-a --role writer --base "$BASE" --verify "python3 pipeline.py --date 2026-07-01" --owns pipeline.py --cwd .</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>sbe task open: fix-totals is open. engineer-a (writer) owns 1 path(s): pipeline.py. Base 0b137953313d. Close runs the diff postcondition against exactly this declaration.</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>python3 "$ROOT/bin/sbe" task close fix-totals --cwd .</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>sbe task close fix-totals: PASS. 1 changed path(s), all inside the declaration. Closed clean.</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> the close is a diff check against the declaration, not a claim. Two layers exist today: <code>sbe task open</code> and <code>sbe task close</code> (shown above, from the book) fence a writer to declared paths, and <code>sbe work start</code> and <code>sbe work finish</code> sit on top for a whole plan task, giving it its own branch and separate draft workspace and refusing to finish without a receipt bound to the exact commit. The book predates the work pair, which is why this real excerpt shows the task layer.</p>
+          </article>
+
+          <article class="stop" id="stop-4">
+            <h3>4. Prove</h3>
+            <p class="muted">Real run, from <code>docs/book/06-evidence-not-vibes.md</code> and <code>docs/book/08-gates-and-decisions.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>bin/sbe evidence run --out /tmp/sbe-book-ch06/test-receipt.json --covers pipeline.py --covers test_estate.py --cwd docs/book/estate -- python3 test_estate.py</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>sbe evidence run: receipt written to /tmp/sbe-book-ch06/test-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in &lt;N.NNNs&gt;, over 2 covered file(s) from explicit --covers. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>python3 "$ROOT/bin/sbe" gate approval .</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>approval  FAIL     APPROVAL (of 1 APPROVAL file(s) read) declares 'Approved by Dana Reviewer', but approval is a typed name with no signature or review id; a name in a text field is not a control (add a signed Approved-by trailer or a Reviewed-in review id) [severity: gate]</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> the receipt only proves a command ran. The gate separately proves a second human looked, and a typed name in a file is refused by name, every time.</p>
+          </article>
+
+          <article class="stop" id="stop-5">
+            <h3>5. Review and converge</h3>
+            <p class="muted">Real run, from <code>docs/book/09-loops-that-converge.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>python3 test_estate.py TestEstate.test_the_wrote_line_matches_the_rows_actually_on_disk</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>test_the_wrote_line_matches_the_rows_actually_on_disk (__main__.TestEstate) ... FAIL
+AssertionError: 3 != 2 : the pipeline claimed 3 row(s) but wrote 2</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> this failure is the loop converging correctly. A test that has never been watched failing is a test nobody has proven tests anything. The book's own stopping rule: once the same refusal repeats twice for the same reason, stop building and go back to probe. A third identical try will not do what the first two could not.</p>
+          </article>
+
+          <article class="stop" id="stop-6">
+            <h3>6. Human merge</h3>
+            <p class="muted">Real run, from <code>docs/book/11-coordinating-humans-and-agents.md</code>.</p>
+            <div class="scroll-x">
+              <pre><code>python3 "$ROOT/bin/sbe" task close review-the-bundle --cwd . --force --who reviewer-1 --why "agent-1 receipt verified, row-count message still off by one, tracked by hand until sbe note ships"</code></pre>
+            </div>
+            <div class="scroll-x">
+              <pre><code>sbe task close review-the-bundle: FORCED by reviewer-1 (agent-1 receipt verified, row-count message still off by one, tracked by hand until sbe note ships). The record carries the disposition and the violation list; this close is never read as clean.</code></pre>
+            </div>
+            <p><strong>What to notice:</strong> a human decision that overrides the fence is recorded as FORCED, never PASS, forever. The tool never fabricates consent. Honestly: <code>sbe pr verify &lt;number&gt; --repo owner/name</code> is the real command for live GitHub pull request evidence, but no chapter in the book runs it against a live pull request with captured output, so this stop shows the reviewer's actual bundle workflow rather than an invented one.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="loops">
+        <p class="eyebrow">Practical advice</p>
+        <h2>Riding the loops</h2>
+        <p>A few habits make the difference between fighting BrotherSBE and working with it.</p>
+        <ul>
+          <li><strong>Start or adopt.</strong> Use <code>/brothersbe:start</code> on a project with no BrotherSBE history yet. Use <code>/brothersbe:adopt</code> when the project already has code and habits that BrotherSBE did not set.</li>
+          <li><strong>Tiers only move up.</strong> A tier is computed from a small set of answers, not chosen. You can argue for a higher tier than the one it computed; you cannot argue your way to a lower one.</li>
+          <li><strong>Two failed tries, then stop.</strong> A verify that comes back with the same refusal twice in a row, for the same reason, means stop building and go back to design. A third identical attempt fixes nothing the first two did not already rule out.</li>
+          <li><strong>NO-DATA is not a verdict.</strong> It means no evidence either way. It is never quietly treated as a pass, and it is never quietly treated as a block either: it gets named, out loud, every time.</li>
+          <li><strong>Receipts come from running commands.</strong> A result is recorded because it actually ran on a machine, never because someone typed what they expected it to say.</li>
+          <li><strong>One writer per file, at a time.</strong> A fence declares which paths a task owns while it is open, so two workers never edit the same file underneath each other.</li>
+        </ul>
+      </section>
+
+      <section id="good-and-not">
+        <p class="eyebrow">An honest range</p>
+        <h2>Really good at, honestly not good at</h2>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Really good at</h3>
+            <ul>
+              <li>Backend and data system design, worked out before code gets written.</li>
+              <li>Schema migrations with a rollback rehearsed and checked before the real run.</li>
+              <li>Evidence backed review of changes and pull requests.</li>
+              <li>Catching errors a program silently swallowed instead of surfacing.</li>
+              <li>Keeping a team honest about what was actually checked.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Honestly not good at</h3>
+            <ul class="gap-list">
+              <li>User interface and visual design work.</li>
+              <li>Tiny throwaway scripts, where the ceremony would outweigh the change. T0 exists for exactly this: near zero ceremony.</li>
+              <li>Hosts other than Claude Code, today.</li>
+              <li>Replacing your judgment about what is worth building.</li>
+              <li>Working without a git repository.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="use-cases">
+        <p class="eyebrow">Where it fits</p>
+        <h2>Use cases</h2>
+        <div class="grid-3">
+          <article class="card">
+            <h3>Add an API endpoint safely</h3>
+            <p>A new endpoint touches a contract other code will depend on, so it earns a real tier before any code gets written. Start with the guided command; it asks the questions that decide how much design the change actually needs.</p>
+            <p><code class="code-chip">/brothersbe:start</code></p>
+          </article>
+          <article class="card">
+            <h3>Change a schema with a rollback you rehearsed</h3>
+            <p>A schema change is exactly the kind of move that raises a tier on its own, whatever a first guess claimed. <code>sbe impact</code> reads the real diff and says plainly when the declared tier disagrees with what the change actually touches.</p>
+            <p><code class="code-chip">bin/sbe impact . --base &lt;commit&gt; --intake &lt;dossier&gt;/00-intake.json</code></p>
+          </article>
+          <article class="card">
+            <h3>Investigate a number nobody trusts</h3>
+            <p>Most disputed numbers come down to a claim nobody checked, the same gap the estate pipeline shows in the story above. <code>sbe evidence verify</code> reads a receipt and says plainly whether the working tree behind it was ever in a state anyone else could reproduce.</p>
+            <p><code class="code-chip">bin/sbe evidence verify &lt;receipt&gt;.json --cwd .</code></p>
+          </article>
+          <article class="card">
+            <h3>Review a pull request before release</h3>
+            <p>A review that only reads the diff is a review that trusts the author's memory of what ran. <code>sbe pr verify</code> is built to check a live pull request's evidence instead of taking the description's word for it.</p>
+            <p><code class="code-chip">sbe pr verify &lt;number&gt; --repo owner/name</code></p>
+          </article>
+          <article class="card">
+            <h3>Adopt a legacy repository</h3>
+            <p>A repository with years of history and no BrotherSBE habits needs a different first step than a blank one. <code>/brothersbe:adopt</code> reads what is already there before proposing anything, instead of assuming a clean slate.</p>
+            <p><code class="code-chip">/brothersbe:adopt</code></p>
+          </article>
+          <article class="card">
+            <h3>Keep a team's status honest</h3>
+            <p>A status update drifts from what actually happened the moment someone summarizes it from memory. <code>/brothersbe:status</code> reads the real state, the open fences, and the open decisions, and says so in plain words.</p>
+            <p><code class="code-chip">/brothersbe:status</code></p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tutorials">
+        <p class="eyebrow">Follow along</p>
+        <h2>Three tutorials</h2>
+        <p>All three run inside a clone of this repository, against the same worked estate example from the story above. Every command below is real; run it and expect output shaped like what is shown.</p>
+
+        <div class="tutorial">
+          <h3>1. Your first verified change</h3>
+          <p class="muted">T0 to T1 on the estate pipeline. Source: <code>docs/book/09-loops-that-converge.md</code>.</p>
+          <ol>
+            <li>
+              <p>Intake at T1:</p>
+              <div class="scroll-x"><pre><code>printf 'n\nn\ny\nn\nsome\n' | bin/sbe intake /tmp/sbe-book-ch09-dossier</code></pre></div>
+              <div class="scroll-x"><pre><code>tier T1 (artifacts required: 01) written to /tmp/sbe-book-ch09-dossier/00-intake.json</code></pre></div>
+            </li>
+            <li>
+              <p>Write <code>01-purpose.md</code>, then check the dossier:</p>
+              <div class="scroll-x"><pre><code>bin/sbe design /tmp/sbe-book-ch09-dossier --strict</code></pre></div>
+              <div class="scroll-x"><pre><code>artifacts  PASS     tier T1: every required artifact present, carrying content, and naming subject matter the rest of this dossier also names</code></pre></div>
+            </li>
+            <li>
+              <p>Add the new test, and run it against the old code first, to prove it can fail:</p>
+              <div class="scroll-x"><pre><code>python3 test_estate.py TestEstate.test_the_wrote_line_matches_the_rows_actually_on_disk</code></pre></div>
+              <div class="scroll-x"><pre><code>AssertionError: 3 != 2 : the pipeline claimed 3 row(s) but wrote 2</code></pre></div>
+            </li>
+            <li>
+              <p>Apply the fix in <code>pipeline.py</code>, changing <code>"wrote %d rows to daily_totals\n" % (len(rows) + 1)</code> to <code>% len(rows)</code>, then run the pipeline:</p>
+              <div class="scroll-x"><pre><code>python3 pipeline.py --date 2026-07-01</code></pre></div>
+              <div class="scroll-x"><pre><code>read 3 orders from orders.csv
+aggregated 2 region(s) for 2026-07-01
+wrote 2 rows to daily_totals</code></pre></div>
+            </li>
+            <li>
+              <p>Run the full suite:</p>
+              <div class="scroll-x"><pre><code>python3 test_estate.py</code></pre></div>
+              <div class="scroll-x"><pre><code>test_the_wrote_line_matches_the_rows_actually_on_disk (__main__.TestEstate) ... ok
+Ran 5 tests in &lt;N.NNNs&gt;
+
+OK</code></pre></div>
+            </li>
+            <li>
+              <p>Fence and land: open the task, run evidence, close clean, then commit.</p>
+              <div class="scroll-x"><pre><code>python3 "$ROOT/bin/sbe" task close fix-row-count-message --cwd .</code></pre></div>
+              <div class="scroll-x"><pre><code>sbe task close fix-row-count-message: PASS. 2 changed path(s), all inside the declaration. Closed clean.</code></pre></div>
+            </li>
+          </ol>
+        </div>
+
+        <div class="tutorial">
+          <h3>2. A risky migration done honestly</h3>
+          <p class="muted">Tier rises, gates demand rehearsal evidence. Source: <code>docs/book/12-cookbook.md</code>.</p>
+          <ol>
+            <li>
+              <p>Declare T1 first, on a change that is actually bigger. The real diff disagrees:</p>
+              <div class="scroll-x"><pre><code>python3 "$ROOT/bin/sbe" impact . --base "$BASE" --intake /tmp/sbe-book-ch12-schema-dossier/00-intake.json</code></pre></div>
+              <div class="scroll-x"><pre><code>proposed tier T3 (a floor, not a ceiling), declared tier T1
+verdict: REVIEW-REQUIRED</code></pre></div>
+            </li>
+            <li>
+              <p>Re-answer honestly. The tier rises to T3, and a re-run of <code>sbe impact</code> now agrees:</p>
+              <div class="scroll-x"><pre><code>proposed tier T3 (a floor, not a ceiling), declared tier T3
+verdict: PASS</code></pre></div>
+            </li>
+            <li>
+              <p>Before the real migration runs, write a rehearsal receipt:</p>
+              <div class="scroll-x"><pre><code>python3 "$ROOT/bin/sbe" evidence run --out /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json --covers backfill_partner_id.py --cwd . -- python3 backfill_partner_id.py --rehearse</code></pre></div>
+              <div class="scroll-x"><pre><code>REHEARSAL: would add partner_id to 3 row(s), nothing written</code></pre></div>
+            </li>
+            <li>
+              <p>Verify the rehearsal receipt before trusting it. A dirty working tree earns NO-DATA, not a pass, even though the rehearsal itself ran cleanly.</p>
+            </li>
+            <li>
+              <p>Only a clean tree under real continuous integration, with a minted run id, ever clears LOCAL-ADVISORY into the higher trust level. Neither receipt here does that on its own.</p>
+            </li>
+          </ol>
+        </div>
+
+        <div class="tutorial">
+          <h3>3. Reviewing a pull request with evidence</h3>
+          <p class="muted">Source: <code>docs/book/11-coordinating-humans-and-agents.md</code>.</p>
+          <ol>
+            <li>
+              <p>A reviewer tries to own the evidence store it is about to review. Refused:</p>
+              <div class="scroll-x"><pre><code>sbe task open: refused. A reviewer task may not own '.sbe/evidence': it overlaps the evidence store .sbe/evidence it would review. A reviewer who writes the receipts it reviews is the defect reviewer separation exists to stop.</code></pre></div>
+            </li>
+            <li>
+              <p>The reviewer opens correctly instead, owning nothing:</p>
+              <div class="scroll-x"><pre><code>sbe task open: review-the-bundle is open. reviewer-1 (reviewer) owns 0 path(s): (none).</code></pre></div>
+            </li>
+            <li>
+              <p>The reviewer checks the agent's receipt, not the agent's word for it:</p>
+              <div class="scroll-x"><pre><code>python3 "$ROOT/bin/sbe" evidence verify /tmp/sbe-book-ch11-receipts/agent-1-receipt.json --cwd .</code></pre></div>
+              <div class="scroll-x"><pre><code>NO-DATA  /tmp/sbe-book-ch11-receipts/agent-1-receipt.json
+  the working tree was dirty or unreadable when this ran (2 uncommitted path(s)), so the receipt covers a state that was never committed and nobody else can reproduce. That is advisory, and advisory is NO-DATA here rather than a pass</code></pre></div>
+            </li>
+            <li>
+              <p>The reviewer reads <code>sbe status</code> before deciding. It exits 0 and reports nothing blocking, but says nothing about the row-count catch either, because nothing there wrapped that catch in anything the tool reads. <code>sbe status</code> reports what was recorded, in the places it knows to look; it was never built to be a second opinion on the change.</p>
+            </li>
+            <li>
+              <p>The reviewer records a forced, honest close rather than pretending the bundle is clean (the same excerpt as journey stop 6 above): FORCED, never PASS.</p>
+            </li>
+          </ol>
+          <p class="muted">Honestly: <code>sbe pr verify &lt;number&gt; --repo owner/name</code> is the real command for live GitHub pull request evidence. No chapter of the book runs it against a live pull request with captured output, so this tutorial uses the book's actual reviewer and status walkthrough rather than inventing one.</p>
+        </div>
+      </section>
+
+      <section id="co-writing">
+        <p class="eyebrow">For developers</p>
+        <h2>Co-writing code with it</h2>
+        <p>Taking a task yourself starts the same way an agent's task does: <code>bin/sbe task open --id &lt;id&gt; --agent &lt;you&gt; --role writer --base &lt;commit&gt; --verify "&lt;command&gt;" --owns &lt;path&gt; --cwd .</code> opens the fence. Edit only the paths you declared. When you are done, <code>bin/sbe task close &lt;id&gt; --cwd .</code> reads the actual diff and reports PASS only when every changed path was inside the declaration.</p>
+        <p>It refuses to close what it cannot prove because closing does not take your word for what changed. A path you touched but never declared is reported as a VIOLATION, not a warning, and the close itself records that.</p>
+        <p>Where the file claims live: <code>.sbe/tasks.json</code>, the task registry. Every open task, its owner, its role, and its declared paths are read from that one file, not from memory or from a chat history.</p>
+        <p>Two habits keep the code modern and clean. First, small, single purpose modules: if a paragraph cannot say why a module exists, it is trying to be more than one thing. Second, no silently swallowed errors: the companion linter in <code>tools/sbe_score.py</code> names the file, the line, and the pattern, whether that is a bare except, an except that only passes, or a discarded subprocess result, rather than letting a wrong result pass for a right one.</p>
+      </section>
+
+      <section id="not-there-yet">
+        <p class="eyebrow">Said out loud</p>
+        <h2>Honestly not there yet</h2>
+        <p>Some things worth knowing before you rely on this:</p>
+        <ul class="gap-list">
+          <li>Not yet listed in any Claude plugin marketplace beyond this repository. A community marketplace submission packet is prepared and waiting on the product owner's final steps; the official directory is curated by Anthropic with no application process. Installing today still means running the two commands above, not clicking install in a store.</li>
+          <li>Claude Code is the only supported host today. Other AI coding tools are planned but not shipped.</li>
+          <li>Releases are not yet signed, and the current tag (a labeled release point) lags behind the main branch (the most current, actively developed version).</li>
+          <li>No outside beginner studies have been run yet.</li>
+        </ul>
+        <p class="muted">BrotherSBE's own rulebook is what insists these gaps get said out loud this early. It would rather list them than let you find them the hard way.</p>
+      </section>
+
+      <section id="go-deeper">
+        <p class="eyebrow">Keep reading</p>
+        <h2>Go deeper</h2>
+        <ul>
+          <li><a href="../../README.md">The full README</a></li>
+          <li><a href="../guides/05-a-worked-engagement.md">A worked engagement, start to finish</a></li>
+          <li><a href="../CLI.md">The command line reference</a></li>
+          <li><a href="../book/">The illustrated book</a></li>
+        </ul>
+      </section>
+
     </div>
-    <p><span class="verified">Verified working on <span class="nums">2026-08-01</span>.</span> To update later, run <code>claude plugin update brothersbe</code>.</p>
-    <p class="muted">Prefer to look before you trust? Clone the repository and run <code>claude plugin validate BrotherSBE</code> first.</p>
-  </section>
-
-  <section id="first-project">
-    <h2>Your first project</h2>
-    <p>Open Claude Code in any project and type:</p>
-    <p><code class="code-chip">/brothersbe:start</code></p>
-    <p>That one command is the only one you truly need. It is part of a guided set of four:</p>
-    <div class="card-grid">
-      <article class="card">
-        <h3><code>/brothersbe:start</code></h3>
-        <p>Begin or resume. It finds where you are, so you never have to hunt for it yourself.</p>
-      </article>
-      <article class="card">
-        <h3><code>/brothersbe:next</code></h3>
-        <p>Exactly one recommended action, and why it is the right one right now.</p>
-      </article>
-      <article class="card">
-        <h3><code>/brothersbe:status</code></h3>
-        <p>Where things stand, in plain words, with nothing left to decode.</p>
-      </article>
-      <article class="card">
-        <h3><code>/brothersbe:help</code></h3>
-        <p>The whole map, for when you want to see everything at once.</p>
-      </article>
-    </div>
-    <p class="muted">You never have to memorize the machinery. Just take one action at a time.</p>
-  </section>
-
-  <section id="lifecycle">
-    <h2>How a change moves through it</h2>
-    <p>Every change, big or small, passes through the same six stops:</p>
-    <div class="scroll-x">
-      <svg class="diagram-svg" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lifecycle diagram: describe the outcome, size the risk, design in proportion, build against the design, prove with real checks, a person decides the merge.">
-        <style>
-          .node-box { fill: none; stroke: var(--color-accent); stroke-width: 2; }
-          .node-num { fill: var(--color-accent); }
-          .node-num-text { fill: var(--color-page); font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; text-anchor: middle; }
-          .node-label { fill: var(--color-ink); font-family: system-ui, sans-serif; font-size: 14px; text-anchor: middle; }
-          .arrow { stroke: var(--color-muted); stroke-width: 2; fill: none; }
-          .arrow-head { fill: var(--color-muted); }
-        </style>
-
-        <!-- boxes: x=0,154,308,462,616,770 width=130 height=90 y=65 -->
-        <g>
-          <rect class="node-box" x="0" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="18" cy="65" r="12"></circle>
-          <text class="node-num-text" x="18" y="70">1</text>
-          <text class="node-label" x="65" y="108"><tspan x="65" dy="0">Describe</tspan><tspan x="65" dy="18">the outcome</tspan></text>
-        </g>
-
-        <g>
-          <rect class="node-box" x="154" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="172" cy="65" r="12"></circle>
-          <text class="node-num-text" x="172" y="70">2</text>
-          <text class="node-label" x="219" y="108"><tspan x="219" dy="0">Size the</tspan><tspan x="219" dy="18">risk</tspan></text>
-        </g>
-
-        <g>
-          <rect class="node-box" x="308" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="326" cy="65" r="12"></circle>
-          <text class="node-num-text" x="326" y="70">3</text>
-          <text class="node-label" x="373" y="108"><tspan x="373" dy="0">Design in</tspan><tspan x="373" dy="18">proportion</tspan></text>
-        </g>
-
-        <g>
-          <rect class="node-box" x="462" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="480" cy="65" r="12"></circle>
-          <text class="node-num-text" x="480" y="70">4</text>
-          <text class="node-label" x="527" y="108"><tspan x="527" dy="0">Build against</tspan><tspan x="527" dy="18">the design</tspan></text>
-        </g>
-
-        <g>
-          <rect class="node-box" x="616" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="634" cy="65" r="12"></circle>
-          <text class="node-num-text" x="634" y="70">5</text>
-          <text class="node-label" x="681" y="108"><tspan x="681" dy="0">Prove with</tspan><tspan x="681" dy="18">real checks</tspan></text>
-        </g>
-
-        <g>
-          <rect class="node-box" x="770" y="65" width="130" height="90" rx="10"></rect>
-          <circle class="node-num" cx="788" cy="65" r="12"></circle>
-          <text class="node-num-text" x="788" y="70">6</text>
-          <text class="node-label" x="835" y="100"><tspan x="835" dy="0">A person</tspan><tspan x="835" dy="18">decides the</tspan><tspan x="835" dy="18">merge</tspan></text>
-        </g>
-
-        <!-- arrows between boxes, y=110 -->
-        <g class="arrow">
-          <line x1="130" y1="110" x2="150" y2="110"></line>
-          <line x1="284" y1="110" x2="304" y2="110"></line>
-          <line x1="438" y1="110" x2="458" y2="110"></line>
-          <line x1="592" y1="110" x2="612" y2="110"></line>
-          <line x1="746" y1="110" x2="766" y2="110"></line>
-        </g>
-        <g class="arrow-head">
-          <polygon points="150,110 141,105 141,115"></polygon>
-          <polygon points="304,110 295,105 295,115"></polygon>
-          <polygon points="458,110 449,105 449,115"></polygon>
-          <polygon points="612,110 603,105 603,115"></polygon>
-          <polygon points="766,110 757,105 757,115"></polygon>
-        </g>
-      </svg>
-    </div>
-  </section>
-
-  <section id="honest">
-    <h2>What makes it honest</h2>
-    <div class="honest-grid">
-      <article class="card">
-        <h3>NO-DATA is never a pass</h3>
-        <p>Missing evidence gets named out loud, not quietly folded into a passing result.</p>
-      </article>
-      <article class="card">
-        <h3>Evidence comes from running it</h3>
-        <p>Every check is generated by actually running the command, never typed from memory.</p>
-      </article>
-      <article class="card">
-        <h3>Nothing merges itself</h3>
-        <p>A person always holds the final decision to merge a change.</p>
-      </article>
-    </div>
-  </section>
-
-  <section id="wont-do">
-    <h2>What it will not do</h2>
-    <ul class="refuse-list">
-      <li>No auto-merge, ever.</li>
-      <li>No changes to a live production system.</li>
-      <li>No invented numbers standing in for a real result.</li>
-      <li>No green checkmark without a command that ran after the last edit.</li>
-    </ul>
-  </section>
-
-  <section id="not-there-yet">
-    <h2>Honestly not there yet</h2>
-    <p>Some things worth knowing before you rely on this:</p>
-    <ul class="gap-list">
-      <li>Not yet listed in Claude's official plugin directory. Installing means running the two commands above, not clicking install in a store.</li>
-      <li>Claude Code is the only supported host today. Other AI coding tools are planned but not shipped.</li>
-      <li>Releases are not yet signed, and the current tag (a labeled release point) lags behind the main branch (the most current, actively developed version).</li>
-      <li>No outside beginner studies have been run yet.</li>
-    </ul>
-    <p class="muted">BrotherSBE's own rulebook is what insists these gaps get said out loud this early. It would rather list them than let you find them the hard way.</p>
-  </section>
-
-  <section id="go-deeper">
-    <h2>Go deeper</h2>
-    <ul>
-      <li><a href="../../README.md">The full README</a></li>
-      <li><a href="../guides/05-a-worked-engagement.md">A worked engagement, start to finish</a></li>
-      <li><a href="../CLI.md">The command line reference</a></li>
-      <li><a href="../book/">The illustrated book</a></li>
-    </ul>
-  </section>
+  </div>
 
   <footer>
     <p><span class="nums">BrotherSBE 1.0.0-rc.1</span>. Page generated <span class="nums">2026-08-01</span>. MIT license.</p>
