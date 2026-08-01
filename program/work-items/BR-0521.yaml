@@ -27,7 +27,11 @@ acceptance:
   - "webhook subscriptions, if any are added later, are registered narrowly with resource_subtype, action and field filters rather than subscribing broadly"
   - dash scan over every new and edited file returns 0 matches
 estimated_days: null
-token_budget: null
+# cap basis: this repository's own measured writer spend, 150k to 310k per sole-writer
+# stage across waves 1 to 10 and loops A to C (several overran a lower cap; the caps
+# here are set at the observed range, not below it). A stage reaching 75 percent with
+# no passing acceptance test triggers a scope review; 100 percent stops the stage.
+token_budget: 150000
 tokens_used: null
 started_at: null
 completed_at: null

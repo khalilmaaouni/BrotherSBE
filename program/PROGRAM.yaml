@@ -14,7 +14,12 @@ plan_date: 2026-07-31
 
 token_budget:
   planned_total: 6200000
-  hard_ceiling: 7400000
+  hard_ceiling: 7410000
+  derivation: >
+    hard_ceiling is the SUM of the per-item caps in MASTER-PLAN.md sections 10,
+    recomputed mechanically rather than typed: 430000 + 890000 + 1180000 +
+    1130000 + 1200000 + 1240000 + 1340000. It moved from 7400000 on 2026-08-01
+    when wave-4 was found stating 1.18M over items summing to 1.20M.
   note: >
     Estimates, not a promise. The release is evidence gated, not date gated.
     Reaching 75 percent of a task cap without a passing acceptance criterion
@@ -46,7 +51,7 @@ waves:
   - id: wave-4
     name: Cross-host adapters
     work_items: BR-0401 to BR-0409
-    token_budget: 1180000
+    token_budget: 1200000
   - id: wave-5
     name: Team control, governance, and release engineering
     work_items: BR-0501 to BR-0507
