@@ -1,0 +1,89 @@
+test_a_fifo_receipt_is_refused_in_bounded_time_json_mode (__main__.TestAccessAndTimeout) ... ok
+test_a_fifo_receipt_is_refused_in_bounded_time_text_mode (__main__.TestAccessAndTimeout) ... ok
+test_run_with_timeout_over_a_slow_command_produces_no_pass_receipt (__main__.TestAccessAndTimeout)
+The child is killed, no exit code was ever observed, and no receipt ... ok
+test_run_without_timeout_is_unaffected (__main__.TestAccessAndTimeout)
+No default: an ordinary run with no --timeout at all must behave ... ok
+test_a_declared_kind_is_recorded_and_survives_verify (__main__.TestDeclaredCheckKind) ... ok
+test_a_kind_field_that_is_not_a_list_fails_rather_than_being_ignored (__main__.TestDeclaredCheckKind) ... /Users/khalil.maaouni/Documents/BrotherSBE/src/brothersbe/__init__.py:41: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/VERSION' mode='r' encoding='utf-8'>
+  return io.open(path, encoding="utf-8").read().strip()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_kind_this_build_does_not_know_fails_by_name (__main__.TestDeclaredCheckKind)
+Resealed on purpose, so the kind control is the only one that can ... ok
+test_a_run_without_kind_declares_nothing_and_says_so (__main__.TestDeclaredCheckKind) ... ok
+test_adding_a_kind_to_an_existing_receipt_breaks_the_seal (__main__.TestDeclaredCheckKind)
+The forgery this field would otherwise invite: take a real receipt ... ok
+test_an_unknown_kind_is_refused_and_writes_no_receipt (__main__.TestDeclaredCheckKind) ... ok
+test_repeated_kinds_are_recorded_sorted_and_deduplicated (__main__.TestDeclaredCheckKind) ... ok
+test_show_names_the_declared_kind_and_its_provenance (__main__.TestDeclaredCheckKind) ... ok
+test_the_command_line_is_never_read_as_a_declaration (__main__.TestDeclaredCheckKind)
+The exact shape of the old bypass, at the generator: a command whose ... ok
+test_the_reader_never_infers_a_kind_from_argv (__main__.TestDeclaredCheckKind)
+`declared_kinds` is the ONE reader of the field, so this pins the ... ok
+test_the_seal_covers_the_declared_kind (__main__.TestDeclaredCheckKind) ... ok
+test_a_ci_run_id_does_not_promote_a_dirty_run (__main__.TestDirtyTree) ... ok
+test_a_receipt_made_on_a_dirty_tree_is_no_data_and_never_a_pass (__main__.TestDirtyTree)
+A dirty-tree receipt covers a state that was never committed and ... ok
+test_strict_makes_that_no_data_block (__main__.TestDirtyTree) ... ok
+test_a_genuinely_bad_flag_still_exits_2 (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage_on_every_evidence_surface (__main__.TestHelpMeansHelp) ... ok
+test_help_on_run_writes_no_receipt (__main__.TestHelpMeansHelp)
+`evidence run -h` must answer and stop; before anything, no receipt ... ok
+test_a_json_array_is_not_a_receipt (__main__.TestMalformed) ... ok
+test_a_missing_receipt_is_reported_and_never_a_pass (__main__.TestMalformed) ... ok
+test_a_receipt_that_is_not_json_fails (__main__.TestMalformed) ... ok
+test_an_unknown_schema_version_fails_rather_than_being_ignored (__main__.TestMalformed) ... ok
+test_a_receipt_with_redactions_still_verifies_pass_on_an_untouched_tree (__main__.TestNoRawOutputLeak)
+Redaction changes what `argv` records; it must not change what the ... ok
+test_a_secret_printed_by_the_command_never_reaches_the_receipt (__main__.TestNoRawOutputLeak)
+A receipt is the one artifact everybody is encouraged to share, so a ... ok
+test_a_secret_shaped_argv_token_is_redacted_not_recorded_verbatim (__main__.TestNoRawOutputLeak)
+FLIPPED (was `test_argv_is_recorded_verbatim_which_is_a_limit_not_a_leak_to_ignore`, ... ok
+test_stderr_is_digested_too (__main__.TestNoRawOutputLeak) ... ok
+test_zero_redactions_keeps_argv_byte_identical_to_what_ran (__main__.TestNoRawOutputLeak)
+The common case: no secret-shaped token anywhere in argv. The recorded ... ok
+test_a_plain_token_with_no_secret_shape_is_untouched (__main__.TestRedactArgv) ... ok
+test_each_known_shape_produces_its_own_named_marker (__main__.TestRedactArgv) ... ok
+test_matches_per_argument_not_across_a_joined_command_line (__main__.TestRedactArgv)
+A shape split across two argv entries by ordinary shell word-splitting ... ok
+test_mirrors_the_telemetry_pattern_list_rather_than_a_second_one (__main__.TestRedactArgv)
+Imported, not reinvented: the same list object the telemetry ... ok
+test_returns_three_values_not_two (__main__.TestRedactArgv)
+Two values here would read as a possible (verdict, evidence) pair to ... ok
+test_a_1_0_receipt_is_not_failed_for_a_field_its_version_never_had (__main__.TestSchemaCompat) ... ok
+test_a_1_1_receipt_is_not_failed_for_the_check_kind_field_it_predates (__main__.TestSchemaCompat)
+The forward-only promise, in the direction that costs something: the ... ok
+test_a_1_1_receipt_missing_the_redaction_count_fails_by_name (__main__.TestSchemaCompat) ... ok
+test_a_1_2_receipt_missing_the_kind_provenance_fails_by_name (__main__.TestSchemaCompat) ... ok
+test_new_receipts_stamp_the_evidence_version (__main__.TestSchemaCompat) ... ok
+test_a_covered_file_changed_after_the_run_fails (__main__.TestStaleness) ... ok
+test_a_deleted_covered_file_fails_rather_than_vanishing (__main__.TestStaleness) ... ok
+test_a_receipt_from_an_earlier_commit_fails (__main__.TestStaleness)
+A receipt only counts as evidence for the commit it was generated ... ok
+test_a_hand_written_receipt_carrying_no_seal_cannot_pass (__main__.TestTheDefect)
+The receipt is plausible in every field a schema can check. It was ... ok
+test_a_hand_written_receipt_with_an_invented_seal_cannot_pass (__main__.TestTheDefect)
+The forger knows a runId is expected and types one that looks like a ... ok
+test_editing_a_real_receipts_exit_code_breaks_its_seal (__main__.TestTheDefect)
+The likeliest real-world forgery: take a receipt from a run that ... ok
+test_the_wrapper_exit_code_is_the_commands_own (__main__.TestTheDefect)
+A failing command must not be laundered into a passing evidence step ... ok
+test_run_without_a_command_refuses_rather_than_writing_an_empty_receipt (__main__.TestTheInvariant) ... ok
+test_the_seal_covers_the_fields_a_forger_would_choose (__main__.TestTheInvariant) ... ok
+test_there_is_no_way_to_hand_the_wrapper_a_duration_or_an_exit_code (__main__.TestTheInvariant) ... ok
+test_a_ci_run_id_on_a_clean_tree_reads_as_protected (__main__.TestTheSoundCase) ... ok
+test_a_generated_receipt_verifies_pass_at_the_same_commit (__main__.TestTheSoundCase)
+The control has to be silent on honest work, or engineers switch it ... ok
+test_show_names_the_trust_level_every_time (__main__.TestTheSoundCase) ... ok
+test_the_receipt_records_what_the_run_actually_did (__main__.TestTheSoundCase) ... ok
+test_a_placeholder_is_not_an_answer (__main__.TestVacuousFields) ... ok
+test_a_vacuous_required_field_fails_and_names_the_field (__main__.TestVacuousFields)
+Resealed on purpose, so the required-field control is the only one ... ok
+test_a_zero_exit_code_is_an_answer_and_not_an_absence (__main__.TestVacuousFields)
+The direction of error that would break honest work: `0` and `False` ... ok
+
+----------------------------------------------------------------------
+Ran 57 tests in 25.084s
+
+OK

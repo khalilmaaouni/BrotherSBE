@@ -1,0 +1,368 @@
+test_the_amendment_round_trip_is_the_only_path_from_fail_to_pass (__main__.TestAmendment) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-qedainbx/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_undocumented_added_operation_is_review_required (__main__.TestContracts) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-709qpqg8/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_undocumented_removed_operation_is_fail_naming_it (__main__.TestContracts) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-d37i9gl9/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_unparseable_contract_file_is_unmeasured_never_pass (__main__.TestContracts) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-xlptz506/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_dropping_a_documented_attribute_is_fail_naming_it (__main__.TestData) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-4154uy8i/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_quoted_command_receipt_binds (__main__.TestQuotedCommandReceipts) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-2t6psmly/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_planned_change_with_a_receipt_is_final_pass_exit_zero (__main__.TestScope) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-z990vxbg/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_unplanned_changed_file_is_review_required_by_name (__main__.TestScope) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-5jsx_zau/repo/notes/extra.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_the_report_is_deterministic_and_binds_base_and_head (__main__.TestScope) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:203: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/09-convergence.json' mode='r' encoding='utf-8'>
+  first = io.open(report_path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:206: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-6e892rz_/repo/design/chg/09-convergence.json' mode='r' encoding='utf-8'>
+  second = io.open(report_path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_opaque_changed_file_is_unmeasured_not_unplanned_review_required (__main__.TestScopeUnmeasured) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol6ku20q/repo/artifacts/build.sha256' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_pure_select_sql_change_is_not_migration_shaped (__main__.TestSqlModelIsNotAMigration) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-8ftf27yd/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-8ftf27yd/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-8ftf27yd/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-8ftf27yd/repo/models_dir/customers.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-8ftf27yd/repo/models_dir/customers.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_missing_base_or_head_is_a_usage_error_and_writes_nothing (__main__.TestUsage) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-ol8ngx4u/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_there_is_no_force_flag (__main__.TestUsage) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-owjzjh7g/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_missing_receipt_fails_naming_the_command (__main__.TestVerification) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-kbuv0p7l/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_receipt_bound_to_another_commit_fails_naming_both_shas (__main__.TestVerification) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/design/chg/00-intake.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/design/chg/03-adr.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/design/chg/05-data-model.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/design/chg/07-verification.md' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/api/openapi.json' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/migrations/0001_add.sql' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_converge.py:120: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-converge-hs2trklh/repo/src/app.py' mode='w' encoding='utf-8'>
+  io.open(path, "w", encoding="utf-8").write(content)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 11.045s
+
+OK

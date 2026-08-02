@@ -1,0 +1,25 @@
+01-hard-gates exit=0
+02-design-checks exit=0
+03-score-lints exit=1
+04-regression-evals exit=0
+05-honesty-meta exit=0
+05b-honesty-seeded exit=0
+06-tool-tests exit=0
+07-fence-hook exit=0
+08-impact exit=0
+09-adopt-init exit=0
+10-book-estate exit=0
+11-bypass exit=0
+12-converge exit=0
+13-decisions exit=0
+14-evidence exit=0
+15-install exit=0
+16-plan exit=0
+17-prverify exit=0
+18-status exit=0
+19-status-team exit=0
+20-tasks exit=0
+21-work exit=0
+22-install-artifact exit=0
+23-upgrade-rollback exit=0
+BATTERY-COMPLETE

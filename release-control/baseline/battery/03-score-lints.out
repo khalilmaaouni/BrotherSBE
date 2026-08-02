@@ -1,0 +1,18 @@
+CHECKS THAT OPENED A FILE IN /Users/khalil.maaouni/Documents/BrotherSBE (2 of 12): these verdicts are about the code here.
+silent-failure-lints      PASS     47 file(s) scanned under ., 0 unexempted hit(s), 52 suppressed by an inline `sbe: allow-silent` comment (evals/run_evals.py:2425, evals/run_evals.py:5745, evals/run_evals.py:6038, evals/run_evals.py:6045, evals/run_evals.py:6070, and 47 more not named), 40 file(s) holding no match at all; 294 file(s) under . were not opened because this lint has no pattern that reads their kind (.md 203, .json 25, (no extension) 16, .diff 15, .sh 8, and 12 more not named); its patterns are written for .py .sql .swift .rb .js .ts .go, so this verdict covers those kinds and says nothing about the rest; this tool's own source was not scanned (1 file(s): tools/sbe_score.py), because it declares these patterns as strings and would match itself [severity: gate]
+citation-inventory        PASS     98 external URL(s) across 170 document(s) scanned under /Users/khalil.maaouni/Documents/BrotherSBE (the installed skill's own tree, this check's default; set SBE_CITATION_ROOT to point it at another root) (every markdown file in the CHECKSUMS.sha256 manifest), each with an inventory entry in docs/CITATIONS.md answering claim, population, date and limit; scope structure and coverage only, never live page content: this check opens no network connection [severity: gate]
+
+CHECKS FED BY A VAULT OR REGISTRY OUTSIDE /Users/khalil.maaouni/Documents/BrotherSBE (10 of 12, of which 2 have no source on this machine at all): a verdict here is not a statement about the code in this directory.
+ledger-coverage           PASS     35 sessions across 5 active days last 7d [severity: soft]
+schema-2-uniform          PASS     103 ledger line(s) read, 0 pre-schema-2 lines remain [severity: soft]
+cache-economy             FAIL     34/35 sessions >= 90% warm-read; below floor: ['8e422680 86%'] [severity: soft]
+vault-log-per-active-day  PASS     5 active day(s) checked against 82 session log file(s) with content (a log covers its filename date and its last-modified date); days without any log: none [severity: soft]
+fence-hygiene             NO-DATA  set BROTHERSBE_REGISTRIES to enable; nothing was opened [severity: soft]
+correction-latency        PASS     62 candidate(s) total, 0 older than 7d unprocessed [severity: soft]
+budget-vs-tier            NO-DATA  set BROTHERSBE_REGISTRIES to enable; no registry was opened, so no fence line was checked for a tier tag [severity: soft]
+prediction-seals          NO-DATA  /Users/khalil.maaouni/Documents/Kay Vault/50-Reference/operator-model.md holds no sealed predictions [severity: soft]
+felt-outcome-ratings      PASS     32 distinct ratings (target >= 6 for alignment 10) [severity: soft]
+review-cadence            PASS     last review: 4.0d ago [severity: soft]
+
+12 checks: 8 PASS, 1 FAIL, 3 NO-DATA. LLM judge scores only the residue.
+STRICT-SOFT: 1 soft-severity check(s) failed; exiting nonzero because --strict-soft opts graded checks into blocking.

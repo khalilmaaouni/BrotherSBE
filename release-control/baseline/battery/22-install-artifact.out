@@ -1,0 +1,28 @@
+test-install-artifact: archiving HEAD (d11975e) into a fresh, otherwise-empty directory
+test-install-artifact: target: /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.iduGtlStqq/install
+test-install-artifact: running verify-install.sh from the fresh copy against its own shipped manifest
+
+verify-install: checked against /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.iduGtlStqq/install/CHECKSUMS.sha256
+verify-install: 264 file(s) match, 0 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: PASSED. Every file the manifest names matches on disk,
+verify-install: and no file exists on disk that the manifest does not name,
+verify-install: outside the excluded paths enumerated above (their current
+verify-install: file count is printed on every run, and source code among
+verify-install: them fails this check).
+verify-install: a manifest records CONTENT, not file mode: a data file that arrived with the execute bit set still matches its hash here, so this says the bytes are the published bytes and says nothing about permissions.
+verify-install: this does not prove the manifest itself is authentic; it proves your files match whatever manifest you pointed this at. Get the manifest from the release you trust (the tag's git history, or a release asset), not from the same untrusted channel as the code.
+test-install-artifact: verify-install.sh PASSED on the fresh install
+test-install-artifact: running bin/sbe doctor from the fresh copy (invoked as `python3 bin/sbe`, not via its own shebang, so this check does not depend on tar having preserved the execute bit; run with cwd set to the fresh copy, because doctor's own git check reads the CALLING process's cwd, not its own script location, so running it from this script's cwd would silently grade this checkout's git tree instead of the artifact's)
+python           PASS     3.9.6 (floor is 3.9)
+tools            PASS     all present in /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.iduGtlStqq/install/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.2, VERSION 1.0.0-rc.2
+git              NO-DATA  not inside a git tree, so nothing that reads a diff can run here
+identity         WARNING  git config reports name "ci" and email "ci@example.com"; that shape is a fixture identity, and a fixture identity authoring real commits is a leak, not a passing environment
+vault            PASS     /Users/khalil.maaouni/Documents/Kay Vault
+private-names    PASS     a private-name list is configured
+
+sbe 1.0.0-rc.2, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 1 NO-DATA.
+test-install-artifact: bin/sbe doctor reported no FAIL
+
+test-install-artifact: PASSED for HEAD (d11975e). `git archive` extracted into an empty directory with no other install step, scripts/verify-install.sh reported PASSED against the manifest that shipped in that same archive, and bin/sbe doctor reported no FAIL, all without writing to $HOME, ~/.claude, or any location outside the one temporary directory this script created and removed on exit.

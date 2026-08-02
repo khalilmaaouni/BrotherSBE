@@ -1,0 +1,47 @@
+test_the_author_of_a_change_can_mint_the_receipt_that_covers_it (__main__.TestAReceiptCanBeRefreshedByWhoeverBrokeIt)
+SCENARIO 33. The staleness control works: edit a covered file and the ... ok
+test_a_review_id_that_names_no_review_is_a_broken_claim (__main__.TestApprovalCannotBeBoughtWithText)
+SCENARIO 12, the vacuous spelling. A placeholder where a pointer ... ok
+test_an_approval_file_carried_in_from_elsewhere_certifies_nothing (__main__.TestApprovalCannotBeBoughtWithText)
+SCENARIO 13, the half this host can decide. An APPROVAL file can be ... ok
+test_an_approval_stops_counting_at_the_next_commit (__main__.TestApprovalCannotBeBoughtWithText)
+SCENARIO 15. The trailer lives in the commit message, so a new commit ... ok
+test_an_invented_review_id_is_a_pointer_and_never_an_approval (__main__.TestApprovalCannotBeBoughtWithText)
+SCENARIO 12. The cheapest forgery on the money gate: type a review id ... ok
+test_that_invented_id_does_not_block_a_strict_run_either (__main__.TestApprovalCannotBeBoughtWithText)
+The honest other half of scenario 12, and the half a reader would ... ok
+test_two_derivations_differing_only_by_an_alias_pass_which_is_a_limit (__main__.TestDerivationIndependenceIsTextual)
+SCENARIO 6. The gate folds case, whitespace, comments and trailing ... ok
+test_two_derivations_over_one_source_pass_which_is_a_limit (__main__.TestDerivationIndependenceIsTextual)
+SCENARIO 7. Two genuinely different queries can still read the same ... ok
+test_an_exemption_cannot_expire_because_nothing_reads_a_date_which_is_a_limit (__main__.TestExemptionsWaiveWhatTheyName)
+SCENARIO 24. There is no expiry field, no owner field and no approver ... ok
+test_an_exemption_naming_a_wildcard_waives_nothing (__main__.TestExemptionsWaiveWhatTheyName)
+SCENARIO 25. An exemption broader than the checks it names is exactly ... ok
+test_the_unbuilt_exceptions_command_refuses_rather_than_listing_nothing (__main__.TestExemptionsWaiveWhatTheyName)
+The other half of scenario 24, and the reason it is UNCOVERED rather ... ok
+test_a_case_variant_of_a_fenced_path_is_refused (__main__.TestFenceScopeEscapes)
+SCENARIO 21, the case half. On a case-insensitive filesystem (the ... ok
+test_a_symlink_pointing_into_a_fenced_file_is_denied (__main__.TestFenceScopeEscapes)
+SCENARIO 21, the symlink half. Writing through a symlink writes the ... ok
+test_the_design_checks_never_read_a_commit_which_is_a_limit (__main__.TestNothingBindsADossierToAChange)
+SCENARIO 23. A dossier from a finished change can be left in place and ... ok
+test_a_package_with_no_receipt_is_named_in_its_neighbours_pass_line (__main__.TestOnePackageCannotAnswerForAnother)
+SCENARIO 22. Read the verdict alone and this is a PASS over a tree ... ok
+test_that_same_package_alone_is_no_data (__main__.TestOnePackageCannotAnswerForAnother)
+The other end of the same run, which is what makes the sentence above ... ok
+test_a_rehearsal_against_an_empty_database_passes_which_is_a_limit (__main__.TestReceiptsProveOnlyWhatTheySay)
+SCENARIO 10. Rehearse the reverse migration against an empty database ... ok
+test_a_rehearsal_id_that_names_no_job_still_passes_which_is_a_limit (__main__.TestReceiptsProveOnlyWhatTheySay)
+SCENARIO 9. Same shape, other gate, and this one says its limit out ... ok
+test_a_snapshot_id_that_resolves_to_nothing_still_passes_which_is_a_limit (__main__.TestReceiptsProveOnlyWhatTheySay)
+SCENARIO 8. Nothing here talks to a warehouse, so a syntactically ... ok
+test_matching_row_counts_never_compare_a_value_which_is_a_limit (__main__.TestReceiptsProveOnlyWhatTheySay)
+SCENARIO 11. The reverse migration can restore the right NUMBER of ... ok
+test_a_receipt_field_cannot_write_a_verdict_line_for_another_gate (__main__.TestRepositoryContentCannotForgeAVerdict)
+SCENARIO 28, the machine-readable half. A figure label carrying a ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 3.366s
+
+OK

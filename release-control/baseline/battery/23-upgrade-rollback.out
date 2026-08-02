@@ -1,0 +1,45 @@
+test-upgrade-rollback: previous tag found: v1.0.0-rc.2
+test-upgrade-rollback: installing the previous release (v1.0.0-rc.2) into a fresh directory
+test-upgrade-rollback: verifying the previous release
+
+verify-install: checked against /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.0ad7jzFSue/install/CHECKSUMS.sha256
+verify-install: 236 file(s) match, 0 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: PASSED. Every file the manifest names matches on disk,
+verify-install: and no file exists on disk that the manifest does not name,
+verify-install: outside the excluded paths enumerated above (their current
+verify-install: file count is printed on every run, and source code among
+verify-install: them fails this check).
+verify-install: a manifest records CONTENT, not file mode: a data file that arrived with the execute bit set still matches its hash here, so this says the bytes are the published bytes and says nothing about permissions.
+verify-install: this does not prove the manifest itself is authentic; it proves your files match whatever manifest you pointed this at. Get the manifest from the release you trust (the tag's git history, or a release asset), not from the same untrusted channel as the code.
+test-upgrade-rollback: the previous release verified clean
+test-upgrade-rollback: installing the upgrade to HEAD (HEAD) into a fresh directory
+test-upgrade-rollback: verifying the upgrade to HEAD
+
+verify-install: checked against /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.0ad7jzFSue/install/CHECKSUMS.sha256
+verify-install: 264 file(s) match, 0 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: PASSED. Every file the manifest names matches on disk,
+verify-install: and no file exists on disk that the manifest does not name,
+verify-install: outside the excluded paths enumerated above (their current
+verify-install: file count is printed on every run, and source code among
+verify-install: them fails this check).
+verify-install: a manifest records CONTENT, not file mode: a data file that arrived with the execute bit set still matches its hash here, so this says the bytes are the published bytes and says nothing about permissions.
+verify-install: this does not prove the manifest itself is authentic; it proves your files match whatever manifest you pointed this at. Get the manifest from the release you trust (the tag's git history, or a release asset), not from the same untrusted channel as the code.
+test-upgrade-rollback: the upgrade to HEAD verified clean
+test-upgrade-rollback: installing the rollback to the previous release (v1.0.0-rc.2) into a fresh directory
+test-upgrade-rollback: verifying the rollback to the previous release
+
+verify-install: checked against /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmp.0ad7jzFSue/install/CHECKSUMS.sha256
+verify-install: 236 file(s) match, 0 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: PASSED. Every file the manifest names matches on disk,
+verify-install: and no file exists on disk that the manifest does not name,
+verify-install: outside the excluded paths enumerated above (their current
+verify-install: file count is printed on every run, and source code among
+verify-install: them fails this check).
+verify-install: a manifest records CONTENT, not file mode: a data file that arrived with the execute bit set still matches its hash here, so this says the bytes are the published bytes and says nothing about permissions.
+verify-install: this does not prove the manifest itself is authentic; it proves your files match whatever manifest you pointed this at. Get the manifest from the release you trust (the tag's git history, or a release asset), not from the same untrusted channel as the code.
+test-upgrade-rollback: the rollback to the previous release verified clean
+
+test-upgrade-rollback: PASSED. v1.0.0-rc.2 -> HEAD -> v1.0.0-rc.2, each step archived into a fresh directory and verified with scripts/verify-install.sh, nothing written outside the one temporary directory this script created and removed on exit.

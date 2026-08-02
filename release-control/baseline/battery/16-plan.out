@@ -1,0 +1,50 @@
+test_contract_change_without_compatibility_task_fails_write_and_writes_nothing (__main__.TestCompatibilityGap) ... ok
+test_decision_bearing_row_with_one_command_and_no_second_row_fails_write (__main__.TestDecisionBearingCalculation) ... ok
+test_decision_bearing_row_with_two_commands_passes_write (__main__.TestDecisionBearingCalculation) ... ok
+test_write_twice_on_identical_dossier_is_byte_identical (__main__.TestDeterminism) ... ok
+test_empty_dossier_is_no_data_and_writes_nothing (__main__.TestEmptyDossier) ... ok
+test_a_source_path_in_physical_prose_demands_no_migration_triplet (__main__.TestExternalProofRepairs) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:458: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpm2t78qov/design/chg/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(_json.dumps(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:463: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpm2t78qov/design/chg/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:466: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpm2t78qov/design/chg/05-data-model.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "05-data-model.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:469: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpm2t78qov/design/chg/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_escaped_pipe_stays_inside_the_check_cell (__main__.TestExternalProofRepairs) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:458: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpxdo7ct4e/design/chg/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(_json.dumps(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:463: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpxdo7ct4e/design/chg/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:466: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpxdo7ct4e/design/chg/05-data-model.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "05-data-model.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:469: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpxdo7ct4e/design/chg/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_plan.py:498: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmpxdo7ct4e/design/chg/08-plan.json' mode='r' encoding='UTF-8'>
+  plan = _json.loads(io.open(os.path.join(doss, "08-plan.json")).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_genuinely_bad_flag_still_exits_2 (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage_and_derives_nothing (__main__.TestHelpMeansHelp) ... ok
+test_migration_without_reconciliation_row_fails_write (__main__.TestMigrationWithoutRow) ... ok
+test_migration_without_reverse_row_fails_write (__main__.TestMigrationWithoutRow) ... ok
+test_planner_never_invents_every_task_cites_a_resolving_source (__main__.TestPlannerNeverInvents) ... ok
+test_registry_integration_opens_first_task_from_the_plan (__main__.TestRegistryIntegration) ... ok
+test_valid_dossier_derives_writer_migration_triplet_and_reviewer_tasks (__main__.TestValidDerivation) ... ok
+test_cyclic_dependencies_fail_validation_naming_the_cycle (__main__.TestValidationFailures) ... ok
+test_overlapping_ownership_without_dependency_fails_validation (__main__.TestValidationFailures) ... ok
+test_stale_dossier_after_write_fails_validation_naming_the_file (__main__.TestValidationFailures) ... ok
+test_task_citing_a_nonexistent_section_fails_validation_naming_the_task (__main__.TestValidationFailures) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 5.645s
+
+OK

@@ -1,0 +1,91 @@
+BROTHERSBE HONESTY META-TEST: no check may report PASS over evidence it never examined
+tools under test: /Users/khalil.maaouni/Documents/BrotherSBE/tools
+
+sbe_design.py.CHECKS  (5 checks discovered)
+  artifacts                  -> 218/220 scenarios reached the check body
+  adr                        -> 66/68 scenarios reached the check body
+  datamodel                  -> 60/62 scenarios reached the check body
+  diagrams                   -> 85/87 scenarios reached the check body
+  placeholder                -> 58/60 scenarios reached the check body
+
+sbe_gate.py.GATES  (4 checks discovered)
+  numbers                    -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  migration                  -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  approval                   -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  ran                        -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+
+sbe_plan.py.PLAN_CHECKS  (9 checks discovered)
+  nonempty                   -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  citations                  -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  ownership                  -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  acceptance                 -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  graph                      -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  compatibility              -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  migration                  -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  calculation                -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  freshness                  -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+
+sbe_score.py.CHECKS  (12 checks discovered)
+  ledger-coverage            -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  schema-2-uniform           -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  cache-economy              -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  vault-log-per-active-day   -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  fence-hygiene              -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  correction-latency         -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  budget-vs-tier             -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  prediction-seals           -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  felt-outcome-ratings       -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  review-cadence             -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  silent-failure-lints       -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+  citation-inventory         -> invocation accounting n/a: this tool runs every check unconditionally, so there is no fallback to fall into
+
+declared not-applicable (printed, never skipped silently):
+  sbe_design.py adr: evidence is text, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_design.py datamodel: evidence is text, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_design.py diagrams: evidence is text, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_design.py placeholder: evidence is text, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_gate.py approval: evidence is git, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_gate.py approval: its worked example asserts NO-DATA rather than PASS, declared reason: this gate reaches PASS only on a commit whose signature THIS HOST verified, and no fixture can produce one: the honesty test has no private key and importing one would make the test prove something about the test's keyring rather than about the gate. The strongest evidence a fixture can carry is the keyless Reviewed-in trailer, whose honest verdict is NO-DATA, so that is what the worked example asserts
+  sbe_score.py fence-hygiene: evidence is tree, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_score.py budget-vs-tier: evidence is tree, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_score.py prediction-seals: evidence is text, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_score.py silent-failure-lints: evidence is tree, so the wrong-shape and malformed-JSON cases do not apply
+  sbe_score.py citation-inventory: evidence is tree, so the wrong-shape and malformed-JSON cases do not apply
+
+declared exemptions from the empty-value sweep (each states its reason):
+  sbe_design.py diagrams [05-data-model.md##Relationships]: this check traces diagram nodes to the ENTITIES declared in the data model, and says nothing about its relationships. Emptying the relationships section leaves every entity it traced against intact, and the datamodel check's own sweep is what holds that section to its sentence (matched 2 scenario(s), excused 2 PASS(es) this run)
+
+declared exemptions from the verdict-source lint (each names the function it resolved to this run):
+  sbe_checks.py:_char_reading (line 881): returns (rendering kind, reading) for one character, not a verdict
+  sbe_checks.py:_script_family (line 897): returns the Unicode script family of one character, not a verdict
+  sbe_checks.py:answered_as (line 1456): returns a reduced value, never a verdict
+  sbe_checks.py:distinct (line 1492): returns (items, duplicate count), not a verdict
+  sbe_checks.py:glob_with_denials (line 149): returns (glob hits, directories it could not enter), not a verdict
+  sbe_checks.py:hidden (line 305): returns (pruned trees holding wanted files, trees the inspection budget left uninspected), not a verdict
+  sbe_checks.py:run_guarded (line 1676): the shared runner; it returns whatever the check it wrapped returned, and every check it can wrap is itself registered
+  sbe_decide.py:load_table (line 112): returns (parsed table, load error), not a verdict
+  sbe_design.py:_coherence_problem (line 230): returns a problem string, or an (unmeasured, why) pair naming a script limit; never a verdict
+  sbe_design.py:_entity_bullets (line 1686): returns (the entity set, whether a heading declared it), not a verdict
+  sbe_design.py:_rejected_alternatives (line 1040): returns (collected alternatives, chosen table rows), not a verdict
+  sbe_design.py:_table_alternatives (line 1134): returns (table-row alternatives, chosen row count), not a verdict
+  sbe_gate.py:_canonical_email (line 520): returns one canonicalized mailbox string, not a verdict
+  sbe_gate.py:_identity_parts (line 474): returns (canonical emails, ordered name word-tuples), not a verdict
+  sbe_gate.py:_items (line 147): returns (item list, why it is empty), not a verdict
+  sbe_gate.py:_parts (line 666): the shared identity parser behind _identity_parts and _rendered_identity_parts; returns parts, not a verdict
+  sbe_gate.py:_rendered_identity_parts (line 506): returns (canonical emails, ordered name word-tuples) with unreadable characters kept, not a verdict
+  sbe_gate.py:_same (line 1127): gate_approval's local sameness probe; returns (shared emails, shared name), not a verdict
+  sbe_gate.py:_wrote (line 1100): gate_approval's local collector; returns (emails, names) for a list of identity strings, not a verdict
+  sbe_gate.py:find (line 277): returns (paths found, scope and pruning note), not a verdict
+  sbe_gate.py:git_trailers (line 429): returns (commit body, signature state, identities, author/committer/signer meta), not a verdict
+  sbe_gate.py:load_receipt (line 114): returns (parsed receipt, parse error), not a verdict
+  sbe_intake.py:read_answers (line 59): returns (answers read, answers refused), not a verdict
+  sbe_score.py:_rel (line 1161): returns a path
+  sbe_telemetry.py:prediction_counts (line 1026): returns a count table
+  sbe_telemetry.py:read_jsonl_counted (line 917): returns (parsed rows, unparseable lines), not a verdict
+  sbe_telemetry.py:redact (line 460): returns (masked text, how many masks), not a verdict
+
+declared exemptions from the report-print lint (the linted set is every file tool_sources() walks; each entry states its reason and what it excused this run):
+  sbe_intake.py: excused 7 print(s); an interactive interview: its prompts, echoes and refusals are dialogue with the operator, and nothing machine-parses them as verdict lines
+  sbe_telemetry.py: excused 80 print(s); operator status lines and hook JSON, never parsed as gate verdicts; its ledger writes are data, not report lines
+
+30 checks discovered from 4 registries in 25 module(s), 4429 scenarios run, 2 waived by declared exemption, 0 failure(s).

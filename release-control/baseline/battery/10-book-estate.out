@@ -1,0 +1,87 @@
+test_the_build_produces_one_offline_html_with_every_chapter (__main__.TestBookBuild) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:39: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/BrotherSBE-for-Dummies.html' mode='r' encoding='utf-8'>
+  html = io.open(html_path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/00-cover.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/01-why-this-exists.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/02-what-you-get-without-a-terminal.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/03-reading-the-truth.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/04-install-day.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/05-the-first-loop.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/06-evidence-not-vibes.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/07-the-task-registry.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/08-gates-and-decisions.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/09-loops-that-converge.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/10-the-vault-and-memory.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/11-coordinating-humans-and-agents.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/12-cookbook.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/13-the-backend-engineers-deep-dive.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/14-the-data-engineers-deep-dive.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/15-the-platform-lead-deep-dive.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/16-working-as-one-team.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/17-the-vault-in-obsidian.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:44: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/18-from-dummy-to-definitive-expert.md' mode='r' encoding='utf-8'>
+  title = io.open(os.path.join(ROOT, "docs", "book", name),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_bare_machine_skips_the_declared_chapters_by_name (__main__.TestChapterCapabilities) ... ok
+test_a_mid_text_underline_line_vanishes_whole (__main__.TestChapterCapabilities)
+The first mask stripped only the glyphs, which worked by accident ... ok
+test_the_caret_underline_lines_of_newer_interpreters_mask (__main__.TestChapterCapabilities) ... ok
+test_a_volatile_only_difference_compares_equal (__main__.TestDeclaredVolatileLine) ... ok
+test_any_other_difference_still_differs (__main__.TestDeclaredVolatileLine) ... ok
+test_doctor_python_version_masks_but_verdict_and_floor_still_bite (__main__.TestDeclaredVolatileLine)
+The doctor prints the live interpreter version beside the floor: ... ok
+test_paths_and_test_ids_mask_but_their_neighbors_still_bite (__main__.TestDeclaredVolatileLine) ... ok
+test_sha_masking_never_eats_the_count_or_the_verdict (__main__.TestDeclaredVolatileLine)
+This fixture used to pin the opposite: a pinned range stayed ... ok
+test_declares_both_light_and_dark_themes (__main__.TestExplainerSelfContained) ... ok
+test_no_external_script_image_link_or_source_references (__main__.TestExplainerSelfContained) ... ok
+test_the_file_exists_and_is_substantial (__main__.TestExplainerSelfContained) ... ok
+test_zero_banned_dash_characters (__main__.TestExplainerSelfContained) ... ok
+test_code_spans_become_code_elements_and_leave_no_backticks (__main__.TestInlineCodeSpans) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_book.py:66: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/BrotherSBE-for-Dummies.html' mode='r' encoding='utf-8'>
+  html = io.open(os.path.join(ROOT, "docs", "book",
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_the_estate_suite_is_green (__main__.TestWorkedEstate) ... ok
+test_the_pipeline_runs_and_names_its_output (__main__.TestWorkedEstate) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 17.143s
+
+OK

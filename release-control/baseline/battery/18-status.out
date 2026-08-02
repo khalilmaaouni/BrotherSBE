@@ -1,0 +1,43 @@
+test_non_overlapping_open_tasks_are_not_named_as_conflicts (__main__.TestActiveConflicts) ... ok
+test_overlapping_open_tasks_are_named_under_active_conflicts (__main__.TestActiveConflicts) ... ok
+test_a_current_receipt_is_not_named_as_broken (__main__.TestBrokenClaims) ... ok
+test_a_stale_receipt_is_named_under_broken_claims_and_exits_1 (__main__.TestBrokenClaims) ... ok
+test_a_command_named_after_the_checks_clears_no_obligation (__main__.TestCheckKindIdentity)
+THE FIXTURE THE BYPASS DIES ON. The receipt is sound, current and ... ok
+test_a_declared_kind_clears_that_obligation_and_only_that_one (__main__.TestCheckKindIdentity)
+The other direction, which matters just as much: the new field has ... ok
+test_a_kind_typed_into_a_receipt_after_the_run_clears_nothing (__main__.TestCheckKindIdentity)
+The forgery the field would otherwise invite. Not resealed, on ... ok
+test_a_legacy_receipt_is_no_data_for_obligations_and_is_named (__main__.TestCheckKindIdentity)
+A receipt written before the field existed. It still verifies, it ... /Users/khalil.maaouni/Documents/BrotherSBE/src/brothersbe/__init__.py:41: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/VERSION' mode='r' encoding='utf-8'>
+  return io.open(path, encoding="utf-8").read().strip()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_declaring_all_three_clears_all_three (__main__.TestCheckKindIdentity) ... ok
+test_status_reads_the_field_through_the_one_reader_in_evidence (__main__.TestCheckKindIdentity)
+Source-level, and cheap: status must not grow a second ... ok
+test_a_receipt_recording_a_failing_run_is_a_merge_blocker_not_completed (__main__.TestCompletedEvidence) ... ok
+test_a_verifying_receipt_shows_under_completed_evidence_with_its_trust_label (__main__.TestCompletedEvidence) ... ok
+test_a_receipt_covering_only_the_evidence_store_reads_no_data_not_pass (__main__.TestEvidenceStoreSelfPoisoning) ... ok
+test_regenerating_the_covered_receipt_does_not_break_the_one_that_covers_it (__main__.TestEvidenceStoreSelfPoisoning) ... ok
+test_the_same_scenario_committed_end_to_end_never_shows_a_covered_file_reason (__main__.TestEvidenceStoreSelfPoisoning) ... ok
+test_a_forced_task_close_is_a_merge_blocker (__main__.TestForcedClose) ... ok
+test_json_mode_carries_every_section_the_scope_and_the_schema_version (__main__.TestJsonMode) ... ok
+test_a_t0_intake_owes_no_evidence (__main__.TestMissingEvidence) ... ok
+test_missing_evidence_for_the_declared_tier_names_the_filler (__main__.TestMissingEvidence) ... ok
+test_next_action_is_the_generic_line_when_everything_is_empty (__main__.TestNextAction) ... ok
+test_next_action_tracks_broken_claims_first_when_both_are_present (__main__.TestNextAction) ... ok
+test_next_action_tracks_merge_blockers_when_broken_claims_is_empty (__main__.TestNextAction) ... ok
+test_an_empty_repo_with_no_stores_is_all_no_data_and_exits_0 (__main__.TestNoStores) ... ok
+test_each_absent_store_marks_its_own_section_no_data_not_only_somewhere (__main__.TestNoStores) ... ok
+test_a_positive_evidence_line_names_its_scope_too (__main__.TestPositiveSentenceGuard)
+The scope rule covers POSITIVE findings, not only clean and NO-DATA ... ok
+test_every_clean_or_nodata_line_in_text_mode_names_its_scope (__main__.TestPositiveSentenceGuard)
+The test greps the RENDERED OUTPUT, never the source: every line ... ok
+test_a_tier_disagreement_with_no_disposition_is_a_merge_blocker (__main__.TestTierReconciliation) ... ok
+test_a_valid_disposition_clears_the_tier_disagreement (__main__.TestTierReconciliation) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 17.283s
+
+OK
