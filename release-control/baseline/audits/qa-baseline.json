@@ -1,0 +1,181 @@
+{
+  "findings": [
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_impact.py",
+      "claim": "MATRIX ROW 1 \u2014 breaking API change detection: COVERED",
+      "observed": "tools/test_sbe_impact.py::TestTheDefect::test_a_contract_change_declared_T0_cannot_pass (line 81) plants an openapi.yaml change declared T0 and asserts proposedTier=T2, verdict=REVIEW-REQUIRED, exit 1; test_a_contract_change_correctly_declared_passes (line 125) is the sound case. Detection logic lives in src/brothersbe/impact.py lines 53-101 (DETECTORS table: openapi, asyncapi, protobuf, avro, graphql, event-schema, db-migration, sql-ddl, dbt-model, orm-model all set 'contract'). Ran live: `python3 tools/test_sbe_impact.py -v` -> 'Ran 20 tests in 7.179s OK' (this session).",
+      "recommended_fix": "No action required for the tested capability. Note the caveat filed separately: detection is path-shaped (any touch to a contract-shaped file trips 'contract'), not a semantic breaking-vs-additive differ.",
+      "verdict_on_review_finding": "NEW"
+    },
+    {
+      "severity": "low",
+      "file": "src/brothersbe/impact.py",
+      "claim": "The 'breaking API change detection' capability is coarse: it flags ANY change to a contract-shaped file, not specifically a breaking one",
+      "observed": "src/brothersbe/impact.py lines 53-70: the 'contract' detectors (openapi/asyncapi/protobuf/avro/graphql/event-schema/db-migration/sql-ddl/dbt-model/orm-model) have no content_pat except sql-ddl; a purely additive, backward-compatible change to api/openapi.yaml (e.g. adding an optional field, fixing a comment) trips the same 'contract' hit as removing a required field or an endpoint. docs/KNOWN-LIMITS.md line 252-277 ('The impact scan proposes a floor, and reads paths more than it reads code') states this explicitly as a deliberate, safe-direction design choice. docs/guides/03-work-doctrines.md line 126 and docs/CITATIONS.md line 136 point to an external tool (oasdiff) for real breaking-change diffing; it is not built or tested here.",
+      "recommended_fix": "If the release matrix intends true semantic breaking-vs-non-breaking classification (not just 'a contract file changed'), this is a documented, out-of-scope gap by design, not a hidden defect. Leave as-is if the floor-only design is accepted; otherwise wire in a real openapi/proto differ and add fixtures analogous to test_a_contract_change_declared_T0_cannot_pass that specifically vary additive-vs-removing changes."
+    },
+    {
+      "severity": "low",
+      "file": "evals/run_evals.py",
+      "claim": "MATRIX ROW 2 \u2014 migration without rollback: COVERED",
+      "observed": "evals/run_evals.py line 234-240, @case('untested-reverse-caught','migration','FAIL'): a migration receipt whose reverse leg carries 'ran_against_restore': False fails the migration gate. Sibling cases c6 (line 243, unresolvable rehearsal id), c7 (sound-migration-passes), c8/lossy-reverse-caught (line 261) round out the class. Gate logic: tools/sbe_gate.py gate_migration, lines 900-1012. Ran live in this session: 'evals/run_evals.py' full suite -> '527 evals: 527 passed, 0 regressions.'",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "high",
+      "file": "tools/sbe_gate.py",
+      "claim": "MATRIX ROW 3 \u2014 lock-heavy migration: ABSENT",
+      "observed": "Read tools/sbe_gate.py gate_migration in full (lines 900-1012): it checks only forward/reverse legs ran against a restore, a rehearsal_run_id, and before/after row counts. Read src/brothersbe/impact.py DETECTORS (lines 53-101): the only migration-adjacent detector is 'destructive-migration' (DROP/TRUNCATE/DELETE-without-WHERE -> irreversible), which says nothing about lock duration or blocking behavior (e.g. ALTER TABLE ... ADD COLUMN NOT NULL, CREATE INDEX without CONCURRENTLY, a long-running lock that blocks writers). grep -i 'lock' across evals/run_evals.py and tools/sbe_gate.py returns zero migration-lock hits (the only 'lock' hits are about the telemetry file lock and check severity wording, unrelated). No detector, no gate field, no eval fixture, no doc row addresses this defect class at all.",
+      "recommended_fix": "Add a migration-receipt field capturing whether the migration was profiled for lock duration/blocking (e.g. a 'lockProfile' object with max lock hold time or a boolean 'concurrent-safe' flag), a gate_migration check that FAILs when a DDL statement matching known lock-heavy patterns (ALTER TABLE ADD COLUMN NOT NULL DEFAULT, CREATE INDEX without CONCURRENTLY on Postgres, etc.) has no such profiling recorded, and a run_evals.py fixture planting exactly that pattern."
+    },
+    {
+      "severity": "high",
+      "file": "tools/sbe_gate.py",
+      "claim": "MATRIX ROW 4 \u2014 fan-out doubling numbers: ABSENT as an automated gate/eval test",
+      "observed": "Read tools/sbe_gate.py gate_numbers in full (lines 729-900): it verifies a pinned snapshot_id, that query and second_derivation are textually different, and that rerun.primary equals rerun.secondary. It never inspects grain (row cardinality) or join fan-out. The exact defect class ('the join that quietly doubles a number') is narrated as a worked example in docs/book/14-the-data-engineers-deep-dive.md lines 110-160, with runnable illustrative Python, but it is prose in a book chapter, not a fixture: grep -i 'grain\\|fan.out\\|fan_out' across evals/run_evals.py and tools/sbe_gate.py returns zero hits. Two independent derivations that BOTH fan out at the wrong grain and agree on the same wrong total would PASS this gate today: nothing here would catch it. This is closely related to, but distinct from, bypass rows 6 and 7 in docs/BYPASS-COVERAGE.md (alias renames and same-source derivations), which ARE pinned as documented UNCOVERED limit fixtures in tools/test_sbe_bypass.py (test_two_derivations_differing_only_by_an_alias_pass_which_is_a_limit, test_two_derivations_over_one_source_pass_which_is_a_limit); the fan-out/grain case is not even pinned as a limit fixture anywhere.",
+      "recommended_fix": "Add a run_evals.py 'numbers' case that plants two derivations sharing the SAME (wrong) grain-changing join, so they agree on a doubled total, and assert the current gate reports PASS -- pinning this as a named LIMIT the way bypass rows 6/7 already are, or (stronger) add a lineage/grain field to the manifest schema and a check that requires the second derivation to state a different grain or join key set."
+    },
+    {
+      "severity": "low",
+      "file": "tools/sbe_score.py",
+      "claim": "MATRIX ROW 5 \u2014 silent exception: COVERED",
+      "observed": "tools/sbe_score.py line 669, silent_failure_lints(); evals/run_evals.py line 2423 @case('lints-catch-a-swallowed-error','lints','FAIL') plants 'try: f()\\nexcept:\\n    pass' and asserts the lint catches it; sc8/sc9 (lines ~2978-2993) cover the 'sbe: allow-silent' exemption path (all-exempted-scan-is-not-clean / exemption-on-the-pass-line-is-honoured). This is a scan of TARGET code for swallowed exceptions (bare except / except-Exception-pass), which is the matrix's 'silent exception' class.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "evals/run_evals.py",
+      "claim": "MATRIX ROW 6 \u2014 missing run evidence: COVERED",
+      "observed": "evals/run_evals.py line 290 @case('unrun-check-caught','ran','FAIL') (a check entry with no exit_code) and line 309 @case('empty-checks-receipt-is-nodata','ran','NO-DATA'); tools/test_sbe_evidence.py::TestMalformed::test_a_missing_receipt_is_reported_and_never_a_pass (line 332). Also confirmed by a live run this session of evals/test_no_data_class.py (default, no --seed): '30 checks discovered from 4 registries in 25 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s)' -- this sweep generates the 'declares nothing' / empty-directory absence scenario for every registered check, including the ran/numbers/migration/approval gates.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_evidence.py",
+      "claim": "MATRIX ROW 7a \u2014 forged receipts: COVERED",
+      "observed": "tools/test_sbe_evidence.py::TestTheDefect (lines 135-208): test_a_hand_written_receipt_carrying_no_seal_cannot_pass, test_a_hand_written_receipt_with_an_invented_seal_cannot_pass, test_editing_a_real_receipts_exit_code_breaks_its_seal, test_the_wrapper_exit_code_is_the_commands_own. Plus evals/run_evals.py ev_forge1 (line 1049), ev_forge2 (line 1211), gd_pathforge (line 2127, a directory NAME crafted to look like a verdict line). Ran live this session: 57/57 tests OK in tools/test_sbe_evidence.py.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_evidence.py",
+      "claim": "MATRIX ROW 7b / 12 \u2014 stale receipts / stale evidence: COVERED",
+      "observed": "tools/test_sbe_evidence.py::TestStaleness (lines 252-284): test_a_receipt_from_an_earlier_commit_fails, test_a_covered_file_changed_after_the_run_fails, test_a_deleted_covered_file_fails_rather_than_vanishing. Plus evals/run_evals.py: a-stale-headcommit-ran-receipt-no-longer-passes (line 7724), a-stale-headcommit-numbers-manifest-no-longer-passes (line 7741), a-stale-headcommit-migration-receipt-no-longer-passes (line 7756).",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "high",
+      "file": "src/brothersbe/evidence.py",
+      "claim": "MATRIX ROW 7c \u2014 wrong-command receipts: ABSENT, and self-documented as an accepted gap",
+      "observed": "docs/THREAT_MODEL.md line 104: 'nothing checks that the command was the RIGHT command: a receipt for `true` is a flawless receipt for a run that tested nothing.' docs/KNOWN-LIMITS.md line 297: 'Nothing checks that the command was the RIGHT command. `sbe evidence run -- true` produces a flawless receipt for a run that tested nothing... deciding whether that argv is the work the gate wanted is a person's job, and no field here does it.' I grepped every test name in tools/test_sbe_evidence.py (93 tests) and tools/test_sbe_bypass.py (21 tests): none asserts that a receipt whose argv is a trivial/no-op command (vs. the actually-required check) is rejected or flagged. test_the_seal_covers_the_fields_a_forger_would_choose (test_sbe_evidence.py line 563) only proves argv cannot be EDITED post-hoc without breaking the seal -- it does not prove the recorded argv is validated against what the gate actually required.",
+      "recommended_fix": "This is a real, honestly-disclosed gap, not a hidden one. If it needs closing: add a declared-check-kind-to-command mapping (the 'kind' field already exists per TestDeclaredCheckKind in test_sbe_evidence.py) with an allowlist of expected command patterns per kind, and a gate that FAILs a receipt whose kind is declared but whose argv does not match any known invocation shape for that kind. At minimum, add a run_evals.py/test_sbe_evidence.py fixture that pins this as a named LIMIT (the way bypass rows 6/7/8/9/10/11 already are) so the gap is a decision on record rather than silent."
+    },
+    {
+      "severity": "critical",
+      "file": "docs/THREAT_MODEL.md",
+      "claim": "MATRIX ROW 8 \u2014 prompt injection in README: ABSENT, and self-documented as the largest unmitigated gap in the project",
+      "observed": "docs/BYPASS-COVERAGE.md line 53, row 28: 'Repository content attempting prompt injection | UNCOVERED | ... The INSTRUCTION channel is not [covered]: a README, a comment or a receipt field that tells the agent to skip a gate is read by a model, and nothing here is an instruction boundary. Covering it needs a control over what the agent reads as instruction, which this repository does not have and cannot fixture with a verdict line.' docs/THREAT_MODEL.md section 11 (lines 178-193): 'Nothing stops: the model believing repository text. There is no content sanitizer here, no allowlist of trusted files, and nothing that separates instruction from data inside a session. This is the largest unmitigated row on this page.' I confirmed zero hits for 'prompt injection'+'readme' scenario tests anywhere in evals/ or tools/test_sbe*.py; the only adjacent, narrower coverage is the MACHINE-READABLE channel (a receipt field or directory name cannot forge a verdict LINE -- tools/test_sbe_bypass.py::test_a_receipt_field_cannot_write_a_verdict_line_for_another_gate), which is a different and much smaller defect than an agent being instructed by README text to skip a gate outright.",
+      "recommended_fix": "This is honestly disclosed by the project itself and is a harness-level problem (no instruction/data boundary exists in the underlying agent runtime), not something a unit test can close. At minimum: add a fixture that pins the CURRENT behavior (an agent reading a crafted README/comment that says 'skip the numbers gate' is NOT prevented by any control here) as a named, tracked LIMIT so a future claim of coverage cannot silently regress past this being disclosed. If the release requires this closed rather than disclosed, it needs an actual instruction-boundary mechanism (e.g. a policy the harness enforces on read content), which is out of scope for a Python check suite."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_bypass.py",
+      "claim": "MATRIX ROW 9 \u2014 symlink attack: COVERED",
+      "observed": "tools/test_sbe_bypass.py::TestFenceScopeEscapes::test_a_symlink_pointing_into_a_fenced_file_is_denied (line 423) and test_a_case_variant_of_a_fenced_path_is_refused (line 435). Plus evals/run_evals.py: gd_vinstall_excluded_symlink (line 1988), gd_vinstall_symlink (line 2027), gd_symlink_module (line 2063), and a-symlinked-source-directory-is-disclosed-not-silent (line 6285). Ran live this session: 21/21 tests OK in tools/test_sbe_bypass.py, and 527/527 in run_evals.py.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_impact.py",
+      "claim": "MATRIX ROW 10 \u2014 docs-only safe change: COVERED",
+      "observed": "tools/test_sbe_impact.py::TestTheSoundCase::test_a_documentation_change_stays_quiet (line 113) and TestStrictOverAbsence::test_a_docs_and_data_only_diff_exits_zero_under_strict (line 254). Both asserted PASS/NO-DATA and exit 0 under --strict for README-only and docs+data+html+test-file-only diffs. Ran live this session: 20/20 tests OK in tools/test_sbe_impact.py.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "evals/run_evals.py",
+      "claim": "MATRIX ROW 11 \u2014 expected PASS/FAIL/NO-DATA/WAIVED per gate: COVERED",
+      "observed": "Across evals/run_evals.py's 527 @case entries, expect values include 205 FAIL, 113 PASS, 52 NO-DATA (counted via grep on the decorator literals), plus WAIVED verified through verdict text/behavior in dedicated cases: v30 'an-exemption-is-reported-as-a-waiver-not-a-pass' (line 3396, asserts the dossier line reads 'WAIVED' not PASS), dp1 'a-waived-check-writes-a-waived-package-never-a-pass-one' (line 7579), plus gd_exempt1/2/leaf/axis/3 (lines 1247-1346) and the-exempted-approval-reads-waived cases (lines 7399-7440). All four canonical verdicts are exercised per relevant gate.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_evidence.py",
+      "claim": "MATRIX ROW 13 \u2014 tampered evidence: COVERED",
+      "observed": "tools/test_sbe_evidence.py::TestTheDefect::test_editing_a_real_receipts_exit_code_breaks_its_seal (line 189) and TestTheInvariant::test_the_seal_covers_the_fields_a_forger_would_choose (line 563), which asserts argv, argvRedactions, exitCode, durationSeconds, headCommit, stdoutSha256, coveredFiles, workingTreeDirty are all in SEALED_FIELDS.",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "low",
+      "file": "tools/test_sbe_evidence.py",
+      "claim": "MATRIX ROW 14 \u2014 wrong commit: COVERED",
+      "observed": "tools/test_sbe_evidence.py::TestStaleness::test_a_receipt_from_an_earlier_commit_fails (line 253). Plus evals/run_evals.py a-stale-headcommit-ran-receipt-no-longer-passes (line 7724), a-headcommit-bound-to-the-current-commit-still-passes (line 7772, sound case), a-non-string-headcommit-is-caught (line 7786), no-git-history-leaves-the-receipt-unaffected (line 7798).",
+      "recommended_fix": "No action required."
+    },
+    {
+      "severity": "high",
+      "file": "tools/test_sbe_evidence.py",
+      "claim": "MATRIX ROW 15 \u2014 timeout with surviving child: ABSENT as an automated regression test, though the defect was manually measured once and honestly disclosed",
+      "observed": "docs/KNOWN-LIMITS.md lines 490-497: 'a `sh -c \"sleep 60 & sleep 60\"` run under `timeout=2` returned in 2.00 seconds and left both sleeps alive... expiry kills the CHILD, not its descendants, because nothing here kills a process group. The refusal comes back at the bound, and a grandchild the command spawned may keep running, detached, after the wrapper has already said no.' This was a one-time manual measurement ('measured rather than assumed'), not a pinned fixture. I read src/brothersbe/evidence.py lines 489-501: `subprocess.run(list(argv), ..., timeout=timeout)` uses Python's default single-process kill, no process_group/preexec_fn/start_new_session/killpg anywhere in the file. I read the full test list of tools/test_sbe_evidence.py::TestAccessAndTimeout (lines 481-542, 4 tests): test_a_fifo_receipt_is_refused_in_bounded_time_json_mode, ..._text_mode, test_run_with_timeout_over_a_slow_command_produces_no_pass_receipt (uses `python3 -c \"import time; time.sleep(30)\"`, a single leaf process with no children), test_run_without_timeout_is_unaffected. None plants a command that forks/backgrounds a surviving child.",
+      "recommended_fix": "Add a permanent regression fixture: run `sbe evidence run --timeout 2 -- sh -c \"sleep 30 & sleep 30\"`, then assert (via `pgrep`/process listing, or a marker file the backgrounded child writes after a delay) that the grandchild is still alive after the wrapper returns -- pinning the CURRENT behavior as a named, tracked limit. If the release wants this closed rather than disclosed: run the child with `start_new_session=True` and kill the process group (`os.killpg`) on TimeoutExpired instead of relying on subprocess.run's default single-process kill."
+    },
+    {
+      "severity": "medium",
+      "file": "src/brothersbe/evidence.py",
+      "claim": "MATRIX ROW 16 \u2014 fake CI env vars: dirty-tree forgery is COVERED and blocked; clean-tree label-forgery is an accepted, tested-as-a-limit gap, not a caught defect",
+      "observed": "COVERED half: tools/test_sbe_evidence.py::TestDirtyTree::test_a_ci_run_id_does_not_promote_a_dirty_run (line 306) confirms a fabricated SBE_CI_RUN_ID on a dirty tree still reads LOCAL-ADVISORY, never PROTECTED-CI. UNMITIGATED half: TestTheSoundCase::test_a_ci_run_id_on_a_clean_tree_reads_as_protected (line 245) proves the opposite case is a documented LIMIT: on a clean tree, ANY value an operator sets for SBE_CI_RUN_ID -- real or invented -- reads as 'PROTECTED-CI' with zero verification against an actual CI/forge API. docs/KNOWN-LIMITS.md lines 288-292 and docs/THREAT_MODEL.md (row 15, lines 260-270) state this plainly: 'nothing here can tell a run id minted by a CI system from one an agent exported into its own shell.' I traced ciRunId/trust_level usage (src/brothersbe/evidence.py lines 405-423, 829, 870, 1020): the trust label is display-only in `evidence show`; no gate_* function in tools/sbe_gate.py reads ciRunId to alter a PASS/FAIL verdict, so the blast radius of this gap is a misleading human-facing label, not a forgeable gate result.",
+      "recommended_fix": "Given the label carries no gate authority today, the residual risk is a human reviewer trusting a PROTECTED-CI badge that was never verified. If the release wants this fully closed: require SBE_CI_RUN_ID to be corroborated (e.g. by calling the forge's own API to confirm the run id exists and matches the current commit, analogous to the token-gated `sbe pr verify`) before granting the PROTECTED-CI label, and add a fixture that fabricates a plausible-looking run id on a clean tree and asserts the label is refused absent that corroboration."
+    },
+    {
+      "severity": "medium",
+      "file": "evals/run_evals.py",
+      "claim": "Calibration ledger for run_evals.py's 527 cases is not documented the way tools/test_sbe_bypass.py's 21 fixtures are",
+      "observed": "evals/run_evals.py's module docstring (lines 2-6) states each case is 'a real failure class as a fixture, a planted defect, and an assertion that the corresponding gate CATCHES it,' and the 527 cases are drawn from real historical defects (evident from comments throughout, e.g. 'THE DEFECT THIS CONTROL EXISTS FOR' framing repeated dozens of times). But docs/BYPASS-COVERAGE.md's explicit calibration record ('break the control it targets, confirm the fixture goes red, restore the tool, confirm it goes green... Twenty one breaks were applied') is scoped ONLY to tools/test_sbe_bypass.py's 21 fixtures, plus a handful of individually cross-referenced cases (e.g. docs/BYPASS-COVERAGE.md row 23's 'TestDossierBindingScenario23, five fixtures, each calibrated'). I found no equivalent statement that all (or a sampled subset of) run_evals.py's other ~500 cases were verified to actually go red when the fix they guard is reverted.",
+      "recommended_fix": "For a release sign-off, either (a) spot-check a random sample of run_evals.py cases by actually reverting the guarded fix in tools/sbe_gate.py or tools/sbe_checks.py and confirming the corresponding eval goes red (a mutation-testing-by-hand exercise), or (b) extend the calibration ledger in docs/BYPASS-COVERAGE.md (or a new docs/CALIBRATION.md) to cover run_evals.py's cases with the same 'broke it, confirmed red, restored, confirmed green' methodology, at least for the release-critical hard-gate cases (numbers/migration/approval/ran)."
+    },
+    {
+      "severity": "low",
+      "file": "evals/test_no_data_class.py",
+      "claim": "No hypothesis/mutmut/atheris; a deterministic, seeded, hand-rolled generative test exists and is wired into CI",
+      "observed": "grep -rniE for 'hypothesis|mutmut|atheris|fuzz' across every .py file in the repo (excluding .claude/worktrees duplicates) returns zero hits. evals/test_no_data_class.py line 93 'SEEDS = []' with seeds only added via repeated `--seed N` CLI args (lines 94-96), feeding seeded_cases() (line 1164) which uses `random.Random(seed)` (line 1193, deterministic, not wall-clock-seeded) to randomly compose 1-3 field mutations per fixture from pools of empty/vacuous/placeholder/comment-only values and assert the corresponding check still reports NO-DATA rather than a false PASS. .github/workflows/brothersbe-gates.yml lines 140-141 run BOTH the deterministic default (`python3 evals/test_no_data_class.py`) AND the seeded sweep (`--seed 1 --seed 2 --seed 3`) in CI, so this generative layer is not vestigial. Ran live this session (default, no seed): '30 checks discovered from 4 registries in 25 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).'",
+      "recommended_fix": "No dedicated mutation-testing tool (mutmut) or coverage-guided fuzzer (atheris/hypothesis) is present. The hand-rolled seeded generator is a reasonable, deterministic substitute for the NO-DATA class specifically, but it does not fuzz arbitrary inputs (e.g. binary garbage, deeply nested JSON, adversarial unicode) the way a real fuzzer would. If broader fuzz coverage is wanted for the release, consider adding a bounded `hypothesis`-based fixture for the JSON-parsing entry points (load_receipt, the numbers/migration/ran manifest readers) as a supplement, not a replacement, to the existing seeded sweep."
+    },
+    {
+      "severity": "low",
+      "file": "evals/run_evals.py, tools/test_sbe_evidence.py, tools/test_sbe_bypass.py, tools/test_sbe_impact.py",
+      "claim": "Evidence honesty: the pass counts quoted in this report were reproduced live at HEAD d11975ed in this session, not taken from a prior summary",
+      "observed": "`git rev-parse HEAD` = d11975ed8e1e172e7c8502d1bea735d5245c2e0b, `git status` clean at session start. Live runs executed in this session: `python3 tools/test_sbe_evidence.py -v` -> 'Ran 57 tests in 21.170s / OK'; `python3 tools/test_sbe_bypass.py -v` -> 'Ran 21 tests in 3.129s / OK'; `python3 tools/test_sbe_impact.py -v` -> 'Ran 20 tests in 7.179s / OK'; `python3 evals/run_evals.py` -> '527 evals: 527 passed, 0 regressions.'; `python3 evals/test_no_data_class.py --quiet` -> '30 checks discovered from 4 registries in 25 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).' No test was skipped or folded into a pass count in any of these five runs; all exited 0.",
+      "recommended_fix": "No action required; this finding documents the verification method for the other findings in this report."
+    }
+  ],
+  "scope_examined": [
+    "evals/run_evals.py (fully read/greped structurally; all 527 @case entries enumerated by category; executed live)",
+    "evals/test_no_data_class.py (structure read, SEEDS/seeded_cases mechanism read in full, executed live default mode)",
+    "tools/test_sbe_evidence.py (fully read; executed live, 57/57 pass)",
+    "tools/test_sbe_bypass.py (fully read; executed live, 21/21 pass)",
+    "tools/test_sbe_impact.py (fully read; executed live, 20/20 pass)",
+    "src/brothersbe/impact.py (fully read)",
+    "src/brothersbe/evidence.py (key sections read: generate(), trust_level(), SEALED_FIELDS, timeout handling)",
+    "tools/sbe_gate.py (gate_numbers, gate_migration, gate_ran fully read; gate_approval located)",
+    "tools/sbe_score.py (silent_failure_lints located and cross-referenced)",
+    "docs/BYPASS-COVERAGE.md (fully read, all 35 rows)",
+    "docs/THREAT_MODEL.md (fully read, all 15 sections)",
+    "docs/KNOWN-LIMITS.md (headings enumerated; the sections on impact scan, evidence wrapper, timeout/process-group residual, and CI run-id fully read)",
+    "docs/book/14-the-data-engineers-deep-dive.md (fan-out/grain narrative section read)",
+    "docs/guides/03-work-doctrines.md and docs/book/13-the-backend-engineers-deep-dive.md (breaking-change / oasdiff references)",
+    "docs/EXTERNAL-PROOF-2026-07-31.md (skimmed for calibration methodology corroboration)",
+    ".github/workflows/brothersbe-gates.yml (grepped for test invocation lines, --seed wiring)",
+    "git log/status/branch at commit d11975ed on release/1.0-closeout"
+  ],
+  "scope_not_examined": [
+    "tools/test_sbe.py in full (2700+ lines; only grepped for specific keywords such as timeout/CI/injection/symlink -- not read end to end)",
+    "tools/test_sbe_fence_hook.py, test_sbe_tasks.py, test_sbe_work.py, test_sbe_status.py, test_sbe_status_team.py, test_sbe_converge.py, test_sbe_decisions.py, test_sbe_adopt.py, test_sbe_prverify.py, test_sbe_prverify_live.py, test_sbe_plan.py, test_sbe_book.py, test_sbe_install.py, docs/book/estate/test_estate.py -- none of these were read or executed this session (out of the 3 named target suites plus run_evals.py, per the mission's stated scope)",
+    "Actual GitHub Actions CI run for this commit (only local reproduction of the same commands was performed; the hosted workflow itself was not triggered or observed)",
+    "The .claude/worktrees/* duplicate trees (appear to be stale/parallel agent copies of the same repo; not diffed against the audited HEAD, assumed out of scope)",
+    "Windows behavior (explicitly documented in docs/KNOWN-LIMITS.md as untested by the project itself)",
+    "Real external-estate re-verification (relied on docs/EXTERNAL-PROOF-2026-07-31.md's own account rather than re-running the FastAPI/dbt/sentry estates myself)",
+    "A literal mutation-testing pass (deliberately reverting a guarded fix in tools/sbe_gate.py/sbe_checks.py and confirming the relevant subset of run_evals.py's 527 cases goes red) was not performed; only the documented calibration record for tools/test_sbe_bypass.py's 21 fixtures was verified by reading, not independently re-executed as a break/restore cycle",
+    "seeded_cases() with --seed 1/2/3 (the CI-wired generative sweep) was not itself executed this session; only the deterministic default (no-seed) run was executed live"
+  ]
+}

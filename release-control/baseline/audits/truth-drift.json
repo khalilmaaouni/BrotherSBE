@@ -1,0 +1,139 @@
+{
+  "findings": [
+    {
+      "review_finding_id": "C-02/C-03 (best-match)",
+      "verdict_on_review_finding": "CONFIRMED",
+      "severity": "critical",
+      "file": "skills/verify/SKILL.md",
+      "line": 51,
+      "claim": "\"Commit-bound, wrapper-generated evidence is the next thing being built. Until it lands, treat a local PASS as advisory.\"",
+      "observed": "This sentence has been unchanged since commit d077ad0 (2026-07-28 23:29:08). The very next commit, 0aabc20 (2026-07-29 00:44:23, 'Bind a receipt to the run that produced it and the commit it covers'), shipped exactly this feature in src/brothersbe/evidence.py, whose own docstring states: 'THE COMMAND IS RUN HERE... sbe evidence run -- <command...> executes the command through subprocess, times it, and records what it observed' and 'THE RECEIPT IS BOUND TO A COMMIT AND TO FILE CONTENT. headCommit must be the head at verify time...'. It is wired into bin/sbe as the `evidence` subcommand (src/brothersbe/cli.py:797-798, `_cmd_evidence` at line 471) and further hardened through commit db7296d (2026-08-01: redaction, FIFO/timeout handling, per-kind receipts). tools/sbe_gate.py:395-423 already reads and enforces the `headCommit` binding inside the hard gates themselves. The feature has existed and been enforced for 3+ days as of the audited HEAD (d11975e), not 'the next thing being built'.",
+      "failure_mode": "A reader of /brothersbe:verify believes commit-binding does not exist yet and discounts a PASS as merely advisory, when the gates already refuse a receipt whose headCommit has moved on (tools/sbe_gate.py's headCommit check) and evidence.py already refuses hand-typed receipts via a SHA256 seal.",
+      "recommended_fix": "Rewrite the paragraph to describe what evidence.py and the gate's headCommit check actually enforce today, and restate the real residual limits already documented in evidence.py's own docstring (runId is tamper-evidence, not a signature; only SBE_CI_RUN_ID-minted receipts are PROTECTED-CI) instead of claiming the mechanism is unbuilt."
+    },
+    {
+      "review_finding_id": "C-03/C-04 (best-match)",
+      "verdict_on_review_finding": "CONFIRMED",
+      "severity": "critical",
+      "file": "skills/kickoff/SKILL.md",
+      "line": 41,
+      "claim": "\"Nothing here inspects OpenAPI files, schemas, protobuf definitions, migration files or data models to check those answers against what the change actually touches, so an answer that understates the risk lowers the ceremony and no check notices. That gap is the reason the change-detection engine is being built; until it ships, treat the tier as a claim by the operator rather than a measurement of the change.\"",
+      "observed": "skills/kickoff/SKILL.md was last touched in commit d077ad0 (2026-07-28 23:29:08). The very next commit, 193c95e (2026-07-29 00:09:53, 'Derive the tier from the diff, and never let it lower a declared one'), shipped src/brothersbe/impact.py, whose DETECTORS list (lines 47-95) explicitly matches openapi/swagger, asyncapi, protobuf (.proto), avro (.avsc), graphql, event-schema, db-migration (migrations/alembic/flyway/liquibase dirs), sql-ddl (CREATE/ALTER/DROP), dbt-model, and orm-model files, plus sensitive-path and irreversible-migration detectors. This module is wired into bin/sbe as `impact` and its alias `inspect-change` (cli.py:793-794) and documented in docs/CLI.md:115-118 with a worked example. It is the change-detection engine the SKILL.md text says 'is being built' -- it already exists, is tested (tools/test_sbe_impact.py), and is fully documented elsewhere in the repo. None of skills/kickoff, verify, next, status, review, adopt, design, help, learn, or start SKILL.md files reference `sbe impact`/`inspect-change` anywhere (grep across skills/*/SKILL.md returns zero hits), so the guided layer never points an operator at the tool that already closes this exact gap.",
+      "failure_mode": "An operator running /brothersbe:kickoff is told to treat the declared tier as an unverified claim and given no path to the diff-derived floor check that already exists, so they either skip a real, already-shipped safety net or waste time believing the project has no way to catch an understated risk answer.",
+      "recommended_fix": "Update the paragraph to state that `sbe impact` (or `inspect-change`) already derives a tier floor from the diff and reconciles it against the declared intake answers, cite its two stated residual limits verbatim from impact.py's own docstring (`consumers` cannot be derived; `crosses_boundary` is only inferred from infrastructure-shaped file paths), and add the command to the guided skill's step list."
+    },
+    {
+      "review_finding_id": "C-04 (supporting instance)",
+      "verdict_on_review_finding": "CONFIRMED",
+      "severity": "high",
+      "file": "docs/KNOWN-LIMITS.md",
+      "line": 25,
+      "claim": "\"## The tier comes from answers about contracts that no checker reads ... Nothing anywhere in this tool opens a schema, a contract, an OpenAPI document, a protobuf file or a file format specification, so nothing can confirm or contradict an answer.\"",
+      "observed": "This section was written in commit ed401dff (2026-07-28 20:28:11), before impact.py existed. It was never removed or reconciled after commit 193c95e (2026-07-29 00:09:53) built src/brothersbe/impact.py and, in the SAME commit, added a second, later section to this SAME file: '## The impact scan proposes a floor, and reads paths more than it reads code' (docs/KNOWN-LIMITS.md line ~253), which correctly describes the tool that the earlier section says does not exist. The document now contradicts itself internally: one section says nothing reads contract files, a later section in the same file describes the tool that does.",
+      "failure_mode": "A reader who stops at the first, still-present section (line 25) concludes the tool has zero contract-awareness and never scrolls to the corrected section further down; the doc's own table of contents gives both sections equal standing with no forward or backward cross-reference.",
+      "recommended_fix": "Delete or merge the stale '## The tier comes from answers about contracts that no checker reads' section into the accurate '## The impact scan proposes a floor' section so the file states the current, single truth once."
+    },
+    {
+      "review_finding_id": "unmapped (repository-state claim)",
+      "verdict_on_review_finding": "NEW",
+      "severity": "high",
+      "file": "PUBLISH-CHECKLIST.md",
+      "line": 1,
+      "claim": "\"This repository is complete, clean, and local only. Publishing is a deliberate, founder-triggered step. Nothing here is pushed.\" ... and the '## The publish step (when the founder chooses)' section lists creating the public GitHub repo and pushing it as not-yet-done future actions.",
+      "observed": "PUBLISH-CHECKLIST.md was last committed in f381840 (2026-07-29 19:51:01). Per the audit's own stated ground truth and release-control/baseline/repo.json ('visibility':'public', 'created_at':'2026-07-28T13:35:40Z', 'pushed_at':'2026-08-01T11:57:26Z') and release-control/baseline/tags.json (tag v1.0.0-rc.1 exists on the remote, commit dacee900), the repository has since been made public and pushed, with an annotated tag cut and pushed on 2026-07-31 per docs/RELEASE.md:66 ('executed for 1.0.0-rc.1 on 2026-07-31 (annotated tag, pushed to origin)'). The checklist file itself was never updated afterward to mark its own preconditions as executed or to note the repo is now live.",
+      "failure_mode": "A reader of this file today (present tense, no timestamp, no 'as of' qualifier) is told the repo is local-only and unpublished, when it has been public with a pushed tag for over two days as of the audited commit; someone could re-run the 'publish step' (create a new public repo, re-push) against an already-public repository, or wrongly assume no external eyes have seen the code.",
+      "recommended_fix": "Add a status header noting the checklist was executed on 2026-07-31 and the repo has been public since then, or convert the file into an executed-history record (mirroring how docs/RELEASE.md already states which steps ran and when) rather than leaving it phrased as a pending, founder-gated future action."
+    },
+    {
+      "review_finding_id": "H-15/H-26/H-27 (best-match: stale wave-8 language)",
+      "verdict_on_review_finding": "CONFIRMED",
+      "severity": "medium",
+      "file": ".github/actions/sbe-consumer/action.yml",
+      "line": 25,
+      "claim": "\"Runs sbe impact, sbe evidence verify (when receipts exist), sbe status (once wave 8 ships it), and the design checks in strict mode...\" and, inline at lines 111-119, \"wave 8 delivers `sbe status`. As this action was written it had not landed... 'sbe status is not built in this BrotherSBE installation (wave 8 has not landed here); step skipped, not failed'\"",
+      "observed": "This file was last touched 2026-08-01 09:56:55 (commit 96f5a014). `sbe status` (wave 8) was wired as a real, non-stub subcommand in commit c37b8cc/404cdd0 on 2026-07-29 13:04:17 -- more than 3 days before this file was last edited -- and src/brothersbe/status.py is a fully built 912-line module, last extended 2026-08-01 20:45:16. The `if [ -f status.py ]` guard means the step is not functionally broken (it will run the real command), but the description and comments describe a not-yet-landed feature that had already landed by the time this file was authored. The same stale phrase is duplicated verbatim in .github/workflows/consumer-check.yml:3 and quoted as a direct file excerpt in docs/book/15-the-platform-lead-deep-dive.md:295 (last touched 2026-08-01 17:28:06, also after status.py landed).",
+      "failure_mode": "A consumer repository operator reading this action's description believes `sbe status` support is conditional/future and may not realize it runs unconditionally today, and a reader of the book chapter is shown a 'wave 8 not landed' excerpt as current truth.",
+      "recommended_fix": "Remove the wave-8 guard language and conditional file-exists check now that status.py has shipped for every installation this action targets; update the description string and the quoted excerpt in docs/book/15 to match."
+    },
+    {
+      "review_finding_id": "unmapped (minor, low external visibility)",
+      "verdict_on_review_finding": "NEW",
+      "severity": "low",
+      "file": "tools/test_sbe_plan.py",
+      "line": 14,
+      "claim": "\"At the time this file was written, `bin/sbe plan` is a NOT BUILT stub that exits 3 for every invocation. Every test here is expected to FAIL against that stub... That red is the point: tests first.\"",
+      "observed": "tools/sbe_plan.py is a fully built, 1214-line module (last touched 2026-07-31 04:04:59), and the tests in this same file now assert real success behavior (e.g. line 159: 'self.assertEqual(code, 0, out)' against actual plan derivation), not stub-exit-3 behavior. The docstring was never updated after the TDD-red phase completed, even though the test file itself was touched afterward (d0505bb, 2026-07-31 03:34:33).",
+      "failure_mode": "Low: this is an internal test-file docstring, not user-facing prose, but a new contributor reading it would wrongly believe `sbe plan` is unbuilt and that green results here mean nothing.",
+      "recommended_fix": "Update the docstring to state the tests now assert the real, shipped --write-and-validate behavior described in docs/specs/2026-07-30-sbe-plan-derivation.md, dropping the 'expected to FAIL' framing."
+    },
+    {
+      "review_finding_id": "H-16",
+      "verdict_on_review_finding": "PARTIAL",
+      "severity": "medium",
+      "file": "VERSION",
+      "line": 1,
+      "claim": "H-16 asks whether hardcoded version strings ('1.0.0-rc.1' / 'rc.2') have drifted from reality.",
+      "observed": "VERSION=1.0.0-rc.2, and .claude-plugin/plugin.json, .claude-plugin/marketplace.json, .brothersbe/config.json all also declare 1.0.0-rc.2; these three are mechanically pinned equal to VERSION by tests in tools/test_sbe.py (lines 1628-1631, 2217-2231), so no drift is possible there. src/brothersbe/__init__.py:version() reads VERSION from disk at runtime rather than duplicating it, so 'sbe --version'/'sbe doctor' cannot drift either. However, release-control/baseline/tags.json shows the GitHub remote has ONLY tag v1.0.0-rc.1 published (commit dacee900); v1.0.0-rc.2 exists only in the local tree/VERSION file and has not been pushed as a tag, consistent with docs/RELEASE.md:68-70 ('publishing v1.0.0-rc.2... is the product owner's, through their own push'). Every reference to v1.0.0-rc.2 I found as an install target (docs/ROLLOUT.md:108, docs/book/04-install-day.md:38) is correctly hedged with a conditional ('once it is published' / 'if tag v1.0.0-rc.2 is published on GitHub, otherwise use the documented alternate clone-and-load path'), so I did not find a false claim that rc.2 is already installable from a tag.",
+      "failure_mode": "Not a code/doc contradiction today, since every rc.2-as-tag reference is conditionally hedged, but the gap between 'declared local version' (rc.2) and 'actually published tag' (rc.1 only) is a live release-process fact worth tracking so it does not silently become a false claim once more docs start asserting rc.2 as installable without the hedge.",
+      "recommended_fix": "No text change required today; when v1.0.0-rc.2 is actually tagged and pushed, re-grep the hedged sentences above to drop the conditional framing at that time, not before."
+    },
+    {
+      "review_finding_id": "H-11",
+      "verdict_on_review_finding": "REFUTED",
+      "severity": "low",
+      "file": "README.md",
+      "line": 347,
+      "claim": "H-11 asks whether README.md, SKILL.md, or docs/KNOWN-LIMITS.md headline claims imply Windows or other out-of-scope support.",
+      "observed": "README.md:347 states plainly 'Windows is untested, and the shipped CI covers Linux and macOS only'; README.md:356 repeats 'Linux and macOS are what CI runs; Windows is untested.' docs/KNOWN-LIMITS.md:240-243 carries a dedicated '## Windows is untested' section. SKILL.md's own description (line 3) scopes itself to 'small teams and strong individual contributors' with no platform overreach language. A targeted grep for cross-agent/cross-IDE/cross-platform overreach terms (Windows, cross-platform, any IDE, any agent, Cursor, Copilot, VSCode, JetBrains, universally, any machine) across README.md, SKILL.md and docs/KNOWN-LIMITS.md returned no matches suggesting scope beyond Linux+macOS+Claude-Code+CLI+GitHub-Action.",
+      "failure_mode": "None found in these three files.",
+      "recommended_fix": "No action needed for README.md, SKILL.md, or docs/KNOWN-LIMITS.md; scope statements in these three files are already accurate and appropriately narrow."
+    },
+    {
+      "review_finding_id": "unmapped (observation, not a proven false claim)",
+      "verdict_on_review_finding": "NEW",
+      "severity": "low",
+      "file": "program/PROGRAM.yaml",
+      "line": 35,
+      "claim": "Two unrelated 'wave' numbering schemes coexist in the tree using the same vocabulary for different things.",
+      "observed": "docs/adr/2026-07-28-plugin-conversion.md:3 and src/brothersbe/cli.py's `_not_built()` (wave 3 = policy, wave 4 = exceptions, wave 8 = status, wave 10 = plugin packaging) refer to a 10-wave 'plugin conversion' plan that is mostly executed (status/wave 8 and packaging/wave 10 are done; policy/wave 3 and exceptions/wave 4 remain genuinely unbuilt, confirmed by no .brothersbe/policy.json schema anywhere in the tree). Separately, program/PROGRAM.yaml:35-59 and program/MASTER-PLAN.md define a DIFFERENT 7-wave (wave-0 through wave-6) 'public release' program, target window 2026-11-09 to 2026-11-23, status 'delivery_blueprint_no_public_release_authorized', budget 6.2M-7.4M tokens -- describing work not yet started. Both documents are live in the same tree and both call their units 'wave N', so 'wave 3' means 'the repository policy schema' in one document and 'installation, packaging, update, and rollback (BR-0301 to BR-0307)' in the other.",
+      "failure_mode": "A reader who encounters 'wave 3' or 'wave 4' in one document and then the other could reasonably (and wrongly) conflate the two plans' scope and completion state, since neither document cross-references the other's numbering scheme.",
+      "recommended_fix": "Rename one of the two numbering schemes (e.g. call the plugin-conversion stages 'phases' and reserve 'wave' exclusively for the MASTER-PLAN.md public-release program, or vice versa) to remove the collision; this is a naming clarity issue, not a factual falsehood in either document."
+    }
+  ],
+  "scope_examined": [
+    "skills/verify/SKILL.md (full file)",
+    "skills/kickoff/SKILL.md (full file)",
+    "bin/sbe (full file) and src/brothersbe/cli.py (full file, all 968 lines) -- enumerated all 25 COMMANDS entries including the two NOT-BUILT stubs (policy=wave3, exceptions=wave4)",
+    "src/brothersbe/evidence.py (module docstring and header, ~120 lines) cross-checked against skills/verify/SKILL.md's 'next thing being built' claim",
+    "src/brothersbe/impact.py (full DETECTORS list and module docstring, ~140 lines) cross-checked against skills/kickoff/SKILL.md's 'change-detection engine' claim",
+    "src/brothersbe/status.py (docstring/header) cross-checked against 'wave 8' claims",
+    "src/brothersbe/adopt.py (docstring + policy section) cross-checked against 'wave 3 policy' claims",
+    "src/brothersbe/__init__.py (version()/repo_root()) to confirm no hardcoded-version drift risk",
+    "PUBLISH-CHECKLIST.md (full file) cross-checked against release-control/baseline/repo.json and tags.json and docs/RELEASE.md",
+    "docs/KNOWN-LIMITS.md (targeted sections: lines 1-40, 230-290, 470-640) for the contract/schema claim and the Windows section",
+    "README.md (lines 1-60, 340-432) for headline scope and 'What this is not' claims",
+    "SKILL.md (front matter and lines 1-40) for headline scope claims",
+    "docs/CLI.md (targeted grep for 'impact'/'inspect-change' documentation) to confirm the capability is documented correctly elsewhere",
+    "CHANGELOG.md, docs/ROLLOUT.md, docs/RELEASE.md, docs/book/04, docs/book/15, program/work-items/BR-0301.yaml, program/PROGRAM.yaml, program/README.md, docs/adr/2026-07-28-plugin-conversion.md (targeted grep/read for version strings and 'wave' language)",
+    ".github/actions/sbe-consumer/action.yml, .github/workflows/consumer-check.yml (full 'sbe status' step) for wave-8 staleness",
+    "tools/test_sbe_plan.py (docstring + assertions) and tools/sbe_plan.py (existence/size) for the 'NOT BUILT stub' claim",
+    "tools/sbe_gate.py (grep for headCommit/GATES definitions) to confirm the four hard gates named in verify/SKILL.md exist and that commit-binding is already enforced there too",
+    "tools/sbe_score.py, tools/sbe_design.py (grep for --strict/--strict-soft flags) to confirm verify/SKILL.md's exact command syntax is accurate",
+    "Repo-wide grep (excluding .git and release-control/) for: wave, not built, not yet built, next thing, will be built, planned, has not landed, coming",
+    "Repo-wide grep for version strings '1.0.0-rc.1'/'1.0.0-rc.2' across .md/.json/.py files",
+    "Repo-wide grep for review-finding IDs (C-02, C-03, C-04, H-11, H-15, H-16, H-26, H-27) -- zero hits anywhere in-repo, confirmed these are external review labels not present in the tracked tree",
+    "git log/git blame timestamps for every file above, used to establish before/after ordering between when a doc claim was written and when the contradicting code landed",
+    "release-control/baseline/repo.json, tags.json, local-tags.txt, audited-sha.txt (read for ground-truth repo state, not included in the stale-language grep per instructions)"
+  ],
+  "scope_not_examined": [
+    "The remaining skills/help, skills/adopt, skills/design, skills/learn, skills/next, skills/review, skills/start, skills/status SKILL.md files were only grepped for 'impact'/'inspect-change' mentions, not read end-to-end for other contradictions.",
+    "src/brothersbe/decisions.py, converge.py, prverify.py, tasks.py, work.py, initcmd.py (2237+736+743+691+242 lines) were not read in full; only referenced indirectly via cli.py's command descriptions and grep hits.",
+    "The full docs/book/ series (18 chapters) was only spot-checked (chapters 04, 10, 15) for version strings and wave-8 language, not read cover to cover for other stale claims.",
+    "docs/for-engineers/, docs/guides/, docs/specs/, docs/plans/, design/ dossiers, and templates/ were not systematically swept for stale future-tense language beyond the repo-wide grep.",
+    "evals/run_evals.py, evals/test_no_data_class.py, and the full tools/test_sbe*.py suite (34 files) were not executed; no tests were run as part of this read-only audit, per the read-only mandate.",
+    "program/MASTER-PLAN.md was read only in the sections shown by grep (waves, budgets); its full length was not read end to end.",
+    ".claude/worktrees/agent-*/ directories were found to contain stale duplicate copies of CHANGELOG.md, KNOWN-LIMITS.md, test_sbe_evidence.py, plugin.json, marketplace.json, config.json -- confirmed these are git-ignored (.git/info/exclude) local worktree scratch, not part of the tracked/audited tree, and were excluded from all findings above.",
+    "No network access was used to verify the live GitHub repository state directly; the 'repo is public with tag v1.0.0-rc.1' fact was taken as given per the task instructions and cross-checked only against the locally-cached release-control/baseline/*.json snapshots.",
+    "The original external review text for C-02, C-03, C-04, H-11, H-15, H-16, H-26, H-27 was not available anywhere in this repository or provided to me, so I could not map my findings to those exact IDs with certainty -- I matched by subject matter (evidence/commit-binding, change-detection/impact, publish-state, wave-8/version staleness, Windows/scope) and marked verdicts accordingly rather than guessing an ID."
+  ]
+}
