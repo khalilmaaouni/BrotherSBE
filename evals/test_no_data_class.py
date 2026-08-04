@@ -1005,6 +1005,7 @@ ADAPTERS = {
     ("sbe_score.py", "CHECKS"): ScoreTool("sbe_score.py"),
     ("sbe_plan.py", "PLAN_CHECKS"): DirTool("sbe_plan.py"),
     ("sbe_release_invariant.py", "CHECKS"): InvariantTool("sbe_release_invariant.py"),
+    ("sbe_instruction_surface.py", "CHECKS"): InvariantTool("sbe_instruction_surface.py"),
 }
 
 

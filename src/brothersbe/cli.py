@@ -1490,6 +1490,11 @@ COMMANDS = [
      _cmd_review_route),
     ("plan", "derive the task plan from a dossier and validate it (delegates to sbe_plan.py)",
      lambda a: _delegate("sbe_plan.py", a.rest)),
+    ("instruction-surface", "did a changed CLAUDE.md, .claude/**, .mcp.json, .claude-plugin/**, "
+                            "hooks/**, agent or skill definition, CODEOWNERS or CI workflow stay "
+                            "inside declared, reviewed scope (delegates to "
+                            "sbe_instruction_surface.py)",
+     lambda a: _delegate("sbe_instruction_surface.py", a.rest)),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
      _cmd_evidence),
     ("task", "the write-scope registry: open, list, fence, check, and close with the "
@@ -1534,12 +1539,13 @@ COMMANDS = [
 #: refused by that same parser with a nonzero exit.
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
-    "evidence", "task", "work", "handover", "pr", "explain", "lineage"))
+    "evidence", "task", "work", "handover", "pr", "explain", "lineage",
+    "instruction-surface"))
 
 
 def build_parser():
     epilog = "commands:\n" + "".join(
-        "  %-15s %s\n" % (name, help_) for (name, help_, _) in COMMANDS)
+        "  %-21s %s\n" % (name, help_) for (name, help_, _) in COMMANDS)
     parser = argparse.ArgumentParser(
         prog="sbe",
         description="BrotherSBE: design first, then evidence. Absent evidence is NO-DATA and "
