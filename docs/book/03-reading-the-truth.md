@@ -48,25 +48,37 @@ was not, looked at.
 
 ## A real run, on this repository
 
-The block below is not typed from memory. It is the literal output of
-running the command shown, against this repository, re-executed by the
-book's own build check every time this page is verified.
+The block below is not typed from memory. It is the literal output of the
+command shown, re-executed by the book's own build check every time this
+page is verified. It runs against a small repository the block itself
+builds, carrying copies of this repository's three real design dossiers.
+Why not against the live repository directly? Because a printed page cannot
+freeze a living branch: the moment real work is in flight, the diff-derived
+sections change, and this page would be lying in one direction or the
+other. The build check proved that twice before this sentence was written.
+The demo repository holds the dossiers still so the reading below stays
+true; your own run of `bin/sbe status .` on a moving repository will differ
+in exactly the ways this chapter teaches you to read.
 
 ```bash
-bin/sbe status .
+rm -rf /tmp/sbe-book-ch03
+git init -q /tmp/sbe-book-ch03
+git -C /tmp/sbe-book-ch03 -c user.name=reader -c user.email=reader@example.com commit -q --allow-empty -m "a starting point"
+cp -r design /tmp/sbe-book-ch03/design
+bin/sbe status /tmp/sbe-book-ch03
 ```
 
 ```
-sbe status: /Users/khalil.maaouni/Documents/BrotherSBE
+sbe status: /tmp/sbe-book-ch03
 
 BROKEN CLAIMS:
-  NO-DATA. scope: no evidence store found at /Users/khalil.maaouni/Documents/BrotherSBE/.sbe/evidence; disposition absent
+  NO-DATA. scope: no evidence store found at /tmp/sbe-book-ch03/.sbe/evidence; disposition absent
 
 MERGE BLOCKERS:
-  clean. scope: dossier final-release-program intake /Users/khalil.maaouni/Documents/BrotherSBE/design/final-release-program/00-intake.json (tier T3); dossier lifecycle-blockers intake /Users/khalil.maaouni/Documents/BrotherSBE/design/lifecycle-blockers/00-intake.json (tier T2); dossier team-operating-model intake /Users/khalil.maaouni/Documents/BrotherSBE/design/team-operating-model/00-intake.json (tier T1); no task registry found at /Users/khalil.maaouni/Documents/BrotherSBE/.sbe/tasks.json; git diff 98882257950c..HEAD over 14 changed file(s)
+  clean. scope: dossier final-release-program intake /tmp/sbe-book-ch03/design/final-release-program/00-intake.json (tier T3); dossier lifecycle-blockers intake /tmp/sbe-book-ch03/design/lifecycle-blockers/00-intake.json (tier T2); dossier team-operating-model intake /tmp/sbe-book-ch03/design/team-operating-model/00-intake.json (tier T1); no task registry found at /tmp/sbe-book-ch03/.sbe/tasks.json; git diff 756953b0c9cd..HEAD over 0 changed file(s)
 
 ACTIVE CONFLICTS:
-  NO-DATA. scope: no task registry found at /Users/khalil.maaouni/Documents/BrotherSBE/.sbe/tasks.json
+  NO-DATA. scope: no task registry found at /tmp/sbe-book-ch03/.sbe/tasks.json
 
 MISSING EVIDENCE:
   - dossier final-release-program: no evidence receipt declares a design completeness check run, and declared tier T3 owes one
@@ -80,9 +92,9 @@ MISSING EVIDENCE:
   - dossier team-operating-model: no evidence receipt declares a scored surface run, and declared tier T1 owes one
 
 COMPLETED EVIDENCE:
-  NO-DATA. scope: no evidence store found at /Users/khalil.maaouni/Documents/BrotherSBE/.sbe/evidence
+  NO-DATA. scope: no evidence store found at /tmp/sbe-book-ch03/.sbe/evidence
 
-NEXT ACTION: run `bin/sbe design --strict <dossier>` through `sbe evidence run --kind design` to record it (MISSING EVIDENCE) scope: intake absent; disposition absent; evidence store absent; task registry absent; dossiers discovered: final-release-program, lifecycle-blockers, team-operating-model; diff git diff 98882257950c..HEAD over 14 changed file(s)
+NEXT ACTION: run `bin/sbe design --strict <dossier>` through `sbe evidence run --kind design` to record it (MISSING EVIDENCE) scope: intake absent; disposition absent; evidence store absent; task registry absent; dossiers discovered: final-release-program, lifecycle-blockers, team-operating-model; diff git diff 756953b0c9cd..HEAD over 0 changed file(s)
 
 sbe status: exit 1. at least one of BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS or MISSING EVIDENCE carries an item above.
 ```
@@ -97,20 +109,23 @@ printed page would be the kind of quiet lie this product exists to catch.
 
 ## Reading this specific report
 
-Every section above reads NO-DATA except MERGE BLOCKERS, which reads
-"clean." That difference is the whole report in miniature. No section found
-a broken claim, an open conflict, or missing evidence for the simple reason
-that nothing has been recorded here to examine: no evidence store, no task
-registry, no intake file. MERGE BLOCKERS alone had something to look at, the
-actual git diff, and found nothing in it that this repository's rules treat
-as blocking.
+Three different verdict shapes sit in one report, and telling them apart is
+the whole lesson. BROKEN CLAIMS, ACTIVE CONFLICTS, and COMPLETED EVIDENCE
+read NO-DATA: nothing was recorded for them to examine, no evidence store,
+no task registry. MERGE BLOCKERS reads "clean": it HAD something to inspect,
+the actual git diff and the three declared intakes, and found nothing the
+rules treat as blocking. And MISSING EVIDENCE carries nine concrete items:
+three dossiers each declared a tier, each tier owes a design check, a hard
+gate run, and a scored surface run, and no receipt anywhere says any of the
+nine happened. Declared obligations with no evidence are findings, not
+silence.
 
-Exit 0 here does not mean this change was verified and found sound. Read the
-closing line again: it names exactly that gap. It means nothing recorded
-anywhere was found broken, which is a different and smaller claim than
-"everything was checked." A reader who treats a clean, NO-DATA heavy report
-as proof of quality has made the exact mistake this whole book exists to
-stop.
+So this report exits 1, and the closing line says exactly why. Notice what
+the exit code did NOT come from: not from anything broken, not from any
+conflict, only from promises the intakes made that nothing has kept yet. A
+reader who skims to "clean" under MERGE BLOCKERS and calls this change
+ready has made the exact mistake this whole book exists to stop: a clean
+section is a claim about one seam, never about the work.
 
 ## When to escalate
 
@@ -125,11 +140,12 @@ what is left is a decision only a human can make.
 COMPLETED EVIDENCE never needs escalation on its own. It is the section that
 tells you what is already settled.
 
-One case deserves a second look even at exit 0: a report that is NO-DATA
-almost everywhere, the way this repository's is right now. That is not a
-blocker by the tool's own rule, but it is worth asking, out loud, whether
-this repository is expected to have an evidence store and a task registry by
-this point in its work, and if so, why it does not yet.
+One case deserves a second look even when nothing blocks: a report that is
+NO-DATA almost everywhere, the way the demo repository's is above outside
+its declared intakes. That is not a blocker by the tool's own rule, but it
+is worth asking, out loud, whether the repository is expected to have an
+evidence store and a task registry by this point in its work, and if so,
+why it does not yet.
 
 ## Diagram: how the sections resolve into one action
 

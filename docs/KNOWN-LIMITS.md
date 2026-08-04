@@ -1013,3 +1013,51 @@ linked worktree git actually creates), and is named here rather than
 guarded against speculatively for a shape not reproduced. Full text:
 `tools/sbe_telemetry.py` (`_resolve_git_dirs`, `cmd_check_update`),
 `tools/test_sbe.py` (`TestCheckUpdateFindsAWorktreeGitdir`).
+
+## The authority-file guard cannot always tell a worker from a human (LT-402)
+
+`tools/sbe_authority_hook.py` refuses an UNDECLARED write to an authority-bearing
+file (CLAUDE.md, `.claude/**`, `.mcp.json`, `.claude-plugin/**`, `hooks/**`,
+`agents/*.md`, `skills/*/SKILL.md`, `CODEOWNERS`, `.github/workflows/**`) only
+when it can also tell it is running inside a dispatched worker's session, not a
+human editing interactively. Refusing every undeclared authority-file edit
+unconditionally would block the ordinary case this project runs in every day: a
+human, in an interactive session, with no task registry in play at all, editing
+CLAUDE.md by hand.
+
+`_worker_context` answers the question with exactly two signals, either
+sufficient on its own: at least one task is OPEN in `.sbe/tasks.json` right now
+(regardless of whether it covers the file in question), or the working
+directory's own `.git` entry is a FILE rather than a directory, the shape `git
+worktree add` leaves behind for a linked worktree and the shape this project's
+own dispatch model uses to isolate a worker (`sbe task open --worktree`).
+
+Both are heuristics, not proof, and here is exactly where they fail. A worker
+that shares the primary tree (no `--worktree` was used to open its task) and
+whose own task has already been closed, or that never ran `sbe task open` at
+all, is indistinguishable from an interactive human by either signal. In that
+shape, an undeclared authority-file edit is ALLOWED, not refused: the hook
+prints a note naming the file and saying no worker context was detected
+(`tools/test_sbe_authority_hook.py::TestWorkerContextSignal::test_no_registry_and_no_linked_worktree_allows_the_undeclared_edit`
+is the fixture that proves the allow, on purpose, in that shape), but nothing
+stops the edit. Closing this gap needs a signal Claude Code's PreToolUse
+payload does not currently carry: nothing in `tool_name`, `tool_input`,
+`session_id`, `cwd`, or `project_dir` distinguishes a dispatched subagent
+invocation from the operator's own primary session. Until such a signal
+exists, this is a real, named remainder, not an oversight.
+
+## The authority guard's case-fold confirmation covers named segments, not a powerset
+
+`tools/sbe_authority_hook.py::confirmed_surface` closes the same
+case-insensitive-filesystem hazard `tools/sbe_fence_hook.py::paths_overlap`
+closes for fence scopes (see "The case-fold confirmation trusts one probe of
+the project's own volume", above), reusing its confirmation function
+(`_same_entry_case_insensitive`) rather than re-deriving it. But the CANDIDATE
+spelling it confirms against is built from a fixed, named table of segments
+(`_known_segments`: the literal tuples `tools/sbe_instruction_surface.py`'s
+`_matched_surface` is itself built from, plus `CLAUDE.md`, `agents`, `skills`,
+`SKILL.md`, `.github`, `workflows`), not an exhaustive case powerset of an
+arbitrary path. A case-folded hazard in a path segment none of the nine
+detected authority families ever names is out of scope by the same logic
+`_matched_surface` itself uses to decide what counts as authority-bearing at
+all, and is not a gap this file closes or claims to.
