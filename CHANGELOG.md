@@ -10,6 +10,25 @@ checklist's own rules.
 
 (nothing yet)
 
+## 1.0.0-rc.6 (2026-08-05)
+
+Wave A of the lean team program: bounded team execution.
+
+- `sbe work brief`: a deterministic, read-only JSON work order for one plan
+  task, byte-identical for identical repository state, refused above 8 KB,
+  atomic on --out. Proven by `tools/test_sbe_work_brief.py` (22 tests).
+- `agents/implementation-worker.md`: the one generic implementation worker,
+  worktree isolated, untrusted-content rule stated, compact return contract.
+  The agent-surface control gained an explicit writer allowlist; the seven
+  reviewers keep their write-tool ban.
+- `/brothersbe:work`: one entry point that reads engine JSON, briefs and
+  starts one to three disjoint ready tasks, dispatches the worker, verifies
+  through `sbe work check` and `sbe work finish`, and hands a claimed task to
+  a human while preserving dirty work and single ownership.
+- `tools/test_sbe_team_workflow.py`: the end to end fixture proving the eight
+  team execution laws on a real scratch repository, including session-restart
+  recovery purely from disk.
+
 ## 1.0.0-rc.5 (2026-08-04)
 
 Closes the remaining three lifecycle blockers.

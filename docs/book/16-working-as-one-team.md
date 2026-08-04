@@ -192,6 +192,7 @@ one job and no write access to anything:
 agents/backend-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 agents/data-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 agents/evidence-auditor.md:4:tools: [Read, Grep, Glob, Bash]
+agents/implementation-worker.md:4:tools: [Read, Grep, Glob, Edit, Write, Bash]
 agents/migration-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 agents/principal-architect.md:4:tools: [Read, Grep, Glob, Bash]
 agents/qa-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
@@ -206,6 +207,7 @@ echo "no reviewer agent lists Write or Edit as a tool"
 ```
 
 ```
+agents/implementation-worker.md
 no reviewer agent lists Write or Edit as a tool
 ```
 
