@@ -167,7 +167,7 @@ def check(root, base):
 
 
 from sbe_checks import Check as _Check
-_TEST_REGISTRY = {"release-invariant": _Check(
+CHECKS = {"release-invariant": _Check(
     check, reads=("VERSION",), kind="git", severity="gate", empty_expect="NO-DATA",
     empty_fixture="",
     full_fixture={"files": {"VERSION": "1.0.0\n"}, "git": {"message": "test"}},
