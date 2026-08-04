@@ -1,7 +1,8 @@
 # Publish checklist (founder-gated)
 
-This repository is complete, clean, and local only. Publishing is a deliberate,
-founder-triggered step. Nothing here is pushed.
+This repository is public at https://github.com/khalilmaaouni/BrotherSBE. Publishing
+already happened. What follows are the preconditions this checklist re-checks before
+EACH release, not a one-time gate before a first push.
 
 ## Preconditions, each to be re-checked at publish time
 
@@ -50,11 +51,10 @@ observation to make on the day, not a claim this document makes on its own behal
       original patterns returned green, a check narrower than its own sentence.
       This line is excluded because it names the terms it searches for, which is
       the one place in the tree where they are the checklist and not the history.
-- [ ] The install command in `README.md` and `docs/SETUP.md` resolves. It points at
-      a repository that does not exist until this checklist is executed, so it is
-      expected to 404 beforehand and must be re-checked immediately after:
+- [ ] The install command in `README.md` and `docs/SETUP.md` resolves. The repository
+      is public, so this must return 200, not 404:
       `curl -sS -o /dev/null -w '%{http_code}\n' https://github.com/khalilmaaouni/BrotherSBE`
-      must print 200 once the repo is public.
+      must print 200.
 - [ ] `git ls-files docs/superpowers/` returns nothing. That directory held an
       unratified design spec and a long agent task list naming private tooling a
       reader does not have, in a repository where the thing is already built. The
@@ -68,13 +68,18 @@ observation to make on the day, not a claim this document makes on its own behal
       with `git check-ignore -v .superpowers/` and `git ls-files .superpowers/`,
       which must return nothing.
 
-## The publish step (when the founder chooses)
-1. Create a new PUBLIC GitHub repo named BrotherSBE under the founder's account.
-2. Add it as the remote and push via GitHub Desktop (the standing release tool),
-   the founder authorizing the push at the GUI. Credentials are never automated.
-3. Confirm the pushed tree matches the intended one: no `sections/`, `verify/`,
-   `WHITEPAPER.md`, no `STATE.md` (gitignored, never re-added), and NO `.docx` at
-   all, matching the earlier checkbox: the whitepaper is handed over out of band.
+## Cutting a release
+The repo is already public: creating it and pushing the first tree is done. What
+remains, for every release after this one, is the tag-and-push procedure documented
+in `docs/RELEASE.md` under "Cutting a release (maintainer)" (lines 43 to 56 of that
+file): bump `VERSION` and the `DIGEST.md` header, write the `CHANGELOG.md` entry,
+regenerate `CHECKSUMS.sha256`, run the gates, commit those four files together, tag,
+then push the tag through the operator's own push process. The tag and the push are
+both human-gated; confirm the pushed tree matches the intended one before calling a
+release done, the same check this checklist has always asked for, no `sections/`,
+`verify/`, `WHITEPAPER.md`, no `STATE.md` (gitignored, never re-added), and NO
+`.docx` at all, matching the earlier checkbox: the whitepaper is handed over out of
+band.
 
 ## After publish
 - Optionally publish the whitepaper separately as the rationale document; it names

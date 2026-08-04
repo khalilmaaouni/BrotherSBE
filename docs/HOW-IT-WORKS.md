@@ -347,6 +347,8 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
         run: python3 tools/test_sbe_impact.py
       - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
         run: sh scripts/test-install-artifact.sh
+      - name: Release invariant (distributable bytes cannot move without VERSION moving)
+        run: python3 tools/sbe_release_invariant.py --strict
       - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
         run: sh scripts/test-upgrade-rollback.sh
       - name: Adopt and init fixtures (sbe adopt, sbe init)

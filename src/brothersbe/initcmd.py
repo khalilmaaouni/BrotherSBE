@@ -12,6 +12,16 @@ nothing, and the receipt -- the one artifact that legitimately does carry a
 timestamp -- is then left untouched rather than rewritten with a new one,
 because nothing happened this run for it to describe.
 
+The generated config also carries the team profile: `.sbe/team-profile.json`
+in the TARGET repository when it has one, otherwise this installation's own
+copy, read by `load_team_profile()` below and folded into `.brothersbe/
+config.json` field by field. Exactly one field set is supported (dossierRoot,
+vaultPathPattern, ci, codeGuideDepth, schemaVersion -- the same five names
+install.sh has always advertised reading). Anything else the profile file
+contains is REJECTED BY NAME rather than silently dropped, because a field a
+team added and never saw applied is a worse failure than a field that never
+existed: the first looks like it worked.
+
 `--dry-run` (the default, wired in cli.py) shows every intended mutation as a
 diff and writes nothing; `--apply` writes. Refuses outside a git repository,
 naming the reason, because there is nowhere for the config, the dossier
@@ -27,7 +37,17 @@ import time
 from . import SCHEMA_VERSION, repo_root, version
 
 CONFIG_PATH = ".brothersbe/config.json"
-DOSSIER_MARKER = "design/.gitkeep"
+#: Where the dossier directory lives when no profile names a different
+#: dossierRoot -- the same default `_config_content()` writes into
+#: `.brothersbe/config.json` when a profile is silent about that field.
+DEFAULT_DOSSIER_ROOT = "design"
+#: The default-case marker only. A profile naming a different dossierRoot
+#: changes where the marker actually goes; `_dossier_marker(profile)` below
+#: computes the path this run actually uses, from the SAME resolved root
+#: `_config_content()` writes into the config, so the two can never name
+#: different places. This constant exists for the default case and for
+#: anything that still reads it expecting "design/.gitkeep".
+DOSSIER_MARKER = DEFAULT_DOSSIER_ROOT + "/.gitkeep"
 RECEIPT_PATH = ".brothersbe/install-receipt.json"
 GITIGNORE_PATH = ".gitignore"
 #: One line above the ignore entry, explaining why it is there before a
@@ -44,6 +64,21 @@ CONSUMER_ACTION_PATH = ".github/actions/sbe-consumer/action.yml"
 #: is the only place that content has to change.
 _CONSUMER_WORKFLOW_SOURCE = ".github/workflows/consumer-check.yml"
 _CONSUMER_ACTION_SOURCE = ".github/actions/sbe-consumer/action.yml"
+
+#: Same relative path in the target repository and in this installation:
+#: `load_team_profile()` tries the target first (a team's own committed
+#: answer) and falls back to this copy (the distribution's default answer),
+#: so one constant serves both lookups.
+TEAM_PROFILE_PATH = os.path.join(".sbe", "team-profile.json")
+
+#: The exactly-one field set `sbe init` understands, in the same order
+#: install.sh has always advertised reading (its own apply_team_profile
+#: comment, "dossierRoot, vaultPathPattern, ci, codeGuideDepth, and
+#: schemaVersion"). A field outside this tuple is named and rejected rather
+#: than merged in, because the alternative -- accepting whatever keys show up
+#: -- means a typo in a team's profile changes nothing and says nothing.
+SUPPORTED_TEAM_PROFILE_FIELDS = ("dossierRoot", "vaultPathPattern", "ci",
+                                 "codeGuideDepth", "schemaVersion")
 
 
 class NotAGitRepository(Exception):
@@ -74,13 +109,99 @@ def refusal_reason(root):
     return None
 
 
-def _config_content():
+def load_team_profile(root):
+    """The team profile this `root` gets installed with, and exactly what
+    happened reading it: never a bare dict of values, because a caller that
+    only sees the values cannot tell "the team asked for this" from "nobody
+    asked and this is the built-in default", and install.sh's installation
+    report (REQUIRED to name what was requested, applied and rejected,
+    separately) needs that difference visible.
+
+    Tries `root`'s own `.sbe/team-profile.json` first -- a team's committed,
+    same-for-everyone answer -- then this installation's copy of the same
+    path, so a repository with no profile of its own still gets sensible
+    defaults instead of an error. Returns a dict:
+
+      `path`      the file actually read, or None when neither carries one
+      `source`    "target repository", "distribution", or None to match
+      `requested` every field name the file contains, sorted
+      `applied`   the SUPPORTED_TEAM_PROFILE_FIELDS subset, name -> value
+      `rejected`  field names the file contains that are outside the
+                  supported set, named rather than merged in or dropped
+      `problem`   why no field could be read (unreadable file, invalid
+                  JSON, not a JSON object), or None
+    """
+    candidates = [(os.path.join(root, TEAM_PROFILE_PATH), "target repository"),
+                 (os.path.join(repo_root(), TEAM_PROFILE_PATH), "distribution")]
+    for path, source in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            with io.open(path, encoding="utf-8") as fh:
+                raw = fh.read()
+        except (IOError, OSError) as exc:
+            return {"path": path, "source": source, "requested": [], "applied": {},
+                    "rejected": [], "problem": "%s could not be read (%s)" % (path, exc)}
+        try:
+            data = json.loads(raw)
+        except ValueError as exc:
+            return {"path": path, "source": source, "requested": [], "applied": {},
+                    "rejected": [], "problem": "%s is not valid JSON (%s)" % (path, exc)}
+        if not isinstance(data, dict):
+            return {"path": path, "source": source, "requested": [], "applied": {},
+                    "rejected": [], "problem": "%s does not contain a JSON object" % path}
+        requested = sorted(data.keys())
+        applied = dict((k, data[k]) for k in requested if k in SUPPORTED_TEAM_PROFILE_FIELDS)
+        rejected = [k for k in requested if k not in SUPPORTED_TEAM_PROFILE_FIELDS]
+        return {"path": path, "source": source, "requested": requested, "applied": applied,
+                "rejected": rejected, "problem": None}
+    return {"path": None, "source": None, "requested": [], "applied": {}, "rejected": [],
+            "problem": "no %s found in %s or in this installation (%s)"
+                       % (TEAM_PROFILE_PATH, root, repo_root())}
+
+
+def _resolved_dossier_root(profile):
+    """The one dossierRoot value this run uses, computed in exactly one
+    place so `_config_content()` (what the config CLAIMS) and
+    `_dossier_marker()` (what actually gets created) read the same answer
+    and can never disagree: a profile supplying "blueprints" must produce
+    both a config naming "blueprints" AND a `blueprints/.gitkeep` on disk,
+    never a config naming one root while the marker sits under another.
+    Falls back to DEFAULT_DOSSIER_ROOT ("design") when the profile is
+    silent, or supplies an empty string, about dossierRoot.
+    """
+    root = profile["applied"].get("dossierRoot") or DEFAULT_DOSSIER_ROOT
+    root = root.rstrip("/") or DEFAULT_DOSSIER_ROOT
+    return root
+
+
+def _dossier_marker(profile):
+    """The `.gitkeep` marker path for THIS run's resolved dossier root (see
+    `_resolved_dossier_root()`), so the directory `sbe init` actually
+    creates always matches the `dossierRoot` its own config.json claims."""
+    return "%s/.gitkeep" % _resolved_dossier_root(profile)
+
+
+def _config_content(profile):
+    """The proposed `.brothersbe/config.json` body. `tool` and `toolVersion`
+    name this installation and are never a team's call, so they stay fixed;
+    `schemaVersion` and `dossierRoot` keep their long-standing defaults when
+    the profile is silent about them (SCHEMA_VERSION and DEFAULT_DOSSIER_ROOT,
+    the exact values this function hardcoded before team profiles were read
+    at all, so a repository with no profile installs exactly as it always
+    did); every other SUPPORTED_TEAM_PROFILE_FIELDS name the profile
+    actually supplied is written through as-is, never invented.
+    """
+    applied = profile["applied"]
     payload = {
-        "schemaVersion": SCHEMA_VERSION,
+        "schemaVersion": applied.get("schemaVersion", SCHEMA_VERSION),
         "tool": "sbe init",
         "toolVersion": version(),
-        "dossierRoot": "design",
+        "dossierRoot": _resolved_dossier_root(profile),
     }
+    for key in ("vaultPathPattern", "ci", "codeGuideDepth"):
+        if key in applied:
+            payload[key] = applied[key]
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
@@ -131,10 +252,26 @@ def plan(root, with_consumer_ci=False):
     """The mutations `sbe init` would make, each compared against what is
     already on disk. Read-only: never writes, so `--dry-run` can call this
     directly.
+
+    Loads the team profile (see `load_team_profile()`) once and folds its
+    supported fields into the proposed config; any field the profile
+    contains outside that supported set is named in `warnings` here rather
+    than only inside `apply()`'s result, so a plain `--dry-run` shows the
+    rejection before anything is written, not only after.
     """
-    mutations = [(CONFIG_PATH, _config_content()), (DOSSIER_MARKER, ""),
+    profile = load_team_profile(root)
+    mutations = [(CONFIG_PATH, _config_content(profile)), (_dossier_marker(profile), ""),
                 (GITIGNORE_PATH, _gitignore_content(root))]
     warnings = []
+    if profile["rejected"]:
+        warnings.append(
+            "team profile at %s named field(s) sbe init does not support: %s (supported: "
+            "%s); rejected by name, not applied"
+            % (profile["path"], ", ".join(profile["rejected"]),
+               ", ".join(SUPPORTED_TEAM_PROFILE_FIELDS)))
+    if profile["problem"] and profile["path"] is not None:
+        warnings.append("team profile could not be applied: %s; config falls back to "
+                        "built-in defaults" % profile["problem"])
     if with_consumer_ci:
         for rel, source in ((CONSUMER_WORKFLOW_PATH, _CONSUMER_WORKFLOW_SOURCE),
                             (CONSUMER_ACTION_PATH, _CONSUMER_ACTION_SOURCE)):
@@ -179,10 +316,15 @@ def apply(root, with_consumer_ci=False):
     `root` is not inside a git repository.
 
     Returns a dict: `written` (the artifact paths actually written this
-    call, plus the receipt path when the receipt itself changed), `skippedAsNoop`
-    (True when nothing needed writing), `receipt` (the receipt content,
-    whether freshly written or the one already on disk), `warnings` (why an
-    optional proposal, like the consumer CI copy, could not be made).
+    call, plus the receipt path when the receipt itself changed), `skipped`
+    (proposal paths that already matched what was on disk, so nothing was
+    written for them this call), `skippedAsNoop` (True when nothing at all
+    needed writing), `receipt` (the receipt content, whether freshly written
+    or the one already on disk), `warnings` (why an optional proposal, like
+    the consumer CI copy, could not be made, and why any team-profile field
+    was rejected), `teamProfile` (the `load_team_profile()` result this call
+    used, so a caller like install.sh can report what was requested, applied
+    and rejected by name without re-reading the file itself).
 
     `.gitignore` is written like any other proposal when the receipt line is
     missing (so it shows up in `written`), but it never enters the receipt's
@@ -195,9 +337,16 @@ def apply(root, with_consumer_ci=False):
         raise NotAGitRepository(reason)
 
     proposals, warnings = plan(root, with_consumer_ci)
+    # plan() already loaded the profile once to build the config proposal;
+    # loaded again here rather than threaded through plan()'s return value,
+    # because plan()'s two-value (proposals, warnings) return is read by
+    # cli.py today and a third value would silently break that unpack.
+    profile = load_team_profile(root)
     written = []
+    skipped = []
     for item in proposals:
         if item["identical"]:
+            skipped.append(item["path"])
             continue
         full = os.path.join(root, item["path"])
         directory = os.path.dirname(full)
@@ -209,8 +358,9 @@ def apply(root, with_consumer_ci=False):
 
     receipt_full = os.path.join(root, RECEIPT_PATH)
     if not written:
-        return {"written": [], "skippedAsNoop": True, "receipt": _read_receipt(receipt_full),
-                "warnings": warnings}
+        return {"written": [], "skipped": skipped, "skippedAsNoop": True,
+                "receipt": _read_receipt(receipt_full), "warnings": warnings,
+                "teamProfile": profile}
 
     prior = _read_receipt(receipt_full) or {}
     prior_paths = list(prior.get("writtenPaths", []))
@@ -238,5 +388,5 @@ def apply(root, with_consumer_ci=False):
     with io.open(receipt_full, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
 
-    return {"written": written + [RECEIPT_PATH], "skippedAsNoop": False, "receipt": receipt,
-           "warnings": warnings}
+    return {"written": written + [RECEIPT_PATH], "skipped": skipped, "skippedAsNoop": False,
+           "receipt": receipt, "warnings": warnings, "teamProfile": profile}

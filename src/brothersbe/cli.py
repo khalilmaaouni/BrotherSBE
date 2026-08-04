@@ -28,6 +28,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 from . import SCHEMA_VERSION, repo_root, version
 
@@ -189,6 +190,87 @@ def _record_decisions(command, argv, lines, suppressed):
             "PASS or a NO-DATA is not one.\n" % command)
 
 
+def _record_review(target, lines, args):
+    """Write one durable review record, `11-review.json`, into the dossier at
+    `target`, and SAY on stdout what was written.
+
+    THIS FUNCTION CANNOT MOVE A VERDICT OR AN EXIT CODE, for exactly the
+    reason `_record_decisions` states above and by the same construction: it
+    returns nothing, the caller computed `worst` before ever calling this and
+    returns that value unchanged no matter what happens here, and every
+    failure raised inside it, of any class, is caught here, printed here in
+    full with the name of its exception class, and stops here. A review run
+    that FAILED still exits nonzero with no record written; a review that
+    PASSED is not turned into a pass by one either.
+
+    THE RECORD NEVER JUDGES ITSELF. Whether this review reads as a clean
+    pass, a stale binding, or a reviewer approving their own change is worked
+    out later, at read time, by `sbe status --team` (see `status.py`), from
+    whatever this file actually says when that command runs; this function
+    only persists what it was told, once, bound to the commit under review.
+    It is never rewritten to soften what it first said: a fresh review after
+    a fresh commit is a fresh record, not an edit to the old one.
+
+    `findings` is not taken as a flag: it is read back out of `lines`, the
+    same stdout this run already printed, through the same
+    `decisions.parse_verdict_lines` that packages FAIL and WAIVED lines into
+    decision packages for `verify`. A human retyping what the tool already
+    said would be a second, driftable copy of the same fact.
+    """
+    try:
+        try:
+            from . import decisions as decisions_mod
+        except ImportError:
+            decisions_mod = None
+        findings = []
+        if decisions_mod is not None:
+            parsed = decisions_mod.parse_verdict_lines("\n".join(lines))
+            findings = [v["line"] for v in parsed["verdicts"]
+                       if v["verdict"] in ("FAIL", "WAIVED")]
+
+        git = subprocess.run(["git", "rev-parse", "HEAD"], cwd=os.path.abspath(target),
+                             capture_output=True, text=True)
+        if git.returncode != 0 or not git.stdout.strip():
+            sys.stdout.write(
+                "\nsbe review: no review record was written: the reviewed commit could "
+                "not be resolved (%s). A record with no bound commit could never be "
+                "checked for staleness later, so none was written. The verdicts above "
+                "stand and this command's exit code is unchanged.\n"
+                % (git.stderr.strip() or "git rev-parse HEAD failed"))
+            return
+        head_sha = git.stdout.strip()
+
+        record = {
+            "schemaVersion": SCHEMA_VERSION,
+            "tool": "sbe review",
+            "dossier": os.path.abspath(target),
+            "headSha": head_sha,
+            "reviewer": args.reviewer,
+            "reviewerType": args.reviewer_type,
+            "result": args.result,
+            "findings": findings,
+            "acceptedRisks": list(args.accept_risk or []),
+            "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        path = os.path.join(os.path.abspath(target), "11-review.json")
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    except Exception as exc:
+        # Deliberately every class, for the same reason `_record_decisions`
+        # gives: an exception class nobody anticipated would move a verdict by
+        # escaping. It is reported in full, with its class named, never
+        # swallowed.
+        sys.stdout.write(
+            "\nsbe review: no review record was written: %s: %s. The verdicts above "
+            "stand and this command's exit code is unchanged.\n"
+            % (type(exc).__name__, exc))
+        return
+    sys.stdout.write(
+        "\nsbe review: review record written, bound to head %s, %d finding(s) and %d "
+        "accepted risk(s):\n  %s\n"
+        % (head_sha[:12], len(findings), len(record["acceptedRisks"]), path))
+
+
 def _record_tier_decision(root, data, intake_path, machine_readable):
     """Write ONE decision package when an impact run raised a tier or read a
     disposition, and say where it landed.
@@ -286,16 +368,44 @@ def _cmd_verify(args):
 def _cmd_review(args):
     """What a reviewer runs before writing a word: the scored surface including
     the soft findings, plus the hard gates. Soft findings are shown because a
-    soft FAIL is still a finding; it only means the exit code does not block."""
+    soft FAIL is still a finding; it only means the exit code does not block.
+
+    `--write` additionally persists a durable review record, `11-review.json`,
+    into the dossier: reviewer, reviewer type, verdict, the FAIL and WAIVED
+    lines this run actually printed, and any accepted risks, bound to the
+    commit under review. Without `--write`, `review` still only prints,
+    exactly as it always did. See `_record_review`'s own docstring for why
+    that write can never move `worst` or this command's exit code; the
+    construction is the same one `_record_decisions` uses for `verify`.
+    """
     target = args.path
     if not os.path.isdir(target):
         sys.stderr.write("sbe review: '%s' is not a directory.\n" % target)
         return EXIT_USAGE
+    if args.write:
+        missing = [flag for flag, value in (
+            ("--reviewer", args.reviewer),
+            ("--reviewer-type", args.reviewer_type),
+            ("--result", args.result)) if not value]
+        if missing:
+            sys.stderr.write(
+                "sbe review: --write also needs %s: a review record with an unstated "
+                "field is not a record, it is a guess.\n" % ", ".join(missing))
+            return EXIT_USAGE
     worst = EXIT_OK
+    lines = []
     for tool, argv in (("sbe_score.py", ["--strict", "--strict-soft", target]),
                        ("sbe_gate.py", [target])):
-        if _delegate(tool, argv) != EXIT_OK:
+        result = delegate_teed(tool, argv)
+        lines.extend(result["lines"])
+        if result["code"] != EXIT_OK:
             worst = EXIT_CONTROL_FAILED
+    # Before the closing caveat, so that caveat stays the last line a reader
+    # sees (the promise `_closing_caveat` makes in its own docstring), and
+    # after `worst` is fully computed, so a write here can never be the thing
+    # that decides what this command's exit code is.
+    if args.write:
+        _record_review(target, lines, args)
     _closing_caveat("review", worst)
     return worst
 
@@ -878,14 +988,42 @@ def build_parser():
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")
             if name == "verify":
-                # `review` does not take it because `review` writes no package.
-                # Adding the flag there would advertise a suppression of
-                # something that never happens, which is its own small lie.
+                # `review` does not take this flag: NO_DECISIONS_FLAG suppresses
+                # the decision package `_record_decisions` writes per FAIL and
+                # WAIVED line, and `review` has never called
+                # `_record_decisions`. That stays true now that `review` can
+                # write `11-review.json` with `--write`: a decision package
+                # and a review record are two different artifacts, and
+                # suppressing the first would say nothing about the second.
                 child.add_argument(NO_DECISIONS_FLAG, dest="no_decisions",
                                    action="store_true",
                                    help="do not write a decision package for the FAIL and "
                                         "WAIVED lines below; the suppression is printed, "
                                         "never silent")
+            else:
+                child.add_argument("--write", action="store_true",
+                                   help="persist a durable review record, "
+                                        "11-review.json, into the dossier; requires "
+                                        "--reviewer, --reviewer-type and --result. "
+                                        "Without --write, review only prints, exactly "
+                                        "as before")
+                child.add_argument("--reviewer", default=None,
+                                   help="who is reviewing (a name, login or email); "
+                                        "required with --write")
+                child.add_argument("--reviewer-type", dest="reviewer_type",
+                                   default=None,
+                                   choices=("human", "model", "independent-model"),
+                                   help="what kind of reviewer this is; required with "
+                                        "--write")
+                child.add_argument("--result", default=None,
+                                   choices=("approved", "changes-required",
+                                            "unverifiable"),
+                                   help="the reviewer's verdict on this change; "
+                                        "required with --write")
+                child.add_argument("--accept-risk", dest="accept_risk",
+                                   action="append", default=[],
+                                   help="a risk the reviewer is knowingly accepting "
+                                        "despite a finding; repeat for more than one")
         elif name == "adopt":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to inspect (default: the current one)")

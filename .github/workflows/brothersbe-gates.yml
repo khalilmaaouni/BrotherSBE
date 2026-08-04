@@ -198,6 +198,18 @@ jobs:
       # nothing written outside that one directory.
       - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
         run: sh scripts/test-install-artifact.sh
+      # scripts/test-install-artifact.sh above already proves the checksums
+      # manifest cannot drift from the bytes it describes; it says nothing
+      # about whether VERSION moved when those bytes did, which is the
+      # narrower gap this step closes. fetch-depth: 0 on the checkout step
+      # above fetches full history for every branch and tag, including the
+      # origin/main remote-tracking ref this checker diffs against by
+      # default, so the base ref resolves here; a checkout that switched to
+      # a shallow clone would make this NO-DATA rather than crash, which is
+      # this tool's own stated behavior for a ref it cannot resolve, never a
+      # false pass.
+      - name: Release invariant (distributable bytes cannot move without VERSION moving)
+        run: python3 tools/sbe_release_invariant.py --strict
       # Exercises the real upgrade/rollback path once this repository has cut
       # its first tag; until then it prints NO-DATA and exits 0 without
       # claiming an upgrade was tested, which is the honest result here, not

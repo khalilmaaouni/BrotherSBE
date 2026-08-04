@@ -511,11 +511,12 @@ def render_text(data):
 # ---------------------------------------------------------------------------
 # The team view: every active change in one blocker-first report.
 # Spec: docs/specs/2026-07-30-sbe-status-team.md. Zero network by design:
-# approval facts come only from a saved 10-approval.json, and their staleness
-# against the current head is DERIVED and labeled so. Findings carry a
-# `basis` honesty field: observed (read this run), derived (computed from
-# observed values), unavailable (a source that could not be read, which keeps
-# its severity slot visible instead of vanishing).
+# approval facts come only from a saved 10-approval.json, review facts only
+# from a saved 11-review.json, and their staleness against the current head
+# is DERIVED and labeled so. Findings carry a `basis` honesty field: observed
+# (read this run), derived (computed from observed values), unavailable (a
+# source that could not be read, which keeps its severity slot visible
+# instead of vanishing).
 # ---------------------------------------------------------------------------
 
 TEAM_SEVERITIES = {
@@ -523,6 +524,21 @@ TEAM_SEVERITIES = {
     4: "stale evidence", 5: "missing approvals", 6: "convergence failures",
     7: "active tasks", 8: "ready tasks", 9: "completed changes",
     10: "next action",
+    # 11, review record: deliberately OUTSIDE 1..6, so `team_blocking` below
+    # never blocks a merge on this slot. A missing review is what every one
+    # of this repository's nine merged pull requests would show today (human
+    # review has never run here), and the repository's own law is that
+    # absence is NO-DATA, never a pass and never a block (see cli.py's
+    # `_record_review`): making a brand new, never-yet-produced kind of
+    # record retroactively MERGE-BLOCKING the day it is introduced would
+    # turn a NO-DATA fact into a block by construction, which is exactly the
+    # confusion that law exists to forbid. A record that DOES exist and is
+    # stale still blocks: that finding is filed at severity 4, the same
+    # "stale evidence" slot approval and convergence staleness already use,
+    # because staleness is not absence, it is a record disagreeing with the
+    # commit in front of it, and this project already treats that as
+    # blocking for the other two stores.
+    11: "review record",
 }
 
 
@@ -585,6 +601,93 @@ def _read_json_or_none(path):
         return json.loads(io.open(path, encoding="utf-8").read())
     except (ValueError, OSError):
         return None
+
+
+#: The fields a review record must carry for this run to trust anything it
+#: says. Named once, here, so the write side (cli.py's `_record_review`) and
+#: this read side cannot drift into two different ideas of "complete".
+_REVIEW_REQUIRED_FIELDS = ("headSha", "reviewer", "reviewerType", "result")
+
+
+def _read_review_record(path):
+    """("missing", None), ("malformed", <why, as text>) or ("ok", <dict>).
+
+    Deliberately NOT `_read_json_or_none`, which folds "the file does not
+    exist" and "the file exists and will not parse" into the same None: that
+    conflation is exactly right for convergence and approval above, where an
+    absent report and an unreadable one are both already read as NO-DATA and
+    nobody has had reason to tell them apart. A review record is held to a
+    stricter, three-state law instead (see the call site): a missing record
+    is NO-DATA, and a record that is present but broken, whether unparseable
+    JSON or missing one of its own required fields, is FAIL, because that is
+    proof somebody tried and left something nobody can trust, which is a
+    worse fact than nobody having reviewed anything yet.
+    """
+    if not os.path.exists(path):
+        return "missing", None
+    try:
+        data = json.loads(io.open(path, encoding="utf-8").read())
+    except (ValueError, OSError) as exc:
+        return "malformed", "does not parse: %s" % exc
+    if not isinstance(data, dict):
+        return "malformed", "the top-level JSON value is not an object"
+    missing = [k for k in _REVIEW_REQUIRED_FIELDS if not data.get(k)]
+    if missing:
+        return "malformed", "missing required field(s): %s" % ", ".join(missing)
+    return "ok", data
+
+
+def _commit_author(root, sha):
+    """(name, email) that authored `sha` in `root`.
+
+    Raises `OSError` when git itself could not be run at all (no `git` on
+    PATH, a permission problem): that is a DIFFERENT fact from "this sha does
+    not resolve", and collapsing the two into the same silent None would make
+    "the tool that checks self-review is broken here" read identically to
+    "this commit is not in the history", which is exactly the confusion this
+    project's own law forbids. It is not caught here; the caller (this
+    module's `build_team_report`) catches it once, at the one place that
+    turns either failure into its own explicit, differently-worded NO-DATA
+    finding, never a pass either way.
+
+    Returns (None, None), not an exception, when git DID run and simply could
+    not resolve `sha` to a commit (a wrong sha, a shallow clone, history that
+    has since been rewritten): that is the ordinary "not found" case, and
+    `None` is a real answer for it, not a guess.
+    """
+    if not sha:
+        return None, None
+    code, out, _err = _git(["log", "-1", "--format=%an\x1f%ae", sha], root)
+    if code != 0 or not out.strip():
+        return None, None
+    parts = out.strip().splitlines()[0].split("\x1f")
+    if len(parts) != 2 or not parts[0].strip():
+        return None, None
+    return parts[0].strip(), parts[1].strip()
+
+
+def _same_identity(reviewer, author_name, author_email):
+    """True when `reviewer`, as recorded in a review record, reads as the
+    same person as a commit's (author_name, author_email), folding case and
+    surrounding space the way a git identity naturally varies: a bare name, a
+    bare email, or "Name <email>" typed as one string. Mirrors the judgement
+    `prverify.py` already makes for GitHub approvals (an approval whose login
+    equals the pull request's author login is "approving their own change");
+    this is the same check made from local git history instead of a GitHub
+    API, because status makes no network call, by construction.
+
+    Called only once an author IS known (the caller reads an unknown author
+    as NO-DATA and never calls this to guess through it), so an empty
+    `reviewer` here can only mean a malformed record, which the caller has
+    already turned away before this runs.
+    """
+    reviewer_folded = (reviewer or "").strip().lower()
+    if not reviewer_folded:
+        return False
+    name_folded = (author_name or "").strip().lower()
+    email_folded = (author_email or "").strip().lower()
+    return (reviewer_folded == name_folded or reviewer_folded == email_folded
+           or (bool(email_folded) and email_folded in reviewer_folded))
 
 
 def _closed_clean(records):
@@ -764,6 +867,111 @@ def build_team_report(path):
                         None, "resolve the failing controls on the pull request",
                         "observed",
                         "the saved approval report's FINAL is %s" % approval.get("final")))
+
+            # A review record, `11-review.json`, written by `sbe review
+            # --write` (see cli.py). Held to a stricter three-state law than
+            # convergence and approval above: those two fold "absent" and
+            # "present but will not parse" into the same NO-DATA, because
+            # nobody has ever had reason to tell the two apart here. A review
+            # record is: absence is NO-DATA (nobody has reviewed yet, which is
+            # a fact, not an accusation); a record present but unparseable, or
+            # missing one of its own required fields, is FAIL (somebody tried
+            # and left a record nobody can trust, which is a worse fact than
+            # silence); and a record that parses is judged from what it says,
+            # never from what its own "result" field claims about itself, the
+            # same way a stale approval is judged from the head sha it is
+            # bound to rather than from its own FINAL.
+            review_path = os.path.join(doss, "11-review.json")
+            review_state, review_payload = _read_review_record(review_path)
+            if review_state == "missing":
+                findings.append(_finding(
+                    name, 11, "NO-DATA", review_path, head, None,
+                    "run sbe review %s --write --reviewer <name> --reviewer-type "
+                    "human|model|independent-model --result "
+                    "approved|changes-required|unverifiable to record one" % doss,
+                    "observed",
+                    "no review record (11-review.json) is saved for this change; "
+                    "absence is a fact, not an accusation"))
+            elif review_state == "malformed":
+                findings.append(_finding(
+                    name, 11, "FAIL", review_path, head, None,
+                    "regenerate 11-review.json with sbe review %s --write" % doss,
+                    "observed",
+                    "%s cannot be trusted (%s): a record nobody can read is not a clean "
+                    "pass" % (review_path, review_payload)))
+            else:
+                review = review_payload
+                bound = review.get("headSha")
+                if head and bound and bound != head:
+                    findings.append(_finding(
+                        name, 4, "FAIL", "11-review.json", bound, review.get("reviewer"),
+                        "re-run sbe review against the current head and --write again",
+                        "derived",
+                        "the review record binds to %s but the repository head is %s: "
+                        "stale review" % (bound[:12], head[:12])))
+                else:
+                    reviewer = review.get("reviewer")
+                    result = review.get("result")
+                    finding_list = review.get("findings")
+                    finding_count = len(finding_list) if isinstance(finding_list, list) else 0
+                    risk_list = review.get("acceptedRisks")
+                    risk_count = len(risk_list) if isinstance(risk_list, list) else 0
+                    # Two different NO-DATA reasons, kept apart rather than
+                    # collapsed into one: `git_error` is set only when git
+                    # itself could not be run at all (no `git` on PATH, a
+                    # permission problem), which is a different fact from
+                    # "git ran and this sha does not resolve" (`author_name`
+                    # staying None below). Neither is ever a pass, and each
+                    # names what actually happened rather than sharing a
+                    # single silent "could not check" sentence.
+                    git_error = None
+                    try:
+                        author_name, author_email = _commit_author(root, bound)
+                    except OSError as exc:
+                        author_name = author_email = None
+                        git_error = exc
+                    if git_error is not None:
+                        findings.append(_finding(
+                            name, 11, "NO-DATA", review_path, bound, reviewer,
+                            "install or repair git on this machine so the reviewed "
+                            "commit's author can be checked", "unavailable",
+                            "git could not be run to check the author of the reviewed "
+                            "commit %s (%s): a self-review check this run could not "
+                            "even attempt is never a pass" % ((bound or "?")[:12], git_error)))
+                    elif author_name is None:
+                        findings.append(_finding(
+                            name, 11, "NO-DATA", review_path, bound, reviewer,
+                            "fetch the reviewed commit so its author can be checked, or "
+                            "re-run sbe review once it is reachable", "unavailable",
+                            "git ran but could not resolve the reviewed commit %s, so "
+                            "its author is unknown and this review cannot be checked "
+                            "for self-review: an undetermined author is never a pass"
+                            % (bound or "?")[:12]))
+                    elif _same_identity(reviewer, author_name, author_email):
+                        findings.append(_finding(
+                            name, 11, "FAIL", review_path, bound, reviewer,
+                            "get an independent reviewer to review %s and record a "
+                            "fresh 11-review.json" % doss, "derived",
+                            "the review record names %s as reviewer, and %s is the "
+                            "author of the reviewed commit %s: an approval naming only "
+                            "the author is not an approval"
+                            % (reviewer, author_name, (bound or "?")[:12])))
+                    elif result != "approved":
+                        findings.append(_finding(
+                            name, 11, str(result), review_path, bound, reviewer,
+                            "resolve what the review flagged, then record a fresh "
+                            "11-review.json", "observed",
+                            "the saved review record's result is %s (%d finding(s), %d "
+                            "accepted risk(s))" % (result, finding_count, risk_count)))
+                    else:
+                        findings.append(_finding(
+                            name, 11, "PASS", review_path, bound, reviewer,
+                            "nothing outstanding from review", "observed",
+                            "the saved review record is approved by %s (%s), "
+                            "independent of the commit author, with %d finding(s) and "
+                            "%d accepted risk(s) recorded"
+                            % (reviewer, review.get("reviewerType"), finding_count,
+                               risk_count)))
 
             if commands and not ev["clean"] and not ev["broken"]:
                 findings.append(_finding(

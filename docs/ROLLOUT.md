@@ -109,21 +109,23 @@ never need anything beyond the tree itself:
   because `v1.0.0-rc.1` misses the guided skills. `tools/test_sbe.py` does not assert this behavior (that assertion
   lives in the two scripts' own calibration, run directly).
 
-For an adopting organization, once a tag exists to pin to:
+For an adopting organization, the delta over the canonical clone is two
+flags: pin a tag, and go shallow. Naming a specific version here would go
+stale the moment the next one is cut (and, as of this writing, would go
+stale immediately: see `docs/KNOWN-LIMITS.md`, "Only one tag is published on
+origin"), so see which tags actually exist before you pin:
 
 ```bash
-# Install, pinned to a specific tag:
-git clone --branch v1.0.0-rc.2 --depth 1 <repository-url> ~/.claude/skills/brothersbe
-cd ~/.claude/skills/brothersbe && scripts/verify-install.sh   # must print PASSED
+git ls-remote --tags <repository-url>
+```
 
-# Upgrade to a newer tag:
-git fetch --tags
-git checkout v<new-version>
-scripts/verify-install.sh                                      # must print PASSED
+Then substitute the tag you saw for `<tag>` below.
+[docs/RELEASE.md](RELEASE.md#pinning-an-install-to-a-release) documents the
+rest (the same `scripts/verify-install.sh` check, run the same way, after the
+install, after an upgrade, and after a rollback):
 
-# Roll back to the previous tag:
-git checkout v<previous-version>
-scripts/verify-install.sh                                      # must print PASSED
+```bash
+git clone --branch <tag> --depth 1 <repository-url> ~/.claude/skills/brothersbe
 ```
 
 `verify-install.sh` PASSED means the files on disk match the manifest that
@@ -131,6 +133,9 @@ shipped with that ref, in both directions (nothing missing, nothing altered,
 nothing extra). It does not prove the manifest itself is authentic; take the
 manifest from the tag you trust, not from the same channel as the code
 (`docs/RELEASE.md` states the same limit for this repository's own install).
+Upgrading and rolling back are the same shape as the pin above: `git
+ls-remote --tags` again to see what is newest, `git fetch --tags && git
+checkout <new-tag>`, then `scripts/verify-install.sh` again.
 
 ## Blocked, verbatim
 

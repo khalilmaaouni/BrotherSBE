@@ -394,7 +394,12 @@ class TestJsonContractAndExit(TeamScenario):
                         "owner", "nextAction", "basis"):
                 self.assertIn(key, f, "finding missing %s: %s" % (key, f))
             self.assertIn(f["basis"], ("observed", "derived", "unavailable"))
-            self.assertTrue(1 <= int(f["severity"]) <= 10, f)
+            # 1..11, not 1..10: severity 11 is the review-record slot, added
+            # deliberately OUTSIDE 1..6 (see TEAM_SEVERITIES in status.py) so
+            # a missing review, which is every one of this repository's nine
+            # merged pull requests to date, reads as NO-DATA and never as a
+            # block.
+            self.assertTrue(1 <= int(f["severity"]) <= 11, f)
         sevs = [int(f["severity"]) for f in data["findings"]]
         self.assertEqual(sevs, sorted(sevs), "most severe first, deterministic")
 

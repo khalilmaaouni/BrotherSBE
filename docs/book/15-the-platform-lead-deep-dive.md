@@ -166,7 +166,7 @@ python3 -m json.tool /tmp/sbe-book-ch15-repo/.brothersbe/install-receipt.json | 
     "installedInto": "/tmp/sbe-book-ch15-repo",
     "schemaVersion": "1.0",
     "tool": "sbe init",
-    "toolVersion": "1.0.0-rc.2",
+    "toolVersion": "1.0.0-rc.3",
     "uninstallInstructions": [
         "rm -f .brothersbe/config.json",
         "rm -f design/.gitkeep",
@@ -264,13 +264,13 @@ ROOT="$(pwd)"
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.2, VERSION 1.0.0-rc.2
+plugin-manifest  PASS     manifest 1.0.0-rc.3, VERSION 1.0.0-rc.3
 git              PASS     working directory is inside a git tree
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.2, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.3, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 `vault` and `private-names` read `NO-DATA`, not `FAIL`. Neither is broken;
@@ -685,9 +685,15 @@ real code today; only one was true before the first tag existed.
 For an adopting organization, the procedure is three commands, and
 `docs/ROLLOUT.md` states the check that must pass after each one:
 
+Pin to a tag that is actually published, not to one you remember. A tag can
+exist on the maintainer's machine and never have been pushed, and a clone
+pinned to an unpublished tag fails on the first command. Ask the remote which
+tags it has, then substitute the one you saw:
+
 ```text
 NOT EXECUTED HERE (these act on a real clone's git history, not this sandbox):
-git clone --branch v1.0.0-rc.2 --depth 1 <repository-url> ~/.claude/skills/brothersbe
+git ls-remote --tags <repository-url>
+git clone --branch <tag> --depth 1 <repository-url> ~/.claude/skills/brothersbe
 cd ~/.claude/skills/brothersbe && scripts/verify-install.sh   # must print PASSED
 git fetch --tags && git checkout v<new-version>
 scripts/verify-install.sh                                      # must print PASSED

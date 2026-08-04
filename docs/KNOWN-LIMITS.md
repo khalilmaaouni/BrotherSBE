@@ -22,6 +22,47 @@ change that declared nothing, and nothing resolves a `Reviewed-in:` id, which
 is why that path reports NO-DATA rather than an approval. Full text:
 `references/laws-hard-gates.md` L9 and `LAWS-REFERENCE.md` (the hard gates).
 
+## This repository's own merged pull requests carry no independent review (L9)
+
+Applied to this repository's own history rather than to a change the gate is
+checking, L9 reports NO-DATA, not PASS. Verified on 2026-08-04: all nine
+merged pull requests in this repository (numbers 1 through 9) carry zero
+submitted reviews, zero review requests, and zero issue comments (`gh pr
+list --state merged --json reviews,reviewRequests,comments`, each field
+empty on every one of the nine), and `git log origin/main --format='%h|%s|
+%(trailers:key=Approved-by,valueonly)'` shows every `Approved-by` trailer on
+every merge commit empty. L9 requires an approval naming somebody other than
+the author and committer, and self-approval FAILs; nine merged pull requests
+with zero reviews is the absence of that evidence, not a weaker form of it.
+This page does not imply a review happened out of band, because none did.
+The founder has chosen plain disclosure of this gap over turning on branch
+protection for this repository. Full text: `references/laws-hard-gates.md`
+L9, and the entry directly above.
+
+## Only one tag is published on origin
+
+Verified on 2026-08-04:
+
+```
+$ git ls-remote --tags origin | grep -v '\^{}'
+dacee900d24d40b351bc117ebbf001406bb09699	refs/tags/v1.0.0-rc.1
+
+$ git ls-remote --tags origin 'refs/tags/v1.0.0-rc.2' | wc -l
+0
+```
+
+`v1.0.0-rc.1` is the only tag this repository has ever pushed to origin.
+`v1.0.0-rc.2` was cut locally (`docs/RELEASE.md`, "What has actually been
+executed") but never pushed, and the version this tree carries moves again
+with every release. A pinning command that names a specific `vX.Y.Z` fails
+at clone time the moment the named tag is not the one actually published,
+which is why `docs/ROLLOUT.md` and `docs/RELEASE.md` now have the reader run
+`git ls-remote --tags <repository-url>` and substitute the tag they see,
+rather than a version typed into this page going stale the next time a
+release is cut. Full text: `docs/ROLLOUT.md` (Upgrade and rollback),
+`docs/RELEASE.md` (Pinning an install to a release, What has actually been
+executed).
+
 ## The tier comes from answers about contracts that no checker reads
 
 The intake asks whether the change alters a data model, an API contract, or a

@@ -3,11 +3,84 @@
 # .github/workflows/brothersbe-gates.yml, run unmodified on the audited
 # commit, every output preserved. Exit codes recorded per step; the run
 # never stops early, mirroring fail-fast: false.
-OUT="$(dirname "$0")/battery"
+#
+# Why the default output location moved off release-control/baseline/battery:
+# that directory is not scratch space, it is the committed Loop 0 evidence,
+# the exact unmodified battery outputs captured at the audited commit and
+# covered by CHECKSUMS.sha256. A rerun that wrote back into it would quietly
+# rewrite the manifest's own inputs, which is precisely what the eval named
+# the-tracked-manifest-matches-the-tree-it-ships-with exists to catch, and it
+# did catch it: five tracked files came back modified the first time this
+# script was pointed at itself. So the frozen baseline is now read-only by
+# default. A caller who wants results writes them somewhere untracked (the
+# default, an mktemp'd directory, printed below so it can be found), or names
+# an explicit directory of their own choosing as the first argument. The one
+# path this script will not write to without being told twice is the frozen
+# baseline itself, guarded below by --rewrite-baseline.
+
+export SBE_DOSSIER_ROOT=''
+
+REWRITE_BASELINE=0
+OUT_ARG=''
+for arg in "$@"; do
+  case "$arg" in
+    --rewrite-baseline)
+      REWRITE_BASELINE=1
+      ;;
+    *)
+      if [ -z "$OUT_ARG" ]; then
+        OUT_ARG="$arg"
+      fi
+      ;;
+  esac
+done
+
+BASELINE_DIR="$(dirname "$0")/battery"
+
+# Resolve a path to an absolute, symlink-free form for comparison, without
+# requiring the path to exist yet. POSIX-only: no realpath dependency.
+abspath() {
+  target="$1"
+  if [ -d "$target" ]; then
+    (cd "$target" && pwd -P)
+    return
+  fi
+  parent="$(dirname "$target")"
+  base="$(basename "$target")"
+  if [ -d "$parent" ]; then
+    printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$base"
+  else
+    printf '%s\n' "$target"
+  fi
+}
+
+if [ -n "$OUT_ARG" ]; then
+  OUT="$OUT_ARG"
+else
+  TMPDIR_BASE="${TMPDIR:-/tmp}"
+  OUT="$(mktemp -d "$TMPDIR_BASE/brothersbe-battery.XXXXXX" 2>/dev/null)"
+  if [ -z "$OUT" ]; then
+    echo "ERROR: mktemp -d failed; pass an explicit output directory as the first argument." >&2
+    exit 1
+  fi
+fi
+
+BASELINE_ABS="$(abspath "$BASELINE_DIR")"
+OUT_ABS="$(abspath "$OUT")"
+
+if [ "$OUT_ABS" = "$BASELINE_ABS" ] && [ "$REWRITE_BASELINE" != "1" ]; then
+  echo "REFUSING: output directory resolves to the frozen Loop 0 baseline ($BASELINE_DIR)." >&2
+  echo "Those files are the audited, checksummed baseline shipped in CHECKSUMS.sha256." >&2
+  echo "Overwriting them invalidates the manifest and regresses the-tracked-manifest-matches-the-tree-it-ships-with." >&2
+  echo "Pass an explicit output directory to run the battery, or pass --rewrite-baseline if you mean to replace the frozen evidence on purpose." >&2
+  exit 1
+fi
+
+echo "Battery output directory: $OUT"
+
 mkdir -p "$OUT"
 SUMMARY="$OUT/summary.txt"
 : > "$SUMMARY"
-export SBE_DOSSIER_ROOT=''
 
 run_step() {
   name="$1"; shift

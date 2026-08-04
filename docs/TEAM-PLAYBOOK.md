@@ -130,13 +130,24 @@ queue, with the artifact attested.
 learned file. The vault records the story; the reviewed file records the rule.
 Nothing else spreads between installs.
 
-## Screens, and where every number comes from
+## Screens, designed, not built, and where every number would come from
 
-Four screens. Every number on every screen names its mechanical source, prints its
-definition, and prints the date it was checked. A figure without those three is a
-defect, not a rounding error.
+Four screens, designed below. None of the four exists in this repository today:
+no code implements a program board, a health screen, a compliance screen or a
+delivery screen. Where a screen is eventually built, every number on it must
+name its mechanical source, print its definition, and print the date it was
+checked. A figure without those three is a defect, not a rounding error.
 
-**Program board.** GitHub Projects v2, fields: stage, owner, approver, budget,
+This is cut work, not missed work. `design/final-release-program/01-purpose.md`
+(lines 88 to 89) records a team dashboard as a deliberate 1.0 non-goal and
+quotes the reason directly: "The team operating model already ratified this
+week chose one-way exporters into the boards teams already use. Building a
+dashboard would contradict a decision that is days old." The four screens
+below are the detailed design behind that same decision, written down so the
+team can build them later without re-deriving the sourcing rules, not a
+description of something 1.0 ships.
+
+**Program board, designed, not built.** GitHub Projects v2, fields: stage, owner, approver, budget,
 evidence link. Fed from the work items in the ledger. Projects v2 gives table,
 board and roadmap views over the same items, and its built-in workflows handle
 trivial status setting only; anything resembling a rollup, an SLA timer or a stale
@@ -144,14 +155,14 @@ item nudge is built in Actions against the Projects v2 GraphQL API
 (https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects).
 Do not plan around the built-in automation doing more than it does.
 
-**Health screen.** The generated status page, published read-only into Confluence
+**Health screen, designed, not built.** The generated status page, published read-only into Confluence
 using the content restrictions API: set the `update` restriction to the publishing
 identity and leave `read` open, so humans can view a generated page and cannot
 hand-edit it (https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content-restrictions/).
 The same data is an Obsidian Bases view over vault properties for the team's own
 use.
 
-**Compliance screen.** Rule suite results: pass, fail, and bypass with the actor
+**Compliance screen, designed, not built.** Rule suite results: pass, fail, and bypass with the actor
 named. This is not a stylistic preference. GitHub's general organization audit log
 carries no dedicated ruleset-bypass event, so a compliance view built on the audit
 log reports a false zero. Bypass auditing lives in the rule suites API, whose
@@ -166,7 +177,7 @@ have been blocked for a sprint before flipping to Active
 (https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository).
 It is a canary for policy changes themselves.
 
-**Delivery screen.** DORA-style metrics with the definition and the checked date
+**Delivery screen, designed, not built.** DORA-style metrics with the definition and the checked date
 printed beside every number, and no tier labels. The tier labels are the trap.
 Google Cloud's own page states that DORA's 2022 cluster analysis found only three
 clusters, High, Medium and Low, which means no more Elite performers
@@ -256,9 +267,10 @@ parallel compliance vocabulary that nobody has seen before.
 3. **Stale-review dismissal.** Approvals are dismissed when commits are pushed that
    affect the diff, so an approval granted on version one cannot silently carry
    over to a materially different version four.
-4. **The control file protects itself.** CODEOWNERS owns itself, or is owned by
-   repository admins, so changing who holds approval authority is itself a
-   reviewed change.
+4. **The control file protects itself, designed, not built.** CODEOWNERS owns
+   itself, or is owned by repository admins, so changing who holds approval
+   authority is itself a reviewed change. No check in this repository verifies
+   self-ownership yet.
 
 Those four map one to one onto what a SOX-style review asks for: the person who
 develops a change cannot be the person who deploys it, and every approval and
@@ -268,7 +280,7 @@ The same source names the compensating control regulators increasingly accept: t
 deploying "person" can be the automated pipeline, provided the pipeline enforces
 peer review and automated checks before it will move code.
 
-There is a fifth mechanism, and it is the one that fills the real gap. CODEOWNERS
+There is a fifth mechanism, designed, not built here, and it is the one that fills the real gap. CODEOWNERS
 has no syntax for "require N of these people". The required reviewer ruleset rule
 does: it attaches per-path minimum approval counts to specific teams, using
 gitignore-style patterns with negation, and went generally available in February
@@ -277,7 +289,7 @@ Layer them. CODEOWNERS decides who gets asked; the ruleset rule enforces how man
 have to say yes. Neither alone gives you both, and claiming CODEOWNERS gives you a
 count is the most common way this gets misrepresented to an auditor.
 
-## Release trains and attestation
+## Release trains and attestation, designed, not built
 
 Trunk-based development with feature flags, a merge queue on the default branch,
 and a fixed-cadence release train.

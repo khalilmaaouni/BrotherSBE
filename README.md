@@ -16,9 +16,9 @@ That is the persistent install: it stays across sessions, and the pair was execu
 Prefer to inspect the package before you trust it? Clone and validate first, then load it for one session only:
 
 ```bash
-git clone https://github.com/khalilmaaouni/BrotherSBE
-claude plugin validate BrotherSBE
-claude --plugin-dir BrotherSBE
+git clone https://github.com/khalilmaaouni/BrotherSBE ~/.claude/skills/brothersbe
+claude plugin validate ~/.claude/skills/brothersbe
+claude --plugin-dir ~/.claude/skills/brothersbe
 ```
 
 The validate step must pass before you load anything, and `--plugin-dir` loads the plugin for that session only, not persistently the way the marketplace install does; [docs/MIGRATION.md](docs/MIGRATION.md) covers both paths. Either way, once the plugin is loaded, make the one first move:
@@ -154,14 +154,7 @@ Validating plugin manifest: /path/to/BrotherSBE/.claude-plugin/plugin.json
 ✔ Validation passed
 ```
 
-Once it validates, the persistent install is the marketplace pair, executed and verified on 2026-08-01:
-
-```bash
-claude plugin marketplace add khalilmaaouni/BrotherSBE
-claude plugin install brothersbe@brothersbe
-```
-
-That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. Steps 2 and 3 below are then unnecessary: the vault export is still worth setting, but no hook goes into your `settings.json`. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). The public repository itself is the marketplace source today, verified working; a signed, directory-listed distribution is still ahead, see [docs/ROLLOUT.md](docs/ROLLOUT.md).
+Once it validates, run the marketplace pair at the top of this page, the persistent install, executed and verified on 2026-08-01. That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. The hooks block that [docs/SETUP.md](docs/SETUP.md) documents for the manual path is then unnecessary: no hook goes into your `settings.json`, because the plugin package wires its own. The vault export in that same page is still worth doing by hand; the plugin does not set `BROTHERSBE_VAULT` for you. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). The public repository itself is the marketplace source today, verified working; a signed, directory-listed distribution is still ahead, see [docs/ROLLOUT.md](docs/ROLLOUT.md).
 
 Either way you install it, there is one command line over the nine script paths:
 
@@ -184,48 +177,29 @@ That block is a real run on a fresh install (no vault exported, no private-name 
 
 `sbe` is a facade, not a rewrite: every built subcommand delegates to the tool in `tools/` that already carries the behavior and the tests, and the old invocations shown throughout this README still work and are not deprecated. Commands, exit codes, and the six subcommands that are present and deliberately refuse: [docs/CLI.md](docs/CLI.md).
 
-### As a cloned skill (the original way, still supported)
+### As a cloned skill (the manual path, still supported)
 
-**1. Clone into your skills directory.**
+The full manual procedure, prerequisites, the clone command, the vault export, and the hooks block you wire by hand into `~/.claude/settings.json`, lives in one place: [docs/SETUP.md](docs/SETUP.md). Reach for it when you want to inspect or hand-place every file yourself, or when [docs/MIGRATION.md](docs/MIGRATION.md) sends you here while moving between paths.
 
-```bash
-git clone https://github.com/khalilmaaouni/BrotherSBE ~/.claude/skills/brothersbe
-```
+### Universal install (any host, one command)
 
-**2. Point the vault at durable storage.** All telemetry, session logs, and resume briefs live here. Nothing leaves the machine.
+`install.sh` is the cross-host path: one POSIX `sh` command that checks the machine, registers the plugin (the marketplace pair when a tag is published, a clone of this repository otherwise), applies your team's committed profile (`.sbe/team-profile.json`) through `sbe init`, and closes with `bin/sbe doctor`'s own verdict. It is also the install path this project's own CI exercises (`scripts/test-install-artifact.sh`), not only documents.
 
 ```bash
-export BROTHERSBE_VAULT="$HOME/BrotherSBEVault"   # put this in your shell profile
+sh install.sh                 # installs into the directory you run it from
+sh install.sh --target <dir>  # installs into <dir> instead
+sh install.sh --dry-run       # names every step it would take, writes nothing
 ```
 
-**3. Wire the hooks** into `~/.claude/settings.json` (or a project `.claude/settings.json`). The harness fires these, not the model, which is the point: the "save before you die" rule cannot be executed by the actor that is dying.
+Run it from the repository whose team you want on the same footing. It refuses to target BrotherSBE's own distribution directory, so it cannot initialize the tool onto itself.
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {"hooks": [{"type": "command",
-        "command": "sh ~/.claude/skills/brothersbe/tools/sbe_sessionstart.sh"}]}
-    ],
-    "SessionEnd": [
-      {"hooks": [{"type": "command",
-        "command": "python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py outcomes-append"}]}
-    ],
-    "PreCompact": [
-      {"hooks": [
-        {"type": "command",
-         "command": "sh ~/.claude/skills/brothersbe/tools/sbe_autosave.sh precompact"},
-        {"type": "command",
-         "command": "python3 ~/.claude/skills/brothersbe/tools/sbe_telemetry.py precompact-brief"}
-      ]}
-    ]
-  }
-}
-```
+### Enterprise or team-managed install
 
-What each does: **SessionStart** injects the active-laws digest plus mechanical nags and any update warning. **SessionEnd** captures nothing by default. Each category is separately opt-in: `BROTHERSBE_TELEMETRY_METRICS` for the idempotent telemetry line, `BROTHERSBE_TELEMETRY_TRANSCRIPT` for anything read from the session transcript, `BROTHERSBE_TELEMETRY_CORRECTIONS` for correction candidates (secret-redacted, owner-only). `BROTHERSBE_TELEMETRY_DISABLE` forces every category off and cannot be overridden locally, which is the switch an organization sets. Every category that stays off says which switch kept it off, so silence is never mistaken for nothing having happened. What each field can hold is in the data dictionary in [SECURITY.md](SECURITY.md). **PreCompact** snapshots the whole worktree (including untracked files) to a private per-worktree git ref under `refs/brothersbe/autosave/` and, only when `BROTHERSBE_TELEMETRY_TRANSCRIPT` is set, writes a forward-looking resume brief (the default writes none and says which switch would), so a token-death is recoverable. Every hook exits 0 and never blocks a session. Details and opt-outs are in [SECURITY.md](SECURITY.md).
+An organization rolling this out across many repositories at once, with a tag pin and a checksum-verified manifest instead of a moving branch, follows [docs/ROLLOUT.md](docs/ROLLOUT.md): the staged rollout, the upgrade and rollback scripts, and what is and is not proven yet.
 
-**4. Wire the checks into CI.** This is what turns them from advisory into blocking. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
+### Wire the checks into CI (every install path)
+
+This is what turns the gates from advisory into blocking, whichever path above you installed with. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 
 ```yaml
       - name: Hard gates (numbers, migration, approval, ran) block on failure
@@ -287,6 +261,8 @@ What each does: **SessionStart** injects the active-laws digest plus mechanical 
         run: python3 tools/test_sbe_impact.py
       - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
         run: sh scripts/test-install-artifact.sh
+      - name: Release invariant (distributable bytes cannot move without VERSION moving)
+        run: python3 tools/sbe_release_invariant.py --strict
       - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
         run: sh scripts/test-upgrade-rollback.sh
       - name: Adopt and init fixtures (sbe adopt, sbe init)
@@ -344,7 +320,7 @@ The same disclosure the checks demand of evidence, applied to the project itself
 
 - **Measured:** the eval counts, the meta-test scenario count, the lint numbers and the defect-reinjection record ([INVARIANTS.md](INVARIANTS.md)) are recomputed by the suites that print them; a doc quoting a stale one fails an eval.
 - **Run on one estate only:** every threshold in `tables/`, every baseline in [RUBRIC.md](RUBRIC.md), and the hooks in daily use. They are defaults where you are, not measurements of your estate.
-- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. Windows is untested, and the shipped CI covers Linux and macOS only. The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have never been executed.
+- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. Windows is untested, and the shipped CI covers Linux and macOS only. The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have been executed for `v1.0.0-rc.1` (tagged and pushed to origin); `v1.0.0-rc.2` is tagged locally but, as of this writing, not yet pushed.
 
 The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md).
 

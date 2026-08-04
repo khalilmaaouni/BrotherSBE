@@ -11,6 +11,22 @@ import glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess,
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# The digest injected unconditionally at every session start used to spend
+# roughly 9KB, almost all of the 10KB hook cap, on 24 law lines: a release
+# review measured that as ~2200-2300 tokens pushed into context before the
+# user asked for anything. The fix cut DIGEST.md down to the three
+# unconditional laws (L6, L11, L14), the checked/human legend, the NO-DATA
+# statement, the after-compaction-or-resume pointer, and a pointer to
+# references/laws-full-digest.md for everything else, verbatim and unabridged.
+# This ceiling is a conservative byte proxy for the release target of well
+# under 800 tokens (roughly 3200 bytes at ~4 bytes/token), set with headroom
+# over the measured post-fix size (~2.4KB) so DIGEST.md can grow a little
+# without silently regressing back toward the old budget. It is deliberately
+# smaller than the 10k-char hook cap TestDigestCap enforces above: that cap
+# bounds what the harness will accept, this one bounds what the digest should
+# actually cost.
+DIGEST_BYTE_CEILING = 3000
+
 # Import sbe_telemetry as a module regardless of cwd.
 spec = importlib.util.spec_from_file_location("sbe_telemetry", os.path.join(HERE, "sbe_telemetry.py"))
 bm = importlib.util.module_from_spec(spec)
@@ -721,6 +737,76 @@ class TestDigestCap(unittest.TestCase):
                           "hint alone overflows:\n%s" % out[-500:])
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+
+class TestDigestBudget(unittest.TestCase):
+    def test_digest_stays_under_the_shrunk_byte_ceiling(self):
+        """DIGEST.md is injected into EVERY session before the user asks for
+        anything, unlike the 10k-char hook cap TestDigestCap enforces (that
+        cap is the harness's outer bound, not a target). A prior release let
+        the digest grow to 9025 bytes, 24 law lines deep, which measured as
+        roughly 2200-2300 tokens of unconditional startup cost. The fix moved
+        everything except the three unconditional laws (L6, L11, L14), the
+        checked/human legend, the NO-DATA statement, and the
+        after-compaction-or-resume pointer out to
+        references/laws-full-digest.md, verbatim. This test pins the digest
+        under DIGEST_BYTE_CEILING mechanically, so that growth cannot creep
+        back in silently the way it did before."""
+        size = os.path.getsize(os.path.join(HERE, "..", "DIGEST.md"))
+        self.assertLess(size, DIGEST_BYTE_CEILING,
+                        "DIGEST.md is %d bytes, at or past the %d-byte budget ceiling "
+                        "chosen to keep startup injection under the token target; move "
+                        "growth into references/laws-full-digest.md instead of "
+                        "accreting the unconditional digest" % (size, DIGEST_BYTE_CEILING))
+
+    def test_digest_moved_lines_survive_verbatim_in_references(self):
+        """Every law line the digest no longer prints unconditionally must
+        still exist, unabridged, in references/laws-full-digest.md, so
+        shrinking the digest deferred content instead of dropping it. This
+        spot-checks a handful of the moved lines for their exact original
+        text rather than trusting a paraphrase."""
+        moved = io.open(os.path.join(HERE, "..", "references",
+                                      "laws-full-digest.md"), encoding="utf-8").read()
+        must_contain = [
+            "Install the check BEFORE writing the work. [human]",
+            "L1 tier before work: five intake answers to 00-intake.json, first "
+            "match wins, malformed answers refused by name.",
+            "L13 one writer per file: fence then dispatch, in your registry, "
+            "tier-tagged, closed with an inline evidence block.",
+            "L19 a review verdict counts only when it names the falsification "
+            "actually executed",
+            "Unverified output carries the label UNVERIFIED next to the item, "
+            "never in a footnote. [human]",
+            "Every shipped threshold and RUBRIC baseline was measured on one "
+            "estate. Re-measure on yours. [human]",
+        ]
+        for snippet in must_contain:
+            self.assertIn(snippet, moved,
+                          "a moved law line lost exact text: %r not found "
+                          "verbatim in laws-full-digest.md" % snippet)
+
+    def test_digest_still_carries_its_unconditional_survivors(self):
+        """L6, L11 and L14 are the three laws SKILL.md itself calls
+        unconditional, plus the checked/human legend and the
+        after-compaction-or-resume pointer are the safety floor: whatever
+        else moves out of the digest, these must not."""
+        digest = io.open(os.path.join(HERE, "..", "DIGEST.md"), encoding="utf-8").read()
+        must_contain = [
+            "L6 stop immediately on any forcing condition",
+            "L11 silent-failure lints",
+            "L14 blast radius: no apply rights on production state",
+            "NO-DATA is never a pass",
+            "never a block",
+            "[checked: tool] means a script decides it and CI can block on it. "
+            "[human] means nothing computes it, and the line is a stated "
+            "discipline, not a control.",
+            "After compaction or resume: re-read SKILL.md",
+            "references/laws-full-digest.md",
+        ]
+        for snippet in must_contain:
+            self.assertIn(snippet, digest,
+                          "the shrunk digest lost a required survivor: %r" % snippet)
+
 
 class TestAuditableSurface(unittest.TestCase):
     def test_the_stated_line_count_tracks_the_tree(self):
