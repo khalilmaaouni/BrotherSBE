@@ -340,10 +340,110 @@ def _closing_caveat(command, code):
                          % (command, code))
 
 
+def _mint_evidence(target, delegates):
+    """Mint one evidence receipt per delegate `_cmd_verify` already ran, into
+    the store `sbe status` already reads (`.sbe/evidence`,
+    `tasks.DEFAULT_EVIDENCE_DIR`), and say on stderr when any could not be
+    written.
+
+    `delegates` is `(tool, flags, kind)` triples: `tool` and `flags` are the
+    same two `_cmd_verify` already passed to `delegate_teed` for the live,
+    streamed run above (`flags` excludes the target path itself; it is added
+    back here against the ABSOLUTE target, never the string the caller may
+    have typed relative to some other directory, because the receipt's own
+    subprocess runs with its cwd set to the target for the git binding
+    `evidence.generate` performs, and a relative path would resolve against
+    the wrong directory there); `kind` is the `evidence.CHECK_KIND_NAMES`
+    obligation that delegate's receipt is declared against.
+
+    CALLED BEFORE `_record_decisions`, deliberately, though both write into
+    `target`. `evidence.generate` reads `git status --porcelain` to decide
+    whether each receipt is clean or dirty; minting first means that read
+    sees the tree exactly as the caller of `sbe verify` left it, not a tree
+    `_record_decisions` has already added an uncommitted decision package
+    to. `evidence.mint_default_many`, which does the actual minting, has the
+    matching within-itself property: every receipt is generated before any
+    of them is written, so the first receipt's own file can never be read as
+    the reason the second one looks dirty. See that function's docstring for
+    why both orderings matter.
+
+    THIS FUNCTION CANNOT MOVE A VERDICT OR AN EXIT CODE, for exactly the
+    reason `_record_decisions` states below and by the same construction: it
+    returns nothing, the caller computed `worst` before ever calling this and
+    returns that value unchanged no matter what happens here, and every
+    failure raised inside it, of any class, is caught here rather than
+    escaping. A gate that FAILED still FAILS with no evidence store writable;
+    a gate that passed is not failed by an unwritable one either.
+
+    EACH DELEGATE IS RUN AGAIN, through `evidence.generate` (by way of
+    `mint_default_many`), which is this module's own law stated in
+    `evidence.py`: a receipt has to observe an actual run, never restate one
+    this function already watched happen via `delegate_teed` above. The
+    three checks this covers are read-only (`sbe_gate.py`, `sbe_design.py`
+    and `sbe_score.py` each promise "writes: nothing"), so the second run
+    costs time, not correctness, and it is the price of minting through the
+    evidence module's own writer instead of `cli.py` fabricating a receipt
+    from output it already captured.
+
+    A receipt made against a dirty target is still written, and still reads
+    NO-DATA naming the dirty state when read back through `evidence.verify`
+    or `sbe status`: that is the law this stage is built around, not a bug
+    (see `design/lifecycle-blockers/03-adr.md`, CR-08). Nothing here softens
+    that; it only runs the command and writes down what happened.
+    """
+    try:
+        from . import evidence as evidence_mod
+        from . import tasks as tasks_mod
+    except ImportError as exc:
+        sys.stderr.write(
+            "sbe verify: no evidence was minted: this installation carries no "
+            "brothersbe.evidence or brothersbe.tasks (%s). The verdict lines above stand "
+            "and this command's exit code is unchanged.\n" % exc)
+        return
+    abs_target = os.path.abspath(target)
+    evidence_dir = os.path.join(abs_target, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    pairs = [(kind, [sys.executable, _tool(tool)] + list(flags) + [abs_target])
+            for tool, flags, kind in delegates]
+    try:
+        written, failures = evidence_mod.mint_default_many(abs_target, pairs, evidence_dir)
+    except Exception as exc:
+        # Deliberately every class, for the reason `_record_decisions` gives: an
+        # exception class nobody anticipated would change verify's exit code by
+        # escaping.
+        sys.stderr.write(
+            "sbe verify: no evidence was minted: %s: %s. The verdict lines above stand and "
+            "this command's exit code is unchanged.\n" % (type(exc).__name__, exc))
+        return
+    if failures:
+        # ONE line for however many of the three did not mint, never one line
+        # per kind, so a shared root cause (an unwritable evidence store) reads
+        # as one sentence rather than three near-identical ones.
+        sys.stderr.write(
+            "sbe verify: %d of %d evidence receipt(s) were not minted (%s). The verdict "
+            "lines above stand and this command's exit code is unchanged.\n"
+            % (len(failures), len(pairs),
+               "; ".join("%s: %s: %s" % (k, type(e).__name__, e) for k, e in failures)))
+    if written:
+        sys.stdout.write(
+            "\nsbe verify: %d evidence receipt(s) minted into %s, one per delegate this run "
+            "already ran:\n" % (len(written), evidence_dir))
+        for path in written:
+            sys.stdout.write("  %s\n" % path)
+
+
 def _cmd_verify(args):
     """The gates, in the order a reader wants them: design completeness first
     (an incomplete dossier makes every later verdict less meaningful), then the
-    hard gates, then the scored surface."""
+    hard gates, then the scored surface.
+
+    Also mints one evidence receipt per delegate below (design, gate, score),
+    written into `.sbe/evidence` so `sbe status` has proof of this run to read
+    instead of reporting MISSING EVIDENCE about a check that just happened
+    (CR-08, `design/lifecycle-blockers/03-adr.md`). See `_mint_evidence` for
+    why that write can never move `worst` or this command's exit code, and
+    for why it runs BEFORE `_record_decisions` even though both write into
+    the same target directory.
+    """
     target = args.path
     if not os.path.isdir(target):
         sys.stderr.write("sbe verify: '%s' is not a directory. A mistyped path must not "
@@ -351,15 +451,25 @@ def _cmd_verify(args):
         return EXIT_USAGE
     worst = EXIT_OK
     lines = []
-    for tool, argv in (("sbe_design.py", ["--strict", target]),
-                       ("sbe_gate.py", [target]),
-                       ("sbe_score.py", ["--strict", target])):
-        result = delegate_teed(tool, argv)
+    # (tool script, its flags before the target path, the evidence kind its
+    # receipt is minted under below). The target path is deliberately not
+    # baked in here: the loop below appends it verbatim for the live,
+    # streamed run, and `_mint_evidence` appends the absolute form for the
+    # receipt run, and each needs its own copy for the reason stated there.
+    delegates = (("sbe_design.py", ["--strict"], "design"),
+                ("sbe_gate.py", [], "gate"),
+                ("sbe_score.py", ["--strict"], "score"))
+    for tool, flags, _kind in delegates:
+        result = delegate_teed(tool, list(flags) + [target])
         lines.extend(result["lines"])
         if result["code"] != EXIT_OK:
             worst = EXIT_CONTROL_FAILED
-    # Before the closing caveat, so that caveat stays the last line a reader
-    # sees, which is the promise `_closing_caveat` makes in its own docstring.
+    # Minting evidence BEFORE recording decisions, though both write into
+    # `target`: see `_mint_evidence`'s own docstring for why the order is
+    # load-bearing rather than arbitrary. Both run before the closing
+    # caveat, so that caveat stays the last line a reader sees, which is the
+    # promise `_closing_caveat` makes in its own docstring.
+    _mint_evidence(target, delegates)
     _record_decisions("verify", [target], lines, args.no_decisions)
     _closing_caveat("verify", worst)
     return worst

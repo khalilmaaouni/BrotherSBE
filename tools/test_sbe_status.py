@@ -619,6 +619,107 @@ class TestNextAction(StatusFixture):
         self.assertIn("scope:", next_line)
 
 
+class TestDossierDiscovery(StatusFixture):
+    """CR-06: single-project status discovers a dossier laid out the way the
+    project's own docs describe it (design/<change>/00-intake.json) by
+    walking the SAME `_design_roots`/`_team_changes` machinery
+    `sbe status --team` already uses, but only when the flat single-dossier
+    layout (00-intake.json at root) is absent. See
+    design/lifecycle-blockers/03-adr.md, the CR-06 decision.
+
+    Reproduced before this fix: this repository's own tree carries two
+    dossiers under design/ and no flat 00-intake.json at root, and
+    `sbe status .` reported every store null and "nothing blocking here"
+    over two dossiers that plainly exist on disk.
+    """
+
+    def _dossier_intake(self, name, **answers):
+        base = {"changes_contract": "n", "crosses_boundary": "n",
+                "reversible_under_hour": "y", "touches_sensitive": "n", "consumers": "none"}
+        base.update(answers)
+        return write(self.repo, os.path.join("design", name, "00-intake.json"),
+                    json.dumps({"answers": base}))
+
+    def test_a_dossier_layout_is_discovered_when_the_flat_layout_is_absent(self):
+        # Exactly this repository's own documented layout: two dossiers
+        # under design/, no flat 00-intake.json at root. One dossier is T2
+        # (owes evidence it never got), the other is T0 (owes nothing), so
+        # this fixture exercises both the discovery and the T0-owes-nothing
+        # guard at once, over dossier-scoped state.
+        self._dossier_intake("change-a", changes_contract="y")
+        self._dossier_intake("change-b")
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        self.assertEqual(sorted(data["scope"]["storesInspected"]["dossiers"]),
+                         ["change-a", "change-b"], text)
+        self.assertNotIn("nothing blocking here", data["nextAction"],
+                         "a T2 dossier owing evidence must never read as clean: %s" % text)
+        self.assertTrue(data["missingEvidence"], "the T2 dossier owes evidence: %s" % text)
+        self.assertTrue(
+            any("change-a" in item["finding"] for item in data["missingEvidence"]),
+            "the missing-evidence finding must be labeled with the dossier it came from: %s"
+            % text)
+        self.assertFalse(
+            any("change-b" in item["finding"] for item in data["missingEvidence"]),
+            "the T0 dossier owes nothing, and must not show up under MISSING EVIDENCE "
+            "just because a sibling dossier does: %s" % text)
+        self.assertNotEqual(code, 0, text)
+
+    def test_when_both_layouts_exist_the_flat_layout_wins_and_dossiers_are_not_scanned(self):
+        # Precedence, stated by the ADR: the flat layout, when present,
+        # always wins, and dossier discovery never runs at all. A T0 flat
+        # intake at root must leave MISSING EVIDENCE empty even though a
+        # sibling, discoverable dossier declares T2 and would owe evidence
+        # entirely on its own.
+        self.intake()  # T0 at root: the flat layout
+        self._dossier_intake("change-a", changes_contract="y")  # T2, must be ignored
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        self.assertIsNone(data["scope"]["storesInspected"]["dossiers"],
+                          "the flat layout must win: dossier discovery must not run at all: "
+                          "%s" % text)
+        self.assertEqual(code, 0, text)
+        self.assertFalse(data["missingEvidence"],
+                         "a T0 flat intake owes nothing, and the sibling dossier must never "
+                         "be consulted while the flat layout is present: %s" % text)
+        self.assertFalse(
+            any("dossier " in item.get("finding", "")
+               for section in (data["brokenClaims"], data["mergeBlockers"],
+                               data["missingEvidence"])
+               for item in section),
+            "no dossier-labeled finding may appear while the flat layout wins: %s" % text)
+
+    def test_a_design_root_escaping_the_repository_is_refused_and_not_walked(self):
+        # The single-project counterpart of build_team_report's own M3
+        # containment test: a designRoots entry that would resolve outside
+        # the repository is REFUSED by its own literal spelling, never
+        # walked, and the refusal itself is surfaced as a merge blocker
+        # rather than silently dropped.
+        outside = tempfile.mkdtemp()
+        try:
+            write(outside, os.path.join("escaped", "00-intake.json"),
+                 json.dumps({"answers": {"changes_contract": "n", "crosses_boundary": "n",
+                                        "reversible_under_hour": "y",
+                                        "touches_sensitive": "n", "consumers": "none"}}))
+            rel = os.path.relpath(outside, self.repo)
+            write(self.repo, os.path.join(".sbe", "team-profile.json"),
+                 json.dumps({"designRoots": [rel]}))
+            code, data, text = self.status_json("--base", self.base)
+            self.assertIsNotNone(data, text)
+            self.assertTrue(
+                any(rel in item["finding"] and "REFUSED" in item["finding"]
+                   for item in data["mergeBlockers"]),
+                "an escaping designRoots entry must be REFUSED by name under MERGE "
+                "BLOCKERS, not silently dropped: %s" % text)
+            self.assertIsNone(data["scope"]["storesInspected"]["dossiers"],
+                             "an escaping entry with no other dossier found must leave "
+                             "the dossiers field empty, not populated from an unwalked "
+                             "directory: %s" % text)
+            self.assertNotEqual(code, 0, text)
+        finally:
+            shutil.rmtree(outside, ignore_errors=True)
+
+
 class TestJsonMode(StatusFixture):
     def test_json_mode_carries_every_section_the_scope_and_the_schema_version(self):
         self.intake(changes_contract="y")

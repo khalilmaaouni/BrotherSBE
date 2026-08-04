@@ -10,6 +10,27 @@ checklist's own rules.
 
 (nothing yet)
 
+## 1.0.0-rc.4 (2026-08-04)
+
+Closes the first two lifecycle blockers from the release handover, with the
+design recorded in `design/lifecycle-blockers/` before any code moved.
+
+- CR-06: single-project `sbe status` discovers the documented dossier layout
+  through the same walker the team report uses; flat layout wins when both
+  exist; empty repositories keep their exact NO-DATA messages. Proven by
+  `tools/test_sbe_status.py` (31 tests, three new).
+- CR-08: `sbe verify` mints design, gate, and score receipts into
+  `.sbe/evidence`, the store `sbe status` reads, so verify-then-status closes
+  on real proof. Receipts on a dirty tree read NO-DATA naming the dirty state,
+  and a receipt-write failure can never move verify's exit code. Proven by
+  `tools/test_sbe.py` (TestVerifyMintsEvidence) and `tools/test_sbe_evidence.py`
+  (TestWriteReceiptAndMintDefault).
+- The consumer action's status step now reads a produced, parseable report as
+  its pass (exit 0 or 1) and still fails on a crash or usage error, because a
+  client mid-change legitimately has open findings.
+- The chapter 3 book transcript and the CLI reference now describe the new
+  discovery honestly; `evals/replay_book.py` re-executes them.
+
 ## 1.0.0-rc.3 (2026-08-04)
 
 Everything below accumulated since `v1.0.0-rc.2` and is folded into this

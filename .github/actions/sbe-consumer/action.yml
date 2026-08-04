@@ -102,19 +102,35 @@ runs:
           echo "no receipts found under $SBE_RECEIPTS_DIR; nothing to verify"
         fi
 
-    - name: sbe status --json (wave 8; skipped honestly until it lands)
+    - name: sbe status --json (a produced report is the pass, open findings are not a broken tool)
       shell: bash
       env:
         SBE_PATH: ${{ inputs.sbe-path }}
       run: |
         set -eu
-        # wave 8 delivers `sbe status`. As this action was written it had not
-        # landed (docs/KNOWN-LIMITS.md names the wave), so this step is guarded
-        # by a file the installation would carry once it has: src/brothersbe/
-        # status.py. A missing file is reported and the step is skipped, never
-        # treated as a failure of a command that does not exist yet.
+        # This is the CONSUMER path: the assertion is that the tool runs and
+        # produces a well-formed report, not that the calling repository's
+        # obligations are all closed. `sbe status` exits 1 by design when a
+        # blocking finding is open (missing evidence, a broken claim), and a
+        # client repository mid-change is in that state most of the time; a
+        # red consumer job on every open obligation would train people to
+        # ignore the job. So exit 0 and exit 1 both count as a produced
+        # report here, the JSON is parse-checked and its nextAction printed,
+        # and anything else (a crash, a usage error) still fails this step.
+        # The file guard below predates `sbe status` landing and stays: an
+        # installation without status.py skips honestly rather than failing
+        # a command that does not exist there.
         if [ -f "$SBE_PATH/src/brothersbe/status.py" ]; then
-          "$SBE_PATH/bin/sbe" status --json
+          set +e
+          out=$("$SBE_PATH/bin/sbe" status --json)
+          code=$?
+          set -e
+          printf '%s\n' "$out"
+          if [ "$code" -gt 1 ]; then
+            echo "sbe status exited $code, which is a tool failure, not a finding"
+            exit "$code"
+          fi
+          printf '%s\n' "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); print('nextAction: ' + d['nextAction'][:160])"
         else
           echo "sbe status is not built in this BrotherSBE installation (wave 8 has not landed here); step skipped, not failed"
         fi
