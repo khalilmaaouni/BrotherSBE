@@ -771,6 +771,98 @@ def _read_review_record(path):
     return "ok", data
 
 
+#: LT-202: normalized findings inside `11-review.json`. The fields a
+#: `structuredFindings` entry must carry for THIS entry, specifically, to be
+#: trusted, named once here so the write side (cli.py's
+#: `_merge_finding_group`) and this read side cannot drift into two
+#: different ideas of "complete". `fingerprint` is included even though
+#: nothing here recomputes it: an entry missing its own fingerprint is
+#: exactly as untrustworthy as one missing its category, because a fresh
+#: `sbe review --write --findings-json` run always writes one.
+_STRUCTURED_FINDING_REQUIRED_FIELDS = (
+    "fingerprint", "reviewer", "category", "severity", "confidence",
+    "introducedByChange", "location", "failure", "status")
+_STRUCTURED_FINDING_CONFIDENCE = ("high", "medium", "low")
+_STRUCTURED_FINDING_INTRODUCED = ("yes", "no", "unknown")
+#: The `findingsSchemaVersion` values this installation can read. LT-202's
+#: own migration path: a record naming a version outside this tuple is
+#: MALFORMED rather than silently parsed as today's shape, exactly the way
+#: an unrecognized `schemaVersion` would be treated anywhere else in this
+#: package, and a future shape change grows this tuple rather than replacing
+#: it, so an old record naming "1.0" never stops being readable.
+_STRUCTURED_FINDINGS_SCHEMA_VERSIONS = ("1.0",)
+
+
+def _malformed_structured_finding(index, item):
+    """Every reason `item` (the `index`-th entry of a `structuredFindings`
+    array already known to be a list) cannot be trusted, or `[]` when it
+    can. A malformed entry is reported by its own index, the same
+    specificity `_read_review_record` already holds a malformed record's
+    parse error to, so "some finding is broken" never has to stand in for
+    "finding 3 is broken"."""
+    if not isinstance(item, dict):
+        return ["structuredFindings[%d] is not an object" % index]
+    reasons = []
+    for field in _STRUCTURED_FINDING_REQUIRED_FIELDS:
+        if not item.get(field):
+            reasons.append("structuredFindings[%d] missing %r" % (index, field))
+    confidence = item.get("confidence")
+    if confidence is not None and confidence not in _STRUCTURED_FINDING_CONFIDENCE:
+        reasons.append("structuredFindings[%d] confidence %r is not one of %s"
+                       % (index, confidence, _STRUCTURED_FINDING_CONFIDENCE))
+    introduced = item.get("introducedByChange")
+    if introduced is not None and introduced not in _STRUCTURED_FINDING_INTRODUCED:
+        reasons.append("structuredFindings[%d] introducedByChange %r is not one of %s"
+                       % (index, introduced, _STRUCTURED_FINDING_INTRODUCED))
+    return reasons
+
+
+def _read_structured_findings(review):
+    """("absent", None), ("malformed", <why, as text>) or ("ok", <list>) for
+    the `structuredFindings` LT-202 can add to a review record `review` that
+    has ALREADY parsed as a trustworthy dict (the caller only reaches this
+    once `_read_review_record` has already returned "ok"; a record broken at
+    the top level is reported through that path instead, and this one is
+    never called for it, the same way `_same_identity` below is only ever
+    called once an author is already known).
+
+    "absent" is the honest, unremarkable case for every review record
+    LT-202 predates, and for one an LT-202-era `sbe review --write` wrote
+    without `--findings-json`: no structured findings were ever recorded,
+    which is a fact, not an accusation, exactly the law
+    `_read_review_record`'s own docstring already states for a missing
+    11-review.json altogether; nothing here invents a finding to fill the
+    silence. "malformed" covers every way a PRESENT value cannot be
+    trusted: `structuredFindings` given without its own
+    `findingsSchemaVersion` (the explicit migration path this sub-schema
+    requires, so a reader is never left guessing which shape it is looking
+    at), a `findingsSchemaVersion` this installation does not recognize, a
+    `structuredFindings` value that is not a list, or any one entry failing
+    `_malformed_structured_finding`. A malformed finding is FAIL here, never
+    silently dropped from the list as though it were merely absent.
+    """
+    if "structuredFindings" not in review:
+        return "absent", None
+    version = review.get("findingsSchemaVersion")
+    if not version:
+        return "malformed", ("structuredFindings is present without "
+                             "findingsSchemaVersion: a record must name which shape "
+                             "its findings are in to be trusted")
+    if version not in _STRUCTURED_FINDINGS_SCHEMA_VERSIONS:
+        return "malformed", ("findingsSchemaVersion %r is not one this installation "
+                             "recognizes (knows: %s)"
+                             % (version, ", ".join(_STRUCTURED_FINDINGS_SCHEMA_VERSIONS)))
+    payload = review.get("structuredFindings")
+    if not isinstance(payload, list):
+        return "malformed", "structuredFindings is present but is not a list"
+    reasons = []
+    for i, item in enumerate(payload):
+        reasons.extend(_malformed_structured_finding(i, item))
+    if reasons:
+        return "malformed", "; ".join(reasons)
+    return "ok", payload
+
+
 def _commit_author(root, sha):
     """(name, email) that authored `sha` in `root`.
 
@@ -1106,6 +1198,67 @@ def build_team_report(path):
                             "%d accepted risk(s) recorded"
                             % (reviewer, review.get("reviewerType"), finding_count,
                                risk_count)))
+
+                # LT-202: the normalized findings, if this record carries
+                # them, read INDEPENDENTLY of the pass/fail/stale judgement
+                # just above, whether or not this record is stale: a stale
+                # binding is already its own severity-4 finding, and
+                # whatever this record's findings actually say is still an
+                # observed fact about the record on disk either way. This
+                # never invents a severity outside 1..11: it stays inside
+                # slot 11 (review record), the same slot the rest of this
+                # block already uses, as one further finding beside it
+                # rather than a new numbered section.
+                # `reviewer` (the loop-scoped variable) is only ever assigned
+                # inside the inner "not stale" branch above, so a STALE
+                # record would leave it unbound here: this reads
+                # `review.get("reviewer")` directly instead, the same way
+                # the stale finding itself does at its own append call, and
+                # for the same reason.
+                struct_reviewer = review.get("reviewer")
+                struct_state, struct_payload = _read_structured_findings(review)
+                if struct_state == "absent":
+                    findings.append(_finding(
+                        name, 11, "NO-DATA", review_path, bound, struct_reviewer,
+                        "record structured findings with sbe review %s --write "
+                        "--findings-json <path> to carry fingerprinted, deduplicated "
+                        "findings" % doss, "observed",
+                        "this review record carries no structuredFindings: either it "
+                        "predates LT-202 or --findings-json was never passed; absence "
+                        "is a fact, not an accusation"))
+                elif struct_state == "malformed":
+                    findings.append(_finding(
+                        name, 11, "FAIL", review_path, bound, struct_reviewer,
+                        "regenerate 11-review.json with a valid --findings-json file",
+                        "observed",
+                        "structuredFindings on %s cannot be trusted (%s): a finding "
+                        "nobody can read is not a clean pass"
+                        % (review_path, struct_payload)))
+                else:
+                    blocking = [f for f in struct_payload if f.get("blocking")]
+                    pre_existing = [f for f in struct_payload
+                                    if f.get("introducedByChange") != "yes"]
+                    arbitration = [f for f in struct_payload
+                                  if f.get("status") == "arbitration"]
+                    if blocking:
+                        struct_verdict = "FAIL"
+                        struct_next = ("resolve the blocking structured finding(s) in "
+                                      "%s" % review_path)
+                    elif arbitration:
+                        struct_verdict = "NO-DATA"
+                        struct_next = ("adjudicate the contradicting finding(s) in %s "
+                                      "(see docs/CLI.md's adjudication protocol shape)"
+                                      % review_path)
+                    else:
+                        struct_verdict = "PASS"
+                        struct_next = "nothing blocking among the structured findings"
+                    findings.append(_finding(
+                        name, 11, struct_verdict, review_path, bound, struct_reviewer,
+                        struct_next, "observed",
+                        "%d structured finding(s) recorded: %d blocking, %d "
+                        "pre-existing, %d pending arbitration"
+                        % (len(struct_payload), len(blocking), len(pre_existing),
+                           len(arbitration))))
 
             if commands and not ev["clean"] and not ev["broken"]:
                 findings.append(_finding(

@@ -190,7 +190,392 @@ def _record_decisions(command, argv, lines, suppressed):
             "PASS or a NO-DATA is not one.\n" % command)
 
 
-def _record_review(target, lines, args):
+#: LT-202: normalized findings inside `11-review.json`. This sub-schema has
+#: its OWN version tag, `findingsSchemaVersion`, deliberately separate from
+#: the package-wide `SCHEMA_VERSION` above: that constant is shared by every
+#: record type this package writes (plan, decisions, review, ...), and
+#: bumping it to signal a change scoped to one field of one record would move
+#: every other record type's stated version too, for a change none of them
+#: made. `_FINDINGS_SCHEMA_VERSION` is the explicit migration path a review
+#: record's OWN structured findings carry, read back by
+#: `status._read_structured_findings`.
+_FINDINGS_SCHEMA_VERSION = "1.0"
+
+_FINDING_CONFIDENCE = ("high", "medium", "low")
+_FINDING_INTRODUCED = ("yes", "no", "unknown")
+#: "arbitration" is deliberately absent: it is the one status a caller can
+#: never supply, only ever the outcome deduplication assigns itself when two
+#: sources contradict (see `_merge_finding_group`).
+_FINDING_STATUS = ("open", "fixed", "accepted", "rejected")
+_FINDING_REQUIRED_FIELDS = ("reviewer", "category", "severity", "confidence",
+                            "introducedByChange", "failure")
+_SEVERITY_RANK = {"critical": 3, "major": 2, "minor": 1, "info": 0}
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
+def _finding_slug(text):
+    """A lowercase, hyphen-joined, ASCII slug of `text`, truncated to 40
+    characters: this project's own definition of a finding's "failure
+    class" for fingerprinting (see `_finding_fingerprint`), and also used to
+    fold a category or a conceptId into the same fingerprint alphabet. Pure
+    and deterministic: the same `text` always slugs to the same string, in
+    any process, so two findings describing the same failure in slightly
+    different words (case, punctuation, surrounding space) still land on one
+    fingerprint rather than minting a silent duplicate."""
+    out = []
+    prev_dash = True
+    for ch in (text or "").strip().lower():
+        if ch.isalnum() and ord(ch) < 128:
+            out.append(ch)
+            prev_dash = False
+        elif not prev_dash:
+            out.append("-")
+            prev_dash = True
+    return "".join(out).strip("-")[:40].rstrip("-") or "unlabeled"
+
+
+def _finding_normalize_path(path):
+    """The path half of a `location`, normalized so `./src/a.py` and
+    `src/a.py` fingerprint identically: backslashes folded to `/` (a
+    Windows-authored findings file should not silently mint a second
+    fingerprint for the same file this project only ever names with forward
+    slashes), and a leading `./` dropped."""
+    p = (path or "").strip().replace("\\", "/")
+    if p.startswith("./"):
+        p = p[2:]
+    return p
+
+
+def _finding_split_location(location):
+    """(normalized path, line-or-symbol) from a `"path:line"` or
+    `"path:symbol"` string. Splits on the LAST colon, so a path that itself
+    carries one (an absolute path is never produced by this project's own
+    tools, but a hand-written findings file could still supply one) still
+    separates correctly. A location with no colon at all is the whole
+    string as a path with an empty line-or-symbol."""
+    text = (location or "").strip()
+    if ":" in text:
+        path, _sep, tail = text.rpartition(":")
+        return _finding_normalize_path(path), tail.strip()
+    return _finding_normalize_path(text), ""
+
+
+def _finding_fingerprint(category, location, failure):
+    """The deterministic fingerprint LT-202 requires: category, the
+    normalized path, the line or symbol, and a slug of the failure text (its
+    failure class), joined with `:`. A pure function of exactly those three
+    inputs, so the same (category, location, failure) always produces the
+    same fingerprint, regardless of what order findings arrive in or how
+    many times this runs; that is what makes identical-fingerprint
+    deduplication in `_group_key` well defined rather than order-dependent."""
+    path, line = _finding_split_location(location)
+    return "%s:%s:%s:%s" % (_finding_slug(category), path or "unknown",
+                            line or "-", _finding_slug(failure))
+
+
+def _validate_raw_finding(entry, index):
+    """A list of reasons `entry` (the `index`-th item of a `--findings-json`
+    array) is not a trustworthy LT-202 finding, or `[]` when it is. Every
+    reason names its own index, so a caller with many findings and one typo
+    is told exactly which entry to fix rather than "something is wrong"."""
+    if not isinstance(entry, dict):
+        return ["finding[%d]: is not a JSON object" % index]
+    errors = []
+
+    def bad(msg):
+        errors.append("finding[%d]: %s" % (index, msg))
+
+    for field in _FINDING_REQUIRED_FIELDS:
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            bad("missing or empty required field %r" % field)
+    concept_id = entry.get("conceptId")
+    locations = entry.get("locations")
+    location = entry.get("location")
+    if concept_id:
+        if not (isinstance(locations, list) and locations
+               and all(isinstance(l, str) and l.strip() for l in locations)):
+            bad("a conceptId finding needs a non-empty 'locations' list of strings, "
+               "one per line the conceptual issue touches")
+    elif not isinstance(location, str) or not location.strip():
+        bad("missing or empty required field 'location' (or supply 'conceptId' with "
+           "'locations' for one issue spanning several lines)")
+    confidence = entry.get("confidence")
+    if confidence not in _FINDING_CONFIDENCE:
+        bad("confidence must be one of %s, got %r" % (_FINDING_CONFIDENCE, confidence))
+    introduced = entry.get("introducedByChange")
+    if introduced not in _FINDING_INTRODUCED:
+        bad("introducedByChange must be one of %s, got %r"
+           % (_FINDING_INTRODUCED, introduced))
+    status = entry.get("status", "open")
+    if status not in _FINDING_STATUS:
+        bad("status must be one of %s, got %r ('arbitration' is reserved: this "
+           "installation assigns it during deduplication and never accepts it as "
+           "input)" % (_FINDING_STATUS, status))
+    evidence = entry.get("evidence", [])
+    if not isinstance(evidence, list) or not all(isinstance(e, str) for e in evidence):
+        bad("evidence must be a list of strings")
+    verification = entry.get("verification")
+    if verification is not None and not isinstance(verification, str):
+        bad("verification must be a string or null")
+    disposition = entry.get("disposition")
+    if disposition is not None and not isinstance(disposition, dict):
+        bad("disposition must be an object or null")
+    disposition = disposition or {}
+    if status == "accepted":
+        by, reason, scope = (disposition.get("by"), disposition.get("reason"),
+                             disposition.get("scope"))
+        if not (isinstance(by, str) and by.strip()):
+            bad("status 'accepted' needs disposition.by naming the human accepting "
+               "the risk")
+        if not (isinstance(reason, str) and reason.strip()):
+            bad("status 'accepted' needs disposition.reason")
+        if not (isinstance(scope, str) and scope.strip()):
+            bad("status 'accepted' needs disposition.scope")
+        reviewer = entry.get("reviewer")
+        if (isinstance(by, str) and isinstance(reviewer, str)
+                and by.strip().lower() == reviewer.strip().lower()):
+            bad("a reviewer can never accept its own risk: disposition.by (%r) is the "
+               "same identity as this finding's own reviewer" % by)
+    elif status == "rejected":
+        refuting = disposition.get("evidence")
+        ok = (isinstance(refuting, str) and refuting.strip()) or (
+            isinstance(refuting, list) and refuting
+            and all(isinstance(e, str) and e.strip() for e in refuting))
+        if not ok:
+            bad("status 'rejected' needs disposition.evidence (the refuting evidence), "
+               "a string or a non-empty list of strings")
+    elif status == "fixed":
+        receipt = disposition.get("receipt")
+        disp_verification = disposition.get("verification")
+        has_proof = (
+            (isinstance(verification, str) and verification.strip())
+            or (isinstance(disp_verification, str) and disp_verification.strip())
+            or (isinstance(receipt, str) and receipt.strip()))
+        if not has_proof:
+            bad("status 'fixed' needs a verification command (top-level "
+               "'verification' or disposition.verification) or a linked receipt "
+               "(disposition.receipt): no finding marks itself fixed without proof")
+    return errors
+
+
+def _finding_is_blocking(introduced, severity, confidence, verification):
+    """LT-202's blocking rules as one predicate, so they are answered once
+    rather than re-derived at every call site:
+
+    - a finding pre-existing before this change (`introducedByChange` is not
+      "yes") is never a change blocker: pre-existing issues are reported
+      separately from change blockers;
+    - `confidence == "low"` never blocks, at any severity: a low-confidence
+      finding cannot block a merge. Taken here at its most conservative, for
+      every low-confidence finding rather than only ones this schema could
+      prove came from a model, because no field on a finding records
+      per-finding human/model provenance to check the narrower reading
+      against, and a schema cannot enforce a distinction it cannot observe;
+    - only `severity == "critical"` can ever block; every other severity is
+      an improvement to raise, never a blocker, in this schema;
+    - a critical finding blocks only with `confidence == "high"` OR a
+      non-empty `verification` command standing in for LT-202's "mechanical
+      proof": a critical blocker requires high confidence or mechanical
+      proof, and neither one alone downgrades it to a mere improvement, it
+      stays recorded, just not blocking.
+    """
+    if introduced != "yes":
+        return False
+    if confidence == "low":
+        return False
+    if (severity or "").strip().lower() != "critical":
+        return False
+    return confidence == "high" or bool(verification and str(verification).strip())
+
+
+def _finding_group_key(entry):
+    """The key two raw findings must share to be deduplicated into one: an
+    explicit `conceptId` (for one conceptual issue spanning several lines,
+    grouped with its category so two different categories never collide on
+    the same conceptId string) when given, else the LT-202 fingerprint
+    itself (identical fingerprint -> one finding, LT-202's first
+    deduplication rule)."""
+    category = entry.get("category") or ""
+    concept_id = entry.get("conceptId")
+    if concept_id:
+        return ("concept", _finding_slug(category), _finding_slug(concept_id))
+    return ("fingerprint", _finding_fingerprint(category, entry.get("location") or "",
+                                                entry.get("failure") or ""))
+
+
+def _merge_finding_group(entries):
+    """One structured LT-202 finding folded from `entries` (every raw
+    finding that shared one `_finding_group_key`), applying every
+    deduplication rule in order:
+
+    - `sources` names every reviewer that reported it, `reviewer` staying
+      the first for backward compatibility with a plain single-source
+      reader;
+    - a severity disagreement keeps the highest severity and sets
+      `severityDisagreement` rather than silently picking one;
+    - confidence is the HIGHEST any single source already claimed on its
+      own, never boosted past that by how many sources agree: two "low"
+      sources never become "medium" by vote count alone;
+    - `introducedByChange` reads "yes" if any source says so (a possible
+      regression is never hidden by a source that called it pre-existing),
+      else "unknown" if any source is unsure, else "no";
+    - a conceptId group's `locations` names every line; a fingerprint group
+      keeps its own one location, still reachable through `locations` as a
+      one-item list, so a reader never has to branch on which case it is;
+    - a status disagreement that mixes two or more of fixed/accepted/
+      rejected is never auto-merged: `status` becomes "arbitration" and
+      `contradiction` carries each source's own status, evidence and
+      disposition, in the same Finding/Evidence-for/Evidence-against shape
+      `docs/CLI.md`'s adjudication protocol section documents, for a human
+      or Fable to resolve. A single agreed non-open status (every source
+      that stated one agrees, or only one source stated one at all) is kept
+      outright: that is confirmation, not a vote-driven change.
+    """
+    first = entries[0]
+    category = first.get("category")
+    concept_id = first.get("conceptId")
+    if concept_id:
+        fingerprint = "%s:concept/%s" % (_finding_slug(category), _finding_slug(concept_id))
+        locations = []
+        for e in entries:
+            for loc in e.get("locations") or []:
+                if loc not in locations:
+                    locations.append(loc)
+        location = locations[0] if locations else ""
+        failure = first.get("failure")
+    else:
+        location = first.get("location") or ""
+        failure = first.get("failure") or ""
+        fingerprint = _finding_fingerprint(category, location, failure)
+        locations = [location]
+
+    sources = []
+    for e in entries:
+        r = e.get("reviewer")
+        if r and r not in sources:
+            sources.append(r)
+
+    severities = []
+    for e in entries:
+        s = e.get("severity")
+        if s and s not in severities:
+            severities.append(s)
+    severity = max(severities, key=lambda s: _SEVERITY_RANK.get(s.strip().lower(), -1)) \
+        if severities else first.get("severity")
+    severity_disagreement = len(severities) > 1
+
+    confidence = max((e.get("confidence") for e in entries),
+                     key=lambda c: _CONFIDENCE_RANK.get(c, 0))
+
+    introduced_values = set(e.get("introducedByChange") for e in entries)
+    if "yes" in introduced_values:
+        introduced = "yes"
+    elif "unknown" in introduced_values:
+        introduced = "unknown"
+    else:
+        introduced = "no"
+
+    evidence = []
+    for e in entries:
+        for item in e.get("evidence") or []:
+            if item not in evidence:
+                evidence.append(item)
+
+    verification = None
+    for e in entries:
+        v = e.get("verification")
+        if v:
+            verification = v
+            break
+
+    statuses = set((e.get("status") or "open") for e in entries)
+    terminal = statuses & set(("fixed", "accepted", "rejected"))
+    contradiction = None
+    disposition = None
+    if len(terminal) > 1:
+        status = "arbitration"
+        contradiction = [
+            {"reviewer": e.get("reviewer"), "status": e.get("status") or "open",
+             "evidence": e.get("evidence") or [], "disposition": e.get("disposition")}
+            for e in entries]
+    elif terminal:
+        status = next(iter(terminal))
+        for e in entries:
+            if (e.get("status") or "open") == status and e.get("disposition"):
+                disposition = e.get("disposition")
+                break
+    else:
+        status = "open"
+
+    # A finding pending arbitration is never a settled blocker: `blocking`
+    # means "a merge gate should mechanically halt on this right now", and a
+    # contradiction nobody has adjudicated yet is exactly the opposite of
+    # settled. `status.py`'s own read of this field already treats
+    # "arbitration" as its own, separately-reported NO-DATA case; letting
+    # `blocking` also read True here would make a read-side gate FAIL a
+    # change over a disagreement no human or Fable has resolved, before the
+    # adjudication protocol (docs/CLI.md) ever ran.
+    blocking = (status != "arbitration"
+               and _finding_is_blocking(introduced, severity, confidence, verification))
+
+    return {
+        "fingerprint": fingerprint,
+        "reviewer": sources[0] if sources else first.get("reviewer"),
+        "sources": sources,
+        "category": category,
+        "severity": severity,
+        "severityDisagreement": severity_disagreement,
+        "confidence": confidence,
+        "introducedByChange": introduced,
+        "location": location,
+        "locations": locations,
+        "failure": failure,
+        "evidence": evidence,
+        "verification": verification,
+        "status": status,
+        "disposition": disposition,
+        "blocking": blocking,
+        "contradiction": contradiction,
+    }
+
+
+def normalize_review_findings(raw_entries):
+    """(structured, errors) from `raw_entries` (the parsed JSON array a
+    `--findings-json` file carries): deduplicated, LT-202-shaped findings,
+    and every reason an entry could not be trusted. When `errors` is
+    non-empty, `structured` is always `[]`: a caller can never write a
+    record built from some valid and some rejected entries, the same "a
+    refused write leaves no partial record" law `_cmd_review`'s own
+    `--reviewer`/`--reviewer-type`/`--result` check already keeps.
+
+    Deduplication groups every entry by `_finding_group_key` (identical
+    fingerprint, or a shared `conceptId`) and folds each group through
+    `_merge_finding_group`; see that function's docstring for the rules
+    applied inside a fold. Group order is the order fingerprints (or
+    conceptIds) are first seen in `raw_entries`, so the same input list
+    always produces the same output order, independent of dict iteration
+    order in this process.
+    """
+    if not isinstance(raw_entries, list):
+        return [], ["findings-json: the top-level JSON value must be a list of findings"]
+    errors = []
+    for i, entry in enumerate(raw_entries):
+        errors.extend(_validate_raw_finding(entry, i))
+    if errors:
+        return [], errors
+    groups = {}
+    order = []
+    for entry in raw_entries:
+        key = _finding_group_key(entry)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(entry)
+    return [_merge_finding_group(groups[k]) for k in order], []
+
+
+def _record_review(target, lines, args, structured_findings=None):
     """Write one durable review record, `11-review.json`, into the dossier at
     `target`, and SAY on stdout what was written.
 
@@ -216,6 +601,19 @@ def _record_review(target, lines, args):
     `decisions.parse_verdict_lines` that packages FAIL and WAIVED lines into
     decision packages for `verify`. A human retyping what the tool already
     said would be a second, driftable copy of the same fact.
+
+    `structured_findings`, when not `None`, is the LT-202 output of
+    `normalize_review_findings` (already validated and deduplicated by
+    `_cmd_review` before this ever runs): it is written into two ADDITIONAL
+    fields, `findingsSchemaVersion` and `structuredFindings`, beside every
+    field this record already carried. `findings` (the raw FAIL/WAIVED
+    verdict lines above) is never replaced or renamed: LT-202's own rule is
+    that a review record may preserve the original raw verdict lines beside
+    the structured ones for traceability, not instead of them. `None` (the
+    default, and what every call site that never passed `--findings-json`
+    still gets) omits both new fields entirely, so a record written without
+    `--findings-json` is byte-for-byte what CR-09 already wrote: no reader of
+    an old record sees a field it does not understand.
     """
     try:
         try:
@@ -252,6 +650,9 @@ def _record_review(target, lines, args):
             "acceptedRisks": list(args.accept_risk or []),
             "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+        if structured_findings is not None:
+            record["findingsSchemaVersion"] = _FINDINGS_SCHEMA_VERSION
+            record["structuredFindings"] = structured_findings
         path = os.path.join(os.path.abspath(target), "11-review.json")
         with io.open(path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
@@ -265,10 +666,13 @@ def _record_review(target, lines, args):
             "stand and this command's exit code is unchanged.\n"
             % (type(exc).__name__, exc))
         return
+    struct_note = ""
+    if structured_findings is not None:
+        struct_note = ", %d structured finding(s)" % len(structured_findings)
     sys.stdout.write(
         "\nsbe review: review record written, bound to head %s, %d finding(s) and %d "
-        "accepted risk(s):\n  %s\n"
-        % (head_sha[:12], len(findings), len(record["acceptedRisks"]), path))
+        "accepted risk(s)%s:\n  %s\n"
+        % (head_sha[:12], len(findings), len(record["acceptedRisks"]), struct_note, path))
 
 
 def _record_tier_decision(root, data, intake_path, machine_readable):
@@ -487,11 +891,24 @@ def _cmd_review(args):
     exactly as it always did. See `_record_review`'s own docstring for why
     that write can never move `worst` or this command's exit code; the
     construction is the same one `_record_decisions` uses for `verify`.
+
+    `--findings-json <path>` additionally normalizes and deduplicates a JSON
+    array of LT-202 findings (see `normalize_review_findings`) and persists
+    the result as `structuredFindings`, beside the raw verdict lines
+    `--write` already records. It is read and validated HERE, before either
+    delegate below ever runs: an unreadable file or a finding that fails
+    validation refuses the whole command at `EXIT_USAGE`, the same "a
+    refused write leaves no partial record" law the `--reviewer`/
+    `--reviewer-type`/`--result` check just above already keeps, and for the
+    same reason: a `sbe_score.py`/`sbe_gate.py` run neither of them needed
+    would otherwise happen before the refusal, costing time for a write that
+    was never going to succeed.
     """
     target = args.path
     if not os.path.isdir(target):
         sys.stderr.write("sbe review: '%s' is not a directory.\n" % target)
         return EXIT_USAGE
+    structured_findings = None
     if args.write:
         missing = [flag for flag, value in (
             ("--reviewer", args.reviewer),
@@ -502,6 +919,23 @@ def _cmd_review(args):
                 "sbe review: --write also needs %s: a review record with an unstated "
                 "field is not a record, it is a guess.\n" % ", ".join(missing))
             return EXIT_USAGE
+        if args.findings_json:
+            try:
+                raw = json.loads(io.open(args.findings_json, encoding="utf-8").read())
+            except (OSError, ValueError) as exc:
+                sys.stderr.write(
+                    "sbe review: --findings-json '%s' could not be read: %s: %s. No "
+                    "review record was written.\n"
+                    % (args.findings_json, type(exc).__name__, exc))
+                return EXIT_USAGE
+            structured_findings, errors = normalize_review_findings(raw)
+            if errors:
+                sys.stderr.write(
+                    "sbe review: --findings-json rejected, no review record was "
+                    "written:\n")
+                for reason in errors:
+                    sys.stderr.write("  %s\n" % reason)
+                return EXIT_USAGE
     worst = EXIT_OK
     lines = []
     for tool, argv in (("sbe_score.py", ["--strict", "--strict-soft", target]),
@@ -515,7 +949,7 @@ def _cmd_review(args):
     # after `worst` is fully computed, so a write here can never be the thing
     # that decides what this command's exit code is.
     if args.write:
-        _record_review(target, lines, args)
+        _record_review(target, lines, args, structured_findings)
     _closing_caveat("review", worst)
     return worst
 
@@ -685,6 +1119,28 @@ def _cmd_impact(args):
             "derived answer is at its lowest value, so there is nothing here for "
             "strictness to grade. A NO-DATA carrying detector hits, or an unreadable "
             "diff, still exits 1.\n")
+    return EXIT_OK
+
+
+def _cmd_review_route(args):
+    """Deterministic reviewer selection from a diff: no model chooses, at
+    most two specialists, and zero is a legal result. See
+    `brothersbe.reviewroute` for the routing table and every detector.
+    """
+    if not os.path.isdir(args.path):
+        sys.stderr.write("sbe review-route: '%s' is not a directory. A mistyped path must "
+                         "not read as a clean scan.\n" % args.path)
+        return EXIT_USAGE
+    from . import reviewroute as reviewroute_mod
+    try:
+        data = reviewroute_mod.route(args.path, base=args.base, head=args.head,
+                                     work_profile=args.work_profile)
+    except reviewroute_mod.DiffUnavailable as exc:
+        data = reviewroute_mod.no_data_report(args.path, exc)
+    if args.json:
+        sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(reviewroute_mod.render(data))
     return EXIT_OK
 
 
@@ -1012,6 +1468,9 @@ COMMANDS = [
     ("version", "print the version and the evidence schema version", _cmd_version),
     ("impact", "read the git diff and reconcile it with the declared intake tier", _cmd_impact),
     ("inspect-change", "alias of impact, the name the finalization brief uses", _cmd_impact),
+    ("review-route", "deterministic reviewer selection from a diff: no model chooses, at most "
+                     "two specialists, zero is a legal result, never claims a clean review",
+     _cmd_review_route),
     ("plan", "derive the task plan from a dossier and validate it (delegates to sbe_plan.py)",
      lambda a: _delegate("sbe_plan.py", a.rest)),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
@@ -1094,6 +1553,23 @@ def build_parser():
             child.add_argument("--json", action="store_true", help="machine-readable output")
             child.add_argument("--strict", action="store_true",
                                help="make NO-DATA block as well, for protected CI")
+        elif name == "review-route":
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository or dossier to route (default: the "
+                                    "current one)")
+            child.add_argument("--base", default=None,
+                               help="the commit or ref to diff from; without it the merge "
+                                    "base with the default branch is used, exactly as in "
+                                    "`sbe impact`")
+            child.add_argument("--head", default="HEAD", help="the commit or ref to diff to")
+            child.add_argument("--work-profile", dest="work_profile", default=None,
+                               choices=("backend", "data", "infrastructure", "migration",
+                                        "qa", "documentation"),
+                               help="the task's declared workProfile, if any; recorded in "
+                                    "the reasons for provenance and does not change which "
+                                    "reviewer is selected, because the priority table "
+                                    "already orders every trigger a diff can raise")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name in ("verify", "review"):
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")
@@ -1134,6 +1610,18 @@ def build_parser():
                                    action="append", default=[],
                                    help="a risk the reviewer is knowingly accepting "
                                         "despite a finding; repeat for more than one")
+                child.add_argument("--findings-json", dest="findings_json",
+                                   default=None,
+                                   help="a JSON file: a list of LT-202 findings "
+                                        "(reviewer, category, severity, confidence, "
+                                        "introducedByChange, location, failure, and "
+                                        "optionally evidence/verification/status/"
+                                        "disposition/conceptId) to normalize, "
+                                        "deduplicate and persist as structuredFindings "
+                                        "in 11-review.json; requires --write, and a "
+                                        "finding that fails validation refuses the "
+                                        "whole write rather than writing a partial "
+                                        "record")
         elif name == "adopt":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to inspect (default: the current one)")

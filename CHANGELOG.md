@@ -10,6 +10,25 @@ checklist's own rules.
 
 (nothing yet)
 
+## 1.0.0-rc.7 (2026-08-05)
+
+Wave B of the lean team program: risk-sized review.
+
+- `sbe review-route`: deterministic reviewer selection from a diff. Seven
+  trigger priorities, at most two specialists, zero is a legal result,
+  unselected triggers named in unmeasured, never a claim of a clean review.
+  Proven by `tools/test_sbe_review_route.py` (25 tests).
+- Normalized findings in the review record: deterministic fingerprints,
+  deduplication that keeps the highest severity and records disagreement,
+  low-confidence findings that cannot block, accepted risk requiring a named
+  human who is not the reviewer, old records readable unchanged. Proven by
+  `tools/test_sbe_review_record.py` (63 tests).
+- `/brothersbe:review` consumes the route: mechanical checks first, only the
+  selected read-only lenses dispatched, findings normalized through the
+  landed write path, contradictions marked for arbitration rather than
+  resolved, one next action. Proven end to end by
+  `tools/test_sbe_review_skill_fixtures.py` (9 fixtures).
+
 ## 1.0.0-rc.6 (2026-08-05)
 
 Wave A of the lean team program: bounded team execution.
