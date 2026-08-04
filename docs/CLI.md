@@ -370,11 +370,14 @@ Six sections, blocker-first, and **every positive or empty line names what it in
 6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
    plus the scope sentence naming exactly which stores this run read.
 
-Where it looks, and this is a stated limit, not a silent one: `<path>/00-intake.json`,
-`<path>/disposition.json`, `<path>/.sbe/evidence/` (recursively), `<path>/.sbe/tasks.json`.
-These are flat, single-dossier conventions, the same ones `tools/test_sbe_impact.py`'s own
-fixtures write to; a dossier nested under `design/<change>/` is not discovered by this
-wave, and every section reads NO-DATA rather than guessing at a path it was never told.
+Where it looks, and this is stated rather than left to be discovered: the flat
+single-dossier conventions first (`<path>/00-intake.json`, `<path>/disposition.json`,
+`<path>/.sbe/evidence/` recursively, `<path>/.sbe/tasks.json`, the same ones
+`tools/test_sbe_impact.py`'s own fixtures write to), and when no flat intake exists,
+the dossier layout through the same walker the team report uses (`design/<change>/`
+plus any `designRoots` the team profile declares, escapes refused by name). When both
+layouts exist the flat one wins and the report says so. A repository with neither
+still reads NO-DATA per section rather than guessing at a path it was never told.
 
 A design/gate/score obligation is cleared only by a receipt whose `sbe evidence verify`
 verdict is PASS (sealed, current, every covered file intact) AND which declares that kind
