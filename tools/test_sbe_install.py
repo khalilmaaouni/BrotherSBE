@@ -174,22 +174,31 @@ class TestInstallScript(unittest.TestCase):
         self.assertEqual(before, after, "dry-run changed the tree")
 
     def test_target_containing_a_space_resolves_correctly(self):
+        # Stubbed `claude` for the same reason the every-step test above stubs
+        # it: this test measures target resolution, not the machine's toolchain,
+        # and a CI runner carries no Claude CLI. Without the stub the dry run
+        # refuses at the prerequisite step and exit 0 here measured the machine.
         tmp = tempfile.mkdtemp()
         try:
             scratch = self._scratch_target(tmp, name="my project name")
             expected = _resolve(scratch)
-            code, stdout, _ = self._run("--dry-run", "--target", scratch)
+            code, stdout, _ = self._run(
+                "--dry-run", "--target", scratch,
+                env={"PATH": self._stub_bin(tmp, "claude")})
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         self.assertEqual(code, 0, stdout)
         self.assertIn("resolved target: %s" % expected, stdout)
 
     def test_target_containing_non_ascii_characters_resolves_correctly(self):
+        # Same stub, same reason as the space test above.
         tmp = tempfile.mkdtemp()
         try:
             scratch = self._scratch_target(tmp, name=u"projet-café-安装")
             expected = _resolve(scratch)
-            code, stdout, _ = self._run("--dry-run", "--target", scratch)
+            code, stdout, _ = self._run(
+                "--dry-run", "--target", scratch,
+                env={"PATH": self._stub_bin(tmp, "claude")})
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         self.assertEqual(code, 0, stdout)
