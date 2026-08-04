@@ -35,6 +35,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `fences` | prints the live fences the write hook would enforce |
 | `impact` | reads the git diff and reconciles it with the declared intake tier |
 | `inspect-change` | alias of `impact`, the name the finalization brief uses |
+| `review-route` | deterministic reviewer selection from a diff: no model chooses, at most two specialists, zero is a legal result, never claims a clean review |
 | `evidence` | generate a receipt by running the command, verify it, or show its trust level |
 | `task` | the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition |
 | `adopt` | inspect a repository for installation readiness, dry run by default |
