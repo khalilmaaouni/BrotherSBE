@@ -42,11 +42,27 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `init` | install BrotherSBE's local footprint into a repository, dry run by default |
 | `version` | the version and the evidence schema version |
 | `plan` | derive `08-plan.json` from a dossier mechanically and validate it; an empty plan never exits 0 (delegates to `tools/sbe_plan.py`) |
-| `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove` |
+| `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove`, `brief` (a deterministic JSON work order for one task, read-only) |
 | `pr` | `pr verify <number> --repo owner/name`: live GitHub approval evidence bound to the head sha; no credentials is NO-DATA with a remedy, never PASS |
 | `converge` | does base..head still match the approved dossier: scope, contracts, data, architecture, verification; no force flag exists |
 | `explain` | print the decision package for a decision id, or for a gate or check name; with no recorded run it regenerates one from the shipped registry and marks the verdict NO-DATA, and it never overwrites a package bound to another commit |
 | `lineage` | walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, an evidence pointer on every hop; an absent store is a named NO-DATA hop, never a shorter chain |
+
+`sbe work brief --plan <08-plan.json> --task <id> [--out <path>] [--json]` runs every `start`
+refusal (plan validation, unknown task, an open dependency, a task another OPEN registry record
+already owns) without opening a branch, a worktree, or writing to the registry: it only reads.
+On success it emits one JSON object with sorted keys and no timestamp field anywhere
+(`schemaVersion`, `taskId`, `title`, `why`, `baselineCommit`, `planPath`, `scope`,
+`mustNotTouch`, `dependencies`, `acceptance`, `verificationCommands`, `relevantPointers`,
+`knownConstraints`, `stopConditions`, `requiredEvidenceKind`, `model`,
+`maxAttemptsPerApproach`), so two calls against the same repository state produce byte-identical
+output. `mustNotTouch` always carries the task's own `readOnly` paths plus the coordination
+files no task may ever declare as its own scope: `.sbe/tasks.json`, `CHECKSUMS.sha256`,
+`VERSION`, `.claude-plugin/`, and `08-plan.json`. A brief that would serialize past 8192 bytes
+is refused by name, naming its largest section, rather than silently truncated. `--out` writes
+the brief atomically (temp file, then rename); a dirty repository is named under
+`knownConstraints` rather than refused. `agents/implementation-worker.md` is the paired agent
+that reads a brief and does the work.
 
 Two more are **present and refuse**: `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.
