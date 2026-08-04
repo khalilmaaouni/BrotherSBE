@@ -1,0 +1,73 @@
+test_a_case_folded_string_match_alone_is_never_trusted (__main__.TestCaseFoldConfirmation)
+The Linux half of the fix: two honestly different files named ... ok
+test_a_real_case_collision_overlaps_at_the_unit_level (__main__.TestCaseFoldConfirmation)
+docs/SETUP.md and docs/setup.md are one file on this machine ... ok
+test_no_root_skips_the_fold_which_is_this_hooks_fail_open_bias (__main__.TestCaseFoldConfirmation)
+A caller with no filesystem to confirm against (root=None) gets the ... ok
+test_fail_open_registry_file_absent (__main__.TestFailOpen) ... ok
+test_fail_open_registry_file_corrupt (__main__.TestFailOpen)
+Corrupt two ways in one file: bytes that are not valid UTF-8, and text ... ok
+test_fail_open_registry_file_unreadable (__main__.TestFailOpen) ... ok
+test_fail_open_when_a_live_fence_declares_no_file_scope (__main__.TestFailOpen)
+A fence with no `files:` field fences nothing this hook can compare ... ok
+test_fail_open_when_a_registry_directory_cannot_be_entered (__main__.TestFailOpen)
+glob returns FEWER paths, not an error, over a directory it cannot ... ok
+test_fail_open_when_no_target_path_is_present (__main__.TestFailOpen) ... ok
+test_fail_open_when_the_payload_is_not_an_object (__main__.TestFailOpen) ... ok
+test_fail_open_when_the_registry_path_is_a_directory (__main__.TestFailOpen) ... ok
+test_fail_open_when_the_session_has_no_identity (__main__.TestFailOpen)
+Without a session id there is nothing to compare against a fence ... ok
+test_fail_open_when_tool_input_is_not_an_object (__main__.TestFailOpen) ... ok
+test_no_failure_path_can_produce_a_deny (__main__.TestFailOpen)
+The structural version of the property: over every malformed payload ... ok
+test_the_disable_switch_allows_and_says_so (__main__.TestFailOpen) ... ok
+test_a_directory_claim_covers_the_files_under_it (__main__.TestGenuineConflictIsRefused) ... ok
+test_a_dot_dot_escape_inside_an_absolute_path_is_canonicalized (__main__.TestGenuineConflictIsRefused) ... ok
+test_a_fence_line_inside_an_html_comment_is_not_enforced (__main__.TestGenuineConflictIsRefused)
+A fence a reader of the registry cannot see must not be a fence that ... ok
+test_a_file_outside_every_fence_is_allowed (__main__.TestGenuineConflictIsRefused) ... ok
+test_a_glob_claim_does_not_cross_a_separator_its_author_never_named (__main__.TestGenuineConflictIsRefused)
+`docs/*.md` claims docs/SETUP.md and must NOT silently swallow ... ok
+test_a_multiedit_payload_is_read_to_its_nested_paths (__main__.TestGenuineConflictIsRefused)
+A MultiEdit-shaped payload whose per-edit entries carry their own ... ok
+test_a_relative_path_from_a_subdirectory_is_canonicalized_before_comparison (__main__.TestGenuineConflictIsRefused)
+Comparing unresolved strings is bypassed by a relative path typed from ... ok
+test_a_write_inside_another_sessions_fence_is_denied (__main__.TestGenuineConflictIsRefused) ... ok
+test_a_write_outside_the_project_root_is_allowed (__main__.TestGenuineConflictIsRefused)
+BrotherSBE fences a project, not the filesystem. ... ok
+test_an_abbreviated_session_id_in_the_registry_still_matches_its_owner (__main__.TestGenuineConflictIsRefused)
+A registry is hand-written and an operator abbreviates a UUID as often ... ok
+test_an_adopted_fence_no_longer_refuses (__main__.TestGenuineConflictIsRefused) ... ok
+test_an_asterisk_bullet_fence_is_enforced (__main__.TestGenuineConflictIsRefused)
+The two bullets render identically. Enforcing only `- ` would leave a ... ok
+test_registries_named_by_the_env_var_are_enforced_too (__main__.TestGenuineConflictIsRefused)
+BROTHERSBE_REGISTRIES is the name the scorer and fence-lint already ... ok
+test_the_named_escape_actually_releases_the_fence (__main__.TestGenuineConflictIsRefused)
+The escape is PERFORMED, not merely quoted. ... ok
+test_the_owner_of_the_fence_is_never_refused_its_own_file (__main__.TestGenuineConflictIsRefused) ... ok
+test_the_refusal_names_an_escape (__main__.TestGenuineConflictIsRefused) ... ok
+test_the_refusal_names_the_fence_that_owns_the_file (__main__.TestGenuineConflictIsRefused) ... ok
+test_a_bad_flag_on_fences_exits_2_instead_of_reading_it_as_a_directory (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage_on_stderr_and_a_clean_stdout (__main__.TestHelpMeansHelp)
+Usage goes to stderr because stdout is the hook's decision channel: ... ok
+test_the_bare_hook_invocation_still_fails_open (__main__.TestHelpMeansHelp) ... ok
+test_no_em_or_en_dashes (__main__.TestShippedFileHygiene) ... ok
+test_the_hook_imports_nothing_outside_the_standard_library (__main__.TestShippedFileHygiene)
+BrotherSBE is standalone by design: clone it and it works with nothing ... ok
+test_the_hook_makes_no_network_call_and_runs_no_subprocess (__main__.TestShippedFileHygiene) ... ok
+test_bash_is_not_gated (__main__.TestToolSurface)
+The skill's own sentence says this hook does not gate Bash, and the ... ok
+test_every_declared_write_tool_is_gated (__main__.TestToolSurface) ... ok
+test_read_only_tools_are_silent (__main__.TestToolSurface) ... ok
+test_a_deny_lands_on_stdout_as_json_at_exit_zero (__main__.TestWireProtocol) ... ok
+test_an_unknown_subcommand_is_refused_rather_than_read_as_a_hook_call (__main__.TestWireProtocol) ... ok
+test_empty_stdin_fails_open_at_exit_zero (__main__.TestWireProtocol) ... ok
+test_stdout_carries_the_decision_and_nothing_else (__main__.TestWireProtocol)
+Claude Code parses stdout as JSON. A diagnostic there corrupts the ... ok
+test_the_fences_subcommand_reports_without_touching_stdout (__main__.TestWireProtocol) ... ok
+test_unparseable_stdin_fails_open_at_exit_zero (__main__.TestWireProtocol) ... ok
+
+----------------------------------------------------------------------
+Ran 47 tests in 0.522s
+
+OK

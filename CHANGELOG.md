@@ -8,6 +8,48 @@ checklist's own rules.
 
 ## Unreleased
 
+(nothing yet)
+
+## 1.0.0-rc.3 (2026-08-04)
+
+Everything below accumulated since `v1.0.0-rc.2` and is folded into this
+release. Read together, the entries close the defects that made rc.2 unsafe
+to hand to a new project: the installer now targets the invoking project and
+refuses to run from inside the distribution directory itself; team profile
+fields are applied or rejected by name instead of being silently ignored;
+startup context injected at session start is cut from roughly 9100 bytes to
+roughly 2400 bytes; a review verdict is now recorded as a durable, commit
+bound record rather than a claim that can be typed and forgotten;
+documentation is reduced to three install paths that were actually run,
+instead of several that only seemed plausible; the release battery no longer
+overwrites its own frozen evidence when it reruns; and remote branch
+topology is reduced to `main` alone.
+
+This entry also closes the last mechanically closable release blocker named
+in the release-plan review's own kill criteria: "distributable bytes change
+without a version change." VERSION, `.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json` could all agree with each other while none
+of them were tied to the CONTENT being shipped, so a marketplace user could
+believe an install was current while running older bytes that lacked
+security, evidence and concurrency fixes; `scripts/test-install-artifact.sh`
+already guarded the checksums manifest against drifting from the bytes it
+describes, but nothing guarded the VERSION string itself. `tools/
+sbe_release_invariant.py` closes that gap mechanically: it diffs a base ref
+(default `origin/main`) against HEAD, and FAILs under `--strict` when any
+tracked path under `src/`, `tools/`, `bin/`, `skills/`, `hooks/`, `agents/`,
+`scripts/`, `install.sh` or `.claude-plugin/` changed in that range without
+VERSION changing in the same range. A change touching none of those paths
+reads NO-DATA, never PASS, matching this project's own law that absence of
+evidence is never a pass; wired into `.github/workflows/brothersbe-gates.yml`
+alongside the install-artifact test, and proved by
+`tools/test_sbe_release_invariant.py` against real `tempfile` and `git init`
+fixtures, including the seeded acceptance case the release-plan review names
+by its own words: a distributable change with no version bump FAILs, the
+same change with a version bump PASSes, and a docs-only change is NO-DATA.
+This release itself is the calibration: running the checker with base
+`v1.0.0-rc.2` against this commit reports FAIL before VERSION moved to
+`1.0.0-rc.3` in this same change, and PASS after.
+
 - The evidence store no longer poisons itself. A receipt's `coveredFiles`,
   when computed from a diff rather than an explicit `--covers` list, is every
   file that changed in `base..head`, and that diff cannot tell "the code this

@@ -1,10 +1,14 @@
 #!/bin/sh
 # BrotherSBE SessionStart: digest + mechanical nags. MUST always exit 0.
 # Output is injected into session context (10k char cap). The cap is ENFORCED
-# HERE rather than assumed: the digest alone uses most of that budget, and the
-# harness truncates the TAIL, which used to be where the compaction hint (the
-# recovery pointer, the most safety-relevant line) printed. So the hint and
-# the nags print FIRST, where truncation can never reach them, the digest
+# HERE rather than assumed: DIGEST.md was cut down to the three unconditional
+# laws (L6, L11, L14), the checked/human legend, a pointer to
+# references/laws-full-digest.md for the rest, and the after-compaction
+# instruction, so the digest itself now uses only a small slice of that
+# budget (see tools/test_sbe.py TestDigestBudget for the enforced ceiling).
+# The harness truncates the TAIL, which used to be where the compaction hint
+# (the recovery pointer, the most safety-relevant line) printed. So the hint
+# and the nags print FIRST, where truncation can never reach them, the digest
 # prints last, and if the total runs over the cap this script cuts it itself
 # with a visible marker instead of letting the harness cut it in silence.
 DIR="$(cd "$(dirname "$0")/.." && pwd)"

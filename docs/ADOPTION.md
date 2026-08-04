@@ -1,10 +1,15 @@
 # Adopting BrotherSBE into a repository
 
-`sbe adopt` proposes what a repository is missing; it never applies a
-protection GitHub controls, because nothing here holds a GitHub token or
-admin rights, and it never claims otherwise. This page is the honest
-checklist: what `sbe adopt` can do for you, and what only you (or your repo
-admin) can click.
+`sbe adopt` and `sbe init` are commands you run from a copy of BrotherSBE
+that is ALREADY INSTALLED (one of the three paths in
+[README.md](../README.md): the marketplace pair, `sh install.sh`, or the
+tag-pinned path in [docs/ROLLOUT.md](ROLLOUT.md)). They are not a fourth way
+to install the tool itself; they configure a target repository to work with
+an install you already have. `sbe adopt` proposes what that repository is
+missing; it never applies a protection GitHub controls, because nothing here
+holds a GitHub token or admin rights, and it never claims otherwise. This
+page is the honest checklist: what `sbe adopt` can do for you, and what only
+you (or your repo admin) can click.
 
 ## What `sbe adopt` does
 
@@ -101,10 +106,13 @@ here with its exact path so nobody has to search for it:
 
 ## `sbe init`
 
-`sbe adopt` proposes policy and CODEOWNERS; `sbe init` installs BrotherSBE's
-own local footprint. See `docs/CLI.md` ("sbe init") for its config file,
-dossier directory, optional consumer CI copy, and the installation receipt
-with exact uninstall instructions.
+`sbe adopt` proposes policy and CODEOWNERS; `sbe init` writes BrotherSBE's
+local footprint (config, dossier directory, receipt) into a target
+repository. Neither command installs BrotherSBE itself: both assume the tool
+is already on the machine running them, the same distinction the top of this
+page draws. See `docs/CLI.md` ("sbe init") for its config file, dossier
+directory, optional consumer CI copy, and the installation receipt with
+exact uninstall instructions.
 
 ## Limits, stated where the behavior is
 

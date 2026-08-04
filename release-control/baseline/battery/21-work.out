@@ -1,0 +1,35 @@
+test_check_names_an_out_of_scope_shell_write_and_reports_not_closable (__main__.TestCheck) ... ok
+test_finish_with_scope_kept_and_a_real_receipt_closes_clean_and_unblocks_a_dependent (__main__.TestFinishIntegration) ... ok
+test_finish_refuses_as_no_data_when_the_verification_receipt_is_absent (__main__.TestFinishRefusals) ... ok
+test_finish_refuses_on_out_of_scope_writes_naming_the_paths (__main__.TestFinishRefusals) ... ok
+test_finish_force_closes_marks_forced_visible_in_check_and_never_satisfies_a_dependent (__main__.TestForceFinish) ... ok
+test_a_genuinely_bad_flag_still_exits_2 (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage_and_starts_nothing (__main__.TestHelpMeansHelp) ... ok
+test_calibration_concat_built_merge_argv_is_caught_by_the_unreviewable_law (__main__.TestNoMergeLaw)
+Calibration, per the audit's own mutation: assign a concat-built ... ok
+test_work_module_never_builds_git_argv_head_from_something_unreadable (__main__.TestNoMergeLaw)
+The gap the audit found: the scan above only recognises an ... ok
+test_work_module_never_constructs_a_merge_rebase_or_push_argv (__main__.TestNoMergeLaw) ... ok
+test_shlex_canonicalization_binds_quoted_commands (__main__.TestQuotedVerifyCommandReceipt) ... /Users/khalil.maaouni/Documents/BrotherSBE/src/brothersbe/__init__.py:41: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/VERSION' mode='r' encoding='utf-8'>
+  return io.open(path, encoding="utf-8").read().strip()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_work.py:704: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/tmphsp7g74y/.sbe/evidence/q.json' mode='w' encoding='UTF-8'>
+  _io.open(_os.path.join(evdir, "q.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_remove_refuses_a_dirty_closed_worktree_without_override (__main__.TestRemove) ... ok
+test_remove_refuses_an_open_task (__main__.TestRemove) ... ok
+test_remove_with_override_dirty_succeeds_and_records_the_reason (__main__.TestRemove) ... ok
+test_start_refuses_a_reviewer_task_that_owns_paths (__main__.TestReviewerCannotOwn) ... ok
+test_start_refuses_an_already_open_registry_record (__main__.TestStartRefusals) ... ok
+test_start_refuses_an_existing_branch_collision (__main__.TestStartRefusals) ... ok
+test_start_refuses_an_existing_worktree_directory_collision (__main__.TestStartRefusals) ... ok
+test_start_refuses_an_unknown_task_id (__main__.TestStartRefusals) ... ok
+test_start_refuses_when_a_dependency_is_not_yet_closed (__main__.TestStartRefusals) ... ok
+test_start_refuses_when_a_dependency_was_force_closed (__main__.TestStartRefusals) ... ok
+test_start_on_a_valid_plan_task_opens_branch_worktree_record_and_prints_the_contract (__main__.TestStartValid) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 6.154s
+
+OK

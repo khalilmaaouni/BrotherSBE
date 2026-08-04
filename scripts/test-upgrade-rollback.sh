@@ -52,13 +52,19 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 cd "$ROOT"
 
-# Find the most recent tag that is an ANCESTOR of HEAD, i.e. a real previous
-# release on this line of history, not a tag sitting on an unrelated branch
-# or pointing at HEAD itself. `git tag --list` can be empty (today, always);
-# guarded explicitly rather than let a bare `for` over an empty command
-# substitution misbehave under `set -e` on some shells.
+# Find the most recent RELEASE tag that is an ANCESTOR of HEAD, i.e. a real
+# previous release on this line of history, not a tag sitting on an unrelated
+# branch or pointing at HEAD itself. Release tags are the `v<digit>` family
+# (docs/RELEASE.md cuts `vX.Y.Z`); the pattern matters because this repository
+# also carries `archive/*` tags, which are preservation snapshots of deleted
+# branch tips, not releases anyone installed. Without the pattern this loop
+# once selected `archive/worktree-agent-a2e2f84b3d27f281f` as "the previous
+# release" and failed verify-install against a tree nobody ever published.
+# `git tag --list` can be empty (today, always); guarded explicitly rather
+# than let a bare `for` over an empty command substitution misbehave under
+# `set -e` on some shells.
 PREV_TAG=""
-ALL_TAGS=$(git tag --list 2>/dev/null || true)
+ALL_TAGS=$(git tag --list 'v[0-9]*' 2>/dev/null || true)
 if [ -n "$ALL_TAGS" ]; then
     for t in $ALL_TAGS; do
         if ! git merge-base --is-ancestor "$t" HEAD 2>/dev/null; then

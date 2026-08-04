@@ -1,6 +1,6 @@
 # BrotherSBE: setup
 
-This page documents the original manual path, still supported: cloning the skill by hand and wiring the hooks yourself. The recommended install today is the plugin path in the main [README.md](../README.md), and [docs/MIGRATION.md](MIGRATION.md) covers moving from this manual path to that one.
+This page documents the original manual path: cloning the skill by hand and wiring the hooks yourself. It is still supported, but it is not the default. Three paths are documented in [README.md](../README.md): the marketplace pair (recommended for one person or a small team), `sh install.sh` (one command, works on any host, and applies your team's committed profile), and the tag-pinned, checksum-verified path in [docs/ROLLOUT.md](ROLLOUT.md) (for an organization rolling this out across many repositories). Come here when you want to inspect or hand-place every file yourself, or when [docs/MIGRATION.md](MIGRATION.md) sends you here while moving between paths.
 
 Install is a few minutes. Turning the gates from advisory into blocking is real CI work, and this document is honest about which is which.
 
@@ -75,114 +75,7 @@ python3 tools/sbe_gate.py --strict design   # enforcing: exits nonzero on any FA
 
 ## 5. Turn the gates from advisory into blocking (the real step)
 
-Cloning the skill gives you the tools. It does not stop a bad merge until you wire `--strict` into the CI of the repository you want guarded. A ready workflow ships at `.github/workflows/brothersbe-gates.yml`; copy it into the guarded repo (and make `tools/` reachable there, by vendoring it or adding a clone step). It runs on every pull request:
-
-```yaml
-      - name: Hard gates (numbers, migration, approval, ran) block on failure
-        run: python3 tools/sbe_gate.py --strict design
-      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
-      # project stop blocking every unrelated merge, and the exit code cannot tell
-      # you one was used, so this step surfaces every WAIVED line as an annotation
-      # and in the job summary. A human sees it, or it is not a control. Add
-      # --strict-waivers here if you want an exemption to block outright.
-      - name: Design checks (dossier completeness) block on failure
-        run: |
-          set -o pipefail
-          python3 tools/sbe_design.py --strict . | tee design-checks.out
-      # The pattern is `^  >> `, the prefix sbe_design.py puts on a waived line, and
-      # not the word WAIVED. The banner the tool prints on every run ends "WAIVED
-      # is not a pass either", so `grep -q 'WAIVED'` was unconditionally true: every
-      # clean run told the reviewer that a .sbe-exempt had waived one or more design
-      # checks and that nothing opened a file for them, over a run in which every
-      # check opened its files. An assurance signal that always fires carries no
-      # information, and this one asserted something false, which trains a reviewer
-      # to ignore the single control that makes WAIVED visible in CI at all.
-      - name: Surface design waivers (a waiver is not a pass)
-        if: always()
-        run: |
-          if grep -qE '^  >> ' design-checks.out; then
-            grep -E '^  >> ' design-checks.out | while read -r line; do
-              echo "::warning title=BrotherSBE design waiver::$line"
-            done
-            {
-              echo '### BrotherSBE design waivers'
-              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
-              echo '```'
-              grep -E '^  >> |^WAIVERS: ' design-checks.out
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-      - name: Silent-failure lints and code-graded checks block on failure
-        run: python3 tools/sbe_score.py --strict --strict-soft .
-      # The gates above are only worth what their tests are worth. These two ran
-      # on nobody's merge path until now, which made them documentation rather
-      # than a gate: a fixture no merge runs cannot stop anything.
-      - name: Regression evals (every gate against the defect it exists to catch)
-        run: python3 evals/run_evals.py
-      - name: Replay detail on failure (which excerpt blocks differ, and how)
-        if: failure()
-        run: |
-          python3 --version
-          python3 evals/replay_book.py || true
-          python3 evals/replay_guide05.py || true
-      - name: Honesty meta-test (no check may PASS over evidence it never examined)
-        run: |
-          python3 evals/test_no_data_class.py
-          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
-      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
-        run: python3 tools/test_sbe.py
-      - name: Fence hook tests (the write boundary)
-        run: python3 tools/test_sbe_fence_hook.py
-      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
-        run: python3 tools/test_sbe_impact.py
-      - name: Install-from-artifact test (a fresh `git archive` install verifies clean)
-        run: sh scripts/test-install-artifact.sh
-      - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
-        run: sh scripts/test-upgrade-rollback.sh
-      - name: Adopt and init fixtures (sbe adopt, sbe init)
-        run: python3 tools/test_sbe_adopt.py
-      - name: Book estate fixtures (the worked example the book's chapters paste)
-        run: python3 tools/test_sbe_book.py
-      - name: Bypass fixtures (the ways a person or an agent gets past these controls)
-        run: python3 tools/test_sbe_bypass.py
-      - name: Converge fixtures (sbe converge)
-        run: python3 tools/test_sbe_converge.py
-      - name: Decision package fixtures (sbe explain, sbe lineage)
-        run: python3 tools/test_sbe_decisions.py
-      - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
-        run: python3 tools/test_sbe_evidence.py
-      - name: Install script fixtures (dry-run, missing prerequisites)
-        run: python3 tools/test_sbe_install.py
-      - name: Plan fixtures (sbe plan)
-        run: python3 tools/test_sbe_plan.py
-      # This is the canned/offline suite: every GitHub API call is routed
-      # through a fake fetch, so it needs no network and no token, and it
-      # runs on every PR. tools/test_sbe_prverify_live.py is a separate,
-      # deliberately unwired script: it needs BOTH SBE_LIVE_GH_REPO and
-      # SBE_LIVE_GH_PR plus a token discoverable the way `sbe pr verify`
-      # itself discovers one, none of which this workflow provides, and
-      # without them it already prints one NO-DATA line and exits 0 (its
-      # own docstring). Wiring it here would either skip silently on every
-      # normal run or require CI secrets this repository does not carry, so
-      # it stays a manual, opt-in script instead.
-      - name: PR verify fixtures (sbe pr verify, canned GitHub API, offline)
-        run: python3 tools/test_sbe_prverify.py
-      - name: Status fixtures (sbe status)
-        run: python3 tools/test_sbe_status.py
-      - name: Team status fixtures (sbe status --team)
-        run: python3 tools/test_sbe_status_team.py
-      - name: Task fixtures (sbe task)
-        run: python3 tools/test_sbe_tasks.py
-      - name: Work fixtures (sbe work)
-        run: python3 tools/test_sbe_work.py
-      # The kill criterion this wave was cut against, verbatim: an install
-      # that needs a manual global settings edit. This proves a plain
-      # `git archive HEAD` extracts on its own into an empty directory and
-      # verifies clean there (scripts/verify-install.sh, bin/sbe doctor),
-      # nothing written outside that one directory.
-```
-
-Seven steps, not three. The first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The waiver step (third of the seven) surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
+Cloning the skill gives you the tools. It does not stop a bad merge until you wire `--strict` into the CI of the repository you want guarded. This is the same CI wiring [README.md](../README.md#wire-the-checks-into-ci-every-install-path) documents in full, with the actual workflow steps kept in one place so a step added there is never silently missing here: copy [`.github/workflows/brothersbe-gates.yml`](../.github/workflows/brothersbe-gates.yml) into the guarded repo (and make `tools/` reachable there, by vendoring it or adding a clone step). It runs on every pull request, seven steps, not three: the first blocks on a failed hard gate (a number with no re-run, an untested migration reverse, an unsigned money-path change, an unrun check). The second blocks on an incomplete dossier (a missing artifact, an ADR with no rejected alternatives, an entity with no system of record, a diagram node nothing defines, a dossier that is still the shipped template). The third blocks on a silent-failure lint. Three more run the regression evals, the honesty meta-test and the tool tests, because a gate whose fixtures nobody runs is a gate nobody knows still works. The waiver step (third of the seven) surfaces any design waiver as an annotation and in the job summary, because a waiver examined nothing and the exit code cannot tell you it happened. Advisory mode tells a session; only this CI wiring stops a merge, and that is by design.
 
 Two settings decide whether those steps can see anything.
 

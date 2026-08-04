@@ -1,0 +1,81 @@
+{
+  "findings": [
+    {
+      "review_finding_id": "C-05",
+      "severity": "high",
+      "file": "docs/KNOWN-LIMITS.md",
+      "line": 514,
+      "claim": "Review claim C-05: the task registry has NO lock and concurrent opens are last-write-wins.",
+      "observed": "docs/KNOWN-LIMITS.md:514 heading '## The registry file itself has no lock', body at 516-519: '`.sbe/tasks.json` is rewritten atomically (write temp, rename), so it is never half-written, but two simultaneous `sbe task open` calls are last-write-wins and one of the two records can vanish... no service, no daemon, no lock.' This is REFUTED by the current code. src/brothersbe/tasks.py:225-289 defines `_registry_lock`, an `fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)` (line 270) taken on sidecar `.sbe/tasks.json.lock` (REGISTRY_LOCK_REL, line 91; opened at line 260), spun up to a 30s timeout (_LOCK_TIMEOUT_S, line 222) and raising RegistryUnusable rather than proceeding unlocked (lines 247-251, 277-281). `cmd_open` (line 406: `with _registry_lock(root):`) and `cmd_close` (line 501: `with _registry_lock(root):`) hold this lock across the ENTIRE read (load_registry) - decide - write (save_registry) critical section, added in commit db7296d ('Lock the stores that lost records...', Aug 1 2026). This is proven, not just claimed: tools/test_sbe_tasks.py:282-380 (class TestConcurrentWriters, test at line 360, `test_twenty_concurrent_writers_open_distinct_tasks_all_survive`) spawns 20 REAL separate subprocesses, each running the actual `sbe task open` CLI, released simultaneously from a filesystem barrier, and asserts all 20 survive as 20 distinct open tasks with none lost. I ran this suite myself: `python3 tools/test_sbe_tasks.py -v` -> 'Ran 18 tests in 10.559s / OK', with the concurrency test passing ('... ok'). git status before and after the run was unchanged (only pre-existing untracked files), so this verification had no side effects.",
+      "recommended_fix": "Rewrite docs/KNOWN-LIMITS.md:514-521. Replace the 'no lock' claim with: `sbe task open` and `sbe task close` now hold an exclusive `fcntl.flock` (tasks.py `_registry_lock`, lines 225-289) across the whole read-modify-write, so two concurrent `sbe task open`/`close` calls can no longer silently drop a record; proven by a 20-process test (tools/test_sbe_tasks.py:360). In the same edit, disclose the genuine residual gap this fix did NOT close: `sbe work remove` (src/brothersbe/work.py, cmd_remove, lines 557-601) still calls `load_registry`/`save_registry` directly at lines 559 and 601 without importing or holding `_registry_lock` at all (confirmed: work.py's imports at lines 28-48 never import `_registry_lock`), so a `sbe work remove --override-dirty` racing an `sbe task open`/`close` (or another `remove`) is still last-write-wins on that one path.",
+      "verdict_on_review_finding": "REFUTED"
+    },
+    {
+      "review_finding_id": "C-05",
+      "severity": "high",
+      "file": "docs/CLI.md",
+      "line": 295,
+      "claim": "Same C-05 'no lock / last-write-wins' claim, repeated in the CLI reference doc.",
+      "observed": "docs/CLI.md:295-296: 'Concurrent writers of the registry file are out of scope (atomic rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`.' Contradicted by src/brothersbe/tasks.py:225-289/406/501 exactly as in the KNOWN-LIMITS.md finding above; this is the CLI reference page a developer reads to look up `sbe task` behavior, so it is the second-most load-bearing stale passage.",
+      "recommended_fix": "Update docs/CLI.md:295-296 to state that `open`/`close` serialize the read-modify-write under an exclusive flock (cite tasks.py `_registry_lock`), and that `sbe work remove` is the one entry point still outside that lock (src/brothersbe/work.py:559,601).",
+      "verdict_on_review_finding": "REFUTED"
+    },
+    {
+      "review_finding_id": "C-05",
+      "severity": "medium",
+      "file": "docs/book/07-the-task-registry.md",
+      "line": 207,
+      "claim": "Same claim in narrative book-chapter prose, under a section titled 'What this registry does not do'.",
+      "observed": "docs/book/07-the-task-registry.md:207-209: 'Concurrent writes to the registry file itself are last-write-wins, not locked, because the rewrite is atomic and this project chose no daemon over a lock nobody asked for.' Same contradiction as above against tasks.py:225-289/406/501. Lower severity than the two reference docs because it is narrative/pedagogical rather than a spec developers consult operationally, but it is still read by adopters as current-state truth.",
+      "recommended_fix": "Rewrite the 'What this registry does not do' passage at lines 207-209 to reflect the fcntl-lock fix for open/close, and keep the `sbe work remove` gap as the one true remaining 'this registry does not do' item.",
+      "verdict_on_review_finding": "REFUTED"
+    },
+    {
+      "review_finding_id": "C-05",
+      "severity": "low",
+      "file": "design/final-release-program/04-technology-map.md",
+      "line": 18,
+      "claim": "A planning document's TaskRegistry row still lists 'Last write wins on concurrent registry writes' as the live failure mode with 'Loop 2 adds the file lock pattern' as future recovery.",
+      "observed": "Line 18: 'TaskRegistry | src/brothersbe/tasks.py, 621 lines... | Loop 2, writer stage | Last write wins on concurrent registry writes, by its own admission | Same lock pattern, same stress test'. tasks.py is now 743 lines (confirmed via `wc -l`), and the recovery path described here (the lock pattern plus a stress test) is exactly what db7296d and tools/test_sbe_tasks.py:360 already implemented and I verified passing. Line 17's DecisionStore row has the same staleness (decisions.py now has `_store_lock`, confirmed via grep at decisions.py:289-355,1259). This is a planning artifact, not a spec page, so severity is low, but 'Every component below exists on main today' (line 3) frames it as current, which it no longer is for these two rows.",
+      "recommended_fix": "Mark the TaskRegistry (line 18) and DecisionStore (line 17) rows as resolved/superseded by the Loop 2 lock work, or remove them from the live technology map now that the fix has merged (git log shows db7296d and the loop2/evidence-identity merge d11975e already landed on this branch).",
+      "verdict_on_review_finding": "REFUTED"
+    },
+    {
+      "severity": "medium",
+      "file": "src/brothersbe/work.py",
+      "line": 601,
+      "claim": "New finding, not in the original C-05 text: is the task registry lock complete across every writer, or does a residual unlocked path remain?",
+      "observed": "cmd_remove (work.py:557-617) calls `load_registry(root)` at line 559, and, when a dirty worktree needs an `--override-dirty` reason recorded, mutates `record[\"overrideDirty\"]` and calls `save_registry(root, data)` at line 601 -- a read-modify-write on the SAME `.sbe/tasks.json` file `tasks.py` locks in `cmd_open`/`cmd_close`. work.py's imports (lines 28-48) never import `_registry_lock`, and grepping the whole function confirms no lock is acquired anywhere in it. Two concurrent callers (an `sbe work remove --override-dirty` racing another `remove`, or an `sbe task open`/`close`) can still race here exactly the way `cmd_open`/`cmd_close` used to before db7296d. This is not silently missed: CHANGELOG.md itself (around the db7296d entry, lines ~235-237) names this as 'a real residual race this change does not close', so the gap is honestly disclosed in the changelog even though none of the three docs flagged above (KNOWN-LIMITS.md, CLI.md, book/07) mention it.",
+      "recommended_fix": "Either wrap cmd_remove's read-modify-write in the same `_registry_lock(root)` context manager tasks.py already exports, or, if that is deliberately out of scope for this wave, say so explicitly in docs/KNOWN-LIMITS.md next to the corrected lock description so the documentation names the ONE path that is still last-write-wins instead of implying (via silence) that the whole registry is now safe.",
+      "verdict_on_review_finding": "NEW"
+    }
+  ],
+  "scope_examined": [
+    "src/brothersbe/tasks.py (full file, 743 lines, read end to end)",
+    "git rev-parse HEAD / git branch --show-current / git status --short (confirmed commit d11975ed8e1e172e7c8502d1bea735d5245c2e0b on release/1.0-closeout, clean except two pre-existing untracked items)",
+    "git log -3 --stat db7296d and git show --stat db7296d (file list and line-change counts for the locking commit)",
+    "docs/KNOWN-LIMITS.md (grepped for lock/last-write/concurrent across all 974 lines; read lines 505-544 in full for context)",
+    "docs/CLI.md (grepped for 'lock'; read lines 280-309 in full for context)",
+    "docs/book/07-the-task-registry.md (read lines 195-219 in full for context)",
+    "design/final-release-program/04-technology-map.md (read lines 1-25 in full)",
+    "CHANGELOG.md (grepped for lock/registry; read the db7296d-era entry describing the `_registry_lock` fix and the work.py residual-race disclosure, and the historical entry at line ~1010 introducing `sbe task` originally)",
+    "tools/test_sbe_tasks.py (grepped for test definitions and concurrency markers across the whole file; read lines 278-397 in full, covering the TestConcurrentWriters class and its barrier/worker mechanics)",
+    "Executed `python3 tools/test_sbe_tasks.py -v` (the invocation documented verbatim in README.md:325 and docs/SETUP.md:175) and read its full output: 18 tests, all passed including the 20-process concurrency test",
+    "git status --short re-checked after the test run to confirm no repo files were modified by running the suite",
+    "src/brothersbe/work.py (grepped for load_registry/save_registry/_registry_lock usage and imports at lines 28-48; read cmd_remove in full, lines 557-621)",
+    "src/brothersbe/status.py and src/brothersbe/decisions.py (grepped for load_registry/save_registry call sites to confirm they only READ the registry, never write it, outside tasks.py)",
+    "src/brothersbe/decisions.py, src/brothersbe/evidence.py, tools/sbe_telemetry.py (grepped for fcntl/_store_lock/_writer_lock to corroborate tasks.py's docstring claim that its lock mirrors these existing patterns)",
+    "Repo-wide grep across all *.md files for 'last-write'/'last write'/'no lock'/'no-lock' to find every doc passage repeating the stale claim (surfaced README.md, CHANGELOG.md, SECURITY.md, design/final-release-program/04-technology-map.md, agents/backend-reviewer.md, docs/CLI.md, docs/KNOWN-LIMITS.md, docs/for-engineers/01-install-and-first-run.md, docs/book/07-the-task-registry.md; each was triaged for relevance to the task-registry lock claim specifically)",
+    "src/brothersbe/*.py broad grep for open(...'w'...)/mkstemp/O_CREAT/os.replace/json.dump to find other shared-store writers outside tasks.py"
+  ],
+  "scope_not_examined": [
+    "Full line-by-line contents of src/brothersbe/decisions.py and src/brothersbe/evidence.py beyond the lock-related grep hits; their lock implementations were confirmed to exist but not audited for correctness",
+    "Full contents of tools/sbe_telemetry.py beyond the lock-related lines grepped",
+    "tools/test_sbe_decisions.py and tools/test_sbe_evidence.py (both grew concurrency-style additions in db7296d per git --stat) were not opened or run; only tools/test_sbe_tasks.py was executed as the mission required",
+    "docs/book/*.md chapters other than 07-the-task-registry.md; docs/HOW-IT-WORKS.md and docs/ROLLOUT.md were only grepped, not read in full",
+    "design/final-release-program/*.md files other than 04-technology-map.md",
+    "Non-markdown files (skills/, agents/ beyond the one backend-reviewer.md grep hit, .github/workflows/) for further stale-claim references or to confirm tools/test_sbe_tasks.py is actually wired into the CI workflow (only the README/SETUP documented invocation was confirmed, not the live workflow YAML)",
+    "The untracked working-tree items CANVAS-brothersbe-1.0-closeout.md and release-control/, which are not part of the audited commit d11975ed and were left alone as out of scope for a commit-pinned audit",
+    "Whether any locale/config/JSON files elsewhere in the repo also assert a stale 'no lock' claim outside of *.md and *.py (not searched beyond the greps listed above)"
+  ]
+}

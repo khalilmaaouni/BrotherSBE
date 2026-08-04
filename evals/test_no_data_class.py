@@ -956,12 +956,50 @@ class ScoreTool:
         return os.path.relpath(p, _telemetry.VAULT) if os.path.isabs(p) else p
 
 
+class InvariantTool:
+    """sbe_release_invariant.py: one hardcoded check, no check-name argument.
+
+    Its CLI is `sbe_release_invariant.py [directory] [base-ref] [--strict]`
+    (tools/sbe_release_invariant.py:177, main() at :188), and a positional that
+    is not a directory is read as a base ref (tools/sbe_release_invariant.py:
+    204-207). DirTool's [name, d] pattern would hand the check name to that
+    parser as a base ref, silently changing what gets diffed instead of naming
+    a check nothing here needs named. This adapter passes only the directory
+    and lets base default to origin/main (tools/sbe_release_invariant.py:57,
+    217), a ref that never resolves inside a throwaway scenario directory, and
+    lets an empty directory read as either "not a git working tree" or an
+    unborn HEAD. Both are NO-DATA by the check's own design (tools/
+    sbe_release_invariant.py:133-147), never a crash and never a PASS.
+    """
+
+    has_fallback = False    # the check body always runs; see DirTool
+
+    def __init__(self, script):
+        self.script = script
+        self.env = {}
+
+    def root(self, d):
+        return d
+
+    def place(self, d, relpath, content):
+        write_file(os.path.join(d, relpath), content)
+
+    def invoke(self, d, name, extra_env):
+        env = dict(self.env)
+        env.update(extra_env)
+        return run(self.script, [d], env)
+
+    def relpath(self, p):
+        return p
+
+
 ADAPTERS = {
     ("sbe_gate.py", "GATES"): DirTool("sbe_gate.py"),
     ("sbe_design.py", "CHECKS"): DirTool("sbe_design.py", env={"SBE_DOSSIER_ROOT": ""},
                                          has_fallback=True),
     ("sbe_score.py", "CHECKS"): ScoreTool("sbe_score.py"),
     ("sbe_plan.py", "PLAN_CHECKS"): DirTool("sbe_plan.py"),
+    ("sbe_release_invariant.py", "CHECKS"): InvariantTool("sbe_release_invariant.py"),
 }
 
 

@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "dimension": "D13",
+  "dimension_citation": "review 1.2 (release-readiness scorecard), review 21.5 (deliverable control matrix)",
+  "status": "not_run, founder_gated",
+  "note": "This file is a capture sheet, not a result. Every session object below is unfilled (null fields) until the study actually runs. Fill fields in place, do not add new studies or rename fields, so the thresholds section can be scored mechanically against exactly this shape.",
+  "studies": {
+    "beginner_study": {
+      "control_id": "D13-C01",
+      "protocol_file": "release-control/validation-kits/beginner-study.md",
+      "requirement_citation": "review 13.1",
+      "control_citation": "review 21.5",
+      "sessions_required": 5,
+      "metric_fields": [
+        {"field": "completion", "type": "boolean", "description": "Reached the PR-ready state unassisted.", "citation": "review 13.1"},
+        {"field": "elapsed_minutes", "type": "number", "unit": "minutes", "description": "Wall-clock time from opening the provided repository to PR-ready state.", "citation": "review 13.1"},
+        {"field": "intervention_count", "type": "integer", "description": "Count of facilitator interventions beyond the fixed script.", "citation": "review 13.1"},
+        {"field": "wrong_command_count", "type": "integer", "description": "Count of commands or choices not matching the guided recommendation.", "citation": "review 13.1"},
+        {"field": "evidence_state_misunderstanding", "type": "boolean", "description": "True if the participant treated NO-DATA or WAIVED as PASS.", "citation": "review 13.1"},
+        {"field": "explains_verification", "type": "enum", "values": ["accurate", "partially_accurate", "could_not_explain"], "description": "Whether the participant could explain what was actually checked.", "citation": "review 13.1"},
+        {"field": "privacy_comprehension", "type": "boolean", "description": "True if the participant correctly described default-off telemetry and no network call.", "citation": "review 13.1"},
+        {"field": "sus_score", "type": "number", "unit": "0-100 SUS scale", "description": "Standard System Usability Scale score.", "citation": "review 13.1"},
+        {"field": "sus_items", "type": "array[integer 1-5]", "description": "The 10 raw SUS item scores backing sus_score.", "citation": "review 13.1"},
+        {"field": "trust_concerns_text", "type": "string", "description": "Verbatim open-ended trust concern answer.", "citation": "review 13.1"},
+        {"field": "undocumented_settings_edit", "type": "boolean", "description": "True if the participant hand-edited a setting not already documented by the product.", "citation": "review 13.1"}
+      ],
+      "thresholds": [
+        {"id": "T-B1", "description": "5/5 complete the core journey.", "rule": "count(sessions where completion == true) == 5", "citation": "review 13.1"},
+        {"id": "T-B2", "description": "No critical misunderstanding of evidence state.", "rule": "count(sessions where evidence_state_misunderstanding == true) == 0", "citation": "review 13.1"},
+        {"id": "T-B3", "description": "No undocumented manual settings edit.", "rule": "count(sessions where undocumented_settings_edit == true) == 0", "citation": "review 13.1"},
+        {"id": "T-B4", "description": "Median intervention count zero.", "rule": "median(sessions[*].intervention_count) == 0", "citation": "review 13.1"},
+        {"id": "T-B5", "description": "Every high usability failure remediated and rerun.", "rule": "for every session with (intervention_count blocked participant over 5 minutes) or (sus_score < 68): a remediation exists and a fresh rerun session shows the failure cleared", "citation": "review 13.1"}
+      ],
+      "sessions": [
+        {"session_id": "B1", "participant_id": null, "outcome_prompt": "A", "estate": "small-python-api", "completion": null, "elapsed_minutes": null, "intervention_count": null, "wrong_command_count": null, "evidence_state_misunderstanding": null, "explains_verification": null, "privacy_comprehension": null, "sus_score": null, "sus_items": null, "trust_concerns_text": null, "undocumented_settings_edit": null},
+        {"session_id": "B2", "participant_id": null, "outcome_prompt": "B", "estate": "small-python-api", "completion": null, "elapsed_minutes": null, "intervention_count": null, "wrong_command_count": null, "evidence_state_misunderstanding": null, "explains_verification": null, "privacy_comprehension": null, "sus_score": null, "sus_items": null, "trust_concerns_text": null, "undocumented_settings_edit": null},
+        {"session_id": "B3", "participant_id": null, "outcome_prompt": "C", "estate": "small-python-api", "completion": null, "elapsed_minutes": null, "intervention_count": null, "wrong_command_count": null, "evidence_state_misunderstanding": null, "explains_verification": null, "privacy_comprehension": null, "sus_score": null, "sus_items": null, "trust_concerns_text": null, "undocumented_settings_edit": null},
+        {"session_id": "B4", "participant_id": null, "outcome_prompt": "A", "estate": "small-python-api", "completion": null, "elapsed_minutes": null, "intervention_count": null, "wrong_command_count": null, "evidence_state_misunderstanding": null, "explains_verification": null, "privacy_comprehension": null, "sus_score": null, "sus_items": null, "trust_concerns_text": null, "undocumented_settings_edit": null},
+        {"session_id": "B5", "participant_id": null, "outcome_prompt": "B", "estate": "small-python-api", "completion": null, "elapsed_minutes": null, "intervention_count": null, "wrong_command_count": null, "evidence_state_misunderstanding": null, "explains_verification": null, "privacy_comprehension": null, "sus_score": null, "sus_items": null, "trust_concerns_text": null, "undocumented_settings_edit": null}
+      ]
+    },
+    "engineer_study": {
+      "control_id": "D13-C02",
+      "protocol_file": "release-control/validation-kits/engineer-study.md",
+      "requirement_citation": "review 13.2",
+      "control_citation": "review 21.5",
+      "sessions_required": 5,
+      "release_critical_defects_total": 22,
+      "metric_fields": [
+        {"field": "critical_recall", "type": "number", "unit": "0-1 fraction", "description": "Fraction of this repository's release-critical planted defects that BrotherSBE flagged.", "citation": "review 13.2"},
+        {"field": "silent_false_assurance", "type": "boolean", "description": "True if BrotherSBE reported PASS over a planted defect's area that was never actually exercised.", "citation": "review 13.2"},
+        {"field": "false_positive_by_detector", "type": "object(string->integer)", "description": "Map of detector/gate/check name to confirmed false-positive count against this repository's non-critical control item(s).", "citation": "review 13.2"},
+        {"field": "actionability_summary", "type": "object", "keys": ["actionable", "partially_actionable", "not_actionable"], "description": "Counts of finding actionability ratings for this repository's critical findings.", "citation": "review 13.2"},
+        {"field": "time_to_verified_plan_minutes", "type": "number", "unit": "minutes", "description": "Wall-clock time to a plan the engineer independently agrees is correct.", "citation": "review 13.2"},
+        {"field": "evidence_independently_understood", "type": "boolean", "description": "True if the engineer explained a piece of raw evidence correctly without facilitator help.", "citation": "review 13.2"},
+        {"field": "assigned_tier", "type": "string", "description": "The tier BrotherSBE's intake assigned this repository's change (T0, T1, T2, or T3).", "citation": "review 12.1"},
+        {"field": "ceremony_proportionate", "type": "boolean", "description": "True if the engineer judged the ceremony proportionate to the change's real risk, on the non-critical control item.", "citation": "review 13.2"}
+      ],
+      "thresholds": [
+        {"id": "T-E1", "description": "100% detection of the release-critical seeded defects in the agreed corpus.", "rule": "sum(caught release-critical defects across all sessions) / 22 == 1.0", "citation": "review 13.2"},
+        {"id": "T-E2", "description": "No silent false assurance.", "rule": "count(sessions where silent_false_assurance == true) == 0", "citation": "review 13.2"},
+        {"id": "T-E3", "description": "False positives below a predeclared threshold per detector.", "rule": "for every detector name across all sessions' false_positive_by_detector: sum(count) <= 1", "citation": "review 13.2", "predeclared_ceiling": 1},
+        {"id": "T-E4", "description": "Expert reviewers rate critical findings actionable.", "rule": "for every session: actionability_summary.not_actionable is not a majority of (actionable + partially_actionable + not_actionable) among critical findings", "citation": "review 13.2"},
+        {"id": "T-E5", "description": "Low-risk path remains proportionate.", "rule": "for every session's non-critical control item: ceremony_proportionate == true", "citation": "review 13.2"}
+      ],
+      "sessions": [
+        {"session_id": "E1", "participant_id": null, "repo": "EN-1-small-python-api", "planted_critical_defects": ["breaking-api-change", "idempotency-defect", "check-then-act-race", "retry-without-bound"], "planted_control_defect": "backward-compatible-api-addition", "critical_recall": null, "silent_false_assurance": null, "false_positive_by_detector": null, "actionability_summary": null, "time_to_verified_plan_minutes": null, "evidence_independently_understood": null, "assigned_tier": null, "ceremony_proportionate": null},
+        {"session_id": "E2", "participant_id": null, "repo": "EN-2-node-ts-service", "planted_critical_defects": ["transaction-external-call-defect", "fan-out-doubling-revenue", "money-partner-path-requiring-approval", "silent-exception"], "planted_control_defect": null, "critical_recall": null, "silent_false_assurance": null, "false_positive_by_detector": null, "actionability_summary": null, "time_to_verified_plan_minutes": null, "evidence_independently_understood": null, "assigned_tier": null, "ceremony_proportionate": null},
+        {"session_id": "E3", "participant_id": null, "repo": "EN-3-data-dbt-project", "planted_critical_defects": ["wrong-grain", "stale-system-of-record-mapping", "mixed-schema-incompatibility", "pii-export"], "planted_control_defect": null, "critical_recall": null, "silent_false_assurance": null, "false_positive_by_detector": null, "actionability_summary": null, "time_to_verified_plan_minutes": null, "evidence_independently_understood": null, "assigned_tier": null, "ceremony_proportionate": null},
+        {"session_id": "E4", "participant_id": null, "repo": "EN-4-sql-migration-plus-terraform", "planted_critical_defects": ["migration-without-rollback", "lock-heavy-migration", "terraform-destructive-plan"], "planted_control_defect": "docs-only-safe-change", "critical_recall": null, "silent_false_assurance": null, "false_positive_by_detector": null, "actionability_summary": null, "time_to_verified_plan_minutes": null, "evidence_independently_understood": null, "assigned_tier": null, "ceremony_proportionate": null},
+        {"session_id": "E5", "participant_id": null, "repo": "EN-5-evidence-security-fixture", "planted_critical_defects": ["missing-run-evidence", "forged-local-receipt", "stale-receipt", "wrong-command-receipt", "prompt-injection-in-readme", "symlink-fifo-path-attack"], "planted_control_defect": null, "critical_recall": null, "silent_false_assurance": null, "false_positive_by_detector": null, "actionability_summary": null, "time_to_verified_plan_minutes": null, "evidence_independently_understood": null, "assigned_tier": null, "ceremony_proportionate": null}
+      ]
+    },
+    "estate_matrix": {
+      "control_id": "D13-C03",
+      "protocol_file": "release-control/validation-kits/estate-matrix.md",
+      "requirement_citation": "review 12.2, review 13",
+      "control_citation": "review 21.5",
+      "estates_required": 6,
+      "metric_fields": [
+        {"field": "fixture_origin", "type": "string", "description": "Where this estate came from and confirmation it is not authored by the BrotherSBE team.", "citation": "review 21.5"},
+        {"field": "never_in_internal_suite", "type": "boolean", "description": "True if this exact repository/fixture has never been used in BrotherSBE's own test suite.", "citation": "review 13.3"},
+        {"field": "commands_run", "type": "array[string]", "description": "Exact commands run against this estate, in order.", "citation": "review 21.5"},
+        {"field": "exit_codes", "type": "array[integer]", "description": "Exit code for each command in commands_run, same order.", "citation": "review 21.5"},
+        {"field": "expected_outcome_met", "type": "boolean", "description": "Whether the estate-matrix.md expected outcome for this estate was observed.", "citation": "review 12.2"},
+        {"field": "observed_result_text", "type": "string", "description": "Verbatim observed result, quoted next to the expected outcome.", "citation": "review 21.5"}
+      ],
+      "thresholds": [
+        {"id": "T-M1", "description": "No release-blocking control is NO-DATA or WAIVED at release.", "rule": "for every estate: expected_outcome_met == true, or the gap is fixed and the estate rerun to true", "citation": "review 14"}
+      ],
+      "estates": [
+        {"estate_id": "M1", "estate_type": "small-python-api", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null},
+        {"estate_id": "M2", "estate_type": "node-typescript-service", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null},
+        {"estate_id": "M3", "estate_type": "data-dbt-project", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null},
+        {"estate_id": "M4", "estate_type": "sql-migration-project", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null},
+        {"estate_id": "M5", "estate_type": "mixed-monorepo", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null},
+        {"estate_id": "M6", "estate_type": "malicious-poisoned-fixture", "fixture_origin": null, "never_in_internal_suite": null, "commands_run": null, "exit_codes": null, "expected_outcome_met": null, "observed_result_text": null}
+      ]
+    }
+  }
+}

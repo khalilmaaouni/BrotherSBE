@@ -1,0 +1,30 @@
+test_twenty_concurrent_writers_open_distinct_tasks_all_survive (__main__.TestConcurrentWriters)
+THE DONE-CHECK: 20 real processes, one temp registry, 20 distinct ... ok
+test_a_corrupt_registry_is_refused_with_the_reason_and_never_reset (__main__.TestCorruptRegistry) ... ok
+test_an_unknown_schema_version_is_refused (__main__.TestCorruptRegistry) ... ok
+test_the_fence_view_renders_agent_per_line_from_the_registry (__main__.TestFenceView) ... ok
+test_force_records_the_disposition_and_marks_the_close_forced (__main__.TestForce) ... ok
+test_force_without_who_and_why_is_refused (__main__.TestForce) ... ok
+test_a_genuinely_bad_flag_still_exits_2 (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage_and_opens_nothing (__main__.TestHelpMeansHelp) ... ok
+test_a_base_commit_that_does_not_resolve_is_no_data_never_a_pass (__main__.TestNoData) ... ok
+test_a_second_open_with_an_overlapping_owned_path_is_refused (__main__.TestOverlap) ... ok
+test_check_catches_a_collision_injected_directly_into_the_json (__main__.TestOverlap)
+The registry is one JSON file anybody can edit. `check` is the scan ... ok
+test_a_reviewer_cannot_open_owning_the_evidence_store (__main__.TestReviewerSeparation) ... ok
+test_a_reviewer_diff_touching_a_receipt_fails_even_with_force (__main__.TestReviewerSeparation) ... ok
+test_open_list_close_round_trip_clean_diff_closes_clean (__main__.TestRoundTrip) ... ok
+test_a_bash_made_edit_outside_owned_paths_is_named_at_close (__main__.TestTheDefect)
+THE DEFECT THIS CONTROL EXISTS FOR. The write below goes through ... ok
+test_a_rename_counts_both_sides (__main__.TestTheDefect) ... ok
+test_an_uncommitted_edit_counts_via_the_porcelain_path (__main__.TestTheDefect) ... ok
+test_the_overlap_rule_is_imported_rather_than_reimplemented (__main__.TestTheOneOverlapRule)
+Two overlap rules would drift apart on the first change to either. ... /Users/khalil.maaouni/Documents/BrotherSBE/src/brothersbe/__init__.py:41: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/VERSION' mode='r' encoding='utf-8'>
+  return io.open(path, encoding="utf-8").read().strip()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 4.957s
+
+OK

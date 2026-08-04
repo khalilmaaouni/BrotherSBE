@@ -1,0 +1,375 @@
+test_a_forced_closure_prints_forced_in_the_team_view (__main__.TestConflictsAndForced) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:159: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-6lypx_vi/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_overlapping_open_tasks_across_changes_is_a_scope_conflict_naming_both (__main__.TestConflictsAndForced) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/src/shared.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-b/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-b/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/design/chg-b/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/src/b.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:119: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:112: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-va5vqg97/repo/.sbe/tasks.json' mode='r' encoding='UTF-8'>
+  data = json.loads(io.open(reg).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_designRoots_entry_escaping_the_repo_is_refused_and_not_walked (__main__.TestDiscoveryAndOrdering) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:213: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/outside/chg-outside/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:218: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-icjb1hre/repo/.sbe/team-profile.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(sbe_dir, "team-profile.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_missing_plan_names_sbe_plan_as_the_next_action_not_an_error (__main__.TestDiscoveryAndOrdering) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-1rgls191/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:181: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-1rgls191/repo/design/bare/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_designRoots_profile_adds_a_second_directory_of_dossiers (__main__.TestDiscoveryAndOrdering) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:194: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/other-designs/chg-alt/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:199: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-0x1ely8d/repo/.sbe/team-profile.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(sbe_dir, "team-profile.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_the_human_output_is_deterministic (__main__.TestDiscoveryAndOrdering) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-b/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-b/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/design/chg-b/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-4uz6rg_o/repo/src/b.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_two_changes_are_listed_together_each_with_a_next_action (__main__.TestDiscoveryAndOrdering) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-b/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-b/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/design/chg-b/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-fzitqm5i/repo/src/b.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_plan_with_no_convergence_report_is_no_data_at_severity_six_not_pass (__main__.TestEvidenceAndConvergence) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-5vtad8j1/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-5vtad8j1/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-5vtad8j1/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-5vtad8j1/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-5vtad8j1/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_stale_approval_report_is_derived_not_observed (__main__.TestEvidenceAndConvergence) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:373: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-cjrq4u3q/repo/design/chg-a/10-approval.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "10-approval.json"), "w").write(json.dumps({
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_failing_evidence_receipt_is_a_severity_two_merge_blocker_attributed (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-77ea50bd/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-77ea50bd/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-77ea50bd/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-77ea50bd/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-77ea50bd/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_forced_close_never_counts_as_completed (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:142: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:131: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-3coi996g/repo/.sbe/tasks.json' mode='r' encoding='UTF-8'>
+  data = json.loads(io.open(reg).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_fresh_plan_lists_its_tasks_as_ready_with_no_open_record (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-_j8tj17k/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-_j8tj17k/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-_j8tj17k/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-_j8tj17k/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-_j8tj17k/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_open_tasks_scope_violation_is_a_severity_two_merge_blocker (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:119: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:261: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-dcdzpvzi/repo/src/extra.py' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "src", "extra.py"), "w").write("y = 2\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_every_change_carries_exactly_one_severity_ten_next_action (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-b/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-b/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/design/chg-b/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-18vrye7v/repo/src/b.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_every_plan_task_closed_clean_is_a_completed_change (__main__.TestFullSeveritySet) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:142: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:131: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-oiyczfb3/repo/.sbe/tasks.json' mode='r' encoding='UTF-8'>
+  data = json.loads(io.open(reg).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_tree_with_only_low_severity_findings_exits_zero (__main__.TestJsonContractAndExit) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-r9zne17j/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:404: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-r9zne17j/repo/design/bare/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_unreadable_registry_is_an_unavailable_finding_and_a_nonzero_exit (__main__.TestJsonContractAndExit) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:119: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-xezqb_20/repo/.sbe/tasks.json' mode='w' encoding='UTF-8'>
+  io.open(reg, "w").write(json.dumps(data, indent=2))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_every_finding_carries_the_full_contract (__main__.TestJsonContractAndExit) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-o8j9_ofm/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-o8j9_ofm/repo/design/chg-a/00-intake.json' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "00-intake.json"), "w").write(
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:91: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-o8j9_ofm/repo/design/chg-a/03-adr.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:92: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-o8j9_ofm/repo/design/chg-a/07-verification.md' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:97: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-o8j9_ofm/repo/src/a.py' mode='w' encoding='UTF-8'>
+  io.open(src, "w").write("x = 1\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_team_makes_no_network_calls_by_construction (__main__.TestJsonContractAndExit) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:62: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-team-waiw8zpq/repo/seed.txt' mode='w' encoding='UTF-8'>
+  io.open(os.path.join(self.repo, "seed.txt"), "w").write("seed\n")
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_status_team.py:425: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/tools/../src/brothersbe/status.py' mode='r' encoding='utf-8'>
+  body = io.open(os.path.join(HERE, "..", "src", "brothersbe",
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 6.739s
+
+OK

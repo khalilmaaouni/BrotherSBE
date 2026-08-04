@@ -1,0 +1,54 @@
+{
+  "findings": [
+    {
+      "severity": "high",
+      "file": "/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_prverify_live.py",
+      "claim": "test_sbe_prverify_live.py is a live GitHub API integration test suite that exists on disk but is not wired into CI",
+      "observed": "Script found at tools/test_sbe_prverify_live.py; mentioned in brothersbe-gates.yml lines 176-183; explicitly documented as NOT to be wired because it requires SBE_LIVE_GH_REPO, SBE_LIVE_GH_PR, and GitHub token (unavailable in this workflow); wiring it would either skip silently on every run or require CI secrets",
+      "recommended_fix": "INTENTIONAL UNWIRING: The comment at line 176-183 of brothersbe-gates.yml explicitly states this is by design. Keep unwired as documented. Mark as intentional in any tracking system to prevent future confusion."
+    },
+    {
+      "severity": "high",
+      "file": "/Users/khalil.maaouni/Documents/BrotherSBE/scripts/verify-install.sh",
+      "claim": "verify-install.sh exists on disk and may be called indirectly by test-install-artifact.sh",
+      "observed": "Script found at scripts/verify-install.sh; NOT wired directly into brothersbe-gates.yml or consumer-check.yml; mentioned in line 197 comment of brothersbe-gates.yml where it describes what test-install-artifact.sh does; actual internal usage must be verified by reading test-install-artifact.sh",
+      "recommended_fix": "VERIFY INDIRECTION: Read scripts/test-install-artifact.sh to confirm whether it calls scripts/verify-install.sh internally. If it does, unwiring is acceptable (indirect). If not, determine whether verify-install.sh should be wired separately or is unused."
+    },
+    {
+      "severity": "low",
+      "file": "/Users/khalil.maaouni/Documents/BrotherSBE/scripts/checksums.sh",
+      "claim": "checksums.sh exists on disk but is not wired into any workflow",
+      "observed": "Script found at scripts/checksums.sh; NOT present in brothersbe-gates.yml or consumer-check.yml; no comments reference it anywhere in workflows; purpose unknown",
+      "recommended_fix": "CLARIFY PURPOSE: Review scripts/checksums.sh header and any calling patterns to determine if it is active code or orphaned. If active, explain why it is not in CI gates. If orphaned, consider removal."
+    },
+    {
+      "severity": "low",
+      "file": "/Users/khalil.maaouni/Documents/BrotherSBE/docs/book/estate/test_estate.py",
+      "claim": "test_estate.py exists in docs/book/estate/ but is not wired into CI",
+      "observed": "Found at docs/book/estate/test_estate.py; not in standard tools/ or evals/ directory; not referenced in brothersbe-gates.yml or consumer-check.yml; appears to be example/teaching code based on path",
+      "recommended_fix": "DOCUMENT STATUS: Add header comment confirming this is pedagogical material only, not a regression test. If it IS a regression test, move it to tools/ or evals/ and wire it."
+    }
+  ],
+  "scope_examined": [
+    "/.github/workflows/brothersbe-gates.yml (all run commands extracted)",
+    "/.github/workflows/consumer-check.yml (all referenced commands extracted)",
+    "/.github/actions/sbe-consumer/action.yml (composite action run commands)",
+    "/bin/sbe (argument parser)",
+    "/src/brothersbe/cli.py (COMMANDS list and all subcommand definitions)",
+    "/tools/ directory (sbe_*.py test files)",
+    "/evals/ directory (eval and test files)",
+    "/scripts/ directory (shell scripts)",
+    "/skills/ directory (skill subdirectories)",
+    "/agents/ directory (agent files)",
+    "/src/brothersbe/ directory (all Python modules)"
+  ],
+  "scope_not_examined": [
+    "Runtime behavior of scripts (actual execution not tested)",
+    "Tools/test_sbe_prverify_live.py internal requirements (assumed based on documentation)",
+    "Internal call chains within composite actions beyond what is visible in action.yml",
+    "Branch protection rules and required status check configuration (mentioned as UNVERIFIABLE-HERE in docs)",
+    "Plugin manifest .claude-plugin/plugin.json details beyond what doctor checks",
+    "Telemetry system (sbe_telemetry.py functionality)",
+    "Decision packages and decisions module internal structure"
+  ]
+}

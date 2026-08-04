@@ -1,0 +1,46 @@
+test_every_layout_category_survives_where_its_paths_exist (__main__.TestAdoptOnThisRepository) ... ok
+test_branch_protection_is_unverifiable_here_never_present (__main__.TestAdoptionReportNeverClaimsPresent) ... ok
+test_even_with_a_codeowners_file_present_enforcement_stays_unverifiable (__main__.TestAdoptionReportNeverClaimsPresent)
+A CODEOWNERS file existing locally is a fact this tool CAN read ... ok
+test_apply_writes_then_second_apply_is_a_noop (__main__.TestApplyThenNoop) ... ok
+test_adopt_default_is_also_dry_run (__main__.TestDryRunWritesNothing)
+`--dry-run` is the default even when the flag itself is omitted; ... ok
+test_adopt_dry_run_writes_nothing (__main__.TestDryRunWritesNothing) ... ok
+test_init_dry_run_writes_nothing (__main__.TestDryRunWritesNothing) ... ok
+test_existing_file_is_not_overwritten_without_force (__main__.TestForceRequired) ... ok
+test_a_bare_repo_proposes_no_ghost_paths (__main__.TestGhostPathsNeverProposed)
+The original defect: a fresh foreign clone got CODEOWNERS lines ... ok
+test_a_partially_present_category_proposes_only_its_existing_paths (__main__.TestGhostPathsNeverProposed)
+Existence is checked per path, not per category: a repo with a ... ok
+test_both_output_modes_name_the_dropped_categories (__main__.TestGhostPathsNeverProposed)
+The law is only as good as its visibility: `--json` carries a ... ok
+test_codeowners_names_the_dropped_categories_in_a_comment (__main__.TestGhostPathsNeverProposed) ... ok
+test_dropped_categories_are_named_in_notProposed (__main__.TestGhostPathsNeverProposed)
+Silence is the failure mode this note exists for: a reader of a ... ok
+test_only_the_self_created_entries_survive_in_a_bare_repo (__main__.TestGhostPathsNeverProposed)
+`.brothersbe/` (created by this very --apply) and `design/` ... ok
+test_second_apply_stays_a_noop_after_adopt_creates_its_own_paths (__main__.TestGhostPathsNeverProposed)
+The trap an existence filter walks into: the first --apply ... ok
+test_the_dossiers_entry_is_always_proposed (__main__.TestGhostPathsNeverProposed)
+`design/` does not exist in this fixture and is proposed anyway: ... ok
+test_a_gitignore_that_already_carries_the_line_is_untouched (__main__.TestInitGitignoreLine)
+Idempotent: present means the proposal is identical, and a ... ok
+test_apply_appends_below_existing_gitignore_content_untouched (__main__.TestInitGitignoreLine) ... ok
+test_apply_creates_gitignore_with_comment_and_line (__main__.TestInitGitignoreLine) ... ok
+test_gitignore_is_never_in_the_receipts_uninstall_set (__main__.TestInitGitignoreLine) ... ok
+test_receipt_lists_every_written_path_and_uninstall_matches (__main__.TestInitReceipt) ... ok
+test_apply_outside_git_repo_refuses_with_reason (__main__.TestInitRefusesOutsideGit) ... ok
+test_dry_run_outside_git_repo_also_refuses (__main__.TestInitRefusesOutsideGit) ... ok
+test_a_planted_dbt_project_adds_the_dbtModels_protected_path (__main__.TestStackDetectionShiftsThePolicy) ... ok
+test_a_planted_migrations_dir_adds_the_migrations_protected_path (__main__.TestStackDetectionShiftsThePolicy) ... ok
+test_neither_signal_present_proposes_neither_extra_path (__main__.TestStackDetectionShiftsThePolicy) ... ok
+test_consumer_action_only_calls_the_named_commands (__main__.TestWorkflowFiles)
+The composite action's own body may only call the four commands ... ok
+test_consumer_workflow_has_both_triggers (__main__.TestWorkflowFiles) ... ok
+test_consumer_workflow_never_invokes_the_product_test_files (__main__.TestWorkflowFiles) ... ok
+test_product_workflow_has_both_triggers (__main__.TestWorkflowFiles) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 4.577s
+
+OK

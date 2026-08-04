@@ -27,19 +27,33 @@ memory; it is this repository's own `install.sh`, run from this repository's
 own root, and the book's build check re-executes it every time this page is
 verified.
 
+That last fact forces a flag into the command, and the reason is worth reading
+before the output. `install.sh` installs into the project you run it from, and
+it REFUSES when that project turns out to be the BrotherSBE clone itself,
+because installing into the tool instead of into your work is a failure that
+prints a success message. This page is generated from inside that very clone,
+so the honest way to show the normal output here is to tell the script this is
+a deliberate self-test. You will not pass this flag. You will run
+`sh install.sh` in your own project, or `sh install.sh --target /path/to/it`.
+
 ```bash
-sh install.sh --dry-run
+sh install.sh --dry-run --developer-self-test
 ```
 
 ```
+install: resolved target: /Users/khalil.maaouni/Documents/BrotherSBE
 would: check git is on PATH
 would: check python3 is on PATH and is version 3.9 or newer
 would: check claude is on PATH (the Claude Code CLI)
-would: install the brothersbe plugin: claude plugin marketplace add https://github.com/khalilmaaouni/BrotherSBE.git then claude plugin install brothersbe@brothersbe, if tag v1.0.0-rc.2 is published on https://github.com/khalilmaaouni/BrotherSBE.git; otherwise take the clone fallback (git clone https://github.com/khalilmaaouni/BrotherSBE.git /Users/khalil.maaouni/.claude/skills/brothersbe, or update it if it is already there, then claude plugin marketplace add /Users/khalil.maaouni/.claude/skills/brothersbe, then claude plugin install brothersbe@brothersbe)
-would: apply the team profile with python3 bin/sbe init . --apply, reading .sbe/team-profile.json for dossierRoot, vaultPathPattern, ci, codeGuideDepth, and schemaVersion
+would: install the brothersbe plugin: claude plugin marketplace add https://github.com/khalilmaaouni/BrotherSBE.git then claude plugin install brothersbe@brothersbe, if tag v1.0.0-rc.3 is published on https://github.com/khalilmaaouni/BrotherSBE.git; otherwise take the clone fallback (git clone https://github.com/khalilmaaouni/BrotherSBE.git /Users/khalil.maaouni/.claude/skills/brothersbe, or update it if it is already there, then claude plugin marketplace add /Users/khalil.maaouni/.claude/skills/brothersbe, then claude plugin install brothersbe@brothersbe)
+would: apply the team profile with python3 bin/sbe init /Users/khalil.maaouni/Documents/BrotherSBE --apply, reading .sbe/team-profile.json (from /Users/khalil.maaouni/Documents/BrotherSBE when it carries one, otherwise this installation's own copy at /Users/khalil.maaouni/Documents/BrotherSBE) for dossierRoot, vaultPathPattern, ci, codeGuideDepth, and schemaVersion; any field outside that set is rejected by name in the report below, never silently ignored
 would: run bin/sbe doctor and confirm it agrees before printing the PASS line
 install: dry run, nothing written.
 ```
+
+The first line is the whole point of the fix. The script names the directory it
+resolved BEFORE it does anything, so a person who is about to install into the
+wrong place can see it in the one place they are already looking.
 
 Four steps, named before any of them run: prerequisites, the plugin, the team
 profile, the doctor's own check. Nothing about this run touched the disk;
@@ -113,13 +127,19 @@ running the script with an environment variable that names a tool no machine
 has:
 
 ```bash
-PATH=/usr/bin:/bin SBE_INSTALL_REQUIRE=definitely-absent-tool sh install.sh --dry-run
+PATH=/usr/bin:/bin SBE_INSTALL_REQUIRE=definitely-absent-tool sh install.sh --dry-run --developer-self-test
 ```
 
 ```
+install: resolved target: /Users/khalil.maaouni/Documents/BrotherSBE
 would: check definitely-absent-tool is on PATH (SBE_INSTALL_REQUIRE, a synthetic requirement added for testing the refusal path only)
 install: MISSING definitely-absent-tool: install definitely-absent-tool and re-run install.sh
 ```
+
+Note the order. The target is resolved and named first, then the prerequisites
+are checked. That ordering is deliberate: being told which directory is about to
+be written is more urgent than being told which tool is missing, because the
+wrong directory is the failure you cannot see afterwards.
 
 Read the second line again: it names the missing thing and the exact command
 that fixes it, `install definitely-absent-tool and re-run install.sh`. That is

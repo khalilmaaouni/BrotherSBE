@@ -1,0 +1,46 @@
+test_an_approval_from_a_bot_account_alone_fails_under_default_policy (__main__.TestBotOnlyApproval) ... /Users/khalil.maaouni/Documents/BrotherSBE/src/brothersbe/__init__.py:41: ResourceWarning: unclosed file <_io.TextIOWrapper name='/Users/khalil.maaouni/Documents/BrotherSBE/VERSION' mode='r' encoding='utf-8'>
+  return io.open(path, encoding="utf-8").read().strip()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_403_on_the_protection_endpoint_makes_both_controls_unverifiable_naming_it (__main__.TestBranchProtectionForbidden)
+The protection endpoint itself is forbidden to this token. Neither ... ok
+test_404_on_the_protection_endpoint_makes_both_controls_unverifiable (__main__.TestBranchProtectionForbidden) ... ok
+test_required_code_owner_review_with_unreadable_reviews_is_unverifiable (__main__.TestCodeownersRequiredButReviewsUnreadable)
+Branch protection is readable and requires a code owner review, ... ok
+test_required_code_owner_review_satisfied_by_a_live_approval_is_pass (__main__.TestCodeownersRequiredWithApproval) ... ok
+test_required_code_owner_review_with_no_live_approval_fails (__main__.TestCodeownersRequiredWithoutApproval) ... ok
+test_a_dismissed_review_counts_neither_as_approval_nor_as_a_block (__main__.TestDismissedReview)
+The only review on the PR is DISMISSED. It must not read as the ... ok
+test_a_failed_required_check_on_the_head_sha_fails_required_checks (__main__.TestFailedRequiredCheck) ... ok
+test_403_with_a_token_present_is_unverifiable_never_pass (__main__.TestForbiddenWithToken) ... ok
+test_a_force_pushed_head_between_first_and_last_fetch_is_unverifiable (__main__.TestForcePushMidRun)
+The PR resource is fetched twice: once to learn the head this run ... ok
+test_a_genuinely_bad_flag_still_exits_2 (__main__.TestHelpMeansHelp) ... ok
+test_help_exits_0_with_usage (__main__.TestHelpMeansHelp) ... ok
+test_a_hostile_base_ref_is_percent_encoded_never_a_raw_path_segment (__main__.TestHostileBaseRefShape) ... ok
+test_a_hostile_head_sha_never_reaches_the_check_runs_url (__main__.TestHostileHeadShaShape) ... ok
+test_valid_sha_shape_accepts_hex_and_rejects_hostile_shapes (__main__.TestHostileHeadShaShape) ... ok
+test_no_applicable_codeowners_rule_is_no_data_never_pass (__main__.TestMissingCodeowners) ... ok
+test_no_token_no_gh_is_no_data_everywhere_with_remedy_and_nonzero_exit (__main__.TestNoTokenAnywhere) ... ok
+test_every_request_construction_is_get_no_mutating_method_anywhere (__main__.TestReadOnlyLaw) ... ok
+test_a_bare_dot_or_dot_dot_repo_is_refused_before_any_fetch (__main__.TestRepoShapeValidation) ... ok
+test_a_bare_dot_or_dot_dot_segment_is_refused_on_either_side (__main__.TestRepoShapeValidation)
+REPO_SHAPE_RE's character class allows periods (real names carry ... ok
+test_path_traversal_repo_is_refused_before_any_fetch (__main__.TestRepoShapeValidation) ... ok
+test_valid_repo_shape_accepts_owner_name_and_rejects_traversal (__main__.TestRepoShapeValidation) ... ok
+test_repository_pr_number_and_head_sha_are_in_the_report_header (__main__.TestReportBinding) ... ok
+test_a_required_context_absent_from_the_check_runs_fails_naming_it (__main__.TestRequiredCheckMissing)
+Branch protection requires "ci/lint", but no check run by that ... ok
+test_an_empty_required_contexts_list_is_pass_with_nothing_required_prose (__main__.TestRequiredChecksEmptyIsPass) ... ok
+test_the_author_approving_their_own_pr_is_a_fail (__main__.TestSelfApproval) ... ok
+test_an_approval_bound_to_a_commit_before_the_head_is_a_fail_naming_both (__main__.TestStaleApproval)
+The reviewer approved SHA_A; the PR has since moved to SHA_B. The ... ok
+test_the_canary_token_never_appears_in_a_full_canned_run (__main__.TestTokenNeverPrinted) ... ok
+test_the_canary_token_never_appears_in_a_no_token_cli_run (__main__.TestTokenNeverPrinted) ... ok
+test_the_latest_review_per_reviewer_being_changes_requested_fails_threads (__main__.TestUnresolvedChangesRequested)
+carol approved first, then asked for changes. Latest-per-reviewer ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 1.905s
+
+OK

@@ -1,0 +1,10 @@
+test_a_dry_run_without_the_claude_cli_refuses_by_name (__main__.TestInstallScript)
+The other half of the pair above, and the behaviour a CI runner ... ok
+test_a_missing_prerequisite_is_named_with_its_remedy (__main__.TestInstallScript) ... ok
+test_dry_run_names_every_step_and_writes_nothing (__main__.TestInstallScript) ... ok
+test_the_team_profile_parses_and_names_its_keys (__main__.TestInstallScript) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.482s
+
+OK

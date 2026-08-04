@@ -1,0 +1,269 @@
+test_fifty_concurrent_writers_against_one_store_lose_none (__main__.TestConcurrentWriters)
+THE DONE-CHECK: 50 real processes, one temp store, the identical ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/006-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/017-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/007-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/030-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/019-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/001-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/002-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/008-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/005-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/043-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/026-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/014-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/021-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/048-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/037-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/015-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/027-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/024-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/039-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/016-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/035-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/012-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/013-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/033-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/018-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/046-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/020-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/040-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/004-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/009-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/038-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/036-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/003-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/041-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/031-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/010-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/049-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/029-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/050-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/032-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/025-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/044-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/022-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/011-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/045-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/028-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/047-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/023-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/034-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:731: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-race-0hs8evx4/.sbe/decisions/042-gate-race-check-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_check_name_two_registries_declare_says_so_rather_than_picking_quietly (__main__.TestDecidingCode)
+`migration` is declared by BOTH tools/sbe_gate.py and ... ok
+test_a_fenced_block_is_longer_than_any_fence_inside_it (__main__.TestDecidingCode)
+An excerpt of real source can carry a fence of its own, and a three ... ok
+test_a_package_for_a_check_nobody_ships_says_no_data_in_both_sections (__main__.TestDecidingCode) ... ok
+test_a_shipped_check_names_its_file_lines_and_carries_the_excerpt (__main__.TestDecidingCode) ... ok
+test_an_unknown_check_gets_no_flowchart_and_says_why (__main__.TestDecidingCode) ... ok
+test_an_unknown_check_is_no_data_and_never_an_invented_span (__main__.TestDecidingCode) ... ok
+test_neither_helper_starts_a_subprocess_to_read_the_logic (__main__.TestDecidingCode)
+The kill criterion of this module, held as a fixture rather than as a ... ok
+test_the_discovery_rule_here_and_in_the_honesty_meta_test_agree (__main__.TestDecidingCode)
+decisions.registries() cannot IMPORT evals/test_no_data_class.py: that ... ok
+test_the_excerpt_is_the_functions_own_lines_at_the_span_it_names (__main__.TestDecidingCode)
+The span is a pointer a reader OPENS. If the numbers do not address ... ok
+test_the_flowchart_draws_only_parts_the_registry_declares (__main__.TestDecidingCode)
+Every box comes from a declaration: what the check reads, the verdict ... ok
+test_the_flowchart_is_mermaid_and_names_the_check_it_drew (__main__.TestDecidingCode) ... ok
+test_the_package_carries_the_deciding_code_and_the_flowchart (__main__.TestDecidingCode) ... ok
+test_a_decision_id_browses_that_package_and_an_unknown_id_is_refused (__main__.TestExplain) ... ok
+test_a_package_bound_to_another_commit_is_superseded_never_overwritten (__main__.TestExplain) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:526: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-98nhrghf/.sbe/decisions/002-gate-numbers-fail/DECISION.md' mode='r' encoding='utf-8'>
+  self.assertIn("supersedes", io.open(second, encoding="utf-8").read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_regenerate_at_a_new_head_leaves_the_older_package_byte_for_byte (__main__.TestExplain)
+The whole refusal this task exists for, held through the CLI rather ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:589: ResourceWarning: unclosed file <_io.BufferedReader name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-qcswpxfz/.sbe/decisions/001-explain-numbers-no-data/DECISION.md'>
+  before = io.open(older, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:595: ResourceWarning: unclosed file <_io.BufferedReader name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-qcswpxfz/.sbe/decisions/001-explain-numbers-no-data/DECISION.md'>
+  self.assertEqual(io.open(older, "rb").read(), before,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:599: ResourceWarning: unclosed file <_io.TextIOWrapper name='/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-qcswpxfz/.sbe/decisions/002-explain-numbers-no-data/DECISION.md' mode='r' encoding='utf-8'>
+  newer = io.open(os.path.join(self._store(), names[1], "DECISION.md"),
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_second_explain_at_the_same_head_prints_what_it_already_wrote (__main__.TestExplain) ... ok
+test_an_unknown_name_is_refused_by_name_and_never_an_empty_package (__main__.TestExplain) ... ok
+test_explaining_a_check_with_no_run_regenerates_and_says_no_data (__main__.TestExplain) ... ok
+test_writing_over_a_package_bound_to_another_commit_is_refused_by_name (__main__.TestExplain)
+The task's hard constraint, held directly rather than as a side ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:539: ResourceWarning: unclosed file <_io.BufferedReader name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-09v9mztl/.sbe/decisions/001-gate-numbers-fail/DECISION.md'>
+  before = io.open(path, "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:549: ResourceWarning: unclosed file <_io.BufferedReader name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-explain-09v9mztl/.sbe/decisions/001-gate-numbers-fail/DECISION.md'>
+  self.assertEqual(io.open(path, "rb").read(), before,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_fail_and_a_waiver_each_get_their_own_package (__main__.TestGateTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:253: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-px6y28ny/.sbe/decisions/001-gate-numbers-fail/DECISION.md' mode='r' encoding='utf-8'>
+  bodies = [io.open(p, encoding="utf-8").read() for p in written]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:253: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-px6y28ny/.sbe/decisions/002-waiver-migration-waived/DECISION.md' mode='r' encoding='utf-8'>
+  bodies = [io.open(p, encoding="utf-8").read() for p in written]
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_package_write_that_fails_leaves_the_gate_exit_code_alone (__main__.TestGateTriggers) ... ok
+test_a_pass_line_writes_no_package (__main__.TestGateTriggers) ... ok
+test_lines_outside_the_grammar_are_counted_never_copied (__main__.TestGateTriggers) ... ok
+test_no_decisions_suppresses_the_write_and_names_the_suppression (__main__.TestGateTriggers) ... ok
+test_the_cli_writes_a_package_and_says_so (__main__.TestGateTriggers) ... ok
+test_the_teeing_delegate_streams_and_keeps_a_copy (__main__.TestGateTriggers) ... BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
+  numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one; no numbers-manifest.json read under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m; 0 of 0 director(y/ies) directly under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m contributed no numbers-manifest.json [severity: gate]
+  migration NO-DATA  no migration in this change, or no migration-receipt.json; no migration-receipt.json read under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m; 0 of 0 director(y/ies) directly under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m contributed no migration-receipt.json [severity: gate]
+  approval  NO-DATA  no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct; no APPROVAL read under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m; 0 of 0 director(y/ies) directly under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m contributed no APPROVAL [severity: gate]
+  ran       NO-DATA  no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt; no ran-receipt.json read under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m; 0 of 0 director(y/ies) directly under /var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-r6915p5m contributed no ran-receipt.json [severity: gate]
+ok
+test_the_text_of_an_unmatched_line_never_reaches_a_package (__main__.TestGateTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:286: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-gate-trigger-msa_q8ql/.sbe/decisions/001-gate-numbers-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(written[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_artifact_nothing_knows_about_is_no_data_and_never_an_empty_pass (__main__.TestLineage) ... ok
+test_every_hop_carries_an_evidence_pointer_and_they_run_oldest_first (__main__.TestLineage) ... ok
+test_the_notes_store_is_a_named_no_data_hop_not_a_missing_one (__main__.TestLineage) ... ok
+test_a_close_record_with_no_forced_block_is_no_data_and_names_what_would_fill_it (__main__.TestOtherTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:373: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-ee727d72/.sbe/decisions/001-forced-close-no-data/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_disposed_raise_is_waived_never_the_pass_the_report_printed (__main__.TestOtherTriggers)
+impact prints PASS once every disagreement carries a disposition. The ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:389: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-6rz5vge9/.sbe/decisions/001-tier-waived/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_forced_close_leaves_a_package_naming_who_why_and_the_violations (__main__.TestOtherTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:328: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-275hn9l6/.sbe/decisions/001-forced-close-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_forced_close_through_the_cli_writes_a_package_and_keeps_its_exit_code (__main__.TestOtherTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:424: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-ckppdloy/.sbe/decisions/001-forced-close-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(written[0], encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_forced_record_claiming_pass_is_recorded_no_data_and_the_claim_is_named (__main__.TestOtherTriggers)
+`sbe task close --force` returns before the forced branch on PASS, so ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:365: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-tkurzy5t/.sbe/decisions/001-forced-close-no-data/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_package_write_that_fails_leaves_the_forced_close_exit_code_alone (__main__.TestOtherTriggers) ... ok
+test_a_review_required_impact_writes_a_package_naming_the_detector (__main__.TestOtherTriggers) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:344: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-f_6czpl5/.sbe/decisions/001-tier-review-required/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_a_tier_package_never_quotes_a_line_the_caller_did_not_compose (__main__.TestOtherTriggers)
+The tier path is handed a REPORT, not a terminal capture. Everything ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:402: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-other-trigger-wg8ow6x2/.sbe/decisions/001-tier-review-required/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(path, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_an_impact_run_with_nothing_decided_writes_nothing (__main__.TestOtherTriggers) ... ok
+test_impact_in_json_mode_keeps_stdout_parseable (__main__.TestOtherTriggers)
+`sbe impact --json` stdout is a document callers parse. A human ... ok
+test_a_package_is_a_dict_with_every_named_section (__main__.TestPackageWriter) ... ok
+test_a_trigger_with_no_verdict_line_is_no_data_not_a_package_that_reads_clean (__main__.TestPackageWriter) ... ok
+test_a_waived_check_is_waived_in_the_package_and_never_pass (__main__.TestPackageWriter) ... ok
+test_ids_are_allocated_from_disk_and_the_file_lands_where_it_says (__main__.TestPackageWriter) ... /Users/khalil.maaouni/Documents/BrotherSBE/tools/test_sbe_decisions.py:88: ResourceWarning: unclosed file <_io.TextIOWrapper name='/private/var/folders/bx/4mv547hj3nxdv72rb00whvjsgmklcm/T/sbe-decisions-li9cm0ey/.sbe/decisions/001-gate-numbers-fail/DECISION.md' mode='r' encoding='utf-8'>
+  body = io.open(first, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+
+----------------------------------------------------------------------
+Ran 45 tests in 10.406s
+
+OK
