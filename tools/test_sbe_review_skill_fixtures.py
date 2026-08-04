@@ -132,9 +132,13 @@ class ReviewSkillFixtures(unittest.TestCase):
         return out.stdout
 
     def sbe(self, *args):
+        # Three values on purpose, matching every other suite's _run helper: a
+        # two-item (int, str) return here pattern-matches the (verdict,
+        # evidence) pair the honesty sweep hunts for outside registries, and
+        # the sweep rightly refused to assume this helper can never say PASS.
         out = subprocess.run([sys.executable, SBE] + list(args), capture_output=True,
                              text=True, env=self.env, stdin=subprocess.DEVNULL, timeout=120)
-        return out.returncode, out.stdout + out.stderr
+        return out.returncode, out.stdout + out.stderr, out.stderr
 
     def write(self, rel, body):
         path = os.path.join(self.repo, rel)
@@ -150,7 +154,7 @@ class ReviewSkillFixtures(unittest.TestCase):
         needs the DIFF-DERIVED tier, exactly like tools/test_sbe_review_route.py's
         own RouteFixture, because a declared T1 intake would cap every one
         of them at one reviewer regardless of how many triggers fired."""
-        code, text = self.sbe("review-route", self.repo, "--base", self.base, "--json", *extra)
+        code, text, _err = self.sbe("review-route", self.repo, "--base", self.base, "--json", *extra)
         data = json.loads(text[text.index("{"):]) if "{" in text else None
         return code, data, text
 
@@ -164,7 +168,7 @@ class ReviewSkillFixtures(unittest.TestCase):
         io.open(os.path.join(doss, "03-adr.md"), "w").write(ADR_TEMPLATE % src_rel)
         io.open(os.path.join(doss, "07-verification.md"), "w").write(VERIFICATION)
         self.write(src_rel, "x = 1\n")
-        code, text = self.sbe("plan", doss, "--write", "--cwd", self.repo)
+        code, text, _err = self.sbe("plan", doss, "--write", "--cwd", self.repo)
         self.assertEqual(code, 0, "plan --write: %s" % text)
         self.git("add", "-A")
         self.git("commit", "-qm", "%s dossier and source" % name)
@@ -183,7 +187,7 @@ class ReviewSkillFixtures(unittest.TestCase):
         must leave no partial 11-review.json, so a caller checks for the
         file rather than trusting the exit code alone."""
         findings_path = self._write_findings_file(findings)
-        code, text = self.sbe("review", doss, "--write", "--reviewer", reviewer,
+        code, text, _err = self.sbe("review", doss, "--write", "--reviewer", reviewer,
                               "--reviewer-type", reviewer_type, "--result", result,
                               "--findings-json", findings_path)
         record_path = os.path.join(doss, "11-review.json")
@@ -192,7 +196,7 @@ class ReviewSkillFixtures(unittest.TestCase):
         return code, text, record
 
     def _team_findings(self, change, severity=None):
-        code, text = self.sbe("status", self.repo, "--team", "--json")
+        code, text, _err = self.sbe("status", self.repo, "--team", "--json")
         data = json.loads(text[text.index("{"):])
         hits = [f for f in data["findings"] if f["change"] == change]
         if severity is not None:
