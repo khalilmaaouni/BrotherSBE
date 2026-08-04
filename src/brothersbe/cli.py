@@ -1450,6 +1450,13 @@ def _cmd_score(args):
 
 
 def _cmd_version(args):
+    """Print the version, or, with `bump <new>`, move every declaration site
+    at once (versionbump.py owns the refusals and the re-read proof)."""
+    rest = list(getattr(args, "rest", []) or []) if args is not None else []
+    if rest:
+        from . import versionbump as versionbump_mod
+        return versionbump_mod.main(rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                                    exit_usage=EXIT_USAGE)
     sys.stdout.write("sbe %s (evidence schema %s, python %d.%d)\n"
                      % (version(), SCHEMA_VERSION, sys.version_info[0], sys.version_info[1]))
     return EXIT_OK
@@ -1482,7 +1489,8 @@ COMMANDS = [
      lambda a: _delegate("sbe_decide.py", a.rest)),
     ("fences", "print the live fences the write hook would enforce",
      lambda a: _delegate("sbe_fence_hook.py", ["fences"] + list(a.rest))),
-    ("version", "print the version and the evidence schema version", _cmd_version),
+    ("version", "print the version, or move every version declaration site at once "
+                "(version bump <new>)", _cmd_version),
     ("impact", "read the git diff and reconcile it with the declared intake tier", _cmd_impact),
     ("inspect-change", "alias of impact, the name the finalization brief uses", _cmd_impact),
     ("review-route", "deterministic reviewer selection from a diff: no model chooses, at most "
