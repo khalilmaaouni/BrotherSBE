@@ -1,11 +1,15 @@
 """Adversarial fixtures for `sbe handover` (LT-301: `12-handover.json`, an
 explicit human handover that is complete only after a named human receiver
-acknowledges). Covers the spec's own acceptance list plus LT-303's
-engine-layer adversarial list: receiver equals outgoing owner, receiver
-equals a worker agent identity, changed HEAD staleness, dirty untracked
-files named, missing evidence named, rejected then re-prepared, two
-receivers racing on one file, overwrite refusal across commits, and Unicode
-and case-fold identity ambiguity.
+acknowledges). Covers the spec's own acceptance list plus every one of
+LT-303's eleven engine-layer adversarial cases: receiver equals outgoing
+owner, receiver equals a worker agent identity, changed HEAD, a dirty
+untracked file named, missing evidence named, missing required access
+refused and named, rejected then re-prepared with both records' own history
+honest, two receivers racing (the winner wins once, the loser's refusal
+names the winner), overwrite refused across commits, a task changing after
+preparation (frozen when HEAD holds, staleness when a commit carries the
+change), and Unicode/case-fold identity ambiguity (gmail's dot fold, an
+NFC/NFD normalization pair, and an uppercase/lowercase domain).
 
 Every fixture builds its own throwaway git repository with a dossier under
 design/, seeded through the real `sbe plan --write` wherever a task graph is
@@ -22,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -370,6 +375,47 @@ class TestOverwriteRefusal(HandoverScenario):
         self.assertEqual(data["status"], "prepared")
         self.assertIsNone(data["acknowledgment"])
 
+    def test_reject_reprepare_reject_again_keeps_each_cycles_reason_honest(self):
+        """LT-303: 'rejected then re-prepared' with BOTH resulting records
+        checked, not just the second. The first reject's own reason must
+        read back exactly as recorded before a re-prepare replaces the file
+        on disk, and a SECOND reject on the fresh record must carry its own
+        text, never the first cycle's reason silently surviving into the
+        new one (the whole record is replaced wholesale by prepare, so a
+        leftover value here would mean two unrelated decisions were
+        conflated, not that either record was individually honest)."""
+        doss = self._prepared()
+        code, text, _ = self.handover("reject", doss, "--receiver", "bob@example.com",
+                                      "--reason", "not ready")
+        self.assertEqual(code, 0, text)
+        first = self._read_handover(doss)
+        self.assertEqual(first["status"], "rejected")
+        self.assertEqual(first["acknowledgment"]["reason"], "not ready", first)
+        self.assertEqual(first["outgoingOwner"], "alice@example.com", first)
+
+        io.open(os.path.join(self.repo, "src", "a.py"), "a").write("y = 2\n")
+        self.commit_all("addressed the first rejection")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "carol@example.com")
+        self.assertEqual(code, 0, text)
+        second_prepared = self._read_handover(doss)
+        self.assertEqual(second_prepared["status"], "prepared")
+        self.assertIsNone(second_prepared["acknowledgment"], "the fresh record must not carry "
+                          "the first cycle's rejection forward: %s" % second_prepared)
+
+        code, text, _ = self.handover("reject", doss, "--receiver", "carol@example.com",
+                                      "--reason", "still broken")
+        self.assertEqual(code, 0, text)
+        second = self._read_handover(doss)
+        self.assertEqual(second["status"], "rejected")
+        self.assertEqual(second["acknowledgment"]["reason"], "still broken",
+                         "the second cycle's own reason must be recorded, not the first "
+                         "cycle's 'not ready' silently carried forward: %s" % second)
+        self.assertNotEqual(second["acknowledgment"]["reason"], first["acknowledgment"]["reason"])
+        self.assertEqual(second["outgoingOwner"], "alice@example.com",
+                         "ownership on record must stay the true outgoing owner across both "
+                         "honest reject cycles")
+
     def test_prepare_refuses_to_overwrite_an_acknowledged_handover(self):
         doss = self._prepared()
         code, text, _ = self.handover("acknowledge", doss, "--receiver", "bob@example.com")
@@ -437,6 +483,42 @@ class TestIdentity(HandoverScenario):
                                      "CLOSED record, must never acknowledge as the human "
                                      "receiver: %s" % text)
         self.assertIn("agent", text.lower())
+
+    def test_nfc_and_nfd_spellings_of_one_name_read_as_the_same_identity(self):
+        """LT-303: Unicode normalization ambiguity. 'José García' composed
+        (NFC, one code point per accented letter) and decomposed (NFD, a base
+        letter plus a combining accent) are two different byte sequences for
+        the SAME rendered name; the identity comparison this module reuses
+        from sbe_gate must not read a decomposition choice as a second
+        person."""
+        doss = self._change("chg-a", "src/a.py")
+        self.commit_all("dossier")
+        nfc_name = unicodedata.normalize("NFC", "José García")
+        nfd_name = unicodedata.normalize("NFD", nfc_name)
+        self.assertNotEqual(nfc_name, nfd_name, "the fixture must exercise two distinct byte "
+                                                 "spellings of the name, or it proves nothing")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", nfc_name,
+                                      "--receiver", nfd_name)
+        self.assertNotEqual(code, 0, "an NFC and an NFD spelling of one name must read as "
+                                     "one identity: %s" % text)
+        self.assertIn("same identity", text)
+        self.assertFalse(os.path.exists(self._handover_path(doss)))
+
+    def test_uppercase_and_lowercase_domain_of_one_mailbox_read_as_the_same_identity(self):
+        """LT-303's uppercase/lowercase DOMAIN case, isolated from the local
+        part and from any name text: the earlier forged-shape test only ever
+        varied case across a whole name-and-email string at once, which
+        leaves a domain-only casefold bug free to hide behind the local
+        part's own match. alice@example.com and alice@EXAMPLE.COM name one
+        mailbox, not two people."""
+        doss = self._change("chg-b", "src/b.py")
+        self.commit_all("dossier")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "alice@EXAMPLE.COM")
+        self.assertNotEqual(code, 0, "a domain differing only in case must not make a "
+                                     "second mailbox: %s" % text)
+        self.assertIn("same identity", text)
+        self.assertFalse(os.path.exists(self._handover_path(doss)))
 
 
 # ---------------------------------------------------------------------------
@@ -589,6 +671,33 @@ class TestAcknowledgeReject(HandoverScenario):
         winner_receiver = "bob@example.com" if winners[0] == "x" else "carol@example.com"
         self.assertEqual(data["acknowledgment"]["receiver"], winner_receiver, data)
 
+    def test_losing_racer_is_refused_naming_the_winning_receiver(self):
+        """Winning once (the test above) is not the whole guarantee: the
+        LOSER's own refusal must name who won, not just fail blind, so a
+        receiver who loses the race can see who to talk to instead of a bare
+        error code."""
+        doss = self._prepared()
+        results = {}
+
+        def go(name, receiver):
+            code, text, _ = self.handover("acknowledge", doss, "--receiver", receiver)
+            results[name] = (code, text)
+
+        t1 = threading.Thread(target=go, args=("x", "bob@example.com"))
+        t2 = threading.Thread(target=go, args=("y", "carol@example.com"))
+        t1.start(); t2.start()
+        t1.join(60); t2.join(60)
+
+        winner = next(n for n, (c, _t) in results.items() if c == 0)
+        loser = next(n for n, (c, _t) in results.items() if c != 0)
+        winner_receiver = "bob@example.com" if winner == "x" else "carol@example.com"
+        loser_code, loser_text = results[loser]
+        self.assertNotEqual(loser_code, 0, results)
+        self.assertIn("already carries status", loser_text, loser_text)
+        self.assertIn(winner_receiver, loser_text,
+                     "the loser's refusal must name the winning receiver, not fail blind: %s"
+                     % loser_text)
+
 
 # ---------------------------------------------------------------------------
 # Frozen snapshot: a prepared record is not silently re-derived on read.
@@ -624,6 +733,35 @@ class TestFrozenSnapshot(HandoverScenario):
                      "with no new commit must not silently rewrite it")
         self.assertEqual(after["record"], before, "show must return exactly what was "
                                                    "written, never a live re-derivation")
+
+    def test_task_changed_together_with_a_new_commit_does_surface_as_staleness(self):
+        """The frozen-snapshot test above holds when HEAD does not move: this
+        is its complement. When a task's state changes AS PART OF a new
+        commit, the ordinary way a task closure actually reaches a shared
+        repository, that drift must surface, through the staleness this
+        module already computes fresh at every read rather than a second,
+        task-specific delta mechanism."""
+        doss = self._change("chg-a", "src/a.py")
+        self.commit_all("dossier")
+        self._open_record("T01", ["src/a.py"], agent="carol")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+
+        reg, data = self._registry()
+        for t in data["tasks"]:
+            if t["id"] == "T01":
+                t["status"] = "closed"
+                t["closedAt"] = "2026-07-30T02:00:00Z"
+        io.open(reg, "w").write(json.dumps(data, indent=2))
+        io.open(os.path.join(self.repo, "src", "a.py"), "a").write("y = 2\n")
+        self.commit_all("closed T01 and moved on")
+
+        code, text, _ = self.handover("show", doss, "--json")
+        self.assertEqual(code, 0, text)
+        after = json.loads(text[text.index("{"):])
+        self.assertTrue(after["stale"], "a task changing alongside a new commit must surface "
+                                        "as staleness: %s" % after)
 
 
 if __name__ == "__main__":
