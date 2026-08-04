@@ -5,36 +5,45 @@ description: Use when someone wants to know where a BrotherSBE project stands. W
 
 # Status
 
-Report where the work stands in language a person can act on. The raw machinery output is
-the input to your answer, never the answer itself.
+Report where the work stands in language a person can act on. The engine's JSON is the input
+to your answer, never the answer itself.
 
 ## Gather
 
-Run the status command and read all of it before writing a word:
+Run the status command and read the whole JSON document before writing a word:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --json
 ```
+
+When `scope.storesInspected.dossiers` names a discovered dossier, also run
+`"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --team --json` and read its `findings` and `changes`
+for the per-dossier detail the single-project report rolls up into one summary.
 
 Also run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" fences` to see the live write fences. A fence
 tells the user which files are currently claimed for editing and by what work, which
 matters to anyone deciding what to touch next.
 
 If either command fails, report the failure plainly, say what you could still observe, and
-recommend the doctor check as the next action. See `${CLAUDE_PLUGIN_ROOT}/docs/CLI.md` for
-what each command covers.
+recommend `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" doctor --json` as the next action. See
+`${CLAUDE_PLUGIN_ROOT}/docs/CLI.md` for what each command covers.
 
 ## Reframe, do not relay
 
-Lead with the guided shape, in plain sentences:
+Lead with the guided shape, in plain sentences, each sourced from a named field rather than a
+paraphrase of the rendered text:
 
-1. **Where you are**: which stage of the lifecycle this project is in right now.
-2. **What is complete**: the stages and checks already done, stated as facts you saw in the
-   output, not as guesses.
-3. **What needs attention**: anything failing, missing, stale, or fenced, in order of how
-   much it blocks progress.
-4. **The single next action**: one recommendation, consistent with what `/brothersbe:next`
-   would pick from the same state.
+1. **Where you are**: the five sections, `brokenClaims`, `mergeBlockers`, `activeConflicts`,
+   `missingEvidence`, `soundEvidence`, read in that order; the first one holding an item names
+   the stage. All five empty: read `notes` for the clean or NO-DATA line behind that, and
+   `scope.storesInspected` for what was searched.
+2. **What is complete**: `soundEvidence`, the COMPLETED EVIDENCE section; `notes.soundEvidence`
+   carries the clean or NO-DATA line when it is empty.
+3. **What needs attention**: `brokenClaims`, `mergeBlockers`, `activeConflicts` and
+   `missingEvidence`, in that order, the same priority `nextAction` itself reads; a live fence
+   from the second command is attention too, even when every section above is clean.
+4. **The single next action**: `nextAction`, verbatim. This is the same field
+   `/brothersbe:next` reads for the same state, not a separate derivation of it.
 
 Technical detail (raw verdict lines, receipt paths, fence entries, exit codes) goes under a
 clearly separated section titled "Details", after the summary, never first. Include it: the
