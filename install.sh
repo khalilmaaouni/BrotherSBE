@@ -252,15 +252,30 @@ apply_team_profile() {
     python3 -c "$PY_TEAM_PROFILE_REPORT" "$init_json"
 }
 
+# run_doctor: closes the install with sbe doctor's own verdict, graded
+# against the RESOLVED TARGET, never this clone (that was DEFECT 3: `cd
+# "$SCRIPT_DIR"` above put every earlier version of this function's cwd at
+# this clone before it ran `bin/sbe doctor`, so doctor's git and identity
+# checks, which read the CALLING process's cwd rather than their own script
+# location, described this BrotherSBE clone's git tree, and "install: PASS,
+# sbe doctor agrees" graded the distribution instead of the project that was
+# just initialized). The fix: cd into $TARGET in a subshell before invoking
+# doctor, so cwd-based checks describe $TARGET, while the doctor binary
+# itself is still called by its absolute path under $SCRIPT_DIR, so its
+# tool-presence check (repo_root(), computed from that script's own file
+# location, not cwd) keeps resolving against this installation's own tools/
+# regardless of which directory doctor is graded against. The closing line
+# names $TARGET so the proof states what it graded, never leaving that
+# implicit.
 run_doctor() {
     if [ "$DRY_RUN" = "1" ]; then
         echo "would: run bin/sbe doctor and confirm it agrees before printing the PASS line"
         return 0
     fi
-    if sh -c 'bin/sbe doctor'; then
-        echo "install: PASS, sbe doctor agrees"
+    if (cd "$TARGET" && "$SCRIPT_DIR/bin/sbe" doctor); then
+        echo "install: PASS, sbe doctor agrees (graded $TARGET)"
     else
-        echo "install: sbe doctor did not agree; read what it printed above for exactly what is missing"
+        echo "install: sbe doctor did not agree (graded $TARGET); read what it printed above for exactly what is missing"
         exit 1
     fi
 }

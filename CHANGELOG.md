@@ -10,6 +10,21 @@ checklist's own rules.
 
 (nothing yet)
 
+## 1.0.0-rc.5 (2026-08-04)
+
+Closes the remaining three lifecycle blockers.
+
+- CR-07 and CR-10: the four beginner skills consume `sbe status --json`,
+  `sbe doctor --json`, and `sbe status --team --json` instead of interpreting
+  rendered prose; rung 5 of next recommends verify only on a FAIL or a named
+  obligation, so a T0 change with four NO-DATA gates can no longer loop.
+  Proven by the skill audits in `tools/test_sbe.py`.
+- CR-03: install.sh's closing doctor grades the TARGET repository and says so;
+  new tests replay hooks from an installed layout against the real PreToolUse
+  wire contract, prove activation hands off to the recorded `claude` argv, and
+  cover a distribution path containing a space. Proven by
+  `tools/test_sbe_install.py` (23 tests) under both a full and a bare PATH.
+
 ## 1.0.0-rc.4 (2026-08-04)
 
 Closes the first two lifecycle blockers from the release handover, with the

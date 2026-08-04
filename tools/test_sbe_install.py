@@ -204,6 +204,36 @@ class TestInstallScript(unittest.TestCase):
         self.assertEqual(code, 0, stdout)
         self.assertIn("resolved target: %s" % expected, stdout)
 
+    def test_script_dir_containing_a_space_resolves_correctly(self):
+        """The SCRIPT_DIR side of the space coverage the target-side test
+        above already has: a full copy of the distribution living at a path
+        with a space in it must still find its own `.claude-plugin/plugin.json`
+        (install_plugin() reads it unconditionally, even under --dry-run,
+        before the dry-run check inside that function) and report a clean,
+        no-op dry run from there. Copies the whole tree rather than just
+        install.sh because that unconditional read, plus the team-profile
+        fallback apply_team_profile() documents (`.sbe/team-profile.json`
+        "from $TARGET when it carries one, otherwise this installation's own
+        copy at $SCRIPT_DIR"), means SCRIPT_DIR has to be a real distribution,
+        not a single relocated script."""
+        tmp = tempfile.mkdtemp()
+        try:
+            dist = os.path.join(tmp, "brother sbe dist")
+            shutil.copytree(ROOT, dist, ignore=shutil.ignore_patterns(".git"))
+            scratch = self._scratch_target(tmp, name="project")
+            expected = _resolve(scratch)
+            env = dict(os.environ)
+            env["PATH"] = self._stub_bin(tmp, "claude")
+            out = subprocess.run(
+                ["sh", os.path.join(dist, "install.sh"), "--dry-run", "--target", scratch],
+                capture_output=True, text=True, env=env, timeout=120)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertIn("resolved target: %s" % expected, out.stdout)
+        for step in ("git", "python3", "claude", "team profile", "doctor"):
+            self.assertIn(step, out.stdout)
+
     def test_a_missing_target_directory_is_named_with_its_remedy(self):
         tmp = tempfile.mkdtemp()
         try:
@@ -214,6 +244,256 @@ class TestInstallScript(unittest.TestCase):
         self.assertEqual(code, 2, stdout)
         self.assertIn("MISSING target", stdout)
         self.assertIn(missing, stdout)
+
+
+#: A fence line in exactly the shape STATE.template.md prescribes, and exactly
+#: the shape tools/test_sbe_fence_hook.py's own FENCE_LINE uses, copied rather
+#: than imported so this file stays runnable standalone the same way every
+#: other file in tools/ is. TTL is a real future date, because the hook reads
+#: the SAME liveness rule (tools/sbe_score.py's _is_live_fence) a stale TTL
+#: here would fail, silently turning the "denied" half of the hook-firing
+#: test below into an unintended "allowed".
+_FENCE_OWNER_SESSION = "owner-session-1111-2222"
+_FENCE_LINE = (
+    "- agent: doc-writer (sole writer, session %s) | tier T1 | TTL 2026-12-31 |\n"
+    "  objective: rewrite the setup guide |\n"
+    "  files: docs/SETUP.md, tools/sbe_gate.py |\n"
+    "  output: one commit |\n" % _FENCE_OWNER_SESSION)
+_FENCE_REGISTRY_BODY = (
+    "# STATE\n\n"
+    "## Fence registry\n\n"
+    + _FENCE_LINE +
+    "\n## Decisions\n"
+)
+
+
+class TestSandboxedRealInstall(unittest.TestCase):
+    """CR-03's remaining real-install gaps, closed against a SANDBOXED real
+    (non-dry-run) `install.sh`: install proof grading the TARGET (DEFECT 3,
+    install.sh's own `run_doctor`), the plugin-activation handoff to `claude`
+    actually happening in order, and the installed layout's own hooks.json
+    actually firing the fence hook as a subprocess.
+
+    Every test here runs install.sh for real, which means install_plugin()
+    runs too and would otherwise reach the network (`git ls-remote` on every
+    real run, per install.sh:174, then either `git clone` or `git -C ... pull`).
+    Sandboxed with the two levers install.sh exposes and nothing else: a
+    stubbed `claude` (never a real Claude Code session; records its own
+    argv so the ACTIVATION HANDOFF can be checked without faking one) and a
+    `git` that answers the network-touching subcommands locally and execs the
+    real `git` for everything else, so bin/sbe doctor's own `git rev-parse`
+    and `git config` calls, run against $TARGET, are answered for real. HOME
+    is overridden into this test's own tempdir so the clone-fallback
+    destination (`$HOME/.claude/skills/brothersbe`) never touches a real
+    machine's actual ~/.claude/skills."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # -- sandbox construction -------------------------------------------
+
+    def _stub_claude(self, bindir, log_path):
+        """Records every invocation as one block of newline-separated argv
+        items terminated by a `--END--` marker line, rather than a single
+        space-joined line, so a future argument containing a space cannot be
+        misread as two arguments."""
+        path = os.path.join(bindir, "claude")
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$@\" >> \"$SBE_TEST_CLAUDE_LOG\"\n"
+                "printf -- '--END--\\n' >> \"$SBE_TEST_CLAUDE_LOG\"\n"
+                "exit 0\n")
+        os.chmod(path, 0o755)
+        return log_path
+
+    def _stub_git(self, bindir, real_git, clone_source):
+        """Answers install.sh's three network-touching calls locally:
+        `ls-remote` empty (no tag published, so install.sh takes the clone
+        fallback rather than the marketplace-direct branch), `clone` as a
+        real local recursive copy of `clone_source` into the requested
+        destination (so the destination ends up a genuine installed layout,
+        with hooks/hooks.json and everything else, for the hook-firing test
+        to run against), and `-C ... pull` as a no-op (the already-cloned
+        update path, unreached in a single fresh run). Every other
+        subcommand execs the REAL git binary, so the git calls install.sh
+        itself does NOT make -- bin/sbe doctor's own `git rev-parse` and
+        `git config`, run against $TARGET -- are answered for real."""
+        path = os.path.join(bindir, "git")
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "    ls-remote)\n"
+                "        exit 0\n"
+                "        ;;\n"
+                "    clone)\n"
+                "        dest=$3\n"
+                "        mkdir -p \"$dest\"\n"
+                "        cp -R \"$SBE_TEST_GIT_CLONE_SOURCE\"/. \"$dest\"/\n"
+                "        rm -rf \"$dest/.git\"\n"
+                "        exit 0\n"
+                "        ;;\n"
+                "    -C)\n"
+                "        exit 0\n"
+                "        ;;\n"
+                "    *)\n"
+                "        exec \"%s\" \"$@\"\n"
+                "        ;;\n"
+                "esac\n" % real_git)
+        os.chmod(path, 0o755)
+
+    def _sandbox(self):
+        bindir = os.path.join(self.tmp, "bin")
+        os.makedirs(bindir)
+        home = os.path.join(self.tmp, "home")
+        os.makedirs(home)
+        claude_log = os.path.join(self.tmp, "claude.log")
+        real_git = shutil.which("git", path="/usr/bin:/bin") or shutil.which("git")
+        self.assertIsNotNone(real_git, "this test needs a real git reachable to pass "
+                             "through the calls the stub does not answer itself")
+        self._stub_claude(bindir, claude_log)
+        self._stub_git(bindir, real_git, ROOT)
+        return bindir, home, claude_log
+
+    def _scratch_target(self, name="project", email="target-doctor-check@fixture.test",
+                        username="Target Doctor Check"):
+        target = os.path.join(self.tmp, name)
+        os.makedirs(target)
+        subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+        subprocess.run(["git", "config", "user.email", email], cwd=target, check=True)
+        subprocess.run(["git", "config", "user.name", username], cwd=target, check=True)
+        return target
+
+    def _real_install(self, target):
+        """A real (non-dry-run) install.sh, fully sandboxed: no network
+        reachable, nothing written outside self.tmp or the sandboxed HOME.
+        Returns (returncode, stdout, stderr, claude_log_path, clone_dest)."""
+        bindir, home, claude_log = self._sandbox()
+        env = dict(os.environ)
+        for stray in ("SBE_INSTALL_REQUIRE",):
+            env.pop(stray, None)
+        env["PATH"] = bindir + os.pathsep + "/usr/bin:/bin"
+        env["HOME"] = home
+        env["SBE_TEST_CLAUDE_LOG"] = claude_log
+        env["SBE_TEST_GIT_CLONE_SOURCE"] = ROOT
+        out = subprocess.run(["sh", os.path.join(ROOT, "install.sh"), "--target", target],
+                             capture_output=True, text=True, env=env, timeout=180)
+        clone_dest = os.path.join(home, ".claude", "skills", "brothersbe")
+        return out.returncode, out.stdout, out.stderr, claude_log, clone_dest
+
+    def _claude_invocations(self, claude_log):
+        if not os.path.exists(claude_log):
+            return []
+        with io.open(claude_log, encoding="utf-8") as fh:
+            text = fh.read()
+        return [b.splitlines() for b in text.split("--END--\n") if b.strip()]
+
+    def _repo_status(self):
+        return subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                              capture_output=True, text=True).stdout
+
+    # -- item 1: install proof grades the TARGET, never this clone ------
+
+    def test_install_proof_grades_the_target_not_this_clone(self):
+        before = self._repo_status()
+        target = self._scratch_target()
+        code, stdout, stderr, _, _ = self._real_install(target)
+        after = self._repo_status()
+        self.assertEqual(code, 0, stdout + stderr)
+        self.assertEqual(before, after, "a real install must never change this clone's own tree")
+        self.assertIn(
+            "git config reports name \"Target Doctor Check\" and email "
+            "\"target-doctor-check@fixture.test\"", stdout,
+            "the doctor step must describe the TARGET's own git identity, "
+            "not this clone's: %s" % stdout)
+        self.assertIn(
+            "install: PASS, sbe doctor agrees (graded %s)" % _resolve(target), stdout,
+            "the closing line must name what was graded: %s" % stdout)
+        self.assertIn(
+            "all present in %s/tools" % ROOT, stdout,
+            "tool presence must still resolve against this installation's own tools/, "
+            "not the target, even while the doctor's other checks describe the "
+            "target: %s" % stdout)
+
+    # -- item 4: plugin activation is a real handoff to `claude`, in order --
+
+    def test_plugin_activation_invokes_claude_marketplace_add_then_install(self):
+        before = self._repo_status()
+        target = self._scratch_target(name="activation-project")
+        code, stdout, stderr, claude_log, clone_dest = self._real_install(target)
+        after = self._repo_status()
+        self.assertEqual(code, 0, stdout + stderr)
+        self.assertEqual(before, after, "a real install must never change this clone's own tree")
+        invocations = self._claude_invocations(claude_log)
+        self.assertEqual(len(invocations), 2,
+                         "expected exactly two claude invocations, in order: %s" % invocations)
+        self.assertEqual(invocations[0], ["plugin", "marketplace", "add", clone_dest],
+                         invocations)
+        self.assertEqual(invocations[1], ["plugin", "install", "brothersbe@brothersbe"],
+                         invocations)
+
+    # -- item 2: the installed layout's own hooks.json fires the fence hook -
+
+    def _run_installed_pretooluse_hook(self, clone_dest, payload):
+        hooks_path = os.path.join(clone_dest, "hooks", "hooks.json")
+        with io.open(hooks_path, encoding="utf-8") as fh:
+            hooks = json.load(fh)
+        command = None
+        for entry in hooks["hooks"]["PreToolUse"]:
+            for h in entry.get("hooks", []):
+                if h.get("type") == "command":
+                    command = h["command"]
+        self.assertIsNotNone(command, "no PreToolUse command hook in the installed hooks.json")
+        self.assertIn(
+            "${CLAUDE_PLUGIN_ROOT}", command,
+            "the installed hooks.json must still carry the plugin-root placeholder for "
+            "this test to prove the substitution rather than a hardcoded path: %s" % command)
+        env = dict(os.environ)
+        for stray in ("BROTHERSBE_REGISTRIES", "BROTHERSBE_FENCE_SESSION",
+                      "BROTHERSBE_FENCE_HOOK_OFF"):
+            env.pop(stray, None)
+        env["CLAUDE_PLUGIN_ROOT"] = clone_dest
+        return subprocess.run(["sh", "-c", command], input=json.dumps(payload),
+                              capture_output=True, text=True, timeout=60, env=env)
+
+    def test_installed_layout_hook_firing(self):
+        _, _, _, _, clone_dest = self._real_install(self._scratch_target(name="hook-source"))
+        self.assertTrue(os.path.exists(os.path.join(clone_dest, "hooks", "hooks.json")),
+                        "the installed layout must carry hooks/hooks.json")
+
+        project = os.path.join(self.tmp, "hook-project")
+        os.makedirs(os.path.join(project, "docs"))
+        with io.open(os.path.join(project, "docs", "SETUP.md"), "w", encoding="utf-8") as fh:
+            fh.write("setup\n")
+        with io.open(os.path.join(project, "README.md"), "w", encoding="utf-8") as fh:
+            fh.write("readme\n")
+        with io.open(os.path.join(project, "STATE.md"), "w", encoding="utf-8") as fh:
+            fh.write(_FENCE_REGISTRY_BODY)
+
+        fenced_payload = {"tool_name": "Write",
+                          "tool_input": {"file_path": os.path.join(project, "docs", "SETUP.md"),
+                                        "content": "x"},
+                          "session_id": "intruder-session-3333-4444",
+                          "cwd": project, "project_dir": project}
+        r = self._run_installed_pretooluse_hook(clone_dest, fenced_payload)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        obj = json.loads(r.stdout)
+        out = obj["hookSpecificOutput"]
+        self.assertEqual(out["permissionDecision"], "deny",
+                         "a payload naming a file another session's live fence owns must "
+                         "be denied: %s" % r.stdout)
+
+        unowned_payload = dict(fenced_payload)
+        unowned_payload["tool_input"] = {"file_path": os.path.join(project, "README.md"),
+                                         "content": "x"}
+        r2 = self._run_installed_pretooluse_hook(clone_dest, unowned_payload)
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        self.assertEqual(r2.stdout, "",
+                         "a file no fence line claims must be a silent allow: %s" % r2.stdout)
 
 
 class TestTeamProfileApplication(unittest.TestCase):
