@@ -12,24 +12,28 @@ Read `${CLAUDE_PLUGIN_ROOT}/SKILL.md`, then
 `${CLAUDE_PLUGIN_ROOT}/references/phase-verification.md` and
 `${CLAUDE_PLUGIN_ROOT}/references/laws-hard-gates.md` (L7 to L10).
 
-## The four hard gates
+## Run verify once, through the command that mints its own evidence
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_gate.py" numbers    <dir>
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_gate.py" migration  <dir>
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_gate.py" approval   <dir>
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_gate.py" ran        <dir>
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" verify <dir>
 ```
 
-Passing a directory instead of a gate name runs the set. These four plus the silent-failure
-lints are refused rather than waived: an operator instruction in session can override a
-default, never a hard gate.
+This single command already runs the design completeness check (`sbe_design.py --strict`),
+the four hard gates together (`sbe_gate.py`: numbers, migration, approval, ran), and the
+scored surface (`sbe_score.py --strict`), in that order, and prints every verdict line each
+one produces. These four gates plus the silent-failure lints are refused rather than waived:
+an operator instruction in session can override a default, never a hard gate.
 
-## The scored surface and the design completeness check
+It then mints one evidence receipt per delegate (design, gate, score) into `.sbe/evidence`,
+the same store `sbe status` reads (CR-08, `design/lifecycle-blockers/03-adr.md`), so a clean
+run leaves proof behind instead of a PASS `sbe status` cannot see. A receipt minted against a
+dirty tree still reads NO-DATA, naming the dirty state: that is correct, not a bug, the first
+time it is surprising.
+
+For the stricter soft-finding surface `bin/sbe verify` does not itself request, also run:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_score.py"  --strict --strict-soft <dir>
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_design.py" --strict <dir>
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_score.py" --strict --strict-soft <dir>
 ```
 
 ## How to read a verdict
@@ -42,6 +46,18 @@ python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_design.py" --strict <dir>
 Report the verdict with the command that produced it and the evidence it names. Never
 summarize a gate you did not run, and never re-word a NO-DATA into a pass because the work
 looks right.
+
+## After running, read what remains from the engine, not from memory
+
+```
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --json
+```
+
+Do not re-derive what is left from the verdict lines above by eye. Read `missingEvidence`: a
+clean run just minted the design, gate and score receipts, so an obligation still listed there
+names something this run did not clear (most often a dirty tree at mint time, or a tier that
+owes a check kind no delegate above covers). Read `nextAction` for the single recommended move
+afterward, and `notes` for the per-section line behind it.
 
 ## The honest limit on all of it, today
 
