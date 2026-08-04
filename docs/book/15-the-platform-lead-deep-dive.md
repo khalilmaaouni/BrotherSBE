@@ -166,7 +166,7 @@ python3 -m json.tool /tmp/sbe-book-ch15-repo/.brothersbe/install-receipt.json | 
     "installedInto": "/tmp/sbe-book-ch15-repo",
     "schemaVersion": "1.0",
     "tool": "sbe init",
-    "toolVersion": "1.0.0-rc.7",
+    "toolVersion": "1.0.0-rc.8",
     "uninstallInstructions": [
         "rm -f .brothersbe/config.json",
         "rm -f design/.gitkeep",
@@ -264,13 +264,13 @@ ROOT="$(pwd)"
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.7, VERSION 1.0.0-rc.7
+plugin-manifest  PASS     manifest 1.0.0-rc.8, VERSION 1.0.0-rc.8
 git              PASS     working directory is inside a git tree
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.7, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.8, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 `vault` and `private-names` read `NO-DATA`, not `FAIL`. Neither is broken;
