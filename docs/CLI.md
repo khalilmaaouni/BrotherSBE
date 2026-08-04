@@ -130,6 +130,33 @@ checkout is exactly how it happens. `doctor` surfaces it rather than passing sil
 and rather than hard-failing an otherwise-healthy environment over a question this command can
 only observe, not adjudicate.
 
+## `sbe version bump`, one command for every declaration site
+
+```bash
+bin/sbe version bump 1.0.0-rc.9            # edit all sites, re-read, print reminders
+bin/sbe version bump 1.0.0-rc.9 --dry-run  # show the edits, write nothing
+```
+
+`sbe version` alone still prints the version and schema. With `bump <new>` it moves every
+declaration site the release invariant reads in one pass: `VERSION`,
+`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (which carries the version
+twice), and `DIGEST.md` line 1. After writing it re-reads all five declarations and fails
+its own run if any one disagrees, because an edit that is not re-read is a claim rather
+than a fact.
+
+Refusals, each by name: a malformed target (the accepted shape is
+`MAJOR.MINOR.PATCH` with an optional `-rc.N` tail, no leading `v`); declaration sites that
+ALREADY disagree, every site and its current value printed, because bumping over a
+disagreement would bury its evidence; a target equal to the current version, refused as a
+no-op rather than reported as success; a missing site file, named with the root it was
+expected under.
+
+What it deliberately does NOT do, printed as reminders on every successful run: the
+`CHANGELOG.md` heading (prose a person writes), `evals/replay_book.py --write` (book
+echoes regenerate from live runs, never from substitution), and `CHECKSUMS.sha256`
+(regenerated LAST in the seal order, after `git add`). Proven by
+`tools/test_sbe_version_bump.py`.
+
 ## `sbe impact`, and the one rule that makes it safe
 
 ```bash
@@ -313,6 +340,38 @@ close clean, which is this control's own kill criterion. `expiry` is information
 deletes a task on a clock. Concurrent writers of the registry file are out of scope (atomic
 rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
 **INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
+
+## `tools/sbe_authority_hook.py`, the guard beside `sbe task`
+
+`sbe task` proves scope AFTER the fact, at `close`. `tools/sbe_authority_hook.py` is the same
+question asked BEFORE the write, for the narrower set of files that can grant authority rather
+than every file a task might own: CLAUDE.md, `.claude/**`, `.mcp.json`, `.claude-plugin/**`,
+`hooks/**`, `agents/*.md`, `skills/*/SKILL.md`, `CODEOWNERS`, `.github/workflows/**`, the same
+nine families `tools/sbe_instruction_surface.py` reads after a commit lands. It is a Claude
+Code PreToolUse hook, wired in `hooks/hooks.json` beside `tools/sbe_fence_hook.py`, never
+replacing it: the fence hook enforces "one writer per file" against a hand-written registry for
+every fenced file, this one enforces "an authority file moves only inside a task's declared
+`ownedPaths`" against `.sbe/tasks.json`, for authority files only.
+
+It refuses a write only when all three are true: the target resolves (symlinks followed,
+case-insensitive-filesystem collisions confirmed by the same method
+`tools/sbe_fence_hook.py::paths_overlap` uses) to one of the nine authority families, no OPEN
+task's `ownedPaths` declares that path, and a worker context is detectable, either an open task
+existing at all or a linked git worktree. Every other condition (an absent or unreadable
+registry, an unimportable helper, a malformed hook payload, no worker context detected) FAILS
+OPEN and prints why; this is the one control in this project's hook layer that fails CLOSED,
+and only for that one rule. The refusal names the open task state (or that none is open), the
+path, and the recovery: open a task record naming this path, or edit outside a worker context.
+
+```
+python3 tools/sbe_authority_hook.py surfaces .
+```
+
+prints, on stderr, the open tasks and the worker-context signal this hook would enforce from a
+directory, the same diagnostic role `sbe_fence_hook.py fences` plays for the fence registry.
+`BROTHERSBE_AUTHORITY_HOOK_OFF=1` turns enforcement off for a session and says so on stderr on
+every write, so the bypass is never silent. Limits in full, including exactly what "worker
+context" can and cannot detect: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
 
 ## `sbe handover`, and why a chat message is not a handover
 

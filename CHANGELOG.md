@@ -6,9 +6,54 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## Unreleased
+## 1.0.0-rc.9 (2026-08-05)
 
-(nothing yet)
+Wave D of the lean team program: the instruction and configuration trust
+boundary, plus the parity rows that serve the release process itself.
+
+- Instruction trust model (LT-401): `docs/THREAT_MODEL.md` gains the "Trust
+  classes" section (four trusted instruction sources, everything else
+  untrusted data, the baseline instruction rule), mirrored compactly in
+  `references/team-execution.md` and in the implementation worker's rule 9.
+  A task that legitimately changes an instruction surface is CODE under
+  security review for that change, never a live instruction for the worker
+  making it.
+- `sbe instruction-surface` (LT-401.B, `tools/sbe_instruction_surface.py`):
+  names every changed authority surface (CLAUDE.md, `.claude/**`,
+  `.mcp.json`, `.claude-plugin/**`, `hooks/**`, agent and skill definitions,
+  CODEOWNERS, CI workflows) between a base ref and HEAD; an undeclared or
+  malformed one FAILs by name, no relevant change is NO-DATA, never PASS.
+  Sixth registry in the honesty sweep (32 checks, 3780 scenarios). Proven by
+  `tools/test_sbe_instruction_surface.py` (18 tests, FAIL verdict calibrated:
+  neutralizing it kills exactly the 5 FAIL-path fixtures).
+- `sbe version bump <new>` (parity row PT-2, `src/brothersbe/versionbump.py`):
+  one command moves every version declaration site (VERSION, plugin.json,
+  marketplace.json twice, DIGEST.md line 1), refuses malformed shapes,
+  refuses sites that already disagree naming each one, refuses a same-version
+  no-op, re-reads every site after the edit, and prints the three steps it
+  deliberately does not do (CHANGELOG prose, book replay, checksums last).
+  Proven by `tools/test_sbe_version_bump.py` (10 tests, calibrated: dropping
+  DIGEST.md from the site list kills exactly the 3 happy-path fixtures).
+- Fable Forge triage verdict recorded at
+  `docs/plans/2026-08-05-fable-forge-triage-verdict.md`: REVISE, five rows
+  conflict with ratified registers, egress rows blocked on a founder
+  boundary decision, accepted rows fold into existing mechanisms behind
+  wave E, nothing from the document executes tonight.
+- `sbe_authority_hook.py`: a narrow PreToolUse hook that refuses a worker's
+  undeclared edit to an authority-bearing file (CLAUDE.md, `.claude/**`,
+  `.mcp.json`, `.claude-plugin/**`, `hooks/**`, `agents/*.md`,
+  `skills/*/SKILL.md`, `CODEOWNERS`, `.github/workflows/**`), unless the wave-5
+  task registry (`.sbe/tasks.json`) carries an OPEN task whose `ownedPaths`
+  declares it. Reuses the authority-surface list from
+  `tools/sbe_instruction_surface.py` and the write-tool surface, path
+  canonicalization and case-fold confirmation from `tools/sbe_fence_hook.py`
+  by import, so none of the three can drift into a second copy. Fails open on
+  every error path (an unreadable registry, an unimportable helper, a
+  malformed payload); refuses only the one rule this file exists for, and only
+  when a worker context is detectable, a heuristic named in full in
+  `docs/KNOWN-LIMITS.md`. Wired beside `sbe_fence_hook.py` in
+  `hooks/hooks.json`, never replacing it. Proven by
+  `tools/test_sbe_authority_hook.py` (43 tests).
 
 ## 1.0.0-rc.8 (2026-08-05)
 
