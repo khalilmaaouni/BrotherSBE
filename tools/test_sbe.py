@@ -1275,7 +1275,23 @@ class TestCliSurface(unittest.TestCase):
     def test_verify_never_lets_exit_zero_read_as_a_pass(self):
         """The aggregating commands exit 0 when nothing FAILED, and a run where
         every check reported NO-DATA also exits 0. The closing line has to say
-        so, because an exit code cannot."""
+        so, because an exit code cannot.
+
+        CHANGED FOR CR-08. This test used to also be the one place that pinned
+        `sbe verify` minting NOTHING: before this stage, a passing run over an
+        empty directory left `.sbe/evidence` unwritten, which is the exact
+        defect CR-08 closes (`design/lifecycle-blockers/03-adr.md`) --
+        `sbe verify` exits 0 and `sbe status` then reports "no evidence store
+        found" about the very run that just happened. `_cmd_verify` now mints
+        one receipt per delegate (design, gate, score) into `.sbe/evidence`
+        every time it runs, including here: `v` is not even a git repository,
+        and the mint step still writes three receipts about it (each reading
+        whatever `evidence.generate` can honestly observe there, never
+        crashing over the missing repo). So this test now also asserts the
+        receipts are present, not just that exit 0 keeps meaning "no control
+        FAILED" rather than "a control passed"; the honest exit-0 caveat is
+        unchanged and still has to be true at the same time evidence exists.
+        """
         v = tempfile.mkdtemp()
         try:
             out = self._run("verify", v)
@@ -1283,6 +1299,14 @@ class TestCliSurface(unittest.TestCase):
             self.assertIn("does not mean a control passed", out.stdout,
                           "verify exited 0 over an empty directory without saying that no "
                           "control passed")
+            evidence_dir = os.path.join(v, ".sbe", "evidence")
+            self.assertTrue(os.path.isdir(evidence_dir),
+                            "sbe verify exited 0 but minted no evidence store at all: %s"
+                            % out.stdout)
+            minted = set(os.listdir(evidence_dir))
+            self.assertEqual(minted, {"design.json", "gate.json", "score.json"},
+                             "sbe verify must mint one receipt per delegate it runs "
+                             "(design, gate, score), got %r" % minted)
         finally:
             shutil.rmtree(v, ignore_errors=True)
 
@@ -1297,6 +1321,205 @@ class TestCliSurface(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertTrue(out.stdout.strip(), "the package imported but reports no version")
+
+
+class TestVerifyMintsEvidence(unittest.TestCase):
+    """CR-08 (`design/lifecycle-blockers/03-adr.md`): `sbe verify` used to
+    exit 0 and mint nothing, so `sbe status` on the same directory kept
+    reporting "no evidence store found" about a run that just happened.
+    `_cmd_verify` now mints one receipt per delegate (design, gate, score)
+    into `.sbe/evidence` every time it runs. Every fixture here is a real
+    git repository and a real `sbe` subprocess, for the same reason
+    `test_sbe_evidence.py` and `test_sbe_status.py` give: the defect lives at
+    the seam between what one command wrote and what another reads, and a
+    mocked filesystem would test the mock.
+    """
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.repo, True)
+        self._git("init", "-q")
+        self._git("config", "user.email", "fixture@example.invalid")
+        self._git("config", "user.name", "fixture")
+        # Named off "main"/"master" on purpose: `evidence.generate`'s default
+        # (no --base) diffs against the merge base with the default branch,
+        # tried under exactly those two names first, and a repo whose only
+        # branch IS named one of them makes that merge-base trivially equal
+        # to HEAD itself, so the diff comes back empty. "trunk" keeps the
+        # default-coverage receipts below actually covering something.
+        self._git("branch", "-m", "trunk")
+
+    def _git(self, *args):
+        out = subprocess.run(["git"] + list(args), cwd=self.repo, capture_output=True, text=True)
+        if out.returncode != 0:
+            raise AssertionError("git %s failed in %s: %s"
+                                 % (" ".join(args), self.repo, out.stderr))
+        return out.stdout.strip()
+
+    def _write(self, rel, body):
+        path = os.path.join(self.repo, rel)
+        directory = os.path.dirname(path)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory)
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        return path
+
+    def _commit(self, message):
+        self._git("add", "-A")
+        self._git("commit", "-qm", message)
+        return self._git("rev-parse", "HEAD")
+
+    def _sbe(self, *argv):
+        return subprocess.run([sys.executable, self.SBE] + list(argv),
+                              capture_output=True, text=True)
+
+    def _evidence_dir(self):
+        return os.path.join(self.repo, ".sbe", "evidence")
+
+    def _receipt(self, kind):
+        with io.open(os.path.join(self._evidence_dir(), "%s.json" % kind),
+                     encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_a_clean_committed_repo_gets_all_three_receipts_and_status_counts_them(self):
+        """Acceptance 1: a clean, committed scratch repo. `sbe verify`
+        mints design, gate and score receipts at the same commit, and
+        `sbe status` stops saying "no evidence store found" and counts
+        them."""
+        self._write("README.md", "base\n")
+        self._commit("base")
+        self._write("app.py", "print('hi')\n")
+        head = self._commit("add app")
+
+        out = self._sbe("verify", self.repo)
+        self.assertEqual(out.stdout.count("does not mean a control passed")
+                         + out.stdout.count("at least one control FAILED"), 1, out.stdout)
+
+        minted = set(os.listdir(self._evidence_dir()))
+        self.assertEqual(minted, {"design.json", "gate.json", "score.json"}, minted)
+        for kind in ("design", "gate", "score"):
+            receipt = self._receipt(kind)
+            self.assertEqual(receipt["checkKinds"], [kind])
+            self.assertEqual(receipt["headCommit"], head,
+                             "%s receipt was not minted at the same commit as HEAD" % kind)
+
+        status = self._sbe("status", self.repo, "--json")
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertNotIn("no evidence store found", status.stdout + status.stderr,
+                         "status still reports no evidence store after verify minted three")
+        data = json.loads(status.stdout)
+        self.assertEqual(data["scope"]["storesInspected"]["evidenceDir"], self._evidence_dir())
+        sound_paths = set(item["path"] for item in data["soundEvidence"])
+        self.assertEqual(sound_paths,
+                         {".sbe/evidence/design.json", ".sbe/evidence/gate.json",
+                          ".sbe/evidence/score.json"},
+                         "status did not count all three freshly minted receipts as sound: %r"
+                         % data["soundEvidence"])
+
+    def test_a_dirty_tree_still_mints_receipts_but_they_read_no_data_naming_the_dirty_state(self):
+        """Acceptance 2: an uncommitted edit sits in the tree. Verify still
+        mints; the receipts read NO-DATA naming the dirty state (the ADR's
+        law, not a bug); status reports that honestly; exit codes are
+        unaffected by any of it."""
+        self._write("README.md", "base\n")
+        self._commit("base")
+        self._write("app.py", "print('hi')\n")
+        self._commit("add app")
+        clean_out = self._sbe("verify", "/nonexistent-path-on-purpose")
+        self.assertEqual(clean_out.returncode, 2, "usage error must still be 2, unaffected")
+
+        self._write("app.py", "print('hi')\nprint('uncommitted edit')\n")
+        self.assertTrue(self._git("status", "--porcelain"), "setup check: repo must be dirty")
+
+        out = self._sbe("verify", self.repo)
+        exit_over_dirty = out.returncode
+
+        minted = set(os.listdir(self._evidence_dir()))
+        self.assertEqual(minted, {"design.json", "gate.json", "score.json"}, minted)
+        for kind in ("design", "gate", "score"):
+            receipt = self._receipt(kind)
+            self.assertIs(receipt["workingTreeDirty"], True,
+                          "%s receipt did not name the dirty tree it was minted against" % kind)
+            verify_out = self._sbe("evidence", "verify",
+                                   os.path.join(self._evidence_dir(), "%s.json" % kind),
+                                   "--cwd", self.repo, "--json")
+            verdict = json.loads(verify_out.stdout)
+            self.assertEqual(verdict["verdict"], "NO-DATA",
+                             "%s must read NO-DATA on a dirty tree, never PASS: %r"
+                             % (kind, verdict))
+
+        status = self._sbe("status", self.repo, "--json")
+        data = json.loads(status.stdout)
+        self.assertEqual(data["soundEvidence"], [],
+                         "a dirty-tree receipt must never be counted as sound evidence")
+        self.assertEqual(data["brokenClaims"], [],
+                         "a dirty-tree receipt is NO-DATA, not a broken claim")
+        self.assertIn(".sbe/evidence", status.stdout,
+                      "status must still show the evidence store was inspected")
+
+        # Re-run over the SAME dirty tree; exit code must not depend on
+        # whether evidence could be minted or on the tree's cleanliness.
+        out2 = self._sbe("verify", self.repo)
+        self.assertEqual(out2.returncode, exit_over_dirty,
+                         "verify's exit code changed between two runs over the identical tree")
+
+    def test_an_unwritable_evidence_store_leaves_the_exit_code_untouched_and_prints_one_line(self):
+        """Acceptance 3: `.sbe` exists as a plain FILE, so `.sbe/evidence`
+        cannot be created. Minting fails for all three delegates; the exit
+        code must be exactly what it would have been without that failure,
+        and the failure must be reported as one line, not one per delegate.
+        """
+        self._write("README.md", "base\n")
+        self._commit("base")
+        baseline = self._sbe("verify", self.repo)
+        shutil.rmtree(os.path.join(self.repo, ".sbe"), ignore_errors=True)
+
+        self._write(".sbe", "occupying this path so .sbe/evidence cannot be created\n")
+        blocked = self._sbe("verify", self.repo)
+
+        self.assertEqual(blocked.returncode, baseline.returncode,
+                         "an unwritable evidence store changed verify's exit code")
+        self.assertFalse(os.path.isdir(self._evidence_dir()),
+                         "no evidence directory should exist when .sbe is a file")
+        stderr_lines = [l for l in blocked.stderr.splitlines() if l.strip()]
+        mint_lines = [l for l in stderr_lines if "evidence" in l and "sbe verify" in l]
+        self.assertEqual(len(mint_lines), 1,
+                         "expected exactly one plain stderr line about the failed mint, got "
+                         "%d: %r" % (len(mint_lines), stderr_lines))
+        self.assertIn("were not minted", mint_lines[0])
+        self.assertIn("exit code is unchanged", mint_lines[0])
+
+    def test_repeated_verify_runs_do_not_fail_their_own_evidence_store(self):
+        """Acceptance 4. Regenerating the SAME three receipts at their fixed
+        paths, committed between runs (the CI re-run shape KNOWN-LIMITS'
+        "Evidence covering evidence" describes), must never make one
+        receipt FAIL because a sibling receipt regenerated: the only
+        acceptable BROKEN CLAIMS reason after committing is the pre-existing,
+        already-documented headCommit staleness (a receipt committed
+        alongside itself is, by construction, one commit behind), never a
+        covered-file hash complaint. Two full rounds are run so the
+        exclusion is proven on more than one regeneration."""
+        self._write("README.md", "base\n")
+        self._commit("base")
+        self._write("app.py", "print('hi')\n")
+        self._commit("add app")
+
+        for round_ in range(2):
+            out = self._sbe("verify", self.repo)
+            self.assertIn(out.returncode, (0, 1), out.stdout + out.stderr)
+            self._commit("round %d: evidence and decisions" % round_)
+
+        status = self._sbe("status", self.repo, "--json")
+        data = json.loads(status.stdout)
+        poisoned = [b for b in data["brokenClaims"]
+                   if "covered file" in b["finding"] or "now hashes to" in b["finding"]]
+        self.assertEqual(poisoned, [],
+                         "the evidence store poisoned itself across repeated verify runs: %r"
+                         % poisoned)
 
 
 class TestHelpMeansHelpOnEveryCommand(unittest.TestCase):
