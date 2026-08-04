@@ -688,6 +688,28 @@ def _cmd_impact(args):
     return EXIT_OK
 
 
+def _cmd_review_route(args):
+    """Deterministic reviewer selection from a diff: no model chooses, at
+    most two specialists, and zero is a legal result. See
+    `brothersbe.reviewroute` for the routing table and every detector.
+    """
+    if not os.path.isdir(args.path):
+        sys.stderr.write("sbe review-route: '%s' is not a directory. A mistyped path must "
+                         "not read as a clean scan.\n" % args.path)
+        return EXIT_USAGE
+    from . import reviewroute as reviewroute_mod
+    try:
+        data = reviewroute_mod.route(args.path, base=args.base, head=args.head,
+                                     work_profile=args.work_profile)
+    except reviewroute_mod.DiffUnavailable as exc:
+        data = reviewroute_mod.no_data_report(args.path, exc)
+    if args.json:
+        sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(reviewroute_mod.render(data))
+    return EXIT_OK
+
+
 def _cmd_evidence(args):
     """Generate, verify and show commit-bound receipts.
 
@@ -1012,6 +1034,9 @@ COMMANDS = [
     ("version", "print the version and the evidence schema version", _cmd_version),
     ("impact", "read the git diff and reconcile it with the declared intake tier", _cmd_impact),
     ("inspect-change", "alias of impact, the name the finalization brief uses", _cmd_impact),
+    ("review-route", "deterministic reviewer selection from a diff: no model chooses, at most "
+                     "two specialists, zero is a legal result, never claims a clean review",
+     _cmd_review_route),
     ("plan", "derive the task plan from a dossier and validate it (delegates to sbe_plan.py)",
      lambda a: _delegate("sbe_plan.py", a.rest)),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
@@ -1094,6 +1119,23 @@ def build_parser():
             child.add_argument("--json", action="store_true", help="machine-readable output")
             child.add_argument("--strict", action="store_true",
                                help="make NO-DATA block as well, for protected CI")
+        elif name == "review-route":
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository or dossier to route (default: the "
+                                    "current one)")
+            child.add_argument("--base", default=None,
+                               help="the commit or ref to diff from; without it the merge "
+                                    "base with the default branch is used, exactly as in "
+                                    "`sbe impact`")
+            child.add_argument("--head", default="HEAD", help="the commit or ref to diff to")
+            child.add_argument("--work-profile", dest="work_profile", default=None,
+                               choices=("backend", "data", "infrastructure", "migration",
+                                        "qa", "documentation"),
+                               help="the task's declared workProfile, if any; recorded in "
+                                    "the reasons for provenance and does not change which "
+                                    "reviewer is selected, because the priority table "
+                                    "already orders every trigger a diff can raise")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name in ("verify", "review"):
             child.add_argument("path", nargs="?", default=".",
                                help="the directory to check (default: the current one)")
