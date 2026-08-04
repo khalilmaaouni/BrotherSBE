@@ -14,6 +14,42 @@ which reads BROTHERSBE_VAULT and defaults its citation check to this
 repository's own tree; every `sbe` call here runs with BROTHERSBE_VAULT
 unset and SBE_CITATION_ROOT pointed at the throwaway repo instead, so a
 scenario depends only on the fixture it built.
+
+LT-202 additively extends `11-review.json` with `structuredFindings`
+(normalized, fingerprinted, deduplicated findings) behind a new
+`--findings-json <path>` flag on `sbe review --write`, plus the
+`findingsSchemaVersion` tag that names which shape they are in. Coverage
+added for it, by class:
+
+  TestNormalizeReviewFindingsUnit   direct-import unit tests of
+                                     `brothersbe.cli.normalize_review_findings`
+                                     and its helpers (the same
+                                     `sys.path.insert` pattern
+                                     tools/test_sbe_status.py already uses):
+                                     fingerprint determinism, every
+                                     deduplication rule, the blocking
+                                     predicate, and every write-time
+                                     validation refusal, all without needing
+                                     a git repository or a subprocess.
+  TestWriteFindingsJson             `sbe review --write --findings-json`
+                                     end to end: a valid file is persisted,
+                                     an invalid one refuses the whole write
+                                     (no partial record), and the write can
+                                     still never move the exit code.
+  TestStatusReadsStructuredFindings  `sbe status --team` reading
+                                     `structuredFindings` back: absence on
+                                     an old or a plain record is honest
+                                     NO-DATA, never invented; a record
+                                     missing `findingsSchemaVersion`, naming
+                                     one this installation does not
+                                     recognize, or carrying a malformed
+                                     entry is FAIL, named by index, never
+                                     silently dropped; a real write with a
+                                     blocking finding reads FAIL, a
+                                     non-blocking one reads PASS, and a
+                                     contradiction dedup left in
+                                     "arbitration" reads NO-DATA naming
+                                     adjudication as the next action.
 """
 import io
 import json
@@ -25,6 +61,7 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, ".."))
 SBE = os.path.join(HERE, "..", "bin", "sbe")
 
 INTAKE = {
@@ -419,6 +456,518 @@ class TestStatusWiring(ReviewScenario):
         self.assertTrue(sevs, "expected findings")
         self.assertTrue(all(1 <= s <= 11 for s in sevs), sevs)
         self.assertIn(11, sevs)
+
+
+# ---------------------------------------------------------------------------
+# LT-202: normalized findings inside 11-review.json.
+# ---------------------------------------------------------------------------
+
+_GOOD_FINDING = {
+    "reviewer": "backend-reviewer", "category": "idempotency", "severity": "critical",
+    "confidence": "high", "introducedByChange": "yes", "location": "src/api.py:123",
+    "failure": "A retried request can create two orders.",
+    "evidence": ["tests/test_orders.py::test_duplicate reproduces it"],
+    "verification": "pytest tests/test_orders.py -k duplicate",
+}
+
+
+class TestNormalizeReviewFindingsUnit(unittest.TestCase):
+    """Direct-import unit coverage of `brothersbe.cli.normalize_review_findings`
+    and its helpers, the same `sys.path.insert(0, .../src)` pattern
+    tools/test_sbe_status.py already uses for `brothersbe.status`. No git
+    repository and no subprocess: every scenario here is a pure function of
+    the JSON a `--findings-json` file would carry."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        # A fresh import per test would be wasteful, but importing once at
+        # module scope would make this file's import order depend on
+        # whether some OTHER test file already put `src` on sys.path first;
+        # inserting and popping per test keeps this file correct in
+        # isolation, exactly as tools/test_sbe_status.py already does at
+        # each of its own call sites.
+        import brothersbe.cli as cli_mod
+        self.cli = cli_mod
+
+    def tearDown(self):
+        sys.path.remove(os.path.join(ROOT, "src"))
+
+    def test_fingerprint_is_deterministic_for_the_same_inputs(self):
+        fp1 = self.cli._finding_fingerprint("idempotency", "src/api.py:123",
+                                            "A retried request can create two orders.")
+        fp2 = self.cli._finding_fingerprint("idempotency", "src/api.py:123",
+                                            "A retried request can create two orders.")
+        self.assertEqual(fp1, fp2)
+        self.assertEqual(fp1, "idempotency:src/api.py:123:a-retried-request-can-create-two-orders")
+
+    def test_fingerprint_normalizes_a_leading_dot_slash_path(self):
+        fp_plain = self.cli._finding_fingerprint("cat", "src/a.py:1", "boom")
+        fp_dotted = self.cli._finding_fingerprint("cat", "./src/a.py:1", "boom")
+        self.assertEqual(fp_plain, fp_dotted)
+
+    def test_fingerprint_differs_when_category_path_line_or_failure_differs(self):
+        base = self.cli._finding_fingerprint("cat", "src/a.py:1", "boom")
+        self.assertNotEqual(base, self.cli._finding_fingerprint("other", "src/a.py:1", "boom"))
+        self.assertNotEqual(base, self.cli._finding_fingerprint("cat", "src/b.py:1", "boom"))
+        self.assertNotEqual(base, self.cli._finding_fingerprint("cat", "src/a.py:2", "boom"))
+        self.assertNotEqual(base, self.cli._finding_fingerprint("cat", "src/a.py:1", "bang"))
+
+    def test_identical_fingerprint_from_two_reviewers_folds_into_one_finding_multi_source(self):
+        a = dict(_GOOD_FINDING, reviewer="backend-reviewer")
+        b = dict(_GOOD_FINDING, reviewer="security-reviewer", confidence="medium")
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertEqual(len(structured), 1, structured)
+        self.assertEqual(structured[0]["sources"], ["backend-reviewer", "security-reviewer"])
+        self.assertEqual(structured[0]["reviewer"], "backend-reviewer",
+                         "the first source stays the primary reviewer")
+
+    def test_a_severity_disagreement_keeps_the_highest_and_records_it(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", severity="minor")
+        b = dict(_GOOD_FINDING, reviewer="r2", severity="critical")
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["severity"], "critical")
+        self.assertTrue(structured[0]["severityDisagreement"])
+
+    def test_agreeing_severity_never_flags_a_disagreement(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", severity="minor")
+        b = dict(_GOOD_FINDING, reviewer="r2", severity="minor")
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertFalse(structured[0]["severityDisagreement"])
+
+    def test_two_low_confidence_duplicates_never_vote_their_way_to_medium(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", confidence="low")
+        b = dict(_GOOD_FINDING, reviewer="r2", confidence="low")
+        c = dict(_GOOD_FINDING, reviewer="r3", confidence="low")
+        structured, errors = self.cli.normalize_review_findings([a, b, c])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["confidence"], "low",
+                         "vote count must never raise confidence by itself")
+
+    def test_confidence_is_the_highest_any_single_source_already_claimed(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", confidence="low")
+        b = dict(_GOOD_FINDING, reviewer="r2", confidence="high")
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["confidence"], "high",
+                         "a source that already claimed high confidence on its own is "
+                         "not diluted by a second, lower-confidence source")
+
+    def test_a_conceptid_folds_several_lines_into_one_parent_finding(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", conceptId="dup-order-path",
+                 locations=["src/api.py:120"])
+        a.pop("location", None)
+        b = dict(_GOOD_FINDING, reviewer="r1", conceptId="dup-order-path",
+                 locations=["src/api.py:145"])
+        b.pop("location", None)
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertEqual(len(structured), 1, structured)
+        self.assertEqual(sorted(structured[0]["locations"]),
+                         ["src/api.py:120", "src/api.py:145"])
+
+    def test_an_evidence_contradiction_is_never_auto_merged_and_goes_to_arbitration(self):
+        fixed = dict(_GOOD_FINDING, reviewer="r1", status="fixed",
+                     verification="pytest -k duplicate")
+        rejected = dict(_GOOD_FINDING, reviewer="r2", status="rejected",
+                        disposition={"evidence": "reproduced locally: no duplicate order"})
+        structured, errors = self.cli.normalize_review_findings([fixed, rejected])
+        self.assertEqual(errors, [])
+        self.assertEqual(len(structured), 1, structured)
+        self.assertEqual(structured[0]["status"], "arbitration")
+        self.assertIsNotNone(structured[0]["contradiction"])
+        statuses = sorted(c["status"] for c in structured[0]["contradiction"])
+        self.assertEqual(statuses, ["fixed", "rejected"])
+        self.assertFalse(structured[0]["blocking"],
+                         "a finding pending arbitration is never a settled blocker")
+
+    def test_two_sources_agreeing_the_finding_is_fixed_is_not_a_contradiction(self):
+        a = dict(_GOOD_FINDING, reviewer="r1", status="fixed", verification="pytest -k a")
+        b = dict(_GOOD_FINDING, reviewer="r2", status="fixed", verification="pytest -k b")
+        structured, errors = self.cli.normalize_review_findings([a, b])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "fixed")
+        self.assertIsNone(structured[0]["contradiction"])
+
+    def test_low_confidence_never_blocks_even_at_critical_severity(self):
+        entry = dict(_GOOD_FINDING, confidence="low")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertFalse(structured[0]["blocking"])
+
+    def test_critical_with_medium_confidence_and_no_verification_does_not_block(self):
+        entry = dict(_GOOD_FINDING, confidence="medium")
+        entry.pop("verification", None)
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertFalse(structured[0]["blocking"],
+                         "a critical blocker requires high confidence or mechanical proof")
+
+    def test_critical_with_medium_confidence_and_a_verification_command_blocks(self):
+        entry = dict(_GOOD_FINDING, confidence="medium", verification="pytest -k thing")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertTrue(structured[0]["blocking"],
+                        "mechanical proof (a stated verification command) is enough "
+                        "without high confidence")
+
+    def test_critical_with_high_confidence_blocks_with_no_verification_needed(self):
+        entry = dict(_GOOD_FINDING, confidence="high")
+        entry.pop("verification", None)
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertTrue(structured[0]["blocking"])
+
+    def test_non_critical_severity_never_blocks_even_at_high_confidence(self):
+        for severity in ("major", "minor", "info"):
+            entry = dict(_GOOD_FINDING, severity=severity, confidence="high")
+            structured, errors = self.cli.normalize_review_findings([entry])
+            self.assertEqual(errors, [])
+            self.assertFalse(structured[0]["blocking"], severity)
+
+    def test_pre_existing_findings_never_block_even_at_critical_high(self):
+        for introduced in ("no", "unknown"):
+            entry = dict(_GOOD_FINDING, introducedByChange=introduced, confidence="high")
+            structured, errors = self.cli.normalize_review_findings([entry])
+            self.assertEqual(errors, [])
+            self.assertFalse(structured[0]["blocking"], introduced)
+            self.assertEqual(structured[0]["introducedByChange"], introduced)
+
+    def test_a_reviewer_can_never_accept_its_own_risk(self):
+        entry = dict(_GOOD_FINDING, reviewer="alice", status="accepted",
+                     disposition={"by": "alice", "reason": "low volume today",
+                                  "scope": "src/api.py"})
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("never accept its own risk" in e for e in errors), errors)
+
+    def test_a_different_human_may_accept_the_risk(self):
+        entry = dict(_GOOD_FINDING, reviewer="alice", status="accepted",
+                     disposition={"by": "Bob the Lead", "reason": "low volume today",
+                                  "scope": "src/api.py"})
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "accepted")
+
+    def test_accepted_without_a_named_human_reason_or_scope_is_refused(self):
+        for missing in ("by", "reason", "scope"):
+            disposition = {"by": "Bob", "reason": "ok", "scope": "src/api.py"}
+            del disposition[missing]
+            entry = dict(_GOOD_FINDING, reviewer="alice", status="accepted",
+                         disposition=disposition)
+            structured, errors = self.cli.normalize_review_findings([entry])
+            self.assertEqual(structured, [])
+            self.assertTrue(any(missing in e for e in errors), (missing, errors))
+
+    def test_rejected_without_refuting_evidence_is_refused(self):
+        entry = dict(_GOOD_FINDING, status="rejected", disposition=None)
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("disposition.evidence" in e for e in errors), errors)
+
+    def test_rejected_with_refuting_evidence_is_accepted(self):
+        entry = dict(_GOOD_FINDING, status="rejected",
+                     disposition={"evidence": "reproduced locally: no duplicate order"})
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "rejected")
+
+    def test_fixed_without_verification_or_receipt_is_refused(self):
+        entry = dict(_GOOD_FINDING, status="fixed")
+        entry.pop("verification", None)
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("no finding marks itself fixed without proof" in e
+                            for e in errors), errors)
+
+    def test_fixed_with_a_disposition_receipt_is_accepted_without_top_level_verification(self):
+        entry = dict(_GOOD_FINDING, status="fixed", disposition={"receipt": ".sbe/evidence/x.json"})
+        entry.pop("verification", None)
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "fixed")
+
+    def test_arbitration_is_reserved_and_refused_as_input(self):
+        entry = dict(_GOOD_FINDING, status="arbitration")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("reserved" in e for e in errors), errors)
+
+    def test_an_invalid_confidence_value_is_refused(self):
+        entry = dict(_GOOD_FINDING, confidence="very sure")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("confidence" in e for e in errors), errors)
+
+    def test_an_invalid_introduced_by_change_value_is_refused(self):
+        entry = dict(_GOOD_FINDING, introducedByChange="maybe")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("introducedByChange" in e for e in errors), errors)
+
+    def test_a_missing_required_field_is_refused_and_names_the_index(self):
+        entry = dict(_GOOD_FINDING)
+        del entry["category"]
+        structured, errors = self.cli.normalize_review_findings([entry, dict(_GOOD_FINDING)])
+        self.assertEqual(structured, [])
+        self.assertTrue(any("finding[0]" in e and "category" in e for e in errors), errors)
+
+    def test_one_bad_entry_among_good_ones_refuses_the_whole_batch_not_a_partial_result(self):
+        good = dict(_GOOD_FINDING)
+        bad = dict(_GOOD_FINDING)
+        del bad["failure"]
+        structured, errors = self.cli.normalize_review_findings([good, bad])
+        self.assertEqual(structured, [], "a batch with any invalid entry writes nothing")
+        self.assertTrue(errors)
+
+    def test_the_top_level_value_must_be_a_list(self):
+        structured, errors = self.cli.normalize_review_findings({"not": "a list"})
+        self.assertEqual(structured, [])
+        self.assertTrue(errors)
+
+
+class TestWriteFindingsJson(ReviewScenario):
+    """`sbe review --write --findings-json <path>`: the write side end to
+    end, over the real command line rather than the imported function."""
+
+    def _write_findings_file(self, findings):
+        path = os.path.join(self.tmp, "findings.json")
+        io.open(path, "w", encoding="utf-8").write(json.dumps(findings))
+        return path
+
+    def test_a_valid_findings_json_file_is_persisted_as_structured_findings(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        findings_path = self._write_findings_file([dict(_GOOD_FINDING)])
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved",
+                                 "--findings-json", findings_path)
+        record = json.loads(io.open(os.path.join(doss, "11-review.json"),
+                                    encoding="utf-8").read())
+        self.assertEqual(record.get("findingsSchemaVersion"), "1.0", text)
+        self.assertEqual(len(record.get("structuredFindings", [])), 1, record)
+        self.assertEqual(record["structuredFindings"][0]["category"], "idempotency")
+        self.assertIn("structured finding", text)
+
+    def test_without_findings_json_the_record_carries_neither_new_field(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                 "--reviewer-type", "human", "--result", "approved")
+        record = json.loads(io.open(os.path.join(doss, "11-review.json"),
+                                    encoding="utf-8").read())
+        self.assertNotIn("findingsSchemaVersion", record,
+                         "a write without --findings-json must be byte-for-byte what "
+                         "CR-09 already wrote")
+        self.assertNotIn("structuredFindings", record)
+
+    def test_an_unreadable_findings_json_path_refuses_the_whole_write(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved",
+                                 "--findings-json", os.path.join(self.tmp, "nope.json"))
+        self.assertEqual(code, 2, text)
+        self.assertFalse(os.path.exists(os.path.join(doss, "11-review.json")),
+                         "a refused write must leave no partial record: %s" % text)
+
+    def test_malformed_json_in_the_findings_file_refuses_the_whole_write(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        findings_path = os.path.join(self.tmp, "findings.json")
+        io.open(findings_path, "w", encoding="utf-8").write("not json{{{")
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved",
+                                 "--findings-json", findings_path)
+        self.assertEqual(code, 2, text)
+        self.assertFalse(os.path.exists(os.path.join(doss, "11-review.json")), text)
+
+    def test_a_finding_that_fails_validation_refuses_the_whole_write(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        bad = dict(_GOOD_FINDING)
+        del bad["severity"]
+        findings_path = self._write_findings_file([bad])
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved",
+                                 "--findings-json", findings_path)
+        self.assertEqual(code, 2, text)
+        self.assertIn("severity", text)
+        self.assertFalse(os.path.exists(os.path.join(doss, "11-review.json")), text)
+
+    def test_self_acceptance_is_refused_through_the_full_command_line_too(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        entry = dict(_GOOD_FINDING, reviewer="alice", status="accepted",
+                     disposition={"by": "alice", "reason": "ok", "scope": "src/a.py"})
+        findings_path = self._write_findings_file([entry])
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved",
+                                 "--findings-json", findings_path)
+        self.assertEqual(code, 2, text)
+        self.assertIn("never accept its own risk", text)
+        self.assertFalse(os.path.exists(os.path.join(doss, "11-review.json")), text)
+
+    def test_write_with_findings_json_still_never_moves_the_exit_code(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        findings_path = self._write_findings_file([dict(_GOOD_FINDING)])
+        without_code, _t1, _e1 = self.sbe("review", doss)
+        with_code, _t2, _e2 = self.sbe("review", doss, "--write", "--reviewer", "r",
+                                       "--reviewer-type", "human", "--result", "approved",
+                                       "--findings-json", findings_path)
+        self.assertEqual(without_code, with_code,
+                         "--findings-json changed the exit code sbe review returned")
+
+
+class TestStatusReadsStructuredFindings(ReviewScenario):
+    """`sbe status --team` reading `structuredFindings` back."""
+
+    def _struct_hits(self, change="chg-a"):
+        """Every severity-11 finding for `change` whose detail names
+        structured findings specifically, filtered by content rather than
+        by list position: this section's sort key (severity, change,
+        evidence, detail) can interleave this finding with the record's own
+        pass/fail finding, so asserting `hits[0]` blindly would pin an
+        accident of string ordering rather than a behavior."""
+        _code, hits, _text = self.team_findings(change, 11)
+        # "structured" (case-folded) alone: the three detail texts this
+        # section can print are "...no structuredFindings...", "...
+        # structuredFindings on ... cannot be trusted...", and "N structured
+        # finding(s) recorded: ...", and no OTHER severity-11 detail this
+        # file's fixtures produce ever uses the word, so this is not
+        # narrower than it needs to be for any of the three states.
+        return [f for f in hits if "structured" in f["detail"].lower()]
+
+    def test_a_record_with_no_findings_json_reads_structured_findings_as_no_data(self):
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self.sbe("review", doss, "--write", "--reviewer", "Independent Reviewer",
+                 "--reviewer-type", "human", "--result", "approved")
+        hits = self._struct_hits()
+        self.assertTrue(hits, "expected a structured-findings finding")
+        self.assertEqual(hits[0]["verdict"], "NO-DATA", hits)
+        self.assertIn("absence is a fact, not an accusation", hits[0]["detail"])
+
+    def test_an_old_hand_written_record_with_no_structuredfindings_key_is_also_no_data(self):
+        """CR-09-era records readable as-is: a record that never heard of
+        LT-202 at all must read exactly the same honest NO-DATA a fresh
+        record written without --findings-json does, never FAIL and never
+        an invented finding."""
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write_json(os.path.join(doss, "11-review.json"),
+                         {"headSha": head, "reviewer": "Someone Else",
+                          "reviewerType": "human", "result": "approved",
+                          "findings": [], "acceptedRisks": []})
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "NO-DATA", hits)
+
+    def test_structuredfindings_without_findingsschemaversion_is_fail_not_missing(self):
+        """The explicit migration path this schema requires: a record
+        cannot carry structuredFindings without naming its own shape."""
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write_json(os.path.join(doss, "11-review.json"),
+                         {"headSha": head, "reviewer": "Someone Else",
+                          "reviewerType": "human", "result": "approved",
+                          "findings": [], "acceptedRisks": [],
+                          "structuredFindings": [dict(_GOOD_FINDING,
+                                                      fingerprint="x:a.py:1:y")]})
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits)
+        self.assertIn("findingsSchemaVersion", hits[0]["detail"])
+
+    def test_an_unrecognized_findingsschemaversion_is_fail(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write_json(os.path.join(doss, "11-review.json"),
+                         {"headSha": head, "reviewer": "Someone Else",
+                          "reviewerType": "human", "result": "approved",
+                          "findings": [], "acceptedRisks": [],
+                          "findingsSchemaVersion": "9.9", "structuredFindings": []})
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits)
+        self.assertIn("9.9", hits[0]["detail"])
+
+    def test_a_structuredfindings_value_that_is_not_a_list_is_fail(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write_json(os.path.join(doss, "11-review.json"),
+                         {"headSha": head, "reviewer": "Someone Else",
+                          "reviewerType": "human", "result": "approved",
+                          "findings": [], "acceptedRisks": [],
+                          "findingsSchemaVersion": "1.0", "structuredFindings": "nope"})
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits)
+
+    def test_a_malformed_entry_is_fail_named_by_its_own_index_never_silently_dropped(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        broken = dict(_GOOD_FINDING, fingerprint="x:a.py:1:y")
+        del broken["category"]
+        self._write_json(os.path.join(doss, "11-review.json"),
+                         {"headSha": head, "reviewer": "Someone Else",
+                          "reviewerType": "human", "result": "approved",
+                          "findings": [], "acceptedRisks": [],
+                          "findingsSchemaVersion": "1.0", "structuredFindings": [broken]})
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits)
+        self.assertIn("structuredFindings[0]", hits[0]["detail"])
+        self.assertIn("category", hits[0]["detail"])
+
+    def test_a_real_write_with_a_blocking_finding_reads_fail(self):
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        findings_path = os.path.join(self.tmp, "findings.json")
+        io.open(findings_path, "w", encoding="utf-8").write(json.dumps([dict(_GOOD_FINDING)]))
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer",
+                                 "Independent Reviewer", "--reviewer-type", "human",
+                                 "--result", "approved", "--findings-json", findings_path)
+        self.assertEqual(code, 0, text)
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "FAIL", hits)
+        self.assertIn("1 blocking", hits[0]["detail"])
+
+    def test_a_real_write_with_only_non_blocking_findings_reads_pass(self):
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        entry = dict(_GOOD_FINDING, severity="minor")
+        findings_path = os.path.join(self.tmp, "findings.json")
+        io.open(findings_path, "w", encoding="utf-8").write(json.dumps([entry]))
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer",
+                                 "Independent Reviewer", "--reviewer-type", "human",
+                                 "--result", "approved", "--findings-json", findings_path)
+        self.assertEqual(code, 0, text)
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "PASS", hits)
+        self.assertIn("0 blocking", hits[0]["detail"])
+
+    def test_a_contradiction_left_pending_arbitration_reads_no_data(self):
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        fixed = dict(_GOOD_FINDING, reviewer="r1", status="fixed",
+                    verification="pytest -k duplicate")
+        rejected = dict(_GOOD_FINDING, reviewer="r2", status="rejected",
+                        disposition={"evidence": "reproduced locally: no duplicate order"})
+        findings_path = os.path.join(self.tmp, "findings.json")
+        io.open(findings_path, "w", encoding="utf-8").write(json.dumps([fixed, rejected]))
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer",
+                                 "Independent Reviewer", "--reviewer-type", "human",
+                                 "--result", "approved", "--findings-json", findings_path)
+        self.assertEqual(code, 0, text)
+        hits = self._struct_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "NO-DATA", hits)
+        self.assertIn("1 pending arbitration", hits[0]["detail"])
+        self.assertIn("adjudicat", hits[0]["nextAction"])
 
 
 if __name__ == "__main__":

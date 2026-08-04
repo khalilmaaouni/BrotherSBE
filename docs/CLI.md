@@ -345,6 +345,115 @@ than the refusal this command used to print instead of a result.
 Full checklist of what only a human with admin rights can turn on: `docs/ADOPTION.md`. Limits in
 full: `docs/KNOWN-LIMITS.md`. Maturity: **INTERNAL-EVAL**.
 
+## `sbe review --write --findings-json`, and the structured findings a review record can carry
+
+```bash
+bin/sbe review design/chg-a --write --reviewer "Independent Reviewer" \
+  --reviewer-type human --result approved \
+  --findings-json review-findings.json     # optional; normalizes and dedupes findings
+```
+
+CR-09 gave every review a durable record, `11-review.json`, bound to the reviewed commit:
+reviewer, reviewer type, result, the raw FAIL/WAIVED verdict lines the run printed, and any
+accepted risks. LT-202 adds ONE more field pair to that record, additively: `--findings-json
+<path>` reads a JSON file, a list of findings in this minimal shape, and persists the
+normalized, deduplicated result as `structuredFindings`, next to `findingsSchemaVersion`
+(currently `"1.0"`), the explicit tag a reader checks before trusting the shape of that list:
+
+```json
+{
+  "reviewer": "backend-reviewer",
+  "category": "idempotency",
+  "severity": "critical",
+  "confidence": "high",
+  "introducedByChange": "yes",
+  "location": "src/api.py:123",
+  "failure": "A retried request can create two orders.",
+  "evidence": ["tests/test_orders.py::test_duplicate reproduces it"],
+  "verification": "pytest tests/test_orders.py -k duplicate",
+  "status": "open",
+  "disposition": null
+}
+```
+
+`fingerprint` is never supplied by the caller: it is computed, deterministically, from
+`category`, the normalized path half of `location`, the line-or-symbol half, and a slug of
+`failure` (its failure class), so the same finding always fingerprints the same way regardless
+of which reviewer reported it or in what order. `confidence` is one of `high`, `medium`, `low`.
+`introducedByChange` is one of `yes`, `no`, `unknown`. `status` is one of `open`, `fixed`,
+`accepted`, `rejected` (`arbitration` is reserved: only deduplication assigns it, never accepted
+as input). One conceptual issue spanning several lines is written as several entries sharing one
+`conceptId` (each with its own `locations` list) instead of one `location`; they fold into a
+single parent finding whose `locations` names every line.
+
+Rules a raw finding is refused for failing, before anything is written (the same "a refused write
+leaves no partial record" law `--write` already keeps for a missing `--reviewer`, so a `--write
+--findings-json` run that fails validation writes NOTHING, never a half-populated record):
+
+- `status: "accepted"` needs `disposition.by` (a named human), `disposition.reason` and
+  `disposition.scope`, and `disposition.by` may never equal the finding's own `reviewer`: a
+  reviewer can never accept its own risk;
+- `status: "rejected"` needs `disposition.evidence`, the refuting evidence;
+- `status: "fixed"` needs a verification command (`verification`, or `disposition.verification`)
+  or a linked receipt (`disposition.receipt`): no finding marks itself fixed without proof.
+
+Deduplication, applied once per `--findings-json` run:
+
+- identical fingerprint folds into one finding, `sources` naming every reviewer that reported it,
+  `reviewer` staying the first for a plain single-source reader;
+- a severity disagreement within a fold keeps the highest severity and sets
+  `severityDisagreement` rather than silently picking one;
+- confidence within a fold is the HIGHEST any single source already claimed on its own, never
+  boosted past that by how many sources agree: two `"low"` reports of the same finding never
+  become `"medium"` by vote count alone;
+- a status disagreement that mixes two or more of `fixed`/`accepted`/`rejected` within one fold is
+  never auto-resolved: `status` becomes `"arbitration"` and `contradiction` carries every source's
+  own status, evidence and disposition, in the adjudication protocol shape below, for a human or
+  Fable to resolve instead.
+
+Each stored finding also carries a computed `blocking` boolean, LT-202's own blocking rule stated
+once rather than re-derived by every reader: pre-existing findings (`introducedByChange` is not
+`"yes"`) never block; `confidence: "low"` never blocks, at any severity, because a model-only
+low-confidence finding cannot block a merge, taken here at its most conservative since no field
+records which findings are human-sourced; only `severity: "critical"` can ever block; and a
+critical finding blocks only with `confidence: "high"` or a non-empty `verification` command
+standing in for LT-202's "mechanical proof". A critical finding that clears neither bar stays
+recorded, just not blocking.
+
+`sbe status --team` reads `structuredFindings` back, inside the existing severity-11 "review
+record" section, as one further finding beside the record's own pass/fail judgement: absent
+`structuredFindings` (every record CR-09 wrote before LT-202, and any LT-202-era record written
+without `--findings-json`) reads NO-DATA, stated honestly rather than invented; a
+`findingsSchemaVersion` this installation does not recognize, a `structuredFindings` value that
+will not parse as a list, or any one entry missing a required field or carrying an enum value
+outside this schema is FAIL, named by the entry's own index, never silently dropped as though it
+were merely absent; a record that reads clean states its counts, exactly the way the record's own
+pass finding already states its finding and accepted-risk counts.
+
+### The adjudication protocol, as a DATA SHAPE (LT-202.B)
+
+When deduplication marks a finding `"arbitration"` (or a human reviewer is otherwise weighing
+reviewers who disagree), the disagreement is recorded in this shape. This is a DATA SHAPE for a
+human or Fable to fill in and paste into the review, not a new agent and not a tool this
+repository runs for you:
+
+```text
+Disagreement:
+Finding:
+Evidence for:
+Evidence against:
+Recommendation:
+What would falsify the recommendation:
+Decision owner:
+Result: accepted | rejected | needs human decision
+```
+
+Fable may draft every line above except one: `Decision owner` and a `Result` of `accepted` on a
+business-risk acceptance belong to the named human alone. The same rule the write-side validation
+already enforces mechanically for `status: "accepted"`, a reviewer can never accept its own risk,
+holds here too, only unenforced by a schema check: Fable may not resolve a business-risk
+acceptance on the human owner's behalf.
+
 ## `sbe status`, and the rule that keeps it from becoming a second gate runner
 
 ```bash
