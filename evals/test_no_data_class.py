@@ -529,6 +529,11 @@ NOT_A_VERDICT = {
     ("sbe_telemetry.py", "read_jsonl_counted"): "returns (parsed rows, unparseable lines), "
                                                 "not a verdict",
     ("sbe_telemetry.py", "prediction_counts"): "returns a count table",
+    ("test_sbe_handover.py", "_receipt"): "LT-301's own fixture helper; returns (exit code, "
+                                          "combined stdout+stderr) from running `sbe evidence "
+                                          "run`, not a verdict",
+    ("test_sbe_handover.py", "_registry"): "LT-301's own fixture helper; returns (registry "
+                                           "file path, parsed registry dict), not a verdict",
 }
 
 
