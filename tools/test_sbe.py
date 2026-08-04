@@ -1957,17 +1957,29 @@ class TestPluginSurface(unittest.TestCase):
                             "%s has no description; a skill with no description is a skill "
                             "nothing will ever route to" % path)
 
+    # The one agent allowed to carry write tools. LT-101 added the repository's
+    # first non-reviewer agent, and this test fired exactly as its docstring
+    # promised it would. The allowlist is by exact stem, not by pattern, so a
+    # new writer agent is a deliberate one-line change here, reviewed in the
+    # diff, never an accident of naming.
+    WRITER_AGENTS = ("implementation-worker",)
+
     def test_every_agent_declares_itself_and_stays_read_only(self):
         """The reviewer agents claim to be read-only in their own prose. A claim
         in prose is not a restriction, but the tools list IS one, so the two are
         pinned together here: an agent that grows a write tool has to change this
         test, which is the moment somebody notices. The evidence auditor matters
         most, because an auditor that can write the evidence it approves is not
-        an auditor."""
+        an auditor. A writer agent is legal ONLY when named in WRITER_AGENTS
+        above, and it must say what it is in its first two words: a worker that
+        could be mistaken for a reviewer is exactly the confusion the lean plan
+        forbids."""
         write_tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
         agents = sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))
-        self.assertGreaterEqual(len(agents), 7,
-                                "expected seven reviewer agents, found %d" % len(agents))
+        reviewers = [p for p in agents
+                     if os.path.splitext(os.path.basename(p))[0] not in self.WRITER_AGENTS]
+        self.assertGreaterEqual(len(reviewers), 7,
+                                "expected seven reviewer agents, found %d" % len(reviewers))
         for path in agents:
             front = self._frontmatter(path)
             stem = os.path.splitext(os.path.basename(path))[0]
@@ -1976,6 +1988,12 @@ class TestPluginSurface(unittest.TestCase):
             self.assertTrue(front.get("description"), "%s has no description" % path)
             tools = front.get("tools", "")
             self.assertTrue(tools, "%s declares no tools list" % path)
+            if stem in self.WRITER_AGENTS:
+                self.assertTrue(front.get("description", "").startswith("Implementation worker"),
+                                "%s carries write tools, so its description must open with "
+                                "'Implementation worker'; it opens with %r"
+                                % (path, front.get("description", "")[:40]))
+                continue
             for banned in write_tools:
                 self.assertNotIn(banned, tools,
                                  "%s is documented as read-only but declares %s"
