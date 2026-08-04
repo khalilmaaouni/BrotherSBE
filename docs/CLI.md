@@ -44,6 +44,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `version` | the version and the evidence schema version |
 | `plan` | derive `08-plan.json` from a dossier mechanically and validate it; an empty plan never exits 0 (delegates to `tools/sbe_plan.py`) |
 | `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove`, `brief` (a deterministic JSON work order for one task, read-only) |
+| `handover` | `prepare`/`show`/`acknowledge`/`reject`: ownership transfer is complete only after a named human receiver acknowledges; the outgoing owner stays the owner until then |
 | `pr` | `pr verify <number> --repo owner/name`: live GitHub approval evidence bound to the head sha; no credentials is NO-DATA with a remedy, never PASS |
 | `converge` | does base..head still match the approved dossier: scope, contracts, data, architecture, verification; no force flag exists |
 | `explain` | print the decision package for a decision id, or for a gate or check name; with no recorded run it regenerates one from the shipped registry and marks the verdict NO-DATA, and it never overwrites a package bound to another commit |
@@ -312,6 +313,90 @@ close clean, which is this control's own kill criterion. `expiry` is information
 deletes a task on a clock. Concurrent writers of the registry file are out of scope (atomic
 rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
 **INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
+
+## `sbe handover`, and why a chat message is not a handover
+
+```bash
+bin/sbe handover prepare design/my-change --outgoing "Alice <alice@example.com>" \
+  --receiver "Bob <bob@example.com>"
+bin/sbe handover show design/my-change              # human-readable
+bin/sbe handover show design/my-change --json
+bin/sbe handover acknowledge design/my-change --receiver "Bob <bob@example.com>"
+bin/sbe handover reject design/my-change --receiver "Bob <bob@example.com>" \
+  --reason "tests are still red"
+```
+
+Ownership transfer is complete only after a named human receiver explicitly
+**acknowledges** it. A completion message in chat is not evidence: nobody can `sbe status`
+it, and "I told them" cannot be checked later. `prepare` writes one artifact,
+`12-handover.json`, inside the dossier, bound to the commit it ran at; the **outgoing owner
+stays the owner** until `acknowledge` succeeds, and rejecting keeps ownership with them too,
+with the reason on record.
+
+`prepare` asks only for what the engine cannot know: `--outgoing` and `--receiver`
+(an identity or a role). Everything else is derived from state other commands already
+recorded, the same stores `sbe status --team` reads:
+
+- **done / inFlight / notStarted**: from the dossier's `08-plan.json` task graph
+  cross-referenced against `.sbe/tasks.json` (an open record makes a task inFlight; a
+  closed, not-`forced`, record makes it done; a `forced` close is a disposition, never a
+  completion, and stays notStarted).
+- **activeTasks**: full ownership detail (id, agent, role, worktree, base commit) for
+  every inFlight task.
+- **worktrees**: the repository root plus every distinct worktree an active task
+  declares, each checked for uncommitted state through `evidence.working_tree_dirty` and
+  named through the same `-uall` porcelain read `sbe task close` and `sbe work remove`
+  already use. The handover file and its own lock sidecar are exempted by exact name from
+  this comparison, the same way `.sbe/tasks.json` is exempted from `sbe task close`'s
+  postcondition: preparing a handover must never report itself as the dirty state.
+- **evidence**: one array covering everything the spec calls evidence, tagged by `kind`
+  (`receipt-store`, `receipt`, `convergence`, `approval`, `review`), each `current`,
+  `stale` (bound to a commit that has since moved, or a covered file that changed) or
+  `unavailable` (absent evidence store, unreadable review record, a verified receipt
+  recording a nonzero exit code).
+- **nextAction**: one deterministic sentence, priority-ordered (convergence, then
+  approval, then review, then a dirty worktree, then a stale receipt, then the first
+  inFlight task, then the first notStarted task, then "review and acknowledge or
+  reject").
+
+`preparedBy` is read from `git config user.name`/`user.email` in the repository, never
+asked for; it falls back to `--outgoing` only when git carries no configured identity.
+`openQuestions`, `decisions` and `requiredAccess` are genuinely unknowable to the engine
+and are written empty; a human may add to `requiredAccess` by hand (or a future tool may),
+and a non-empty one **blocks acceptance**, naming every outstanding item, until it is
+cleared.
+
+**Identity comparison is not reinvented.** Receiver-versus-outgoing-owner and
+receiver-versus-registered-agent comparisons reuse `tools/sbe_gate.py`'s self-approval
+machinery verbatim (`_identity_parts`, `_canonical_email`, `_names_overlap`): the same
+case-fold, gmail dot-fold, initial-expansion and homoglyph resistance the approval gate
+already earned. A receiver that reads as the outgoing owner is refused at both `prepare`
+and `acknowledge`/`reject`; a receiver that reads as any agent identity the task registry
+has ever recorded (open or closed) is refused at `acknowledge`/`reject`, never at
+`prepare`, because `--receiver` there may legitimately be a role rather than a person.
+
+**Overwrite refusal.** `prepare` refuses to silently replace an existing, still-`prepared`
+handover bound to a different commit (re-run once the receiver has acted, or `reject`
+first), and never overwrites an `acknowledged` handover at all: that record is a completed
+acceptance. A `rejected` handover, and a `prepared` one re-run at the SAME head, are always
+freely re-preparable. `prepare`, `acknowledge` and `reject` all hold one `fcntl.flock`
+sidecar (`12-handover.json.lock`, the same locking pattern `tasks._registry_lock` already
+uses) across their whole read-check-write, so two receivers racing to acknowledge the same
+file can no longer both read `status: prepared`: the first atomic write (temp file, then
+`os.replace`) wins, and the second is refused, never a torn file.
+
+**Staleness.** `show` recomputes staleness at read time by comparing the bound `headSha`
+against the current HEAD; a `prepared` record is never rewritten to match a tree that
+moved on, exactly the way `11-review.json` is never silently rewritten (see `sbe review`
+above). `acknowledge` refuses outright on a stale handover, naming both shas, rather than
+recording an acceptance of code nobody looked at. Nothing here writes `.sbe/tasks.json`: no
+task owner changes until `acknowledge` succeeds, and this module only ever reads that
+registry.
+
+Exit codes: `0` on success (including a `show` of a missing handover, which is NO-DATA, not
+a failure: absence never blocks anything when ownership is not changing), `1` a refusal
+(stale, overwrite, identity, missing access, malformed file), `2` usage (a bad flag, a
+missing `--reason` on `reject`, a blank `--receiver`). Maturity: **INTERNAL-EVAL**.
 
 ## `sbe adopt`, and the line it will never cross
 
