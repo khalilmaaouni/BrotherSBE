@@ -20,17 +20,30 @@ MISSING EVIDENCE, never invented as a FAIL this module discovered on its own.
 WHERE THIS MODULE LOOKS, stated because a store this module does not check is
 a store whose absence must never read as clean:
 
-  intake            <root>/00-intake.json
-  disposition       <root>/disposition.json
+  intake            <root>/00-intake.json, or <dossier>/00-intake.json per
+                     discovered dossier when the flat file above is absent
+  disposition       <root>/disposition.json, or <dossier>/disposition.json,
+                     matching whichever intake was actually read
   evidence store    <root>/.sbe/evidence/  (recursively, every *.json)
   task registry     <root>/.sbe/tasks.json
 
-These are flat, single-dossier conventions, the same ones `tools/
-test_sbe_impact.py`'s own fixtures already write to. A dossier nested under
-`design/<change>/` is not discovered by this wave; that is a stated limit,
-not a silent gap, and it means a repository that only ever writes those files
-under a dossier subdirectory sees every section read NO-DATA here even
-though the files exist elsewhere on disk.
+The evidence store and task registry are always shared and root-level: read
+once, the same way, for the whole repository, exactly as `sbe status --team`
+already reads them. Intake and disposition are read flat at `<root>` FIRST,
+the same single-dossier convention `tools/test_sbe_impact.py`'s own fixtures
+write to, and when that flat `00-intake.json` exists this module's output is
+unchanged from every earlier version of this file: the flat layout always
+wins and dossier discovery never runs. Only when the flat file is ABSENT does
+this module walk for dossiers, through the SAME `_design_roots`/
+`_team_changes` machinery `build_team_report` below already uses (the
+default `design/` root, plus any `.sbe/team-profile.json` `designRoots`
+entry that resolves inside the repository; an entry that would escape the
+repository is refused and named as a merge blocker, never silently walked).
+Each discovered dossier's own `00-intake.json` and `disposition.json` are
+then read in the flat file's place, one target per dossier, and every
+finding they produce is labeled with the dossier's name so a reader always
+knows which change it came from. A repository that writes neither the flat
+files nor any dossier still reads NO-DATA here, exactly as before.
 
 ACTIVE CONFLICTS reuses wave 5's overlap scan by calling `tasks.load_registry`,
 `tasks.open_tasks` and `tasks.claims_overlap` directly, the same three
@@ -300,17 +313,67 @@ def _scan_tasks(root, reg_path):
 def _scope_sentence(scope):
     """The sentence every positive or empty line carries, naming exactly
     which stores this run read. Every positive statement names its inspected
-    scope; this is the one sentence that names it."""
+    scope; this is the one sentence that names it.
+
+    The `dossiers` clause only appears when CR-06 discovery actually ran
+    (the flat layout was absent and this run went looking under the design
+    roots instead): `storesInspected["dossiers"]` stays `None` whenever the
+    flat layout is present, so a flat repository's scope sentence is exactly
+    the five-part sentence this file has always printed.
+    """
     si = scope.get("storesInspected", {})
     parts = [
         "intake %s" % (si.get("intake") or "absent"),
         "disposition %s" % (si.get("disposition") or "absent"),
         "evidence store %s" % (si.get("evidenceDir") or "absent"),
         "task registry %s" % (si.get("taskRegistry") or "absent"),
-        "diff %s" % (scope.get("diffRange") or ("NO-DATA: %s" % scope.get("diffProblem")
-                                                if scope.get("diffProblem") else "NO-DATA")),
     ]
+    dossiers = si.get("dossiers")
+    if dossiers is not None:
+        parts.append("dossiers discovered: %s" % ", ".join(dossiers))
+    parts.append(
+        "diff %s" % (scope.get("diffRange") or ("NO-DATA: %s" % scope.get("diffProblem")
+                                                if scope.get("diffProblem") else "NO-DATA")))
     return "scope: " + "; ".join(parts)
+
+
+def _intake_summary_text(summaries):
+    """The MERGE BLOCKERS empty-scope note's `intake ... (tier ...)` clause.
+
+    One flat target (the ordinary layout, `summaries[0]["label"] is None`)
+    keeps the exact sentence this file has always printed. One or more
+    discovered dossiers are joined instead, each labeled by name, so a
+    reader knows which change's intake was actually read.
+    """
+    if len(summaries) == 1 and summaries[0]["label"] is None:
+        s = summaries[0]
+        return "intake %s (tier %s)" % (s["intakePath"] if s["intakeExists"] else "absent",
+                                        s["tier"] or "unknown")
+    if not summaries:
+        return "intake absent (tier unknown)"
+    return "; ".join(
+        "dossier %s intake %s (tier %s)"
+        % (s["label"], s["intakePath"] if s["intakeExists"] else "absent",
+           s["tier"] or "unknown")
+        for s in summaries)
+
+
+def _missing_evidence_summary_text(summaries):
+    """The MISSING EVIDENCE empty-scope note's `declared tier ... from ...`
+    clause. Same singular-versus-discovered split as `_intake_summary_text`,
+    kept as a separate function because the two notes have always used
+    different wording for the same underlying facts."""
+    if len(summaries) == 1 and summaries[0]["label"] is None:
+        s = summaries[0]
+        return "declared tier %s from %s" % (
+            s["tier"] or "unknown", s["intakePath"] if s["intakeExists"] else "no intake file")
+    if not summaries:
+        return "declared tier unknown from no intake file"
+    return "; ".join(
+        "dossier %s declared tier %s from %s"
+        % (s["label"], s["tier"] or "unknown",
+           s["intakePath"] if s["intakeExists"] else "no intake file")
+        for s in summaries)
 
 
 def _section_line(items, inspected, detail):
@@ -332,7 +395,16 @@ def _next_action(sections, scope):
 def build_report(path, base=None, now=None):
     """The whole `sbe status` verdict: six sections, blocker-first, plus the
     scope this run actually read. Raises nothing; every failure to read a
-    store becomes a NO-DATA note in that store's section instead."""
+    store becomes a NO-DATA note in that store's section instead.
+
+    CR-06: intake and disposition are read flat at `<root>` first, exactly as
+    every earlier version of this function read them. Only when that flat
+    `00-intake.json` is absent does this function discover dossiers through
+    the SAME `_design_roots`/`_team_changes` walker `build_team_report`
+    already uses, read each discovered dossier's own intake and disposition
+    in the flat file's place, and label every finding they produce with the
+    dossier's name. See the module docstring for the full statement.
+    """
     root = os.path.abspath(path)
     now = time.time() if now is None else now
 
@@ -344,96 +416,159 @@ def build_report(path, base=None, now=None):
     evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
     reg_path = tasks_mod.registry_path(root)
 
+    # ---- CR-06: dossier discovery, only when the flat layout is absent.
+    # The flat file always wins when it exists: discovery never even runs
+    # then, which is how a flat repository's output stays byte-identical to
+    # every earlier version of this function. ----
+    flat_present = os.path.exists(intake_path)
+    dossiers, dossier_refusals = [], []
+    if not flat_present:
+        dossiers, dossier_refusals = _team_changes(root)
+    if flat_present or not dossiers:
+        targets = [(None, intake_path, disposition_path)]
+    else:
+        targets = [(name, os.path.join(doss, INTAKE_REL), os.path.join(doss, DISPOSITION_REL))
+                  for name, doss in dossiers]
+
     head_sha = _git_head(root)
     scope = {
         "root": root,
         "base": base,
         "headCommit": head_sha,
         "storesInspected": {
-            "intake": intake_path if os.path.exists(intake_path) else None,
+            "intake": intake_path if flat_present else None,
             "disposition": disposition_path if os.path.exists(disposition_path) else None,
             "evidenceDir": evidence_dir if os.path.isdir(evidence_dir) else None,
             "taskRegistry": reg_path if os.path.exists(reg_path) else None,
+            # None when the flat layout is present (discovery never ran) or
+            # when discovery ran and found nothing; the same absence-reads-
+            # as-absence shape every other store above already uses. Only
+            # non-empty when at least one dossier was actually found.
+            "dossiers": (sorted(name for name, _d in dossiers)
+                        if (not flat_present and dossiers) else None),
         },
         "diffRange": None,
         "diffProblem": None,
     }
 
     # ---- Evidence store: BROKEN CLAIMS, the sound receipts, and the
-    # exit-code-failing receipts that belong under MERGE BLOCKERS. ----
+    # exit-code-failing receipts that belong under MERGE BLOCKERS. Shared and
+    # root-level for every target below, exactly as `sbe status --team`
+    # already reads it: a receipt is never scoped to one dossier. ----
     ev = _scan_evidence(root, evidence_dir)
     broken_claims.extend(ev["broken"])
     sound_evidence.extend(ev["clean"])
     merge_blockers.extend(ev["failing"])
 
-    # ---- Disposition staleness: BROKEN CLAIMS. ----
-    if os.path.exists(disposition_path) and head_sha:
-        _live, disp_note = impact_mod.read_disposition(disposition_path, head_sha)
-        if disp_note:
-            broken_claims.append({
-                "finding": "disposition file %s: %s" % (disposition_path, disp_note),
-                "remedy": "record a fresh disposition against head %s naming who decided "
-                         "and why" % head_sha[:12],
-            })
-
-    # ---- Task registry: ACTIVE CONFLICTS and FORCED closes. ----
+    # ---- Task registry: ACTIVE CONFLICTS and FORCED closes. Shared and
+    # root-level, same reasoning as the evidence store above. ----
     tk = _scan_tasks(root, reg_path)
     active_conflicts.extend(tk["conflicts"])
     merge_blockers.extend(tk["forced"])
 
-    # ---- Intake vs diff reconciliation, read exactly as `sbe impact` reads
-    # it: this is analysis of a diff and two small JSON files, never a
-    # subprocess and never a new gate run. ----
-    human_tier, _answers, intake_problem = impact_mod.read_intake(intake_path)
-    idata = None
-    try:
-        idata = impact_mod.report(
-            root, base=base, head="HEAD",
-            intake_path=intake_path if os.path.exists(intake_path) else None,
-            disposition_path=disposition_path if os.path.exists(disposition_path) else None)
-        scope["diffRange"] = idata["scope"]
-    except DiffUnavailable as exc:
-        scope["diffProblem"] = str(exc)
-
-    if intake_problem and human_tier is None and os.path.exists(intake_path):
+    # ---- CR-06 containment: a designRoots entry that would escape the
+    # repository is refused by `_design_roots` and never walked; it is
+    # surfaced here as a merge blocker, never a silent skip, the same
+    # containment law `build_team_report` already applies to it. ----
+    for entry in dossier_refusals:
         merge_blockers.append({
-            "finding": "intake at %s cannot be read: %s" % (intake_path, intake_problem),
-            "remedy": "fix 00-intake.json so its five answers parse in the accepted "
-                     "vocabulary, then re-run status",
+            "finding": "designRoots entry %r in .sbe/team-profile.json resolves outside "
+                      "this repository root and was REFUSED: it is not walked for "
+                      "dossiers, and no dossier under it is discovered" % entry,
+            "remedy": "point designRoots entry %r at a directory inside this repository, "
+                     "or remove the entry" % entry,
         })
-    if idata is not None:
-        for d in idata["disagreements"]:
-            if d["disposition"] != "missing":
-                continue
-            merge_blockers.append({
-                "finding": "intake declared %s but the diff shows %s (detector %s on %s, no "
-                          "disposition)" % (human_tier, idata["proposedTier"], d["detector"],
-                                            d["file"]),
-                "remedy": "record a disposition for %s naming who decided and why, against "
-                         "head %s, or revise the declared tier"
-                         % (d["detector"], (head_sha or idata.get("headCommit") or "?")[:12]),
-            })
 
-    # ---- MISSING EVIDENCE: only when a tier is known and owes something. ----
-    #
-    # An obligation is cleared by a receipt that DECLARES its kind, never by
-    # one whose command line happens to spell it. Receipts that declare
-    # nothing are named in the same finding rather than left out of it: a
-    # reader told "no receipt records a hard gate run" while four receipts sit
-    # in the store would reasonably conclude the tool cannot see them.
-    if human_tier not in (None, "T0"):
-        kindless_note = ""
-        if ev["kindless"]:
-            kindless_note = ("; %d receipt(s) in the store declare no check kind and clear no "
-                             "obligation: %s" % (len(ev["kindless"]), "; ".join(ev["kindless"])))
-        for kind, label, cmdline in CHECK_KINDS:
-            if kind not in ev["kindsCovered"]:
-                missing_evidence.append({
-                    "finding": "no evidence receipt declares a %s run, and declared tier %s "
-                              "owes one%s" % (label, human_tier, kindless_note),
-                    "remedy": "run `%s` through `sbe evidence run --kind %s` to record it"
-                             % (cmdline, kind),
+    # ---- Disposition staleness, intake/diff reconciliation and MISSING
+    # EVIDENCE, run once per target above: the one flat root target in the
+    # ordinary layout (unchanged from every earlier version of this
+    # function), or once per discovered dossier when the flat layout was
+    # absent instead. ----
+    summaries = []
+    for label, t_intake_path, t_disposition_path in targets:
+        prefix = ("dossier %s: " % label) if label else ""
+
+        if os.path.exists(t_disposition_path) and head_sha:
+            _live, disp_note = impact_mod.read_disposition(t_disposition_path, head_sha)
+            if disp_note:
+                broken_claims.append({
+                    "finding": "%sdisposition file %s: %s"
+                              % (prefix, t_disposition_path, disp_note),
+                    "remedy": "record a fresh disposition against head %s naming who decided "
+                             "and why" % head_sha[:12],
                 })
+
+        # Intake vs diff reconciliation, read exactly as `sbe impact` reads
+        # it: this is analysis of a diff and two small JSON files, never a
+        # subprocess and never a new gate run.
+        human_tier, _answers, intake_problem = impact_mod.read_intake(t_intake_path)
+        idata = None
+        try:
+            idata = impact_mod.report(
+                root, base=base, head="HEAD",
+                intake_path=t_intake_path if os.path.exists(t_intake_path) else None,
+                disposition_path=(t_disposition_path
+                                  if os.path.exists(t_disposition_path) else None))
+            if scope["diffRange"] is None:
+                scope["diffRange"] = idata["scope"]
+        except DiffUnavailable as exc:
+            if scope["diffProblem"] is None:
+                scope["diffProblem"] = str(exc)
+
+        if intake_problem and human_tier is None and os.path.exists(t_intake_path):
+            merge_blockers.append({
+                "finding": "%sintake at %s cannot be read: %s"
+                          % (prefix, t_intake_path, intake_problem),
+                "remedy": "fix 00-intake.json so its five answers parse in the accepted "
+                         "vocabulary, then re-run status",
+            })
+        if idata is not None:
+            for d in idata["disagreements"]:
+                if d["disposition"] != "missing":
+                    continue
+                merge_blockers.append({
+                    "finding": "%sintake declared %s but the diff shows %s (detector %s on "
+                              "%s, no disposition)"
+                              % (prefix, human_tier, idata["proposedTier"], d["detector"],
+                                 d["file"]),
+                    "remedy": "record a disposition for %s naming who decided and why, "
+                             "against head %s, or revise the declared tier"
+                             % (d["detector"],
+                                (head_sha or idata.get("headCommit") or "?")[:12]),
+                })
+
+        # ---- MISSING EVIDENCE: only when a tier is known and owes
+        # something. ----
+        #
+        # An obligation is cleared by a receipt that DECLARES its kind, never
+        # by one whose command line happens to spell it. Receipts that
+        # declare nothing are named in the same finding rather than left out
+        # of it: a reader told "no receipt records a hard gate run" while
+        # four receipts sit in the store would reasonably conclude the tool
+        # cannot see them.
+        if human_tier not in (None, "T0"):
+            kindless_note = ""
+            if ev["kindless"]:
+                kindless_note = ("; %d receipt(s) in the store declare no check kind and "
+                                 "clear no obligation: %s"
+                                 % (len(ev["kindless"]), "; ".join(ev["kindless"])))
+            for kind, klabel, cmdline in CHECK_KINDS:
+                if kind not in ev["kindsCovered"]:
+                    missing_evidence.append({
+                        "finding": "%sno evidence receipt declares a %s run, and declared "
+                                  "tier %s owes one%s"
+                                  % (prefix, klabel, human_tier, kindless_note),
+                        "remedy": "run `%s` through `sbe evidence run --kind %s` to record it"
+                                 % (cmdline, kind),
+                    })
+
+        summaries.append({
+            "label": label,
+            "intakePath": t_intake_path,
+            "intakeExists": os.path.exists(t_intake_path),
+            "dispositionExists": os.path.exists(t_disposition_path),
+            "tier": human_tier,
+        })
 
     sections = (broken_claims, merge_blockers, active_conflicts, missing_evidence,
                sound_evidence)
@@ -441,24 +576,23 @@ def build_report(path, base=None, now=None):
 
     notes = {
         "brokenClaims": _section_line(
-            broken_claims, ev["inspected"] or os.path.exists(disposition_path),
-            "%s; disposition %s" % (ev["note"], "present" if os.path.exists(disposition_path)
-                                    else "absent")),
+            broken_claims,
+            ev["inspected"] or any(s["dispositionExists"] for s in summaries),
+            "%s; disposition %s"
+            % (ev["note"], "present" if any(s["dispositionExists"] for s in summaries)
+               else "absent")),
         "mergeBlockers": _section_line(
             merge_blockers,
-            os.path.exists(intake_path) or tk["inspected"] or ev["count"] > 0
-            or idata is not None,
-            "intake %s (tier %s); %s; %s"
-            % (intake_path if os.path.exists(intake_path) else "absent",
-               human_tier or "unknown", tk["note"],
-               idata["scope"] if idata is not None else
-               ("diff NO-DATA: %s" % scope["diffProblem"]))),
+            any(s["intakeExists"] for s in summaries) or tk["inspected"] or ev["count"] > 0
+            or scope["diffRange"] is not None,
+            "%s; %s; %s"
+            % (_intake_summary_text(summaries), tk["note"],
+               scope["diffRange"] or ("diff NO-DATA: %s" % scope["diffProblem"]))),
         "activeConflicts": _section_line(active_conflicts, tk["inspected"], tk["note"]),
         "missingEvidence": _section_line(
-            missing_evidence, os.path.exists(intake_path) and human_tier is not None,
-            "declared tier %s from %s" % (human_tier or "unknown",
-                                          intake_path if os.path.exists(intake_path)
-                                          else "no intake file")),
+            missing_evidence,
+            any(s["intakeExists"] and s["tier"] is not None for s in summaries),
+            _missing_evidence_summary_text(summaries)),
         "soundEvidence": _section_line(sound_evidence, ev["inspected"], ev["note"]),
     }
 
