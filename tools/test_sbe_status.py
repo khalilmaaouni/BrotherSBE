@@ -91,6 +91,14 @@ class StatusFixture(unittest.TestCase):
         data = json.loads(text) if text.strip().startswith("{") else None
         return code, data, text
 
+    def handover(self, *args):
+        """LT-302.B fixtures build real `12-handover.json` records through
+        the real `sbe handover` engine (mirroring `tools/test_sbe_handover.py`'s
+        own `HandoverScenario.handover`), never a hand-typed JSON stand-in:
+        the read path under test belongs to `status.py`, but the record it
+        reads must still be one the write side would actually produce."""
+        return self.sbe("handover", *args)
+
     def intake(self, **answers):
         base = {"changes_contract": "n", "crosses_boundary": "n",
                 "reversible_under_hour": "y", "touches_sensitive": "n", "consumers": "none"}
@@ -770,6 +778,105 @@ class TestPositiveSentenceGuard(StatusFixture):
         for line in positive:
             self.assertIn("scope:", line,
                           "a positive evidence line named nothing it inspected: %r" % line)
+
+
+class TestHandoverIntegration(StatusFixture):
+    """LT-302.B: the smallest possible read path so `sbe status` can report
+    whether ownership of this change is moving, and to whom, over a real
+    `12-handover.json` the real `sbe handover` engine wrote (never a
+    hand-typed stand-in). Additive only: every fixture here also asserts the
+    five pre-existing sections are untouched, so this suite cannot pass by
+    accident on a `handover` key that silently broke something else.
+    """
+
+    def _handover_of(self, data):
+        self.assertIn("handover", data, data)
+        self.assertEqual(len(data["handover"]), 1,
+                         "the flat single-dossier layout must yield exactly one handover "
+                         "entry: %s" % data["handover"])
+        return data["handover"][0]
+
+    def _assert_other_sections_untouched(self, data):
+        for key in ("brokenClaims", "mergeBlockers", "activeConflicts", "missingEvidence",
+                    "soundEvidence"):
+            self.assertFalse(
+                any("handover" in json.dumps(item).lower() for item in data[key]),
+                "the handover field must never leak into %s: %s" % (key, data[key]))
+
+    def test_no_handover_needed_is_reported_and_never_blocks(self):
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "none", entry)
+        self.assertIsNone(entry["stale"], entry)
+        self.assertIn("no handover", entry["detail"], entry)
+        self.assertIn("never a block", entry["detail"], entry)
+        self.assertEqual(code, 0, text)
+        self._assert_other_sections_untouched(data)
+
+    def test_a_prepared_handover_reads_prepared_and_awaiting_receiver(self):
+        code, text, _ = self.handover("prepare", self.repo, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "prepared", entry)
+        self.assertFalse(entry["stale"], entry)
+        self.assertIn("awaiting receiver", entry["detail"], entry)
+        self.assertEqual(entry["outgoingOwner"], "alice@example.com", entry)
+        self.assertEqual(entry["intendedReceiver"], "bob@example.com", entry)
+        self.assertEqual(code, 0, text)
+        self._assert_other_sections_untouched(data)
+
+    def test_a_stale_prepared_handover_names_the_moved_head(self):
+        code, text, _ = self.handover("prepare", self.repo, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        write(self.repo, "unrelated.txt", "more\n")
+        self.commit("advance head past the prepared handover")
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "prepared", entry)
+        self.assertTrue(entry["stale"], entry)
+        self.assertIn("stale", entry["detail"], entry)
+        self.assertIn("re-prepared", entry["detail"], entry)
+
+    def test_an_acknowledged_handover_reads_acknowledged(self):
+        code, text, _ = self.handover("prepare", self.repo, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.handover("acknowledge", self.repo, "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, data, text = self.status_json("--base", self.base)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "acknowledged", entry)
+        self.assertFalse(entry["stale"], entry)
+        self.assertIn("acknowledged", entry["detail"], entry)
+        self.assertIn("moved to bob@example.com", entry["detail"], entry)
+
+    def test_a_rejected_handover_reads_rejected_and_names_the_reason(self):
+        code, text, _ = self.handover("prepare", self.repo, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.handover("reject", self.repo, "--receiver", "bob@example.com",
+                                      "--reason", "not ready yet")
+        self.assertEqual(code, 0, text)
+        code, data, text = self.status_json("--base", self.base)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "rejected", entry)
+        self.assertIn("not ready yet", entry["detail"], entry)
+        self.assertIn("stays with alice@example.com", entry["detail"], entry)
+
+    def test_a_malformed_handover_file_is_named_not_silently_dropped(self):
+        write(self.repo, "12-handover.json", "{not json\n")
+        code, data, text = self.status_json("--base", self.base)
+        self.assertIsNotNone(data, text)
+        entry = self._handover_of(data)
+        self.assertEqual(entry["status"], "malformed", entry)
+        self.assertIn("cannot be trusted", entry["detail"], entry)
+        self._assert_other_sections_untouched(data)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,23 @@ checklist's own rules.
 
 (nothing yet)
 
+## 1.0.0-rc.8 (2026-08-05)
+
+Wave C of the lean team program: explicit human handover.
+
+- `sbe handover prepare/show/acknowledge/reject`: ownership transfer that
+  stays with the outgoing owner until the receiver acknowledges, bound to
+  HEAD, stale when the code moves, refusing agent identities and every
+  forged shape of self handover including dot-fold, case-fold, and Unicode
+  normalization aliases. Proven by `tools/test_sbe_handover.py` (34 tests).
+- Status reports six handover states per change, and absence is never a
+  blocker when ownership is not changing.
+- `/brothersbe:handover`: prepare, the exact summary shape, receiver
+  inspect and acknowledge guidance, one guided next action.
+- A prepared record is a frozen snapshot by design, like every record in
+  the family; a task that changes without a new commit is visible through
+  live status beside it, and that boundary is stated rather than hidden.
+
 ## 1.0.0-rc.7 (2026-08-05)
 
 Wave B of the lean team program: risk-sized review.

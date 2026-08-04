@@ -1181,6 +1181,23 @@ def _cmd_work(args):
     from . import work as work_mod
     return work_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                          exit_usage=EXIT_USAGE)
+
+
+def _cmd_handover(args):
+    """Explicit human handover: `prepare`, `show`, `acknowledge`, `reject`.
+
+    Not a delegation: like `evidence`, `task` and `work`, there is no tool in
+    `tools/` behind it. `prepare` derives what it can from the status-team
+    report, the task registry, the plan, evidence receipts, convergence,
+    approval and review, binds to HEAD, and writes `12-handover.json`
+    atomically; ownership stays with the outgoing owner until a named human
+    receiver runs `acknowledge`.
+    """
+    from . import handover as handover_mod
+    return handover_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                             exit_usage=EXIT_USAGE)
+
+
 def _cmd_explain(args):
     """Browse a decision package, or regenerate one from the shipped registry.
 
@@ -1479,6 +1496,9 @@ COMMANDS = [
              "diff-against-declaration postcondition", _cmd_task),
     ("work", "isolated implementation for one plan task: start, check, finish, remove, "
              "and never a merge", _cmd_work),
+    ("handover", "explicit human handover: prepare, show, acknowledge, reject; ownership "
+                "stays with the outgoing owner until a named human receiver acknowledges",
+     _cmd_handover),
     ("converge", "does the code between two commits still match the approved dossier: "
                  "scope, contracts, data, architecture, verification", _cmd_converge),
     ("pr", "pull-request surfaces: pr verify <number> --repo owner/name checks live "
@@ -1514,7 +1534,7 @@ COMMANDS = [
 #: refused by that same parser with a nonzero exit.
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
-    "evidence", "task", "work", "pr", "explain", "lineage"))
+    "evidence", "task", "work", "handover", "pr", "explain", "lineage"))
 
 
 def build_parser():

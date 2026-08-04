@@ -1,13 +1,15 @@
 # Team execution
 
 LOAD WHEN: `/brothersbe:work` is resolving ready tasks, dispatching an implementation-worker
-against a worktree, or a human is taking over a task another writer has claimed.
+against a worktree, or a human is taking over a task another writer has claimed; or
+`/brothersbe:handover` is preparing, showing, or resolving an explicit human handover of a whole
+change.
 
-(The compact reference `skills/work/SKILL.md` points at. That file carries the full operational
-steps with their exact commands; this file carries the four things worth checking against
-independently of the skill's own prose: the flow compressed to six stages, the parallelism
-conditions, the one-writer law as it applies here, the takeover protocol, and the shape a
-worker's report must carry.)
+(The compact reference both `skills/work/SKILL.md` and `skills/handover/SKILL.md` point at.
+Those files carry the full operational steps with their exact commands; this file carries the
+things worth checking against independently of either skill's own prose: the work flow
+compressed to six stages, the parallelism conditions, the one-writer law as it applies here, the
+takeover protocol, the handover protocol, and the shape a worker's report must carry.)
 
 ## The six-stage flow
 
@@ -84,6 +86,58 @@ to carry, not the registry's). Acceptance: one owner true at any moment (the fen
 alongside the registry record, always answers it); resuming an agent on a taken-over task
 requires an explicit instruction, never an automatic re-dispatch; no dirty work is ever deleted
 to hand a task over.
+
+**This protocol is not the handover protocol below, and the two are not interchangeable.**
+Takeover is mid-task and informal: one still-open task record, no artifact, no acceptance step,
+a spoken fence note that only this skill's own operator hears. Handover (LT-301, `sbe handover`)
+is whole-change and formal: a written, commit-bound artifact that stays incomplete until a named
+human receiver explicitly acknowledges it, so `sbe status` can answer "who owns this" later
+without asking anyone. Use takeover when a human is stepping into a task an agent (or another
+human) currently holds, mid-flight, and no formal record is wanted. Use handover when ownership
+of the whole change is moving between two named humans and that transfer needs to survive a
+context reset, a new session, or a later audit.
+
+## The handover protocol
+
+On "hand this off to `<name>`", or a receiver asking what they inherit: `/brothersbe:handover`
+runs this flow (see `skills/handover/SKILL.md` for the exact commands and rendered shapes).
+
+1. **State and worktree checks, first.** `sbe status --json` and `sbe status --team --json` for
+   the active dossier's `handover` field (LT-302.B: `status` one of `none`, `prepared`,
+   `acknowledged`, `rejected`, `malformed`, plus `stale`), then `git status --short` in the
+   repository root and any worktree an active task in the dossier declares, run BEFORE `prepare`
+   so hidden uncommitted state is surfaced up front rather than discovered later inside the
+   artifact.
+2. **Prepare.** `sbe handover prepare <dossier> --outgoing <identity> --receiver
+   <identity-or-role>` asks for only the two things the engine cannot derive; `done`, `inFlight`,
+   `notStarted`, `evidence`, `activeTasks`, `worktrees` and `nextAction` all come from the same
+   stores `sbe status --team` reads, never hand-computed. A refusal (self-handover, an existing
+   handover still awaiting its receiver at a different commit, an already-acknowledged record) is
+   relayed verbatim, never forced past.
+3. **Render the summary**, sourced from the written record (`sbe handover show <dossier>
+   --json`), never a paraphrase: From, To, Commit, Done, In flight, Open questions, Evidence
+   (current versus stale counts), Access needed, and the ownership line stating plainly that
+   ownership remains with the outgoing owner until the receiver acknowledges.
+4. **Tell the receiver exactly how to inspect and decide**: `sbe handover show <dossier>` to
+   read it, `sbe handover acknowledge <dossier> --receiver <identity>` to accept, `sbe handover
+   reject <dossier> --receiver <identity> --reason <text>` to decline.
+5. **Ownership timing.** The outgoing owner stays the owner until `acknowledge` succeeds. A
+   rejection keeps ownership with the outgoing owner too, with the reason on record, and the
+   handover stays visible rather than deleted; the dossier is freely re-prepared afterward. Only
+   after acknowledgment succeeds does task ownership move, and only through the existing registry
+   behavior other commands already own (`sbe work start`'s `agent` field, `sbe task
+   open`/`close`); this skill, like `handover.py` itself, never writes `.sbe/tasks.json`.
+6. **One guided next action for the receiver.** `nextAction` on the record, verbatim, naming the
+   first file and command to inspect, never the project's whole history and never every evidence
+   entry dumped at once. A `stale` record (its bound commit no longer matches HEAD) must be
+   re-prepared by the outgoing owner before it can be acknowledged; say so and stop there.
+
+Identity comparison (receiver-versus-outgoing-owner, receiver-versus-registered-agent) is not
+reinvented by this skill: `sbe handover prepare`/`acknowledge`/`reject` already reuse
+`tools/sbe_gate.py`'s self-approval machinery, the same case-fold, gmail dot-fold,
+initial-expansion and homoglyph resistance the approval gate earned; a forged self-handover or an
+agent identity acting as the human receiver is refused by the engine itself, not by this skill's
+own judgment.
 
 ## The worker response contract
 
