@@ -137,7 +137,7 @@ $ python3 evals/test_no_data_class.py
 Real last line:
 
 ```
-30 checks discovered from 4 registries in 24 module(s), 3737 scenarios run, 2 waived by declared exemption, 0 failure(s).
+31 checks discovered from 5 registries in 28 module(s), 3758 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 Exit code 0. The two waivers are printed above that line with their stated
@@ -145,7 +145,7 @@ reasons, so a waiver is never silent:
 
 ```
   sbe_intake.py: excused 7 print(s); an interactive interview: its prompts, echoes and refusals are dialogue with the operator, and nothing machine-parses them as verdict lines
-  sbe_telemetry.py: excused 56 print(s); operator status lines and hook JSON, never parsed as gate verdicts; its ledger writes are data, not report lines
+  sbe_telemetry.py: excused 80 print(s); operator status lines and hook JSON, never parsed as gate verdicts; its ledger writes are data, not report lines
 ```
 
 And the tool tests:
