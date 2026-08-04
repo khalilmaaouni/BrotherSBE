@@ -113,8 +113,20 @@ run_step 18-status           python3 tools/test_sbe_status.py
 run_step 19-status-team      python3 tools/test_sbe_status_team.py
 run_step 20-tasks            python3 tools/test_sbe_tasks.py
 run_step 21-work             python3 tools/test_sbe_work.py
-run_step 22-install-artifact sh scripts/test-install-artifact.sh
-run_step 23-upgrade-rollback sh scripts/test-upgrade-rollback.sh
+run_step 22-work-brief       python3 tools/test_sbe_work_brief.py
+run_step 23-team-workflow    python3 tools/test_sbe_team_workflow.py
+run_step 24-review-route     python3 tools/test_sbe_review_route.py
+run_step 25-review-record    python3 tools/test_sbe_review_record.py
+run_step 26-review-skill     python3 tools/test_sbe_review_skill_fixtures.py
+run_step 27-handover         python3 tools/test_sbe_handover.py
+run_step 28-instruction      python3 tools/test_sbe_instruction_surface.py
+run_step 29-authority-hook   python3 tools/test_sbe_authority_hook.py
+run_step 30-version-bump     python3 tools/test_sbe_version_bump.py
+run_step 31-release-invar    python3 tools/test_sbe_release_invariant.py
+run_step 32-golden-scenario  python3 tools/test_sbe_golden_scenario.py
+run_step 33-interop          python3 tools/test_sbe_interop.py
+run_step 34-install-artifact sh scripts/test-install-artifact.sh
+run_step 35-upgrade-rollback sh scripts/test-upgrade-rollback.sh
 
 echo "BATTERY-COMPLETE" >> "$SUMMARY"
 cat "$SUMMARY"
