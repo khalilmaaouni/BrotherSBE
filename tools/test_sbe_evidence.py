@@ -852,6 +852,129 @@ class TestDeclaredCheckKind(EvidenceFixture):
             sys.path.pop(0)
 
 
+class TestWriteReceiptAndMintDefault(EvidenceFixture):
+    """`write_receipt`, `mint_default` and `mint_default_many`: the writer
+    path CR-08 gave `sbe verify`'s default evidence minting
+    (`cli.py:_mint_evidence`), added here rather than in `cli.py` because the
+    ADR that settled CR-08 (`design/lifecycle-blockers/03-adr.md`) requires
+    minting to route through this module's own writer, never a parallel one.
+    These are the receipt-contract tests these three functions did not have
+    before: `TestTheSoundCase` above pins the same shape (a generated
+    receipt verifies PASS at the same commit, and records what the run
+    actually did) for `generate()` reached through the CLI; this class pins
+    it for these three reached directly, the way `_mint_evidence` reaches
+    them.
+    """
+
+    def _mod(self):
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        try:
+            from brothersbe import evidence as mod
+            return mod
+        finally:
+            sys.path.pop(0)
+
+    def test_write_receipt_creates_missing_parent_directories(self):
+        mod = self._mod()
+        nested = os.path.join(self.out, "a", "b", "c", "receipt.json")
+        self.assertFalse(os.path.isdir(os.path.dirname(nested)))
+        mod.write_receipt({"hello": "world"}, nested)
+        self.assertTrue(os.path.exists(nested))
+        with io.open(nested, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"hello": "world"})
+
+    def test_mint_default_writes_to_the_fixed_per_kind_path(self):
+        mod = self._mod()
+        evidence_dir = os.path.join(self.out, ".sbe", "evidence")
+        path = mod.mint_default(self.repo, "gate",
+                                ["python3", "-c", "print('the suite ran')"], evidence_dir,
+                                base=self.base)
+        self.assertEqual(path, os.path.join(evidence_dir, "gate.json"))
+        self.assertTrue(os.path.exists(path))
+
+    def test_mint_default_receipt_verifies_pass_at_the_same_commit(self):
+        """The receipt contract `TestTheSoundCase.test_a_generated_receipt_
+        verifies_pass_at_the_same_commit` pins for `generate()` through the
+        CLI, pinned here for the path `sbe verify`'s default minting uses."""
+        mod = self._mod()
+        evidence_dir = os.path.join(self.out, ".sbe", "evidence")
+        path = mod.mint_default(self.repo, "design",
+                                ["python3", "-c", "print('the suite ran')"], evidence_dir,
+                                base=self.base)
+        result = mod.verify(path, cwd=self.repo)
+        self.assertEqual(result["verdict"], "PASS", result["reasons"])
+
+    def test_mint_default_records_what_the_run_actually_did(self):
+        """The same contract `TestTheSoundCase.test_the_receipt_records_what_
+        the_run_actually_did` pins for `generate()`, pinned here."""
+        mod = self._mod()
+        evidence_dir = os.path.join(self.out, ".sbe", "evidence")
+        path = mod.mint_default(self.repo, "score", ["python3", "-c", "import sys; sys.exit(7)"],
+                                evidence_dir, base=self.base)
+        receipt = mod.load(path)
+        self.assertEqual(receipt["exitCode"], 7)
+        self.assertEqual(receipt["headCommit"], self.head)
+        self.assertEqual(receipt["checkKinds"], ["score"])
+        self.assertGreaterEqual(receipt["durationSeconds"], 0)
+
+    def test_mint_default_raises_on_an_unknown_kind_rather_than_writing_a_false_declaration(self):
+        mod = self._mod()
+        evidence_dir = os.path.join(self.out, ".sbe", "evidence")
+        with self.assertRaises(mod.ReceiptUnreadable):
+            mod.mint_default(self.repo, "not-a-real-kind", ["python3", "-c", "pass"],
+                             evidence_dir, base=self.base)
+        self.assertFalse(os.path.exists(os.path.join(evidence_dir, "not-a-real-kind.json")),
+                         "a refused mint must not leave a receipt behind")
+
+    def test_mint_default_many_generates_every_pair_before_writing_any(self):
+        """The regression this class exists to pin. `evidence_dir` sits
+        INSIDE `self.repo` here, on purpose (unlike the other tests above,
+        which write outside the repo): that is what exposes the defect a
+        naive generate-then-write loop has. The first receipt written
+        becomes a new untracked file in `self.repo`, and if the SECOND
+        receipt's dirty check runs after that write, it reads the tree as
+        dirty because of the FIRST receipt's own file, not because of
+        anything the caller did. `self.repo` is clean at `self.head`
+        (`EvidenceFixture.setUp` commits everything), so both receipts must
+        read `workingTreeDirty: False` when minted together correctly."""
+        mod = self._mod()
+        evidence_dir = os.path.join(self.repo, ".sbe", "evidence")
+        pairs = [("design", ["python3", "-c", "pass"]), ("gate", ["python3", "-c", "pass"])]
+        written, failures = mod.mint_default_many(self.repo, pairs, evidence_dir, base=self.base)
+        self.assertEqual(failures, [], failures)
+        self.assertEqual(len(written), 2, written)
+        for path in written:
+            receipt = mod.load(path)
+            self.assertIs(receipt["workingTreeDirty"], False,
+                         "%s read dirty, which means one receipt minted in this batch was "
+                         "read as the reason for another one's dirty tree: %r"
+                         % (path, receipt["workingTreeDetail"]))
+
+    def test_mint_default_many_isolates_one_failure_from_the_others(self):
+        mod = self._mod()
+        evidence_dir = os.path.join(self.out, ".sbe", "evidence")
+        pairs = [("design", ["python3", "-c", "pass"]),
+                 ("gate", ["not-a-real-executable-on-purpose"])]
+        written, failures = mod.mint_default_many(self.repo, pairs, evidence_dir, base=self.base)
+        self.assertEqual(len(written), 1, written)
+        self.assertTrue(written[0].endswith("design.json"), written)
+        self.assertEqual(len(failures), 1, failures)
+        self.assertEqual(failures[0][0], "gate")
+        self.assertFalse(os.path.exists(os.path.join(evidence_dir, "gate.json")),
+                         "a failed pair must not leave a receipt behind")
+
+    def test_run_subcommand_still_reports_a_write_failure_after_the_write_receipt_refactor(self):
+        """`main`'s `run` subcommand now calls `write_receipt` instead of
+        writing inline; this pins that the CLI still reports an unwritable
+        `--out` rather than losing the message in the refactor."""
+        blocked = os.path.join(self.out, "not-a-directory")
+        with io.open(blocked, "w", encoding="utf-8") as fh:
+            fh.write("occupying this path so it cannot become a directory\n")
+        _path, code, text = self.generate(out=os.path.join(blocked, "receipt.json"))
+        self.assertNotEqual(code, 0, text)
+        self.assertIn("could not be written", text, text)
+
+
 class TestHelpMeansHelp(unittest.TestCase):
     """`sbe evidence ... -h` printed the right usage and exited 2: the module
     caught argparse's SystemExit(0) for help and folded it into exit_usage,

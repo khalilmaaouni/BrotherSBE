@@ -568,6 +568,119 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds
     return receipt
 
 
+def write_receipt(receipt, out_path):
+    """Write `receipt` (as returned by `generate()`) to `out_path` as JSON,
+    creating the parent directory first if it does not exist yet.
+
+    This is the exact write `sbe evidence run`'s own `--out` performs (see
+    `main`, the `run` subcommand, which calls this too): pulled out so a
+    second caller that already holds a receipt from `generate()` -- today
+    that is `mint_default` below, used by `sbe verify`'s default minting --
+    uses the identical writer path rather than growing a second one beside
+    it. `design/lifecycle-blockers/03-adr.md` records that instruction as
+    binding for CR-08: receipts route through this module's own writer,
+    never a parallel one.
+
+    Raises OSError on a directory or a file it cannot create; this function
+    does not decide what that failure means to whichever command called it,
+    that call keeps the job, same as every other write in this module.
+    """
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    if out_dir and not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    with io.open(out_path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+
+
+def mint_default_many(cwd, kind_argv_pairs, evidence_dir, base=None, head="HEAD", covers=None,
+                      timeout=None):
+    """Mint one receipt per `(kind, argv)` pair in `kind_argv_pairs`, each to
+    the FIXED path `<evidence_dir>/<kind>.json`, and return `(written,
+    failures)`: `written` the paths actually written, `failures` a list of
+    `(kind, exception)` for the pairs that were not.
+
+    This is the helper `sbe verify`'s default minting uses (`cli.py`'s
+    `_cmd_verify`, by way of `_mint_evidence`), so minting several receipts
+    at once stays inside this module's own generate-then-write path instead
+    of `cli.py` growing a parallel writer that fabricates a receipt's fields
+    from a run it already watched happen. Every `generate()` call here runs
+    `argv` again, because THE COMMAND IS RUN HERE is this module's own law
+    (see the module docstring): a receipt has to observe an actual run,
+    never restate one somebody else watched.
+
+    EVERY PAIR IS GENERATED BEFORE ANY OF THEM IS WRITTEN, and that order is
+    the reason this function exists beside a simpler generate-then-write
+    loop. `evidence_dir` sits inside `cwd`, the same tree `generate()` reads
+    `git status --porcelain` against to decide `workingTreeDirty` for EACH
+    receipt (`working_tree_dirty`); write one receipt at a time -- generate,
+    write, generate, write -- and the first receipt's own file is a new
+    untracked path by the time the second one asks whether the tree is
+    dirty, so only the first of several receipts minted together could ever
+    read clean, and every one after it reads NO-DATA for a reason that has
+    nothing to do with the code under test and everything to do with this
+    function's own prior write. Generating every receipt first, against the
+    tree exactly as the caller found it, then writing every one that
+    generated successfully, means every receipt's dirty state reflects one
+    shared truth about that tree, never a cascade this function created by
+    writing into the thing it was reading.
+
+    A FIXED path per kind, not one namespaced by time or run id, is
+    deliberate for a second reason: `evidence.verify`'s own `exclude_dirs`
+    parameter, the same machinery `status.py`'s `_scan_evidence` already
+    passes, treats a receipt regenerated at a fixed `--out` path as the
+    ordinary shape of a routine re-run rather than a change to the code
+    under test (see `docs/KNOWN-LIMITS.md`, "Evidence covering evidence").
+    Without a fixed path, every `sbe verify` would mint a new file and the
+    store would grow without bound; with one, running `sbe verify` twice
+    regenerates the same receipts in place, the shape that exclusion
+    machinery already expects.
+
+    A failure generating or writing one pair does not stop the others: each
+    is attempted independently and its exception, if any, lands in
+    `failures` rather than being raised, so one broken delegate does not
+    cost the receipts the other delegates earned.
+    """
+    generated, failures = [], []
+    for kind, argv in kind_argv_pairs:
+        try:
+            receipt = generate(cwd, argv, base=base, head=head, covers=covers, timeout=timeout,
+                               kinds=[kind])
+        except Exception as exc:
+            failures.append((kind, exc))
+            continue
+        generated.append((kind, receipt))
+    written = []
+    for kind, receipt in generated:
+        out_path = os.path.join(evidence_dir, "%s.json" % kind)
+        try:
+            write_receipt(receipt, out_path)
+        except Exception as exc:
+            failures.append((kind, exc))
+            continue
+        written.append(out_path)
+    return written, failures
+
+
+def mint_default(cwd, kind, argv, evidence_dir, base=None, head="HEAD", covers=None,
+                 timeout=None):
+    """Run `argv`, declared as `kind`, through `generate()`, write the
+    receipt to the FIXED path `<evidence_dir>/<kind>.json`, and return that
+    path. Raises whatever `mint_default_many` recorded as this one pair's
+    failure, if generating or writing it failed.
+
+    The single-receipt convenience over `mint_default_many` above, which
+    does the actual generate-then-write work; see its docstring for why
+    minting more than one receipt together needs the two-phase order this
+    function does not, on its own, need to worry about.
+    """
+    written, failures = mint_default_many(cwd, [(kind, argv)], evidence_dir, base=base,
+                                          head=head, covers=covers, timeout=timeout)
+    if failures:
+        _, exc = failures[0]
+        raise exc
+    return written[0]
+
+
 def load(path):
     """The receipt at `path`, or raise. A file that is not JSON is not a receipt.
 
@@ -1002,17 +1115,13 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         except ReceiptUnreadable as exc:
             sys.stderr.write("sbe evidence run: no receipt written. %s\n" % exc)
             return exit_failed
-        out_dir = os.path.dirname(os.path.abspath(args.out))
-        if out_dir and not os.path.isdir(out_dir):
-            try:
-                os.makedirs(out_dir)
-            except OSError as exc:
-                sys.stderr.write("sbe evidence run: cannot create %s: %s\n" % (out_dir, exc))
-                return exit_usage
         try:
-            with io.open(args.out, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-        except (IOError, OSError) as exc:
+            write_receipt(receipt, args.out)
+        except OSError as exc:
+            # One message for both ways this write fails (the parent directory
+            # could not be created, or the file itself could not be opened):
+            # `write_receipt` is the one place either happens now, so this is
+            # the one place that reports either happening.
             sys.stderr.write("sbe evidence run: the command ran but the receipt could not be "
                              "written to %s: %s. Treat the run as unrecorded.\n"
                              % (args.out, exc))
