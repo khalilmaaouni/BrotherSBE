@@ -83,6 +83,12 @@ class TeamScenario(unittest.TestCase):
             self.fail("sbe status has no --team flag yet: %s" % text.strip())
         return code, text, err
 
+    def handover(self, *args):
+        """LT-302.B fixtures build real `12-handover.json` records through
+        the real `sbe handover` engine (mirroring `tools/test_sbe_handover.py`'s
+        own `HandoverScenario.handover`), never a hand-typed JSON stand-in."""
+        return self.sbe("handover", *args)
+
     def _change(self, name, src_rel):
         doss = os.path.join(self.repo, "design", name)
         os.makedirs(doss)
@@ -432,6 +438,123 @@ class TestJsonContractAndExit(TeamScenario):
         for needle in ("urllib", "http.client", "socket", "api.github.com"):
             self.assertNotIn(needle, body,
                              "status must read the estate, never the network")
+
+
+class TestHandoverIntegration(TeamScenario):
+    """LT-302.B: the smallest possible read path so `sbe status --team` can
+    report whether ownership of each change is moving, and to whom, over a
+    real `12-handover.json` the real `sbe handover` engine wrote. The
+    result is a purely additive top-level `handover` list, never folded
+    into the severity 1..11 `findings` list: every test here also reasserts
+    the 1..11 contract `TestJsonContractAndExit` already pins, so this
+    class cannot pass by silently widening that range.
+    """
+
+    def _handover_for(self, data, name):
+        self.assertIn("handover", data, data)
+        hits = [h for h in data["handover"] if h["change"] == name]
+        self.assertEqual(len(hits), 1, "exactly one handover entry per change: %s"
+                                       % data["handover"])
+        return hits[0]
+
+    def _assert_severity_contract_holds(self, data):
+        for f in data["findings"]:
+            self.assertTrue(1 <= int(f["severity"]) <= 11,
+                            "a handover entry must never widen the findings severity "
+                            "range: %s" % f)
+
+    def test_no_handover_needed_is_reported_per_change_and_never_blocks(self):
+        self._change("chg-a", "src/a.py")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        entry = self._handover_for(data, "chg-a")
+        self.assertEqual(entry["status"], "none", entry)
+        self.assertIsNone(entry["stale"], entry)
+        self.assertIn("no handover", entry["detail"], entry)
+        self.assertIn("never a block", entry["detail"], entry)
+        self._assert_severity_contract_holds(data)
+
+    def test_a_prepared_handover_reads_prepared_and_awaiting_receiver(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        entry = self._handover_for(data, "chg-a")
+        self.assertEqual(entry["status"], "prepared", entry)
+        self.assertFalse(entry["stale"], entry)
+        self.assertIn("awaiting receiver", entry["detail"], entry)
+        self.assertEqual(entry["outgoingOwner"], "alice@example.com", entry)
+        self.assertEqual(entry["intendedReceiver"], "bob@example.com", entry)
+        self._assert_severity_contract_holds(data)
+
+    def test_a_stale_prepared_handover_is_named_without_widening_the_severity_range(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        io.open(os.path.join(self.repo, "unrelated.txt"), "w").write("more\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "advance head past the prepared handover")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        entry = self._handover_for(data, "chg-a")
+        self.assertEqual(entry["status"], "prepared", entry)
+        self.assertTrue(entry["stale"], entry)
+        self.assertIn("stale", entry["detail"], entry)
+        self._assert_severity_contract_holds(data)
+
+    def test_an_acknowledged_handover_reads_acknowledged(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                      "--receiver", "bob@example.com")
+        code, text, _ = self.handover("acknowledge", doss, "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        entry = self._handover_for(data, "chg-a")
+        self.assertEqual(entry["status"], "acknowledged", entry)
+        self.assertIn("acknowledged", entry["detail"], entry)
+        self._assert_severity_contract_holds(data)
+
+    def test_a_rejected_handover_reads_rejected(self):
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                      "--receiver", "bob@example.com")
+        code, text, _ = self.handover("reject", doss, "--receiver", "bob@example.com",
+                                      "--reason", "not ready yet")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        entry = self._handover_for(data, "chg-a")
+        self.assertEqual(entry["status"], "rejected", entry)
+        self.assertIn("not ready yet", entry["detail"], entry)
+        self._assert_severity_contract_holds(data)
+
+    def test_two_changes_each_carry_their_own_independent_handover_entry(self):
+        doss_a = self._change("chg-a", "src/a.py")
+        self._change("chg-b", "src/b.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "both dossiers")
+        self.handover("prepare", doss_a, "--outgoing", "alice@example.com",
+                      "--receiver", "bob@example.com")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        a_entry = self._handover_for(data, "chg-a")
+        b_entry = self._handover_for(data, "chg-b")
+        self.assertEqual(a_entry["status"], "prepared", a_entry)
+        self.assertEqual(b_entry["status"], "none",
+                         "chg-b must read its own absence, not chg-a's prepared record: %s"
+                         % b_entry)
 
 
 if __name__ == "__main__":

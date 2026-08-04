@@ -392,6 +392,133 @@ def _next_action(sections, scope):
     return "nothing blocking here that this tool can see. %s" % _scope_sentence(scope)
 
 
+# ---------------------------------------------------------------------------
+# LT-302.B: the smallest possible read path for `12-handover.json` (LT-301's
+# explicit-human-handover artifact), so `sbe status` can say whether
+# ownership of a change is moving to someone else, and to whom, without
+# becoming a second copy of the engine that writes it.
+#
+# This module never imports `brothersbe.handover`: that module already
+# imports THIS one (`handover.cmd_prepare` derives its summary from the same
+# task-registry and evidence readers this file owns), so a reverse import
+# would be a cycle. What is read here is deliberately smaller than
+# `handover.read_handover`'s own fourteen-field check: only `status` (to
+# tell prepared/acknowledged/rejected apart) and `headSha` (for the same
+# bound-commit staleness compare convergence, approval and review are
+# already held to, in `build_team_report` below). `_read_handover_record`
+# mirrors `_read_review_record`'s three-state law exactly: a missing record
+# is NO-DATA (nobody is handing this change to anyone, a fact, never a
+# block, per LT-302.B's own instruction); a record present but unparseable,
+# not an object, or carrying a `status` this installation has never
+# written, is a broken claim, worse than silence.
+#
+# The result is intentionally NOT folded into `build_team_report`'s
+# severity 1..11 findings list. That range is already pinned twice: this
+# project's own contract test (`test_every_finding_carries_the_full_
+# contract` in tools/test_sbe_status_team.py) hard-asserts `1 <= severity
+# <= 11`, and the LT-202 structured-findings note a few hundred lines below
+# states the same law in prose ("never invents a severity outside 1..11").
+# A handover is explicitly never a merge blocker of its own ("do not make
+# handover absence a blocker when ownership is not changing" -- LT-302.B),
+# so it does not need a severity slot to be visible: both `build_report` and
+# `build_team_report` return a new, purely additive `handover` list, one
+# entry per change, and a caller reads it by name, exactly the way LT-302's
+# skill is told to read every other status field: JSON, never prose
+# interpretation.
+# ---------------------------------------------------------------------------
+
+HANDOVER_REL = "12-handover.json"
+_HANDOVER_STATUSES = ("prepared", "acknowledged", "rejected")
+
+
+def _read_handover_record(path):
+    """("missing", None) | ("malformed", <why, as text>) | ("ok", <dict>).
+
+    See the module note above for why this mirrors `_read_review_record`
+    rather than `handover.read_handover`: same three states, a smaller
+    field check.
+    """
+    if not os.path.exists(path):
+        return "missing", None
+    try:
+        data = json.loads(io.open(path, encoding="utf-8").read())
+    except (ValueError, OSError) as exc:
+        return "malformed", "does not parse: %s" % exc
+    if not isinstance(data, dict):
+        return "malformed", "the top-level JSON value is not an object"
+    if data.get("status") not in _HANDOVER_STATUSES:
+        return "malformed", ("status %r is not one of %s"
+                             % (data.get("status"), ", ".join(_HANDOVER_STATUSES)))
+    return "ok", data
+
+
+def _handover_state(dossier, head):
+    """One dict describing what `12-handover.json` says about ownership of
+    the change at `dossier`, or the honest absence of one.
+
+    `status` is "none" (no handover exists for this change: LT-302.B's "no
+    handover needed"), "malformed" (a record exists and cannot be trusted),
+    or the artifact's own recorded "prepared" ("handover prepared", and,
+    when it is not stale, the detail sentence below also says "awaiting
+    receiver", LT-302.B's third state, in exactly those words),
+    "acknowledged" or "rejected". `stale` is True when a record's own bound
+    `headSha` no longer matches `head` (mirroring the exact bound-commit
+    compare convergence, approval and review already use below), False when
+    it matches, and None when staleness does not apply (no record, or a
+    broken one). `change` is left for the caller to fill in: this function
+    is called once per dossier by both `build_report` and
+    `build_team_report`, and only the caller knows which of the two
+    vocabularies (a discovered dossier's name, or `None` for the flat
+    single-dossier layout) applies.
+    """
+    path = os.path.join(dossier, HANDOVER_REL)
+    kind, payload = _read_handover_record(path)
+    if kind == "missing":
+        return {"change": None, "status": "none", "path": path, "boundHead": None,
+                "stale": None, "outgoingOwner": None, "intendedReceiver": None,
+                "detail": "no handover (12-handover.json) is recorded for this change; "
+                          "absence is a fact, not an accusation, and never a block when "
+                          "ownership is not changing"}
+    if kind == "malformed":
+        return {"change": None, "status": "malformed", "path": path, "boundHead": None,
+                "stale": None, "outgoingOwner": None, "intendedReceiver": None,
+                "detail": "%s cannot be trusted: %s" % (path, payload)}
+    status_val = payload.get("status")
+    bound = payload.get("headSha")
+    outgoing = payload.get("outgoingOwner")
+    receiver = payload.get("intendedReceiver")
+    stale = bool(head and bound and bound != head)
+    if status_val == "prepared":
+        if stale:
+            detail = ("the handover from %s to %s binds to %s but the repository head is "
+                      "%s: stale, and must be re-prepared before %s can acknowledge or "
+                      "reject it" % (outgoing, receiver, str(bound)[:12],
+                                    (head or "?")[:12], receiver))
+        else:
+            detail = ("a handover from %s to %s is prepared and awaiting receiver: "
+                      "ownership remains with %s until %s acknowledges"
+                      % (outgoing, receiver, outgoing, receiver))
+    elif status_val == "acknowledged":
+        ack = payload.get("acknowledgment") or {}
+        who = ack.get("receiver") or receiver
+        detail = ("the handover from %s was acknowledged by %s at %s; ownership has "
+                  "moved to %s" % (outgoing, who, ack.get("at"), who))
+        if stale:
+            detail += (" (the code has moved on since: bound to %s, head is now %s)"
+                      % (str(bound)[:12], (head or "?")[:12]))
+    else:  # "rejected", the only value _read_handover_record's "ok" state admits here
+        ack = payload.get("acknowledgment") or {}
+        who = ack.get("receiver") or receiver
+        detail = ("the handover to %s was rejected by %s (%s); ownership stays with %s"
+                  % (receiver, who, ack.get("reason") or "no reason recorded", outgoing))
+        if stale:
+            detail += (" (the code has moved on since: bound to %s, head is now %s)"
+                      % (str(bound)[:12], (head or "?")[:12]))
+    return {"change": None, "status": status_val, "path": path, "boundHead": bound,
+            "stale": stale, "outgoingOwner": outgoing, "intendedReceiver": receiver,
+            "detail": detail}
+
+
 def build_report(path, base=None, now=None):
     """The whole `sbe status` verdict: six sections, blocker-first, plus the
     scope this run actually read. Raises nothing; every failure to read a
@@ -410,6 +537,7 @@ def build_report(path, base=None, now=None):
 
     broken_claims, merge_blockers, active_conflicts = [], [], []
     missing_evidence, sound_evidence = [], []
+    handover_entries = []
 
     intake_path = os.path.join(root, INTAKE_REL)
     disposition_path = os.path.join(root, DISPOSITION_REL)
@@ -570,6 +698,15 @@ def build_report(path, base=None, now=None):
             "tier": human_tier,
         })
 
+        # LT-302.B: one handover entry per target, purely additive (see the
+        # note above `_handover_state`). The dossier for this target is
+        # wherever its own intake lives: `root` itself for the flat layout,
+        # or the discovered dossier directory otherwise, exactly the same
+        # split `prefix` above already reads off `label`.
+        h_entry = _handover_state(os.path.dirname(t_intake_path), head_sha)
+        h_entry["change"] = label
+        handover_entries.append(h_entry)
+
     sections = (broken_claims, merge_blockers, active_conflicts, missing_evidence,
                sound_evidence)
     next_action = _next_action(sections, scope)
@@ -610,6 +747,7 @@ def build_report(path, base=None, now=None):
         "soundEvidence": sound_evidence,
         "notes": notes,
         "nextAction": next_action,
+        "handover": handover_entries,
     }
 
 
@@ -953,8 +1091,19 @@ def build_team_report(path):
 
     open_by_change = {}
     plan_owns_by_change = {}
+    handover_entries = []
     for name, doss in changes:
         change_start = len(findings)
+
+        # LT-302.B: one handover entry per change, purely additive (see the
+        # note above `_handover_state`, right before `build_report`): never
+        # folded into the severity 1..11 findings this loop builds below,
+        # so it can never brush against `team_blocking`'s 1..6 range or this
+        # project's own hard-pinned 1..11 findings-contract test.
+        h_entry = _handover_state(doss, head)
+        h_entry["change"] = name
+        handover_entries.append(h_entry)
+
         plan = _read_json_or_none(os.path.join(doss, "08-plan.json"))
         plan_ids = set()
         plan_owns = set()
@@ -1376,7 +1525,7 @@ def build_team_report(path):
     findings.sort(key=lambda f: (f["severity"], f["change"], f["evidence"] or "",
                                  f["detail"]))
     return {"tool": "sbe status --team", "root": root, "headCommit": head,
-            "changes": names, "findings": findings,
+            "changes": names, "findings": findings, "handover": handover_entries,
             "basisLegend": "observed: read this run; derived: computed from observed "
                            "values; unavailable: a source that could not be read and "
                            "stays visible"}
