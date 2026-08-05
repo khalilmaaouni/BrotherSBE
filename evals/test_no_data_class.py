@@ -1354,7 +1354,7 @@ def restore_access(top):
                 pass
 
 
-def access_cases(tool, check):
+def access_cases(tool, check, force=False):
     """Evidence that exists and cannot be opened must never read as clean or absent.
 
     Four shapes per check, each derived from the check's own worked example: the
@@ -1364,9 +1364,21 @@ def access_cases(tool, check):
     directory symlink beside intact evidence and demands the walk terminates
     without changing the verdict. Not applicable when running as root (chmod
     cannot take access away from root) and declared so rather than skipped.
+
+    force=True bypasses the ACCESS_APPLIES platform gate while still returning
+    [] when the check itself has no full_fixture (that condition is about the
+    check's own data, not the host, so it always applies). Used only by
+    counts() below: the suite's shape (how many scenarios exist to be walked)
+    is a property of the checks and registries, not of which host happens to
+    run it, so the doc-truth figure counts() feeds to shipped-doc comparisons
+    must not shrink on a host where chmod/symlink/mkfifo are unavailable. The
+    real run in main() calls this without force and correctly runs, and
+    discloses, fewer scenarios on such a host (see ACCESS_APPLIES's own
+    "notapplicable" note in main()); only the platform-INDEPENDENT total this
+    function computes is being widened here, not what main() actually does.
     """
     fx = check.full_fixture
-    if not ACCESS_APPLIES or fx is None:
+    if (not force and not ACCESS_APPLIES) or fx is None:
         return []
     files, env = fx["files"], fx.get("env", {})
     declared = tool.relpath(check.reads[0])
@@ -1400,14 +1412,36 @@ def access_cases(tool, check):
 # ---------------------------------------------------------------------------
 
 def counts():
-    """(checks, registries, scenarios, waived) without running anything.
+    """(checks, registries, modules, scenarios, waived) without running anything.
 
     Exists so a doc that prints this test's summary line can be checked against
     it mechanically. Three shipped docs printed an eval count the suite had not
     produced for a whole wave, which is the same defect as a stale evidence
     string: a number asserted where nothing recomputed it. `waived` counts the
     scenarios a declared exemption matches, computed the same way the run
-    counts them, so the summary line's waived figure is checkable too.
+    counts them, so the summary line's waived figure is checkable too. `modules`
+    is the same `len(mods)` main() prints in "N module(s)": windows-porting-lane
+    round 2 found the doc-consistency eval that reads this function (dc2, in
+    evals/run_evals.py) captured that figure with its own regex and then never
+    compared it to anything, so a shipped doc's module count could go, and did
+    go, stale with nothing to catch it. `modules` is returned here so dc2 can
+    derive its expectation from the SAME discovery main() runs (load_tool_
+    modules(), called once, right below) rather than from a number baked into
+    either file.
+
+    access_cases(..., force=True): the ACCESS axis (chmod, broken symlink,
+    symlink loop, FIFO) does not run on a host where ACCESS_APPLIES is False
+    (Windows, or POSIX as root), and main() correctly runs fewer scenarios
+    there, disclosed by its own "notapplicable" note. A shipped doc's pasted
+    summary line is not that: it is a fixed figure asserted once about the
+    suite's SHAPE, and the checks and registries this counts do not change
+    from one host to another, so the scenario total this function reports
+    must not either. Without force=True here, a Windows run of this same
+    function returned a count 192 lower than the POSIX figure every shipped
+    doc quotes (32 checks * 6 ACCESS scenarios each), and the doc-consistency
+    eval that reads this function (evals/run_evals.py's dc2) read that as the
+    docs being stale on Windows specifically, when nothing about the tree
+    the docs describe had changed.
     """
     mods, _failed = load_tool_modules()
     registries, _ = discover_registries(mods)
@@ -1420,11 +1454,11 @@ def counts():
         for _name, check in reg.items():
             checks += 1
             scs = (legacy_cases(tool, check) + hollow_cases(tool, check)
-                   + access_cases(tool, check))
+                   + access_cases(tool, check, force=True))
             scenarios += len(scs)
             waived += sum(1 for sc in scs
                           if sc.exemptible and check.optional_leaves.get(sc.sid.split("|")[0]))
-    return checks, regs, scenarios, waived
+    return checks, regs, len(mods), scenarios, waived
 
 
 def main():

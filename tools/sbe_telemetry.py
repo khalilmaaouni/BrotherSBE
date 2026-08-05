@@ -77,8 +77,12 @@ readable: use fld() everywhere.
 import json, os, sys, glob, re, stat, datetime, hashlib, time, contextlib
 try:
     import fcntl
-except ImportError:          # a platform with no fcntl (untested elsewhere anyway)
+except ImportError:          # every non-POSIX platform (Windows: use msvcrt below)
     fcntl = None
+try:
+    import msvcrt
+except ImportError:          # every POSIX platform (fcntl above covers it instead)
+    msvcrt = None
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sbe_checks import (distinct, derivation_fold, evidence_problem, without_comments,
@@ -276,9 +280,18 @@ def _writer_lock(path, timeout_s=15.0):
     (an append proceeds unlocked so a telemetry row is never dropped, which
     reopens the loss window only if a lock holder is stuck past the timeout,
     and says so here; a maintenance command REFUSES to rewrite). On a
-    platform with no fcntl the same policy applies and maintenance names it.
+    platform with neither fcntl nor msvcrt the same policy applies and
+    maintenance names it.
+
+    Portable by primitive, not by platform name: fcntl.flock where it exists
+    (every POSIX build), msvcrt.locking where it does not (never both in one
+    interpreter), both raised on contention, retried the same way. msvcrt's
+    byte-range reset (see the lock call below) is not repeated before
+    UNLOCK: calibration proved a second reset there cannot matter (nothing
+    moves the fd between lock and unlock) and it was removed (test_sbe.py,
+    TestWriterLockByteRangeCalibration). None of this runs on fcntl.
     """
-    if fcntl is None:
+    if fcntl is None and msvcrt is None:
         yield False
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -302,7 +315,27 @@ def _writer_lock(path, timeout_s=15.0):
         deadline = time.time() + timeout_s
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    # msvcrt.locking's region is anchored at the CURRENT file
+                    # position, not the whole file: two openers of a freshly
+                    # created (0-byte) sidecar would otherwise lock two
+                    # different byte ranges (whichever happened to pad the
+                    # file first ends up one byte further along) and never
+                    # contend with each other at all. Padding to >=1 byte
+                    # (cheap to repeat: a no-op once the first opener has
+                    # done it) and seeking back to 0 before every lock call
+                    # makes every opener target the same [0, 1) range
+                    # regardless of who created the file. A failure padding
+                    # or seeking here needs no except of its own: it falls
+                    # into the same except below as a failed lock, which is
+                    # exactly what it is, and the retry/timeout policy
+                    # already covers that uniformly.
+                    if os.fstat(fd).st_size < 1:
+                        os.write(fd, b"0")
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
                 got = True
                 break
             except OSError:
@@ -313,7 +346,22 @@ def _writer_lock(path, timeout_s=15.0):
     finally:
         if got:
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                if fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                else:
+                    # No lseek(0, os.SEEK_SET) here, unlike the LOCK call
+                    # above: a matching reset used to sit before this call
+                    # too, on the theory that anything might have moved the
+                    # fd between lock and unlock. TestWriterLockByteRange
+                    # Calibration (tools/test_sbe.py) could not make that
+                    # reset fail under any mutation, because nothing in this
+                    # function's own control flow touches the fd's position
+                    # between the successful LOCK above and this UNLOCK: the
+                    # caller's work inside `yield got` runs against whatever
+                    # file it opened, never this lock sidecar. An assertion
+                    # that can never fail is not a guard, so the reset was
+                    # removed rather than kept for the look of symmetry.
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
             except OSError:  # sbe: allow-silent closing the fd below releases the lock regardless
                 pass
         os.close(fd)
@@ -590,7 +638,7 @@ def cmd_migrate():
         if not held:
             print("migrate: could not take or open the writer lock (%s.lock) within its "
                   "timeout; another writer may be mid-rewrite, the sidecar may be unopenable, "
-                  "or this platform has no fcntl. "
+                  "or this platform has neither fcntl nor msvcrt to lock with. "
                   "Nothing was touched; run again when the other writer finishes"
                   % os.path.basename(LEDGER))
             return
@@ -780,7 +828,7 @@ def cmd_dedup():
             if not held:
                 print("dedup: could not take or open the writer lock (%s.lock) within its "
                       "timeout; another writer may be mid-rewrite, the sidecar may be "
-                      "unopenable, or this platform has no fcntl. "
+                      "unopenable, or this platform has neither fcntl nor msvcrt to lock with. "
                       "%s was not touched" % (os.path.basename(path), os.path.basename(path)))
                 continue
             _dedup_one_locked(path, keyfn, keep)

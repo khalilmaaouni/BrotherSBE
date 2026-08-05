@@ -2086,6 +2086,19 @@ def gd_symlink_module(root):
     return "refused unwalked"
 
 
+def _first_diff_offset(a, b):
+    """The first byte index where two byte strings disagree, or None if equal
+    up to the shorter one's length (the length difference is still reported
+    by the caller). Bytes in, bytes out: no text-mode decoding happens here,
+    because decoding is exactly the step that can hide a line-ending byte
+    difference before this function ever sees it."""
+    n = min(len(a), len(b))
+    for i in range(n):
+        if a[i] != b[i]:
+            return i
+    return None if len(a) == len(b) else n
+
+
 @case("the-tracked-manifest-matches-the-tree-it-ships-with", "guard", "matches")
 def gd_manifest_fresh(root):
     # A pristine clone of HEAD failed its own integrity check: CHECKSUMS.sha256
@@ -2117,15 +2130,56 @@ def gd_manifest_fresh(root):
         return "matches"
     wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}
     hl = {l.split("  ", 1)[1]: l[:64] for l in have.splitlines() if "  " in l}
-    drift = [p for p in sorted(set(wl) | set(hl))
-             if wl.get(p) != hl.get(p)][:4]
-    return "the tracked manifest is stale for: %s (regenerate with scripts/checksums.sh " \
-           "CHECKSUMS.sha256)" % ", ".join(drift)
+    drift = [p for p in sorted(set(wl) | set(hl)) if wl.get(p) != hl.get(p)]
+    # Reproduction harness (windows-porting-lane finding 3): a Windows leg
+    # read several of these as stale with no local way to reproduce why, so
+    # rather than guess at a fix this states the evidence a Windows run would
+    # need to prove or disprove any theory (line-ending conversion on
+    # checkout is the leading one, since no .gitattributes pins the working
+    # tree's line endings, but this prints the proof rather than assuming
+    # it). For each of the first 4 stale paths, the git-tracked blob and the
+    # on-disk working-tree file are both read as raw BYTES (git show's
+    # stdout is captured without text=True, and the working-tree file is
+    # opened "rb"; either read going through text mode would let Python's
+    # own universal-newline translation silently erase the exact evidence
+    # being reported), and the first offset where they disagree is printed
+    # alongside the two byte values there and each side's length. A CRLF
+    # conversion shows up unmistakably: committed=b'\n' at some offset,
+    # working-tree=b'\r' at that same offset, working-tree length one longer
+    # per converted line break. Anything else it prints is equally
+    # informative and just as actionable.
+    detail = []
+    for p in drift[:4]:
+        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
+        if blob.returncode != 0:
+            detail.append("%s: git show HEAD:%s failed (%s)"
+                          % (p, p, blob.stderr.decode(errors="replace").strip()[:120]))
+            continue
+        try:
+            with open(os.path.join(_REPO, p), "rb") as f:
+                wt_bytes = f.read()
+        except OSError as e:
+            detail.append("%s: working-tree file unreadable (%s)" % (p, e.strerror or e))
+            continue
+        committed_bytes = blob.stdout
+        off = _first_diff_offset(committed_bytes, wt_bytes)
+        if off is None:
+            detail.append("%s: identical bytes on this read (the hash mismatch above did not "
+                          "reproduce here; a transient rebuild between the two reads is the "
+                          "likely cause, not a persistent content difference)" % p)
+        else:
+            detail.append("%s: first differing byte at offset %d of %d/%d (committed=%r, "
+                          "working-tree=%r)"
+                          % (p, off, len(committed_bytes), len(wt_bytes),
+                             committed_bytes[off:off + 1], wt_bytes[off:off + 1]))
+    return ("the tracked manifest is stale for: %s (regenerate with scripts/checksums.sh "
+           "CHECKSUMS.sha256); byte-level detail: %s"
+           % (", ".join(drift[:4]), " | ".join(detail) if detail else "n/a"))
 
 
 @case("a-directory-name-cannot-write-verdict-lines-into-the-report", "guard", "honest")
 def gd_pathforge(root):
-    # A dossier directory named `ok\n  datamodel  PASS ...` wrote a forged
+    # A dossier directory named `ok<break>  datamodel  PASS ...` wrote a forged
     # verdict line into the design report ABOVE the true verdict, and
     # verdict_and_evidence (the honesty suite's own reader, the same shape as
     # any CI grep or human eye) returned the forged PASS for a FAILed check.
@@ -2134,7 +2188,35 @@ def gd_pathforge(root):
     # through one_line() as a whole (say()), and the meta-test's source lint
     # fails any print in a report tool that skips the choke point. This pins
     # the shipped repro end to end.
-    forged = ("ok\n  datamodel  PASS     2 entity(ies), each with a system of record "
+    #
+    # <break> is U+2028 LINE SEPARATOR, not a literal "\n": a raw newline in a
+    # directory name is a control character (0x0A), and Windows refuses to
+    # create any path component containing one (NTFS forbids the ASCII control
+    # range 0x00-0x1F outright, surfacing as an OSError on invalid filename
+    # syntax), which made this fixture uncreatable on that leg. U+2028 is not
+    # in that forbidden set, so os.makedirs succeeds on every platform.
+    #
+    # What the swap does and does not make identical (round 2 correction: an
+    # earlier draft of this comment overclaimed "identical", which a hostile
+    # review disproved by mutation). sbe_checks._LINE_BREAKS matches BOTH "\n"
+    # and U+2028 in one character class, so one_line() still flattens the
+    # forged name onto one line for either, and Python's str.splitlines(),
+    # which both verdict_and_evidence below and this eval's own "physical"
+    # check use to read stdout, still treats U+2028 as a line boundary exactly
+    # as it treats "\n": that half is genuinely the same mechanism, on every
+    # platform. What is NOT the same: a literal "\n" is also Unicode category
+    # Cc, so one_line()'s separate Cc/Cf/Cs visible-escape loop would catch it
+    # on its own even if _LINE_BREAKS regressed, a redundant second line of
+    # defense; U+2028 is category Zl, outside that loop's three categories, so
+    # THIS fixture is caught by _LINE_BREAKS alone. That makes it a strictly
+    # MORE sensitive probe of _LINE_BREAKS specifically, not an equivalent
+    # substitution: dropping U+2028 from _LINE_BREAKS while leaving "\r\n" in
+    # place turns this fixture red, where a same-shape literal-"\n" fixture
+    # would stay green under that exact mutation, saved by the Cc loop it
+    # never gets to exercise on this platform-portable path. The forged name
+    # still renders as two lines if the escaping regresses; only the on-disk
+    # name changed.
+    forged = ("ok   datamodel  PASS     2 entity(ies), each with a system of record "
               "[severity: gate]")
     doss = os.path.join(root, forged)
     os.makedirs(doss)
@@ -4056,10 +4138,17 @@ def dc1(root):
 
 @case("no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce", "docs", "consistent")
 def dc2(root):
+    # windows-porting-lane round 2: `got` used to drop group(3), the module
+    # count, on the floor (captured by the regex, quoted back in the
+    # message, never compared). A shipped doc could assert any module figure
+    # at all and this case still returned "consistent". Every group the
+    # regex names is compared now, module count included, derived from
+    # meta.counts() (the same load_tool_modules() discovery main() runs),
+    # never from a number written into this file.
     import re as _re
     meta = SourceFileLoader("test_no_data_class",
                             os.path.join(HERE, "test_no_data_class.py")).load_module()
-    checks, regs, scen, waived = meta.counts()
+    checks, regs, mods, scen, waived = meta.counts()
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
@@ -4068,12 +4157,12 @@ def dc2(root):
         for m in _re.finditer(r"(\d+) checks discovered from (\d+) registries in (\d+) module\(s\), "
                               r"(\d+) scenarios run(?:, (\d+) waived by declared exemption)?",
                               open(p, errors="replace").read()):
-            got = (int(m.group(1)), int(m.group(2)), int(m.group(4)))
-            if got != (checks, regs, scen) or (m.group(5) is not None
-                                               and int(m.group(5)) != waived):
+            got = (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+            if got != (checks, regs, mods, scen) or (m.group(5) is not None
+                                                      and int(m.group(5)) != waived):
                 wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d "
-                             "scenarios, %d waived"
-                             % (rel, m.group(0), checks, regs, scen, waived))
+                             "modules, %d scenarios, %d waived"
+                             % (rel, m.group(0), checks, regs, mods, scen, waived))
     return "consistent" if not wrong else "; ".join(wrong[:4])
 
 

@@ -21,7 +21,7 @@ only: no `pip install`, no lockfile, no dependency tree.
 
 Git is needed because the approval gate reads commit trailers and signatures.
 
-A POSIX shell for the two `sh` tools. Windows is untested by the project.
+A POSIX shell for the two `sh` tools. A windows-latest CI leg runs the battery with those two scripts excluded by name (docs/KNOWN-LIMITS.md, "Windows CI runs, with named gaps").
 
 ## 1. Get the clone
 
@@ -137,7 +137,7 @@ $ python3 evals/test_no_data_class.py
 Real last line:
 
 ```
-32 checks discovered from 6 registries in 35 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 46 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 Exit code 0. The two waivers are printed above that line with their stated

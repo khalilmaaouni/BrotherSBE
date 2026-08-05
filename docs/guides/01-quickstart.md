@@ -790,7 +790,7 @@ jobs:
         run: python3 tools/test_sbe_work.py
       - name: Work brief fixtures (sbe work brief)
         run: python3 tools/test_sbe_work_brief.py
-      # EXCLUDED on windows-latest: this step ran `sh scripts/test-install-artifact.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows is untested").
+      # EXCLUDED on windows-latest: this step ran `sh scripts/test-install-artifact.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows CI runs, with named gaps").
       # On Linux and macOS, scripts/test-install-artifact.sh above already proves
       # the checksums manifest cannot drift from the bytes it describes; that
       # script is excluded on this Windows leg (see the exclusion comment just
@@ -804,7 +804,7 @@ jobs:
       # resolve, never a false pass.
       - name: Release invariant (distributable bytes cannot move without VERSION moving)
         run: python3 tools/sbe_release_invariant.py --strict
-      # EXCLUDED on windows-latest: this step ran `sh scripts/test-upgrade-rollback.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows is untested").
+      # EXCLUDED on windows-latest: this step ran `sh scripts/test-upgrade-rollback.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows CI runs, with named gaps").
 ```
 
 Why the two settings matter:

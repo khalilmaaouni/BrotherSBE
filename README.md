@@ -360,7 +360,7 @@ The same disclosure the checks demand of evidence, applied to the project itself
 
 - **Measured:** the eval counts, the meta-test scenario count, the lint numbers and the defect-reinjection record ([INVARIANTS.md](INVARIANTS.md)) are recomputed by the suites that print them; a doc quoting a stale one fails an eval.
 - **Run on one estate only:** every threshold in `tables/`, every baseline in [RUBRIC.md](RUBRIC.md), and the hooks in daily use. They are defaults where you are, not measurements of your estate.
-- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. Windows is untested, and the shipped CI covers Linux and macOS only. The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have been executed for `v1.0.0-rc.1` (tagged and pushed to origin); `v1.0.0-rc.2` is tagged locally but, as of this writing, not yet pushed.
+- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. A windows-latest leg runs the same battery as the Linux and macOS legs, with two POSIX sh scripts excluded by name (docs/KNOWN-LIMITS.md, "Windows CI runs, with named gaps"). The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have been executed for `v1.0.0-rc.1` (tagged and pushed to origin); `v1.0.0-rc.2` is tagged locally but, as of this writing, not yet pushed.
 
 The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md).
 
@@ -369,7 +369,7 @@ The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMIT
 - Python 3, standard library only. There is no `pip install`, no lockfile, and no dependency to audit beyond the tree itself.
 - git (the autosave, the approval gate, and the manifest all read it).
 - Claude Code with hooks, for the session wiring above. The checkers run fine without it: every tool is a plain script you can run by hand.
-- A POSIX shell for the two `sh` tools. Linux and macOS are what CI runs; Windows is untested.
+- A POSIX shell for the two `sh` tools; CI runs Linux, macOS, and Windows, with those two scripts excluded on Windows by name.
 
 ## Uninstall
 
@@ -420,7 +420,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 35 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 46 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:
