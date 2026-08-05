@@ -41,8 +41,10 @@ never reworded); run the probe, read that field, and stop at the first rung that
    own `nextAction`; with no severity 7 entry but a severity 8 entry present, nothing has
    started, recommend the `work start` command that finding's `nextAction` names.
 5. **A hard gate FAILs, or evidence is missing for the declared tier.** Run
-   `python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_gate.py" <dir>` (writes nothing, per its own
-   "writes: nothing" usage line) and read the verdict word each gate line prints. Then run
+   `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" gate <dir> --no-decisions` (the gate check itself writes
+   nothing, per its own "writes: nothing" usage line; `--no-decisions` keeps this a plain read
+   by skipping the CLI's own decision-package write too) and read the verdict word each gate
+   line prints. Then run
    `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --json` and read `missingEvidence`.
    - Any gate line reads FAIL: recommend `/brothersbe:verify`, naming the failing gate.
    - No gate reads FAIL, and `missingEvidence` is a non-empty list: recommend

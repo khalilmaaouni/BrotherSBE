@@ -33,7 +33,7 @@ time it is surprising.
 For the stricter soft-finding surface `bin/sbe verify` does not itself request, also run:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_score.py" --strict --strict-soft <dir>
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" score --strict --strict-soft <dir>
 ```
 
 ## How to read a verdict

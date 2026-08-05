@@ -46,3 +46,20 @@ this is a tombstone.
 Example: if ops maturity rises enough to run a message broker's on call
 rotation, and the warehouse comes to need sub second freshness, revisit
 toward a change data capture stream instead of a polled queue.
+
+## Falsification tier
+What backs this recommendation: a deterministic check, a mutation
+calibration, or a fresh-context refute, in that order. If nothing but
+reasoning alone backs it, that is NO-DATA, not evidence, named as such
+rather than dressed up as one of the three.
+Example: the shape recommendation ran through `tools/sbe_decide.py` against
+the criteria above (a deterministic check); no mutation calibration or
+fresh-context refute exists yet for this table.
+
+## Return to developer
+The explicit option to return control to the developer instead of
+accepting the recommendation, stated so silence is never mistaken for
+acceptance.
+Example: the developer may keep the synchronous call and accept the
+checkout-availability risk instead of adopting the queue; nothing here
+defaults to the recommendation without that choice being made out loud.

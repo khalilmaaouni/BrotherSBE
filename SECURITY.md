@@ -22,7 +22,7 @@ add` and `claude plugin install`.
 Outside those two, BrotherSBE has no analytics, no account, and no server.
 Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
-yourself; the tools are standard-library Python and shell: 29,963 lines measured
+yourself; the tools are standard-library Python and shell: 34,627 lines measured
 2026-08-05 by `wc -l tools/*.py tools/*.sh`, a figure stated here rather
 than left for you to discover, and a test in `tools/test_sbe.py` fails if it
 drifts more than 15 percent, so the auditability claim degrades loudly

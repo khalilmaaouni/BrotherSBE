@@ -458,6 +458,116 @@ class TestStatusWiring(ReviewScenario):
         self.assertIn(11, sevs)
 
 
+class TestReviewHistory(ReviewScenario):
+    """LANE B-006: a second `--write` at the SAME head used to overwrite
+    `11-review.json` in place, silently erasing a prior verdict with no
+    trace. Fix: every `--write` first archives whatever `11-review.json`
+    holds into append-only `11-review-history.jsonl` beside it, and `sbe
+    status --team` discloses a same-head, different-result supersession as
+    its own named finding, filtered here by evidence path rather than list
+    position for the reason `_struct_hits` below gives: findings interleave
+    by (severity, change, evidence, detail)."""
+
+    def _write(self, doss, result, reviewer="Independent Reviewer"):
+        return self.sbe("review", doss, "--write", "--reviewer", reviewer,
+                        "--reviewer-type", "human", "--result", result)
+
+    def _current(self, doss):
+        return json.loads(io.open(os.path.join(doss, "11-review.json")).read())
+
+    def _history_path(self, doss):
+        return os.path.join(doss, "11-review-history.jsonl")
+
+    def _history_entries(self, doss):
+        path = self._history_path(doss)
+        if not os.path.exists(path):
+            return []
+        return [json.loads(l) for l in
+               io.open(path, encoding="utf-8").read().splitlines() if l.strip()]
+
+    def _disclosure_hits(self, change="chg-a"):
+        _code, hits, _text = self.team_findings(change, 11)
+        return [f for f in hits if "11-review-history.jsonl" in (f["evidence"] or "")]
+
+    def test_a_second_write_at_the_same_head_preserves_the_first_verdict(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self.assertFalse(os.path.exists(self._history_path(doss)))
+        self._write(doss, "changes-required")
+        self.assertEqual(self._current(doss)["result"], "changes-required")
+        self.assertFalse(os.path.exists(self._history_path(doss)),
+                         "the first ever write has nothing prior to archive")
+
+        code, text, _ = self._write(doss, "approved")
+        self.assertEqual(code, 0, text)
+        current = self._current(doss)
+        self.assertEqual(current["result"], "approved", current)
+        self.assertEqual(current["headSha"], head, current)
+
+        # RED against pre-fix code: the prior verdict must stay readable.
+        entries = self._history_entries(doss)
+        self.assertEqual(len(entries), 1,
+                         "overwritten record must be archived, not erased: %s" % entries)
+        self.assertEqual(entries[0]["result"], "changes-required", entries)
+        self.assertEqual(entries[0]["headSha"], head, entries)
+
+    def test_a_third_write_archives_the_second_and_keeps_the_first(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        for result in ("changes-required", "unverifiable", "approved"):
+            self.assertEqual(self._write(doss, result)[0], 0)
+        self.assertEqual(self._current(doss)["result"], "approved")
+        entries = self._history_entries(doss)
+        self.assertEqual([e["result"] for e in entries],
+                         ["changes-required", "unverifiable"], entries)
+
+    def test_the_overwrite_is_disclosed_in_status_never_silent(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write(doss, "changes-required")
+        self._write(doss, "approved")
+        _code, hits, text = self.team_findings("chg-a", 11)
+        plain = [f for f in hits if "11-review-history.jsonl" not in (f["evidence"] or "")
+                and "structured" not in f["detail"].lower()]
+        self.assertTrue(plain, hits)
+        self.assertEqual(plain[0]["verdict"], "PASS", plain)
+
+        # RED against pre-fix code: nothing named the replaced verdict.
+        disclosed = self._disclosure_hits("chg-a")
+        self.assertTrue(disclosed, "an overwrite at the SAME head must be a NAMED "
+                        "finding, never silent: %s" % hits)
+        self.assertEqual(disclosed[0]["verdict"], "FAIL", disclosed)
+        self.assertEqual(disclosed[0]["basis"], "derived", disclosed)
+        self.assertIn("changes-required", disclosed[0]["detail"])
+        self.assertIn(head[:12], disclosed[0]["detail"])
+
+    def test_no_false_positive_disclosure(self):
+        """Neither a single write, nor a second write with the SAME result,
+        nor a further write at a DIFFERENT head (an ordinary fresh review,
+        already covered by the severity-4 stale-binding check) is a
+        same-head verdict flip, and none of the three fires the disclosure."""
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        self._write(doss, "approved")
+        self.assertFalse(os.path.exists(self._history_path(doss)))
+        self.assertEqual(self._disclosure_hits("chg-a"), [])
+
+        self._write(doss, "approved")
+        self.assertTrue(os.path.exists(self._history_path(doss)))
+        self.assertEqual(self._disclosure_hits("chg-a"), [])
+
+        io.open(os.path.join(self.repo, "src", "a.py"), "a").write("y = 2\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "a further, unrelated commit")
+        self._write(doss, "changes-required")
+        self.assertEqual(self._disclosure_hits("chg-a"), [])
+
+    def test_a_corrupt_current_record_is_still_archived_not_lost(self):
+        doss, head, _out = self._make_clean_change("chg-a", "src/a.py")
+        io.open(os.path.join(doss, "11-review.json"), "w").write("{not valid")
+        self.assertEqual(self._write(doss, "approved")[0], 0)
+        entries = self._history_entries(doss)
+        self.assertEqual(len(entries), 1, entries)
+        self.assertTrue(entries[0].get("corrupt"), entries)
+        self.assertEqual(self._current(doss)["result"], "approved")
+
+
 # ---------------------------------------------------------------------------
 # LT-202: normalized findings inside 11-review.json.
 # ---------------------------------------------------------------------------

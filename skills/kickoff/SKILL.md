@@ -29,7 +29,7 @@ the routing table that says which reference file to load when. Do not work from 
 6. Score the intake:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_intake.py" --help
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" intake --help
 ```
 
 The intake writes `00-intake.json` into the dossier directory. The tier it computes decides
