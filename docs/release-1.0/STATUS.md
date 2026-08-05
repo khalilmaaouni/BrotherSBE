@@ -1,5 +1,11 @@
 # Release 1.0 status
 
+> HISTORICAL SNAPSHOT, marked 2026-08-05 at 1.0.0-rc.11. This status froze in the
+> rc.2 to rc.3 era and is kept unedited as history. It is no longer the program
+> surface: the CHANGELOG records what shipped since, live state comes from
+> `sbe status`, and the program that replaced this one is
+> docs/plans/2026-08-04-lean-team-rebase.md.
+
 The single program surface. `docs/release-1.0/FABLE-PLAN-REVIEW.md` holds the
 approved plan and its amendments; this file holds where the work stands. No
 second roadmap is created. Amendments are recorded as decisions in the plan

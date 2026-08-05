@@ -53,8 +53,11 @@ evidence or accepted and fixed. A finding that is neither is an open item with a
 owner, not a closed one.
 
 **Scribe.** Mechanical. Session records and telemetry are hook-written. No human
-transcribes anything. If a session ends with no record, that reads as NO-DATA on
-the health screen, not as a clean session.
+transcribes anything. If a session ends with no record, that reads as NO-DATA,
+not as a clean session. (The health screen that would surface this is designed
+in the Screens section of this document and not yet built. Today session records
+land in the vault telemetry ledger, where capture is off by default, so an
+absent record is the default state rather than a signal.)
 
 **Incident mode.** When production is on fire, the roles split the way Google SRE
 splits them: an incident commander who holds state, a communications lead who
@@ -336,6 +339,10 @@ repositories. Secondary sources say Enterprise Cloud is needed; no directly open
 dated vendor page confirmed it. Verify before designing a gate around it.
 
 ## Integrations: three stages
+
+The Ledger node is the existing evidence source; every integration node it
+feeds is a design target and none is built. The stage labels below say which
+are buildable today and which wait.
 
 ```mermaid
 flowchart TB

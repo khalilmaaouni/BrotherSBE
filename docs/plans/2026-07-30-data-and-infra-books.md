@@ -1,5 +1,12 @@
 # Loops 1b and 1c: the Data Engineer and Infrastructure Engineer books, Implementation Plan
 
+> NOT EXECUTED, marked 2026-08-05 at 1.0.0-rc.11. The two domain volumes this
+> plan tracks were never built: only their design specs and the base book's data
+> chapter exist on main. The program moved to the lean team rebase
+> (docs/plans/2026-08-04-lean-team-rebase.md); the unchecked boxes below are
+> unexecuted planning state kept for a future decision, not open work of the
+> current program.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship two domain volumes, BrotherSBE for Data Engineers (Snowflake and Databricks) and BrotherSBE for Infrastructure Engineers (AWS and Azure with Azure Data Factory, Kubernetes, microservices, Elasticsearch, and load balancing), each with a locally runnable JSON-native estate, reusing the base book's builder and replay harness.

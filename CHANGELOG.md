@@ -6,6 +6,19 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## Unreleased
+
+- Documentation truth pass (LT-503, first half): historical and superseded
+  markers on the release-1.0 handover and status snapshots and the shipped
+  loop plans, a not-executed marker on the data and infra books plan, and a
+  design-only marker on the team-docs spec; the team playbook no longer
+  references the unbuilt health screen in present tense and labels the
+  integration diagram nodes as design targets; `docs/CLI.md` gains the
+  missing `instruction-surface` row and its passthrough list now matches the
+  CLI's own PASSTHROUGH set (adding instruction-surface, handover, explain,
+  lineage). Deferred and disclosed: collapsing the overlapping
+  getting-started surfaces into one quickstart and one engineering reference.
+
 ## 1.0.0-rc.11 (2026-08-05)
 
 The two engine gaps the LT-501 golden scenario disclosed in rc.10 are fixed,

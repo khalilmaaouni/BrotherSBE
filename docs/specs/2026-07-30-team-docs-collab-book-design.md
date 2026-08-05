@@ -1,5 +1,10 @@
 # Team documentation, decision deep-dives, collaboration, and the book
 
+> DESIGN ONLY, NOT BUILT, marked 2026-08-05 at 1.0.0-rc.11. The commands this spec
+> describes (`sbe docs build`, `sbe docs export`, `sbe note`, `sbe issues`) do not
+> exist in the CLI registry and nothing below ships today. Kept as an approved
+> future-work design; treat every present-tense sentence below accordingly.
+
 Design spec, approved by the founder through question windows on 2026-07-30 (three
 interview rounds, four design-section approvals, all recorded in the session transcript
 and the vault). This file is the single source of truth for the six-loop program below.
