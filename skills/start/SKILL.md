@@ -14,10 +14,27 @@ one next move. Speak plain language first; name the underlying commands second, 
 Run these two commands, in order, and read the JSON before responding:
 
 1. `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" doctor --json`. Read `result`. `FAIL` means at least one
-   `checks[]` entry reads `FAIL`: name which one, by its `name` and `detail`, and stop there
-   rather than reading status at all. When the failing check is `tools` or `plugin-manifest`,
-   name `/brothersbe:adopt` as the next stop too: those two are what "not correctly installed"
-   looks like in this output.
+   `checks[]` entry reads `FAIL`: name which one, by its `name` and `detail`.
+
+   When the failing check is `project-init`, this is the ordinary shape of a fresh install:
+   the marketplace path never runs `sbe init`, so a beginner's very first
+   `/brothersbe:start` can land in a repository with no local footprint at all. Say so in
+   plain language, not the raw JSON, then repair it before doing anything else, following
+   the same preview-then-apply consent register every write-capable skill here uses (see
+   `/brothersbe:adopt`: dry run by default, `--apply` reserved for an explicit yes):
+     a. Preview: `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" init .` (dry run by default, writes
+        nothing). Show the user what it proposes to create.
+     b. Ask the user, in plain language, whether to apply it. Write nothing until they say
+        yes.
+     c. On yes, run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" init . --apply`, confirm what it wrote,
+        then re-run `sbe doctor --json` once to confirm `project-init` now reads `PASS`
+        before continuing to step 2 below.
+     d. If the user declines, say plainly that the rest of this flow needs the footprint
+        and stop here rather than guessing at what to do instead.
+
+   For any OTHER failing check, stop there rather than reading status at all. When the
+   failing check is `tools` or `plugin-manifest`, name `/brothersbe:adopt` as the next stop
+   too: those two are what "not correctly installed" looks like in this output.
 2. `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --json`. Read `scope.storesInspected`: every field
    `null`, including `dossiers`, means nothing was found anywhere this run looked, so this is
    genuinely new. Any non-null field means prior state exists.

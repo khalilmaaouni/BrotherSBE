@@ -19,7 +19,25 @@ published, and on the clone fallback calls `git -C ... pull --ff-only` or
 `git clone` (lines 106-110), then hands off to `claude plugin marketplace
 add` and `claude plugin install`.
 
-Outside those two, BrotherSBE has no analytics, no account, and no server.
+Outside those two, BrotherSBE has no analytics, no account, and no remote
+server: nothing here reaches a network address other than GitHub, through the
+one documented exception above, and the git remotes `install.sh` talks to
+before a session exists.
+
+**2026-08-05 amendment (gate LP-0301, decision recorded in
+[docs/adr/2026-08-05-gui-server-amendment.md](docs/adr/2026-08-05-gui-server-amendment.md)):**
+the promise above is "no remote server", not "no server at all". A loopback-only
+GUI workspace is authorized: a future module, `src/brothersbe/gui/server.py`,
+may bind `127.0.0.1` and nothing else, never `0.0.0.0`, never a remote host, and
+never an outbound call of its own. That module does not exist in this tree yet;
+this amendment only reserves its name in the audit surface below, and in the
+zero-network scan's allowlist, so a later lane can build it without reopening
+this security boundary. No GUI code ships in this change. Nothing else gains
+network capability by this amendment: every other file, including every other
+file a future `src/brothersbe/gui/` directory holds, stays bound to the same
+zero-network rule as before, and the scan below enforces that directly rather
+than trusting the directory name.
+
 Everything it writes goes to your vault folder, which you choose with
 `BROTHERSBE_VAULT` (default `~/BrotherSBEVault`). You can verify both claims
 yourself; the tools are standard-library Python and shell: 34,627 lines measured
@@ -33,23 +51,31 @@ grep -rnE "urllib|requests|socket|http|curl|wget|subprocess" tools/ src/ hooks/ 
 ```
 
 What to expect from that grep, so the check is usable rather than
-reassuring: none of the hits is a network call, with one documented
-exception: `src/brothersbe/prverify.py`, which is `sbe pr verify`'s own
-GitHub API client, named above. The exact count moves with the code and is
-deliberately not stated here (an earlier revision pinned a number and it
-rotted); the PROPERTY is what matters, and every other hit is one of three
-benign shapes: `subprocess` running local `git`, the words "socket" or
-"http" inside a refusal message or comment, or a fake credential inside a
-redaction TEST FIXTURE (`tools/test_sbe.py` carries a literal `curl ...
-Bearer ...` string precisely to prove such strings get masked). A hit
-outside `src/brothersbe/prverify.py` that actually imports `urllib` or
-`requests`, or opens an `http` URL or a network `socket`, is a violation of
-this document; report it. The property itself is drift-tested:
-`tools/test_sbe.py` parses every tool under `tools/`, `src/brothersbe/`,
-`hooks/`, `scripts/`, `bin/sbe`, and `install.sh`, and fails if any of them,
-other than the allow-listed `src/brothersbe/prverify.py`, imports `urllib`,
-`requests`, `socket` or `http`, or if a shell tool invokes `curl` or
-`wget`.
+reassuring: none of the hits is a network call, with one documented exception
+in code that exists today, `src/brothersbe/prverify.py`, which is `sbe pr
+verify`'s own GitHub API client, named above. A second exception is reserved
+but not yet built: `src/brothersbe/gui/server.py`, the loopback-only GUI
+workspace the 2026-08-05 amendment above authorizes. That path does not exist
+in this tree, so running the grep today produces no hit for it, only for
+`prverify.py`; when the module is built, it becomes the second and only other
+named exception, and it may bind `127.0.0.1` and nothing else. The exact
+count moves with the code and is deliberately not stated here (an earlier
+revision pinned a number and it rotted); the PROPERTY is what matters, and
+every other hit is one of three benign shapes: `subprocess` running local
+`git`, the words "socket" or "http" inside a refusal message or comment, or a
+fake credential inside a redaction TEST FIXTURE (`tools/test_sbe.py` carries
+a literal `curl ... Bearer ...` string precisely to prove such strings get
+masked). A hit outside `src/brothersbe/prverify.py`, or outside a real
+`src/brothersbe/gui/server.py` bound to `127.0.0.1` only, that actually
+imports `urllib`, `requests`, `socket` or `http`, or opens a network socket
+some other way, is a violation of this document; report it. The property
+itself is drift-tested: `tools/test_sbe.py` parses every tool under `tools/`,
+`src/brothersbe/` (including every file a future `src/brothersbe/gui/`
+directory holds, walked recursively, not skipped as a directory), `hooks/`,
+`scripts/`, `bin/sbe`, and `install.sh`, and fails if any of them, other than
+the allow-listed `src/brothersbe/prverify.py` and, once it exists,
+`src/brothersbe/gui/server.py` by its exact path, imports `urllib`,
+`requests`, `socket` or `http`, or if a shell tool invokes `curl` or `wget`.
 
 ## Capture is off by default, per category
 
