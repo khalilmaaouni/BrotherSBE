@@ -50,7 +50,18 @@ import subprocess
 # ---------------------------------------------------------------------------
 
 def git(cwd, *args):
-    out = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True)
+    # Identity pinned in the ENVIRONMENT, not only in each repo's local
+    # config: the engine provisions task worktrees whose commits must never
+    # depend on the machine's global gitconfig. A laptop with a real
+    # identity masked this once; a CI runner with none failed with
+    # "Committer identity unknown" (PR 17, both ubuntu legs, first contact).
+    env = dict(os.environ)
+    env.setdefault("GIT_AUTHOR_NAME", "Golden Scenario Fixture")
+    env.setdefault("GIT_AUTHOR_EMAIL", "fixture@example.invalid")
+    env.setdefault("GIT_COMMITTER_NAME", "Golden Scenario Fixture")
+    env.setdefault("GIT_COMMITTER_EMAIL", "fixture@example.invalid")
+    out = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True,
+                         env=env)
     if out.returncode != 0:
         raise AssertionError("git %s failed in %s: %s" % (" ".join(args), cwd, out.stderr))
     return out.stdout.strip()

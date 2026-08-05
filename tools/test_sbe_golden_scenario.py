@@ -565,7 +565,9 @@ class TestFullChain(GoldenScenarioFixture):
             with io.open(declared_path, "w", encoding="utf-8") as fh:
                 fh.write(bs.AUTHORITY_PATH + "\n")
             amend = subprocess.run(
-                ["git", "commit", "--amend", "-q", "-m",
+                ["git", "-c", "user.name=Golden Scenario Fixture",
+                 "-c", "user.email=fixture@example.invalid",
+                 "commit", "--amend", "-q", "-m",
                 "config: record local settings override\n\n"
                 "Approved-by: security-reviewer@example.invalid"],
                 cwd=scratch_dir, capture_output=True, text=True)
