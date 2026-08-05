@@ -34,7 +34,7 @@ ADR records the recommendation, the first and second alternative, and what would
 ## The completeness check
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_design.py" --strict <dossier-or-repo-root>
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" design --strict <dossier-or-repo-root>
 ```
 
 An empty directory reports NO-DATA naming why, never "clean". A declared dossier root holding

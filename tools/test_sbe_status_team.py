@@ -557,5 +557,106 @@ class TestHandoverIntegration(TeamScenario):
                          % b_entry)
 
 
+class TestPerChangeEvidenceScoping(TeamScenario):
+    """LANE B-004, reproduced against the plain (non---team) `sbe status`
+    (`build_report`), whose CR-06 dossier path used to consult
+    `_scan_evidence`'s single GLOBAL `kindsCovered` for every discovered
+    dossier: a gate receipt scoped to one dossier's own owned file cleared a
+    SIBLING dossier's obligation too, purely because both dossiers
+    consulted the same set in the same run. `test_sbe_status.py`'s own
+    `TestDossierDiscovery` already pins the flat single-dossier layout's
+    byte-identical output; kept out of this class on purpose.
+    """
+
+    def status(self, *extra):
+        return self.sbe("status", self.repo, "--json", *extra)
+
+    def _t2_dossier(self, name, src_rel):
+        doss = self._change(name, src_rel)
+        answers = dict(INTAKE["answers"])
+        answers["changes_contract"] = "y"  # T2: owes design, gate and score
+        io.open(os.path.join(doss, "00-intake.json"), "w").write(
+            json.dumps({"answers": answers}, indent=2))
+        return doss
+
+    def _missing_gate(self, data, name):
+        return [m for m in data["missingEvidence"]
+               if m["finding"].startswith("dossier %s: " % name)
+               and "hard gate" in m["finding"]]
+
+    def _two_committed_t2_dossiers(self):
+        self._t2_dossier("chg-a", "src/a.py")
+        self._t2_dossier("chg-b", "src/b.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "both T2 dossiers and their source")
+
+    def _gate_receipt(self, out_rel, covers):
+        out = os.path.join(self.repo, out_rel)
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo, "--covers", covers,
+            "--kind", "gate", "--", sys.executable, "-c", "import sys; sys.exit(0)")
+        self.assertEqual(code, 0, "the fixture receipt must verify sound: %s" % text)
+        return out
+
+    def test_a_receipt_scoped_to_one_dossier_no_longer_clears_a_siblings_gate_obligation(self):
+        # THE BUG, reproduced: chg-a's receipt used to clear chg-b's
+        # obligation too, purely because both were discovered together.
+        self._two_committed_t2_dossiers()
+        self._gate_receipt(".sbe/evidence/gate-a.json", "src/a.py")
+
+        code, text, _ = self.status()
+        data = json.loads(text[text.index("{"):])
+        a_gate, b_gate = self._missing_gate(data, "chg-a"), self._missing_gate(data, "chg-b")
+
+        self.assertFalse(a_gate, "the receipt covers src/a.py, chg-a's own plan ownership: "
+                                 "it must clear chg-a's gate obligation: %s" % text)
+        self.assertTrue(b_gate, "chg-a's receipt must never clear chg-b's gate obligation "
+                                "just because both were discovered together: %s" % text)
+        self.assertIn("chg-a", b_gate[0]["finding"],
+                     "the finding must name where the matching receipt landed, not stay "
+                     "silent about a receipt that plainly exists: %s" % text)
+        self.assertNotEqual(code, 0, text)
+
+    def test_a_same_numbered_task_id_in_a_sibling_plan_does_not_borrow_the_claim(self):
+        # `sbe plan --write` always numbers a dossier's first task "T01", so
+        # BOTH dossiers derive a task of their own also called "T01". An id
+        # match alone must not let a registry record claim a sibling's
+        # obligation; its OWN ownedPaths must overlap that dossier's plan.
+        self._two_committed_t2_dossiers()
+        out = self._gate_receipt(".sbe/evidence/gate-claimed.json", "seed.txt")
+        run_id = json.loads(io.open(out, encoding="utf-8").read())["runId"]
+        reg = os.path.join(self.repo, ".sbe", "tasks.json")
+        io.open(reg, "w").write(json.dumps({"schemaVersion": "1.0", "tasks": [{
+            "id": "T01", "agent": "alice", "role": "writer", "worktree": None,
+            "ownedPaths": ["src/a.py"], "readOnlyPaths": [], "baseCommit": None,
+            "expiry": None, "status": "closed", "verifyCommand": "python3 -c pass",
+            "evidenceId": run_id, "openedAt": "2026-07-30T00:00:00Z",
+            "closedAt": "2026-07-30T01:00:00Z"}]}))
+
+        code, text, _ = self.status()
+        data = json.loads(text[text.index("{"):])
+        a_gate, b_gate = self._missing_gate(data, "chg-a"), self._missing_gate(data, "chg-b")
+
+        self.assertFalse(a_gate, "chg-a's own T01 record claims this receipt, and its "
+                                 "ownedPaths (src/a.py) is chg-a's own plan: %s" % text)
+        self.assertTrue(b_gate, "chg-b also derives its own T01 task, but the claiming "
+                                "record's ownedPaths name chg-a's file, not chg-b's: an id "
+                                "match alone must never borrow the claim: %s" % text)
+
+    def test_a_receipt_attributable_to_no_dossier_stays_unscoped_and_clears_nothing(self):
+        self._two_committed_t2_dossiers()
+        self._gate_receipt(".sbe/evidence/gate-unscoped.json", "seed.txt")
+
+        code, text, _ = self.status()
+        data = json.loads(text[text.index("{"):])
+        for name in ("chg-a", "chg-b"):
+            hits = self._missing_gate(data, name)
+            self.assertTrue(hits, "seed.txt is owned by neither plan: must clear neither "
+                                  "dossier's gate obligation: %s" % text)
+            self.assertIn("unscoped", hits[0]["finding"],
+                         "an unscoped receipt must be named as such, never silently dropped "
+                         "or silently allowed to clear an obligation: %s" % text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

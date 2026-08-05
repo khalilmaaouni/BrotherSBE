@@ -201,6 +201,17 @@ def _record_decisions(command, argv, lines, suppressed):
 #: `status._read_structured_findings`.
 _FINDINGS_SCHEMA_VERSION = "1.0"
 
+#: LANE B-006: the append-only file `_archive_prior_review` writes every
+#: superseded `11-review.json` into, beside it, before a new `--write`
+#: replaces it. Named once, here, so this write side and the read side
+#: (`status._read_review_history`, which names the identical literal in its
+#: own `_REVIEW_HISTORY_FILENAME`) cannot drift into two different ideas of
+#: where history lives; the two modules do not import each other (neither
+#: does today, for `11-review.json` itself, which every write and read site
+#: in both files already names as its own literal), so this stays a literal
+#: kept in step by name rather than a shared import.
+_REVIEW_HISTORY_FILENAME = "11-review-history.jsonl"
+
 _FINDING_CONFIDENCE = ("high", "medium", "low")
 _FINDING_INTRODUCED = ("yes", "no", "unknown")
 #: "arbitration" is deliberately absent: it is the one status a caller can
@@ -575,6 +586,52 @@ def normalize_review_findings(raw_entries):
     return [_merge_finding_group(groups[k]) for k in order], []
 
 
+def _archive_prior_review(path, history_path):
+    """Before `_record_review` opens `path` (`11-review.json`) for writing,
+    preserve whatever it CURRENTLY holds by appending it, verbatim, as one
+    line of the append-only `history_path` (`11-review-history.jsonl`)
+    beside it. Returns True when something was archived, False when `path`
+    did not exist yet: the ordinary first-ever-write case, where nothing has
+    been overwritten, so nothing is appended.
+
+    LANE B-006: a second `sbe review --write` at the same head used to
+    overwrite `11-review.json` in place, silently erasing whatever verdict
+    was there before, undetectable at the same head. This is the one place
+    that catches a record BEFORE it is replaced: called once, immediately
+    ahead of the write, from inside `_record_review`'s own try block, so any
+    failure reading `path` or writing `history_path` here (a permission
+    problem, for instance) is caught by that same handler and refuses the
+    whole write, exactly the way a failure writing `path` itself already
+    would. Nothing here swallows that failure into a quiet False: a write
+    that could not be safely archived must never proceed to overwrite the
+    one copy that DID exist, so an unreadable `path` raises rather than
+    returning as if there were nothing to archive.
+
+    Nothing is skipped when the existing file will not parse as JSON: the
+    raw text is archived wrapped in a `{"corrupt": true, "raw": ...}` marker
+    instead, so a record broken by some other means (a hand-edited file, a
+    partial write from a crashed process) is still never silently lost by
+    the write that follows it. `status._read_review_history` reads such an
+    entry back as one more list item with no `headSha` or `result` of its
+    own, which the one check that reads this file already treats as not
+    participating in its same-head comparison, rather than as a reason to
+    fail that check.
+    """
+    if not os.path.exists(path):
+        return False
+    raw = io.open(path, encoding="utf-8").read()  # OSError propagates: see docstring
+    try:
+        prior = json.loads(raw)
+        entry = prior if isinstance(prior, dict) else {"corrupt": True, "raw": raw}
+    except ValueError:
+        entry = {"corrupt": True, "raw": raw}
+    entry = dict(entry)
+    entry["supersededAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with io.open(history_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, sort_keys=True) + "\n")
+    return True
+
+
 def _record_review(target, lines, args, structured_findings=None):
     """Write one durable review record, `11-review.json`, into the dossier at
     `target`, and SAY on stdout what was written.
@@ -593,8 +650,21 @@ def _record_review(target, lines, args, structured_findings=None):
     out later, at read time, by `sbe status --team` (see `status.py`), from
     whatever this file actually says when that command runs; this function
     only persists what it was told, once, bound to the commit under review.
-    It is never rewritten to soften what it first said: a fresh review after
-    a fresh commit is a fresh record, not an edit to the old one.
+
+    `11-review.json` ITSELF is a POINTER, not the whole record, and every
+    reader that already existed before LANE B-006 (this docstring's own
+    earlier claim that a fresh review is "not an edit to the old one" was
+    true of the FILE's meaning, never true of the bytes on disk: a second
+    `--write` at the same head used to overwrite `path` in place with no
+    trace of what it replaced) keeps reading exactly that pointer unchanged.
+    What changed is what happens immediately before the overwrite:
+    `_archive_prior_review` (above) preserves whatever `path` currently
+    holds into the append-only `11-review-history.jsonl` beside it, so a
+    verdict superseded by a later write is never gone, only superseded, and
+    `sbe status --team` discloses a same-head, different-result supersession
+    as its own named finding (see `status.py`'s history-disclosure block),
+    itself worked out at read time, never by this write path, keeping THE
+    RECORD NEVER JUDGES ITSELF true of the history too.
 
     `findings` is not taken as a flag: it is read back out of `lines`, the
     same stdout this run already printed, through the same
@@ -654,6 +724,12 @@ def _record_review(target, lines, args, structured_findings=None):
             record["findingsSchemaVersion"] = _FINDINGS_SCHEMA_VERSION
             record["structuredFindings"] = structured_findings
         path = os.path.join(os.path.abspath(target), "11-review.json")
+        history_path = os.path.join(os.path.abspath(target), _REVIEW_HISTORY_FILENAME)
+        # LANE B-006: archive whatever `path` currently holds BEFORE it is
+        # overwritten below. Must run before the `io.open(path, "w", ...)`
+        # that follows: that call truncates `path` the instant it opens, so
+        # archiving after it would have nothing left to archive.
+        archived = _archive_prior_review(path, history_path)
         with io.open(path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
     except Exception as exc:
@@ -669,10 +745,12 @@ def _record_review(target, lines, args, structured_findings=None):
     struct_note = ""
     if structured_findings is not None:
         struct_note = ", %d structured finding(s)" % len(structured_findings)
+    history_note = (", 1 prior record archived to %s" % history_path) if archived else ""
     sys.stdout.write(
         "\nsbe review: review record written, bound to head %s, %d finding(s) and %d "
-        "accepted risk(s)%s:\n  %s\n"
-        % (head_sha[:12], len(findings), len(record["acceptedRisks"]), struct_note, path))
+        "accepted risk(s)%s%s:\n  %s\n"
+        % (head_sha[:12], len(findings), len(record["acceptedRisks"]), struct_note,
+           history_note, path))
 
 
 def _record_tier_decision(root, data, intake_path, machine_readable):

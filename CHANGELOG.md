@@ -6,6 +6,106 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.14 (2026-08-05)
+
+- LANE B-004, per-change evidence scoping: `sbe status`'s MISSING EVIDENCE
+  check, on the CR-06 multi-dossier path, used to clear an obligation by
+  reading `status._scan_evidence`'s own `kindsCovered`, a single set
+  computed ONCE over the whole evidence store with no notion of which
+  change a receipt belonged to, so a gate receipt scoped to change A's own
+  owned file cleared change B's obligation too, purely because both
+  dossiers were discovered in the same run. Reproduced with a two-dossier
+  fixture, red on the prior code. `src/brothersbe/status.py` now computes
+  per-dossier coverage (`_dossier_evidence_attribution`, new): a receipt
+  clears a dossier's obligation only when a registry task record that is
+  genuinely that dossier's own (its `id` is one of that dossier's own plan
+  task ids AND its own `ownedPaths` overlap a path that dossier's plan
+  owns, not an id match alone, because every derived plan starts fresh at
+  "T01" and an id-only match would reopen the identical bug through the
+  registry-claim path) claims it by `evidenceId`, or every one of its
+  `coveredFiles` falls inside a path that dossier's plan `owns`. A receipt
+  attributable to no dossier stays UNSCOPED: it clears nothing on the
+  discovered-dossier path, and the finding says so by name rather than
+  staying silent. The flat single-dossier layout never calls the new
+  function and its output stays byte-identical to every earlier version of
+  this file. Proven by
+  `tools/test_sbe_status_team.py::TestPerChangeEvidenceScoping` (three
+  fixtures: the reproduced bug, the UNSCOPED wording, and the T01-collision
+  guard), with `tools/test_sbe_status.py`, `tools/test_sbe.py`,
+  `tools/test_sbe_golden_scenario.py` and `evals/run_evals.py` all
+  re-verified green. See `docs/KNOWN-LIMITS.md` ("Evidence obligations
+  under CR-06 multi-dossier status, fixed") for what remains an honest
+  limit.
+
+- LANE B-006, immutable review history: a second `sbe review --write` at the
+  SAME head used to overwrite `design/<name>/11-review.json` in place
+  (`src/brothersbe/cli.py`'s `_record_review`, mode `"w"`), silently erasing
+  a `changes-required` verdict the moment a later `approved` write landed at
+  the identical commit, undetectable at that same head. `_record_review` now
+  calls a new `_archive_prior_review` immediately before it opens
+  `11-review.json` for writing: whatever the file currently holds is
+  appended, verbatim (or wrapped as `{"corrupt": true, "raw": ...}` when it
+  will not parse), as one JSON line into a new append-only
+  `11-review-history.jsonl` beside it, before the new record replaces it.
+  `11-review.json` stays the current pointer, byte-for-byte what every
+  existing reader (status.py slot 11, the review skill) already expects, so
+  nothing downstream changes. `src/brothersbe/status.py`'s `build_team_report`
+  reads the history back: a record superseded at the SAME head as the
+  current one but naming a DIFFERENT `result` now surfaces as its own named,
+  severity-11 finding (`FAIL`, basis `derived`), never silent. Proven by
+  `tools/test_sbe_review_record.py`'s new `TestReviewHistory` (red first,
+  by stashing the fix and running the new tests against the unfixed write
+  path: 5 of 7 failed, showing the prior verdict gone and no disclosure;
+  green after restoring the fix): a second write preserves the first
+  verdict, a third write keeps both priors, the overwrite is disclosed with
+  the prior result and the head named, and three false-positive guards (a
+  single write, two writes with the same result, a fresh review at a
+  genuinely different head) confirm the disclosure never fires when nothing
+  was actually overwritten.
+
+- LANE B-013, skills facade convergence: five skill files invoked
+  `python3 tools/*.py` directly in parallel to the `bin/sbe` subcommand that
+  already carries the same behavior. `skills/design/SKILL.md` now calls
+  `sbe design --strict` (a straight passthrough to `sbe_design.py`, byte
+  identical output confirmed), `skills/kickoff/SKILL.md` now calls
+  `sbe intake --help` (same passthrough), `skills/adopt/SKILL.md` now calls
+  `sbe fences .` (same passthrough), `skills/verify/SKILL.md` now calls
+  `sbe score --strict --strict-soft <dir>`, and `skills/next/SKILL.md` now
+  calls `sbe gate <dir> --no-decisions`, with its "writes nothing" claim
+  updated to name the flag that keeps the CLI's own decision-package write
+  from firing on what is meant to stay a plain diagnostic read (confirmed
+  the verdict lines match the direct tool call byte for byte; only a
+  trailing decision-package note differs without the flag). Proven by
+  `python3 tools/test_sbe_interop.py`, `python3 tools/test_sbe_instruction_surface.py`,
+  and a grep for `python3 .*tools/` across the five files returning empty.
+
+- LANE FT-rule, the founder's decision contract: every key decision surface
+  now names the falsification tier behind each claim it makes (a
+  deterministic check, then a mutation calibration, then a fresh-context
+  refute, with reasoning alone read as NO-DATA rather than a tier) and
+  offers an explicit option to return control to the developer instead of
+  accepting the recommendation. Landed on the three surfaces the checkpoint
+  shape is built from: `SKILL.md`'s L6 checkpoint-shape line, the L12 RULE
+  paragraph in `references/laws-decision-tables.md` (the file SKILL.md's
+  routing table loads when a decision table's recommendation is about to be
+  reported), and two new sections (`## Falsification tier`,
+  `## Return to developer`) in `templates/dossier/03-adr.md`, each extended
+  in the register the surface already used rather than rewritten. Proven by
+  `tools/test_sbe_decision_contract.py` (new), which isolates the exact
+  sentence or paragraph on each surface and asserts both elements are
+  present verbatim; calibrated red by rsyncing the repository to a `/tmp`
+  scratch copy, deleting the control-return clause from the scratch
+  `SKILL.md`, and confirming the test fails there while the real working
+  tree stays green. Known fallout, both out of this change's owned-file
+  scope to fix: `CHECKSUMS.sha256` is now stale for the three edited files
+  (regenerate with `scripts/checksums.sh CHECKSUMS.sha256`), and
+  `docs/guides/02-the-gates-in-practice.md`'s pasted `silent-failure-lints`
+  line under-counts `tools/` by one file now that
+  `tools/test_sbe_decision_contract.py` exists (43 to 44 scanned, 40 to 41
+  clean); `evals/run_evals.py` names both by their case name
+  (`the-tracked-manifest-matches-the-tree-it-ships-with`,
+  `no-shipped-doc-prints-a-silent-failure-lint-line-the-scorer-does-not-produce`).
+
 ## 1.0.0-rc.13 (2026-08-05)
 
 - LANE PT-3, deterministic `sbe map`: `skills/help/SKILL.md`'s "project map"

@@ -73,6 +73,25 @@ verify() is NO-DATA (advisory: a dirty tree at generation time, or no covered
 file) is neither a broken claim nor clean evidence, and is not otherwise pinned
 in a section; it is counted in the evidence scope note.
 
+LANE B-004: on the CR-06 discovered-dossier path, "clears an obligation" is
+scoped PER CHANGE, not read off one repository-wide set. The evidence store
+is still scanned once, shared and root-level, exactly as stated above; what
+changed is which dossier a given receipt is allowed to clear. A receipt is
+attributable to a dossier when a registry task record belonging to that
+dossier's own `08-plan.json` claims it by `evidenceId`, or when every one of
+its `coveredFiles` falls inside a path that dossier's plan `owns`. Before
+this, a gate receipt generated for change A cleared change B's MISSING
+EVIDENCE obligation too, purely because both dossiers consulted the same
+global `kindsCovered` set; that was reproduced, not theorized, with a
+two-dossier fixture. A receipt attributable to no dossier at all is
+UNSCOPED: on the flat single-dossier layout it still clears the obligation
+exactly as it always has (this scoping never runs there, so that output
+stays byte-identical), but on the discovered-dossier path it clears no
+dossier's obligation, and the MISSING EVIDENCE finding says so by name
+("a matching receipt exists but is unscoped") rather than staying silent
+about a receipt that plainly exists in the store. See
+`_dossier_evidence_attribution`.
+
 WHAT A DECLARED KIND IS NOT: a proof that the command performed that check.
 `sbe evidence run --kind gate` binds the declaration to a run that actually
 happened and seals it, so it cannot be typed into a receipt afterwards, and the
@@ -168,8 +187,14 @@ def _scan_evidence(root, evidence_dir):
     DECLARES), `kindless` (one sentence per verified receipt that declares no
     kind, so a reader is told that evidence exists and says nothing about
     which check it was, rather than left to read the absence as no evidence at
-    all), `count`, `inspected` (whether the store existed to look at) and
-    `note` (the scope sentence every caller prints, either way).
+    all), `count`, `inspected` (whether the store existed to look at),
+    `note` (the scope sentence every caller prints, either way), and
+    `receipts` (LANE B-004: one `{"path", "runId", "kinds", "coveredFiles"}`
+    dict per verified, non-NO-DATA receipt -- clean and failing alike, the
+    same population `kindsCovered` is built from -- so a caller that needs
+    PER-CHANGE coverage, not this global set, can decide attribution for
+    itself without re-reading every receipt off disk a second time; see
+    `_dossier_evidence_attribution`).
 
     Every receipt verifies with the evidence store ITSELF excluded from its
     covered files: `evidence_mod.verify` is called with `exclude_dirs` set to
@@ -196,13 +221,14 @@ def _scan_evidence(root, evidence_dir):
     unreadable registry all verify against root exactly as before: linkage
     that cannot be read never upgrades a verdict.
     """
-    broken, clean, failing, kindless = [], [], [], []
+    broken, clean, failing, kindless, receipts = [], [], [], [], []
     kinds_covered = set()
     if not os.path.isdir(evidence_dir):
         return {"broken": broken, "clean": clean, "failing": failing,
                 "kindless": kindless,
                 "kindsCovered": kinds_covered, "count": 0, "inspected": False,
-                "note": "no evidence store found at %s" % evidence_dir}
+                "note": "no evidence store found at %s" % evidence_dir,
+                "receipts": receipts}
     exclude_rel = os.path.relpath(evidence_dir, root)
     try:
         registry_records = tasks_mod.load_registry(root).get("tasks", [])
@@ -250,6 +276,10 @@ def _scan_evidence(root, evidence_dir):
         gap = evidence_mod.kind_declaration_gap(receipt)
         if gap:
             kindless.append("receipt %s declares no check kind: %s" % (rel, gap))
+        covered_paths = [cf.get("path") for cf in (receipt.get("coveredFiles") or [])
+                        if isinstance(cf, dict) and cf.get("path")]
+        receipts.append({"path": rel, "runId": receipt.get("runId"), "kinds": kinds,
+                         "coveredFiles": covered_paths})
         trust = result["trust"]
         exit_code = receipt.get("exitCode")
         argv_text = " ".join(str(a) for a in (receipt.get("argv") or []))
@@ -281,8 +311,7 @@ def _scan_evidence(root, evidence_dir):
                 "remedy": "fix the underlying failure and re-run to produce a new passing "
                          "receipt; see %s" % rel,
                 "path": rel,
-                "coveredFiles": [cf.get("path") for cf in (receipt.get("coveredFiles") or [])
-                                if isinstance(cf, dict) and cf.get("path")],
+                "coveredFiles": covered_paths,
             })
     note = (("%d receipt(s) found under %s" % (len(paths), evidence_dir)) if paths
            else "evidence store %s exists and holds no receipt" % evidence_dir)
@@ -290,7 +319,122 @@ def _scan_evidence(root, evidence_dir):
         note += ("; %d verified receipt(s) declare no check kind and clear no obligation"
                  % len(kindless))
     return {"broken": broken, "clean": clean, "failing": failing, "kindless": kindless,
-            "kindsCovered": kinds_covered, "count": len(paths), "inspected": True, "note": note}
+            "kindsCovered": kinds_covered, "count": len(paths), "inspected": True, "note": note,
+            "receipts": receipts}
+
+
+def _plan_owns(doss):
+    """(owns, taskIds): every path a change's own `08-plan.json` declares a
+    task OWNS, and the task ids that plan defines. A missing or unreadable
+    plan reads as (empty set, empty set), the honest state before `sbe plan
+    --write` has ever run for this change: it owns nothing yet and no
+    registry record can be its claim. Mirrors the identical read
+    `build_team_report` already does inline for its own scope-conflict
+    attribution (`plan_owns_by_change`), kept as a separate function here
+    rather than a shared one so this change touches nothing in that
+    function or its own pinned tests."""
+    plan = _read_json_or_none(os.path.join(doss, "08-plan.json"))
+    owns, task_ids = set(), set()
+    if plan:
+        for task in plan.get("tasks", []):
+            tid = task.get("id")
+            if tid:
+                task_ids.add(tid)
+            for p in task.get("owns") or []:
+                if isinstance(p, str) and p.strip():
+                    owns.add(p)
+    return owns, task_ids
+
+
+def _dossier_evidence_attribution(root, dossiers, ev):
+    """LANE B-004: per-change coverage over `ev["receipts"]`, for CR-06's
+    discovered-dossier path only.
+
+    Reproduced before this function existed: `_scan_evidence`'s own
+    `kindsCovered` is a single GLOBAL set, computed once over every receipt
+    in the store with no notion of which change it belongs to. A gate
+    receipt generated for change A therefore cleared change B's MISSING
+    EVIDENCE obligation too, the moment both dossiers were discovered in the
+    same run, purely because the same global set was consulted for both.
+
+    A receipt is attributable to a dossier when EITHER: a registry task
+    record claims the receipt by `evidenceId` (the receipt's `runId`
+    matches) AND that record is genuinely THIS dossier's own task, OR every
+    one of the receipt's `coveredFiles` falls inside a path that dossier's
+    plan `owns` (`sbe_fence_hook.paths_overlap`, via `tasks.paths_overlap`,
+    the same containment rule task ownership is judged by everywhere else in
+    this project; a receipt that also covers a file outside the dossier's
+    declared ownership is not a clean claim of that dossier's obligation and
+    is not attributed to it on that path). A receipt attributable to no
+    dossier at all stays UNSCOPED: it is left out of every dossier's
+    coverage below, on purpose, rather than guessed at.
+
+    "Genuinely this dossier's own task" is deliberately NOT just "the
+    record's `id` is one this dossier's plan also names": every derived plan
+    starts fresh at T01 (`build_team_report`'s own scope-conflict code,
+    right below this function, states the identical fact for the identical
+    reason), so two sibling dossiers routinely each declare a task of their
+    own also called "T01", and an id match alone would let a registry record
+    that truly belongs to dossier A get read as dossier B's claim too,
+    reopening the exact class of cross-dossier bug this function exists to
+    close. A record only counts as a dossier's claim when, IN ADDITION to
+    the id match, the record's own declared `ownedPaths` overlap a path that
+    dossier's plan `owns`: the same containment check the coveredFiles path
+    above already uses, applied to the registry's own claim instead of the
+    receipt's.
+
+    Returns (`coveredByName`: {dossier name: set(kind) actually attributed
+    to it}, `unscopedPaths`: {kind: [receipt path, ...]} for receipts
+    declaring that kind but attributable to no dossier, `attributedNames`:
+    {kind: {dossier name: [receipt path, ...]}} for receipts declaring that
+    kind and attributed to some dossier), so a caller reporting a kind a
+    dossier still owes can say WHY a matching receipt did not clear it
+    (unscoped, or landed on a different dossier) instead of staying silent
+    about a receipt that plainly exists in the store.
+    """
+    try:
+        registry_records = tasks_mod.load_registry(root).get("tasks", [])
+    except tasks_mod.RegistryUnusable:
+        registry_records = []
+    plan_facts = dict((name, _plan_owns(doss)) for name, doss in dossiers)
+    claimed_run_ids = {}
+    for name, (owns, task_ids) in plan_facts.items():
+        claimed = set()
+        for r in registry_records:
+            evidence_id = r.get("evidenceId")
+            if not evidence_id or r.get("id") not in task_ids:
+                continue
+            record_owns = r.get("ownedPaths") or []
+            if any(tasks_mod.paths_overlap(p, claim, root)
+                  for p in record_owns for claim in owns):
+                claimed.add(evidence_id)
+        claimed_run_ids[name] = claimed
+
+    covered_by_name = dict((name, set()) for name, _doss in dossiers)
+    unscoped_paths, attributed_names = {}, {}
+    for rcpt in ev["receipts"]:
+        run_id = rcpt.get("runId")
+        covered_files = rcpt.get("coveredFiles") or []
+        kinds = rcpt.get("kinds") or set()
+        attributed_to = []
+        for name, _doss in dossiers:
+            owns, _task_ids = plan_facts[name]
+            by_claim = bool(run_id) and run_id in claimed_run_ids.get(name, set())
+            by_owned_paths = bool(covered_files) and all(
+                any(tasks_mod.paths_overlap(cf, claim, root) for claim in owns)
+                for cf in covered_files)
+            if by_claim or by_owned_paths:
+                attributed_to.append(name)
+        if attributed_to:
+            for name in attributed_to:
+                covered_by_name[name] |= kinds
+                for kind in kinds:
+                    attributed_names.setdefault(kind, {}).setdefault(name, []).append(
+                        rcpt.get("path"))
+        else:
+            for kind in kinds:
+                unscoped_paths.setdefault(kind, []).append(rcpt.get("path"))
+    return covered_by_name, unscoped_paths, attributed_names
 
 
 def _scan_tasks(root, reg_path):
@@ -624,6 +768,22 @@ def build_report(path, base=None, now=None):
     sound_evidence.extend(ev["clean"])
     merge_blockers.extend(ev["failing"])
 
+    # ---- LANE B-004: per-change evidence scoping, for the MISSING EVIDENCE
+    # obligation check below only. Computed ONLY on the CR-06
+    # discovered-dossier path (`dossiers` non-empty and the flat layout
+    # absent): the flat single-dossier layout keeps consulting `ev`'s own
+    # global `kindsCovered` exactly as it always has, so a flat repository's
+    # output stays byte-identical to every earlier version of this function
+    # (the CR-06 law stated at the top of this file). `dossier_kinds_covered`
+    # stays `{}` in that case, and every read below treats an empty dict as
+    # "scoping does not apply here" rather than "every dossier covers
+    # nothing". See `_dossier_evidence_attribution` for what "attributable"
+    # means. ----
+    dossier_kinds_covered, unscoped_kind_paths, attributed_kind_names = {}, {}, {}
+    if not flat_present and dossiers:
+        dossier_kinds_covered, unscoped_kind_paths, attributed_kind_names = (
+            _dossier_evidence_attribution(root, dossiers, ev))
+
     # ---- Task registry: ACTIVE CONFLICTS and FORCED closes. Shared and
     # root-level, same reasoning as the evidence store above. ----
     tk = _scan_tasks(root, reg_path)
@@ -710,21 +870,53 @@ def build_report(path, base=None, now=None):
         # of it: a reader told "no receipt records a hard gate run" while
         # four receipts sit in the store would reasonably conclude the tool
         # cannot see them.
+        #
+        # LANE B-004: which set clears an obligation depends on whether CR-06
+        # dossier discovery ran. `dossier_kinds_covered` is non-empty ONLY on
+        # that path, and on it a kind counts as covered for THIS target only
+        # when a receipt is actually attributable to THIS dossier (see
+        # `_dossier_evidence_attribution`); the flat single-dossier layout
+        # (that dict stays `{}`) keeps consulting `ev`'s own global set
+        # exactly as it always has, unchanged.
         if human_tier not in (None, "T0"):
             kindless_note = ""
             if ev["kindless"]:
                 kindless_note = ("; %d receipt(s) in the store declare no check kind and "
                                  "clear no obligation: %s"
                                  % (len(ev["kindless"]), "; ".join(ev["kindless"])))
+            if dossier_kinds_covered:
+                covered_here = dossier_kinds_covered.get(label, set())
+            else:
+                covered_here = ev["kindsCovered"]
             for kind, klabel, cmdline in CHECK_KINDS:
-                if kind not in ev["kindsCovered"]:
-                    missing_evidence.append({
-                        "finding": "%sno evidence receipt declares a %s run, and declared "
-                                  "tier %s owes one%s"
-                                  % (prefix, klabel, human_tier, kindless_note),
-                        "remedy": "run `%s` through `sbe evidence run --kind %s` to record it"
-                                 % (cmdline, kind),
-                    })
+                if kind in covered_here:
+                    continue
+                scope_note = ""
+                # A kind covered somewhere in the store, but not attributed to
+                # THIS dossier: never silently cleared, and never silently
+                # dropped either -- name the receipt and say why it did not
+                # clear this obligation, unscoped or landed elsewhere.
+                if dossier_kinds_covered and kind in ev["kindsCovered"]:
+                    parts = []
+                    unscoped_here = sorted(unscoped_kind_paths.get(kind) or [])
+                    if unscoped_here:
+                        parts.append("a matching receipt exists but is unscoped (%s)"
+                                     % ", ".join(unscoped_here))
+                    elsewhere = sorted(n for n in attributed_kind_names.get(kind, {})
+                                       if n != label)
+                    if elsewhere:
+                        parts.append(
+                            "a matching receipt exists but is attributed to dossier %s, "
+                            "not this one" % ", ".join(elsewhere))
+                    if parts:
+                        scope_note = "; " + "; ".join(parts)
+                missing_evidence.append({
+                    "finding": "%sno evidence receipt declares a %s run, and declared "
+                              "tier %s owes one%s%s"
+                              % (prefix, klabel, human_tier, kindless_note, scope_note),
+                    "remedy": "run `%s` through `sbe evidence run --kind %s` to record it"
+                             % (cmdline, kind),
+                })
 
         summaries.append({
             "label": label,
@@ -1037,6 +1229,56 @@ def _read_structured_findings(review):
     return "ok", payload
 
 
+#: LANE B-006: every review record `_record_review` (cli.py) ever superseded
+#: with a later `--write` is archived, verbatim, as one JSON object per line
+#: into this append-only file beside `11-review.json`, before the new record
+#: replaces it (see cli.py's `_archive_prior_review`). Named once, here, so
+#: the write side and this read side cannot drift into two different ideas
+#: of where history lives.
+_REVIEW_HISTORY_FILENAME = "11-review-history.jsonl"
+
+
+def _read_review_history(path):
+    """Every historical review record ever archived to the append-only
+    `path` (see `_REVIEW_HISTORY_FILENAME` above), as a list of dicts,
+    oldest first.
+
+    This backs a DISCLOSURE, not a pass/fail gate the way
+    `_read_review_record` is: a missing file is the ordinary case (nothing
+    has ever been overwritten yet) and reads as `[]`, not an error, and an
+    unreadable file or a single line that will not parse as a JSON object is
+    skipped rather than escalated, so a broken line here can never make the
+    OTHER, readable lines invisible to the one check that reads this file.
+    The record this line was archived FROM already went through
+    `_record_review`'s own well-formed write path, so a line failing to
+    parse here is itself already a fact worth trusting less, never a reason
+    to hide every other line beside it.
+    """
+    if not os.path.exists(path):
+        return []
+    try:
+        text = io.open(path, encoding="utf-8").read()
+    except OSError:
+        return []
+    entries = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except ValueError:  # sbe: allow-silent this file backs a disclosure, not a
+            # gate: one broken line must not hide every other, readable line beside
+            # it, and `_archive_prior_review` (cli.py) already wraps a source record
+            # that will not parse as JSON in a `{"corrupt": true, ...}` marker before
+            # it ever reaches this file, so a line failing here is a SECOND, unrelated
+            # corruption this function has no way to name more specifically than skipping it.
+            continue
+        if isinstance(item, dict):
+            entries.append(item)
+    return entries
+
+
 def _commit_author(root, sha):
     """(name, email) that authored `sha` in `root`.
 
@@ -1313,6 +1555,13 @@ def build_team_report(path):
             else:
                 review = review_payload
                 bound = review.get("headSha")
+                # Hoisted out of the "not stale" branch below (LANE B-006):
+                # the history-disclosure block after the structured-findings
+                # block needs `result` whether or not this record is stale,
+                # the same way it already needs `bound`, and a value read
+                # once here is the same value the "not stale" branch below
+                # would otherwise re-read from the same dict a second time.
+                result = review.get("result")
                 if head and bound and bound != head:
                     findings.append(_finding(
                         name, 4, "FAIL", "11-review.json", bound, review.get("reviewer"),
@@ -1322,7 +1571,6 @@ def build_team_report(path):
                         "stale review" % (bound[:12], head[:12])))
                 else:
                     reviewer = review.get("reviewer")
-                    result = review.get("result")
                     finding_list = review.get("findings")
                     finding_count = len(finding_list) if isinstance(finding_list, list) else 0
                     risk_list = review.get("acceptedRisks")
@@ -1444,6 +1692,47 @@ def build_team_report(path):
                         "pre-existing, %d pending arbitration"
                         % (len(struct_payload), len(blocking), len(pre_existing),
                            len(arbitration))))
+
+                # LANE B-006: a second `sbe review --write` at the SAME head
+                # used to overwrite `11-review.json` in place, with nothing
+                # anywhere recording that a DIFFERENT verdict had ever been
+                # recorded at that exact commit; an `approved` write could
+                # erase a `changes-required` write undetectably. `cli.py`'s
+                # `_record_review` now archives every superseded record into
+                # `11-review-history.jsonl` before it writes a new one (see
+                # `_archive_prior_review` there), so nothing is lost, but
+                # THE RECORD NEVER JUDGES ITSELF (this file's own module
+                # note): whether an archived, same-head, different-result
+                # entry is worth a reader's attention is worked out here, at
+                # read time, the same way staleness and self-review already
+                # are, not by the write path. This reads INDEPENDENTLY of
+                # every judgement above it, whether or not the current
+                # record is stale, for the same reason the structured-
+                # findings block just above does: staleness already has its
+                # own severity-4 finding, and a same-head verdict flip is a
+                # separate, observable fact about the history file either
+                # way. `result` is the hoisted `review.get("result")` above
+                # (read once whether or not this record is stale), the same
+                # variable the "not stale" branch's own PASS/FAIL judgement
+                # already used.
+                history_path = os.path.join(doss, _REVIEW_HISTORY_FILENAME)
+                history_entries = _read_review_history(history_path)
+                differing = [e for e in history_entries
+                            if e.get("headSha") == bound and e.get("result")
+                            and e.get("result") != result]
+                if differing:
+                    prior_results = sorted(set(e.get("result") for e in differing))
+                    findings.append(_finding(
+                        name, 11, "FAIL", history_path, bound, struct_reviewer,
+                        "read the superseded verdict(s) in %s before trusting the "
+                        "current result" % history_path, "derived",
+                        "the current review record's result is %r, but %s carries "
+                        "%d prior verdict(s) bound to this SAME head %s that said "
+                        "otherwise (%s): a later write replaced an earlier, "
+                        "different verdict without the commit changing, disclosed "
+                        "here rather than silently lost"
+                        % (result, history_path, len(differing), (bound or "?")[:12],
+                           ", ".join(prior_results))))
 
             if commands and not ev["clean"] and not ev["broken"]:
                 findings.append(_finding(

@@ -1142,3 +1142,70 @@ is documented instead, in `docs/INTEROPERABILITY.md`'s own "Doctor: branch
 taken" section.
 
 Full text: `docs/INTEROPERABILITY.md`, `tools/test_sbe_interop.py`.
+
+
+## Evidence obligations under CR-06 multi-dossier status, fixed (LANE B-004)
+
+`sbe status`'s (non---team) MISSING EVIDENCE check used to clear an
+obligation by consulting `status._scan_evidence`'s own `kindsCovered`, a
+single set computed ONCE over the whole `.sbe/evidence/` store with no
+notion of which change a receipt belonged to. That was harmless on the
+ordinary flat single-dossier layout (one change, one obligation, one
+store), but on the CR-06 discovered-dossier path (`design/<name>/` with no
+flat `00-intake.json` at root) it meant a gate receipt scoped to change A's
+own owned file cleared change B's MISSING EVIDENCE obligation too, purely
+because both dossiers, discovered in the same run, consulted the same
+global set. Reproduced with a two-dossier fixture before any fix landed:
+`chg-a`'s own gate receipt (covering only `src/a.py`, `chg-a`'s own plan
+ownership) also cleared `chg-b`'s gate obligation, with nothing in the
+output naming why.
+
+Fixed: `status._dossier_evidence_attribution` computes per-dossier coverage
+over `_scan_evidence`'s (now additionally returned) `receipts` list. A
+receipt is attributable to a dossier when a registry task record that is
+GENUINELY that dossier's own claims it by `evidenceId` (the record's `id`
+is one of the dossier's own `08-plan.json` task ids AND the record's own
+`ownedPaths` overlap a path that dossier's plan `owns` -- the id alone is
+not enough, because every derived plan starts fresh at "T01", so sibling
+dossiers routinely share task ids and an id-only match would reopen the
+identical class of bug through the registry-claim path instead of the
+coveredFiles one), or when every one of the receipt's `coveredFiles` falls
+inside a path that dossier's plan owns (`sbe_fence_hook.paths_overlap`, the
+same containment rule task ownership is judged by everywhere else in this
+project). A receipt attributable to no dossier at all is UNSCOPED: it
+clears nothing on the discovered-dossier path, and the MISSING EVIDENCE
+finding says so by name ("a matching receipt exists but is unscoped", or
+names the dossier it actually landed on) rather than staying silent about a
+receipt that plainly exists in the store. The flat single-dossier layout
+never calls this function at all (`dossier_kinds_covered` stays `{}`, and
+every read of it falls back to the original global `ev["kindsCovered"]`
+unchanged), so that layout's output stays byte-identical to every earlier
+version of this file, per the CR-06 law `status.py`'s own module docstring
+states.
+
+What remains a real, honestly-scoped limit: attribution depends entirely on
+a dossier's own `08-plan.json` actually declaring `owns` paths (or a
+registry record actually declaring a matching `ownedPaths`); a discovered
+dossier with no plan yet owns nothing in this scheme and so cannot be
+attributed a receipt by either path, which means every one of its
+obligations reads as MISSING even for evidence a human would recognize as
+"obviously theirs" -- the honest state before `sbe plan --write` has ever
+run for that change, not a regression. Two sibling dossiers whose plans
+BOTH declare `owns` over genuinely overlapping paths (a plan-level version
+of the same ambiguity task-registry fencing exists to prevent, but plan
+`owns` values are not deduplicated against each other the way registry
+`ownedPaths` claims are checked for overlap) can both be attributed the
+same receipt; that is read as intentional here (a receipt over shared,
+declared territory clears both obligations), not policed further.
+
+Proven by `tools/test_sbe_status_team.py::TestPerChangeEvidenceScoping`:
+one fixture reproduces the original bug (red before the fix, green after,
+per this project's own before-any-fix discipline), one pins the UNSCOPED
+wording by name, and one pins the T01-collision guard specifically (a
+receipt claimed by a registry record whose `ownedPaths` name one dossier's
+file must never clear a sibling dossier's obligation merely because that
+sibling's own plan also derived a task called "T01"; calibrated by removing
+the `ownedPaths` overlap requirement in an rsync scratch copy, which turns
+that one fixture red). `tools/test_sbe_status.py::TestDossierDiscovery`
+and its sibling classes, unmodified by this change, stay green and continue
+to pin the flat layout's byte-identical output.

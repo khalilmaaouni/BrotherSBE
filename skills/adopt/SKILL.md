@@ -39,7 +39,7 @@ to install the proposed configuration.
 
 ```
 sh   "${CLAUDE_PLUGIN_ROOT}/scripts/verify-install.sh"
-python3 "${CLAUDE_PLUGIN_ROOT}/tools/sbe_fence_hook.py" fences .
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" fences .
 claude plugin validate "${CLAUDE_PLUGIN_ROOT}"
 ```
 
