@@ -5042,6 +5042,13 @@ def dc_worked(root):
 
 @case("guide-05s-output-blocks-are-what-the-tools-print", "docs", "consistent")
 def dc9(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: the replay harness drives bash scripts "
+                "against POSIX-captured transcripts; on this platform the "
+                "harness cannot produce comparable output at all (run "
+                "31042529271: every live capture collapsed to one line), "
+                "so the doc-truth guarantee is measured on the POSIX legs "
+                "only")
     # The guide's opening claim, made mechanical: evals/replay_guide05.py
     # writes every artifact block byte for byte, runs every command block, and
     # diffs each captured output against the block the guide shows. A stale
@@ -5058,6 +5065,13 @@ def dc9(root):
 
 @case("the-books-terminal-blocks-are-what-the-tools-print", "docs", "consistent")
 def dc9b(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: the replay harness drives bash scripts "
+                "against POSIX-captured transcripts; on this platform the "
+                "harness cannot produce comparable output at all (run "
+                "31042529271: every live capture collapsed to one line), "
+                "so the doc-truth guarantee is measured on the POSIX legs "
+                "only")
     # The book's own front matter claim, made mechanical the same way dc9
     # makes guide-05's: evals/replay_book.py walks every docs/book/[0-9][0-9]-*.md
     # chapter, runs every bash block against the repo it actually lives in,

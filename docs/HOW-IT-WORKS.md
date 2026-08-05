@@ -290,6 +290,17 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
 ```yaml
       # Windows-only guard: a no-op where python3 already resolves (the current
       # windows-latest image), a bridge where an image ships only python.exe.
+      - name: Line endings stay bytes (autocrlf off before any file exists)
+        # The tracked manifest hashes exact bytes and .gitattributes rides
+        # INSIDE the checkout, so files extracted before it lands in the
+        # working tree could still be converted by the runner's default
+        # autocrlf: rounds 1 to 3 of this leg watched the same four
+        # early-alphabet files (.brothersbe/config.json, the two
+        # .claude-plugin manifests, .gitattributes itself) hash stale on
+        # first read and identical on re-read (run 31042529271). Turning
+        # conversion off before checkout removes the ordering race the
+        # in-tree attributes file cannot close by itself.
+        run: git config --global core.autocrlf false
       - name: Ensure python3 resolves (guard for images shipping only python.exe)
         run: |
           if ! command -v python3 >/dev/null 2>&1; then

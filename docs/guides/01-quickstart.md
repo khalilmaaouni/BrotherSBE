@@ -616,6 +616,17 @@ jobs:
         # already the implicit default shell for an unspecified step.
         shell: bash
     steps:
+      - name: Line endings stay bytes (autocrlf off before any file exists)
+        # The tracked manifest hashes exact bytes and .gitattributes rides
+        # INSIDE the checkout, so files extracted before it lands in the
+        # working tree could still be converted by the runner's default
+        # autocrlf: rounds 1 to 3 of this leg watched the same four
+        # early-alphabet files (.brothersbe/config.json, the two
+        # .claude-plugin manifests, .gitattributes itself) hash stale on
+        # first read and identical on re-read (run 31042529271). Turning
+        # conversion off before checkout removes the ordering race the
+        # in-tree attributes file cannot close by itself.
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0   # the approval gate reads commit trailers and signatures

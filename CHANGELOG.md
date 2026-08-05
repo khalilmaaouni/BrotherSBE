@@ -6,6 +6,18 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## Unreleased
+
+- Windows round 4, the declared final round of the night: conversion is off
+  BEFORE checkout (a workflow step, because .gitattributes rides inside the
+  checkout it needs to protect: rounds 1 to 3 watched the same four
+  early-alphabet files hash stale on first read only), the same step pasted
+  into all three copy-ready doc blocks and the quickstart fence, and the two
+  transcript-replay evals become named PLATFORM-GAPs off POSIX: run
+  31042529271 showed every live capture collapsing to one line because the
+  replay harness itself is bash against POSIX-captured transcripts, so that
+  guarantee is measured on the POSIX legs and says so.
+
 ## 1.0.0-rc.17 (2026-08-06)
 
 - Windows round 3, each fix at its root, every trigger named from run
