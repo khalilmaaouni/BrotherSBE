@@ -274,6 +274,15 @@ jobs:
   # this leg, not a promise that every suite already passes on Windows.
   gates-windows:
     runs-on: windows-latest
+    env:
+      # Round 2 of this leg's first day proved the need: two Unicode homoglyph
+      # evals (a-lisu-spelling-of-tbd-is-not-a-snapshot-pin and
+      # a-small-capital-placeholder-is-not-a-pin) read their fixtures through
+      # Windows' legacy locale codec and the gate saw mangled bytes instead of
+      # the homoglyph it exists to catch. Linux and macOS already run UTF-8
+      # locales; declaring UTF-8 mode here equalizes the environment without
+      # touching what any gate tests.
+      PYTHONUTF8: "1"
     defaults:
       run:
         # Git for Windows ships bash on windows-latest by default (verified
