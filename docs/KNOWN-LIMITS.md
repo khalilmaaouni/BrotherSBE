@@ -1062,59 +1062,57 @@ detected authority families ever names is out of scope by the same logic
 `_matched_surface` itself uses to decide what counts as authority-bearing at
 all, and is not a gap this file closes or claims to.
 
-## A per-task worktree branch's own evidence cannot read clean against team status or converge (LT-501)
+## Per-task worktree evidence under team status and converge (LT-501; both engine gaps fixed in rc.11, one true boundary remains)
 
 The LT-501 golden scenario (`tools/test_sbe_golden_scenario.py`) runs the
 whole team lifecycle for real: `sbe work start` opens a dedicated branch and
 linked worktree per task, never merges, rebases onto, or pushes to the
 repository root's own branch (the no-merge law, checked mechanically by the
-same suite). Driving that real chain surfaced two places where a receipt
-genuinely bound to a task's OWN verification, on its OWN branch, is
-misreported once a second, repo-root-scoped control reads it back, neither
-of which this suite may fix (`src/brothersbe/status.py` and
-`src/brothersbe/converge.py` are engine files, out of LT-501's own file
-boundary).
+same suite). Driving that real chain surfaced two engine gaps in rc.10,
+recorded here at the time with red fixtures built to flip. Both were fixed
+in rc.11 and the fixtures flipped exactly as designed.
 
-First: `sbe status --team`'s evidence scan (`status._scan_evidence`, which
-calls `evidence.verify(path, cwd=root)`) always compares a receipt's
-`headCommit` against the repository ROOT's own currently checked-out HEAD,
-never against the task's own worktree branch the receipt was generated in.
-Since `sbe work start` always branches a task into its own linked worktree
-and the root's own branch never advances to include it, a receipt for a
-finished task's own verification command reads as a severity-1 "broken
-claim" (`headCommit ... is not the current head ...; covered file ... no
-longer exists`) the moment `sbe status --team` inspects it -- not because
-anything about the evidence is wrong, but because the root repository's own
-branch was never advanced to include that task's commits, which this
-project's own no-merge law says it never legitimately will be by `sbe`
-itself. `sbe work finish`'s own narrower verification (which does pass the
-task's own worktree as `cwd`) is unaffected; only the shared, repo-root-
-scoped `sbe status --team` evidence scan is. Proven by
+First, fixed in rc.11: `sbe status --team`'s evidence scan
+(`status._scan_evidence`) used to compare every receipt's `headCommit`
+against the repository ROOT's own checked-out HEAD, so a finished task's
+own receipt, generated on the task's own never-merged branch, always read
+as a severity-1 broken claim. The scan now resolves a receipt CLAIMED BY A
+TASK RECORD, meaning the record's `evidenceId` equals the receipt's
+`runId`, against that record's declared worktree when the directory still
+exists, and the resolution is disclosed on the entry itself (`verifiedIn`,
+`task`, and the finding sentence naming the declared worktree). What
+remains true, and is a boundary rather than a defect: a claimed receipt
+whose worktree has been removed, an unclaimed receipt, and an unreadable
+registry all still verify against root exactly as before, so linkage that
+cannot be read never upgrades a verdict. Proven by
 `tools/test_sbe_golden_scenario.py::TestTeamModeCIPostcondition`, which
-calibrates the documented "exit 0 only when no finding has severity 1 to 6"
-contract across two real states of the same scenario rather than assuming a
-scenario with real, finished task work can ever reach a clean one.
+asserts zero severity-1 findings after real task work while the legitimate
+NO-DATA blockers (missing approval, missing convergence) stay named
+exactly, and separately asserts the plain status JSON names the worktree
+resolution, so a scan that silently dropped the receipt cannot pass either
+assertion. Calibrated by suppressing the resolution in a scratch copy: the
+suite goes red.
 
-Second, narrower: `sbe converge`'s VERIFICATION dimension
-(`src/brothersbe/converge.py`, the block computing `missing_cover`) compares
-a bare path string from a plan task's `owns` against
-`receipt["coveredFiles"]` with a plain `p not in covered` membership test.
-`sbe evidence run` always writes `coveredFiles` as a list of `{path,
-sha256, note}` objects, never bare strings, so this membership test can
-never match: a writer task's OWN receipt is misreported as "does not cover"
-its own owned path even when it plainly does, for every task whose `owns`
-is non-empty. `tools/test_sbe_converge.py`'s own existing happy-path fixture
-never exercises this, because its receipt happens to be bound to the
-REVIEWER half of a derived migration triplet, whose `owns` is empty, making
-the membership check vacuously satisfied by construction. The golden
-scenario's own SQL task (T02, `owns: ["migrations/0002_widget_index.sql"]`)
-hits the non-empty-`owns` case for real and names the exact FAIL text
-(`tools/test_sbe_golden_scenario.py::TestFullChain`), both so the gap is
-provably reproducible and so a future fix has a red fixture ready to turn
-green; that fixture asserts SCOPE and DATA read PASS for the same range
-(the parts of convergence this coveredFiles-shape gap does not touch) and
-names VERIFICATION's FAIL by its exact reason, rather than asserting FINAL
-PASS and papering over why it cannot be reached.
+Second, fixed in rc.11: `sbe converge`'s VERIFICATION dimension
+(`src/brothersbe/converge.py`, the block computing `missing_cover`) used to
+compare a bare path string from a plan task's `owns` against
+`receipt["coveredFiles"]`, which `sbe evidence run` always writes as a list
+of `{path, sha256, note}` objects, so the membership test could never match
+and a writer task's OWN receipt was misreported as not covering its own
+owned path. The block now extracts `path` from each entry (tolerating a
+legacy bare-string entry) before the membership test. Proven by
+`tools/test_sbe_golden_scenario.py::TestFullChain`, which asserts the
+sealed-receipt PASS finding for T02's own receipt and the absence of the
+old does-not-cover text against it. Calibrated by reverting the extraction
+in a scratch copy: the suite goes red.
+
+What remains a real limit, unchanged and inherent: `sbe converge` assesses
+one explicit `--head`, so receipts for the OTHER tasks, bound to their own
+never-merged branch heads, still read as wrong-head stale evidence for the
+assessed head until integration happens outside `sbe` (the no-merge law
+says `sbe` itself never performs it). The golden scenario asserts
+VERIFICATION still FAILs for exactly that reason and FINAL stays FAIL by
+the documented rule.
 
 
 ## Plugin interoperability rests on platform behavior this repository cannot drive in a test (LT-502)

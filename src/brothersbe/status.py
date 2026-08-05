@@ -183,6 +183,18 @@ def _scan_evidence(root, evidence_dir):
     diff-range accident would FAIL the moment it refreshed: the evidence
     store poisoning itself. See docs/KNOWN-LIMITS.md ("Evidence covering
     evidence") for exactly what this closes and does not.
+
+    A receipt CLAIMED BY A TASK RECORD verifies against that task's own tree:
+    when a registry record's `evidenceId` equals the receipt's `runId` and the
+    record still declares a worktree directory that exists, `verify` runs with
+    that worktree as its cwd, because the receipt is evidence for the task
+    branch's head, and reading it against the root checkout would misreport
+    every finished task's own evidence as a broken claim (the gap the golden
+    scenario disclosed through rc.10). The resolution is disclosed on the
+    clean entry (`verifiedIn`, `task`, and the finding sentence itself). A
+    claimed receipt whose worktree is gone, an unclaimed receipt, and an
+    unreadable registry all verify against root exactly as before: linkage
+    that cannot be read never upgrades a verdict.
     """
     broken, clean, failing, kindless = [], [], [], []
     kinds_covered = set()
@@ -192,6 +204,16 @@ def _scan_evidence(root, evidence_dir):
                 "kindsCovered": kinds_covered, "count": 0, "inspected": False,
                 "note": "no evidence store found at %s" % evidence_dir}
     exclude_rel = os.path.relpath(evidence_dir, root)
+    try:
+        registry_records = tasks_mod.load_registry(root).get("tasks", [])
+    except tasks_mod.RegistryUnusable:
+        registry_records = []
+    claimed_by_run_id = {}
+    for record in registry_records:
+        record_run_id = record.get("evidenceId")
+        record_worktree = record.get("worktree")
+        if record_run_id and record_worktree and os.path.isdir(record_worktree):
+            claimed_by_run_id[record_run_id] = (record_worktree, record.get("id"))
     paths = []
     for dirpath, _dirnames, filenames in os.walk(evidence_dir):
         for name in filenames:
@@ -200,7 +222,15 @@ def _scan_evidence(root, evidence_dir):
     paths.sort()
     for full in paths:
         rel = os.path.relpath(full, root)
-        result = evidence_mod.verify(full, cwd=root, exclude_dirs=(exclude_rel,))
+        try:
+            receipt_run_id = evidence_mod.load(full).get("runId")
+        except evidence_mod.ReceiptUnreadable:
+            receipt_run_id = None
+        verify_cwd, claimed_task = (None, None)
+        if receipt_run_id and receipt_run_id in claimed_by_run_id:
+            verify_cwd, claimed_task = claimed_by_run_id[receipt_run_id]
+        result = evidence_mod.verify(full, cwd=verify_cwd or root,
+                                     exclude_dirs=(exclude_rel,))
         verdict = result["verdict"]
         if verdict == "FAIL":
             broken.append({
@@ -226,16 +256,22 @@ def _scan_evidence(root, evidence_dir):
         kinds_text = (", ".join(sorted(kinds)) if kinds
                       else "none declared, so it clears no obligation")
         if exit_code == 0:
-            head = _git_head(root)
-            clean.append({
+            head = _git_head(verify_cwd or root)
+            resolved = (", verified in task %s's declared worktree" % claimed_task
+                        if verify_cwd else "")
+            entry = {
                 "finding": "receipt %s verifies as sound evidence, trust %s (declared check "
                           "kind(s): %s; command: %s; scope: this receipt's covered files "
-                          "against HEAD %s, nothing beyond them)"
+                          "against HEAD %s, nothing beyond them%s)"
                           % (rel, trust, kinds_text, argv_text or "not recorded",
-                             head[:7] if head else "unknown"),
+                             head[:7] if head else "unknown", resolved),
                 "remedy": "no action; this receipt is sound evidence",
                 "path": rel, "trust": trust,
-            })
+            }
+            if verify_cwd:
+                entry["verifiedIn"] = verify_cwd
+                entry["task"] = claimed_task
+            clean.append(entry)
         else:
             failing.append({
                 "finding": "receipt %s verifies as trustworthy but records exit code %s for "
