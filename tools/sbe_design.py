@@ -703,7 +703,12 @@ def check_artifacts(root):
                          "of an artifact)"
                          % (", ".join(empty), ARTIFACT_MIN_WORDS, ARTIFACT_MIN_CHARS))
         parts.extend(unrelated)
-        return "FAIL", "tier %s requires %s; %s" % (tier, ", ".join(need), "; ".join(parts))
+        # label carries the override sentence (the written tier, the computed
+        # tier, and the direction) exactly as the PASS and NO-DATA branches
+        # above already append it. This branch fires right after an override
+        # (a written tier whose required artifacts are then found missing),
+        # so omitting label here was the one place a reader lost that context.
+        return "FAIL", "tier %s requires %s; %s%s" % (tier, ", ".join(need), "; ".join(parts), label)
     # A refusal must never upgrade to a PASS. The tuple form of unmeasured is a
     # coherence requirement this check tried to measure and could not (a script
     # it cannot segment, or siblings in a different script); folding that into

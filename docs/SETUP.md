@@ -62,10 +62,11 @@ every command from here down is relative to it.
 
 ```
 cd ~/.claude/skills/brothersbe
-python3 evals/run_evals.py
 ```
 
-One line per real failure class, each caught by the check that owns it, ending "527 passed, 0 regressions." That is the whole trust claim, executable. Then see the gates on a directory:
+The eval bed and the honesty meta-test are documented once, with the real verbatim
+output, in [README.md](../README.md#a-60-second-first-run): run them from this
+directory. Then see the gates on a directory:
 
 ```
 python3 tools/sbe_gate.py .            # all four gates, advisory

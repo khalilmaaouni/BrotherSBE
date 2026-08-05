@@ -12,6 +12,7 @@ sitting outside a check registry.
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -627,6 +628,95 @@ class TestLineage(unittest.TestCase):
         result = _run([sys.executable, SBE, "lineage", "never/existed.py"], cwd=self.tmp)
         self.assertIn("NO-DATA", result["stdout"])
         self.assertNotIn("PASS", result["stdout"])
+
+
+class TestLineageWorktreeResolution(unittest.TestCase):
+    """BLOCKER A1. `status._scan_evidence` resolves a receipt CLAIMED BY A
+    TASK RECORD (registry `evidenceId` matches the receipt's own `runId`)
+    against that task's own declared `worktree`, never against the root
+    checkout: a closed task's receipt is evidence for the task branch's
+    head, and verifying it against root instead misreports every finished
+    task's own sound evidence as a broken claim (the rc.10/rc.11 gap,
+    `tools/test_sbe_golden_scenario.py`'s own docstring). `sbe lineage`'s
+    receipt scan (`_lineage_receipts`) never learned that lookup: it always
+    calls `evidence_mod.verify(full, cwd=top)` against the repository top,
+    so the identical receipt `sbe status` reads as sound reads as a
+    broken-receipt hop here, over the same commit, for the same task,
+    reproduced below rather than theorized.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-lineage-worktree-")
+        _git_repo(self.tmp)  # root repo; its own HEAD never advances past seed
+
+    def tearDown(self):
+        subprocess.run(["git", "-C", self.tmp, "worktree", "prune"],
+                       check=True, capture_output=True)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _finished_task_receipt(self):
+        """A real task worktree, branched off root HEAD, carrying its own
+        further commit (`widget.py`, never committed to the root branch) and
+        its own sealed receipt over it, registered CLOSED in the root's task
+        registry with that worktree declared: the identical shape
+        `tools/test_sbe_golden_scenario.py` already proves `sbe status`
+        resolves correctly (rc.11)."""
+        wt = os.path.join(self.tmp, "wt-t01")
+        subprocess.run(["git", "-C", self.tmp, "branch", "t01"], check=True)
+        subprocess.run(["git", "-C", self.tmp, "worktree", "add", wt, "t01"],
+                       check=True, capture_output=True)
+        with io.open(os.path.join(wt, "widget.py"), "w", encoding="utf-8") as fh:
+            fh.write("def widget():\n    return 1\n")
+        subprocess.run(["git", "-C", wt, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", wt, "commit", "-qm", "add widget.py"], check=True)
+        out = os.path.join(self.tmp, ".sbe", "evidence", "t01.json")
+        result = _run([sys.executable, SBE, "evidence", "run", "--out", out,
+                       "--covers", "widget.py", "--cwd", wt,
+                       "--", sys.executable, "-c", "pass"])
+        self.assertEqual(result["code"], 0, result)
+        run_id = json.loads(io.open(out, encoding="utf-8").read())["runId"]
+        base = subprocess.run(["git", "-C", self.tmp, "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        reg_dir = os.path.join(self.tmp, ".sbe")
+        reg = os.path.join(reg_dir, "tasks.json")
+        data = {"schemaVersion": "1.0", "tasks": [{
+            "id": "T01", "agent": "alice", "role": "writer", "worktree": wt,
+            "ownedPaths": ["widget.py"], "readOnlyPaths": [], "baseCommit": base,
+            "expiry": None, "status": "closed", "verifyCommand": "python3 -c pass",
+            "evidenceId": run_id, "openedAt": "2026-08-05T00:00:00Z",
+            "closedAt": "2026-08-05T00:01:00Z",
+        }]}
+        with io.open(reg, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=2))
+        return wt
+
+    def test_lineage_resolves_a_receipt_against_its_task_declared_worktree(self):
+        self._finished_task_receipt()
+        # First, the fixture itself must reproduce the state `sbe status`
+        # already resolves correctly (soundEvidence, resolved worktree):
+        # otherwise a green result below would prove nothing about the
+        # actual defect.
+        status_result = _run([sys.executable, SBE, "status", self.tmp, "--json"])
+        status_data = json.loads(status_result["stdout"])
+        self.assertTrue(
+            any("declared worktree" in (e.get("finding") or "")
+               for e in status_data.get("soundEvidence", [])),
+            "the fixture must reproduce the state status already resolves sound, "
+            "against T01's declared worktree: %s" % status_result["stdout"])
+
+        # sbe lineage over the SAME repository, the SAME artifact, must agree:
+        # closed-task state where status says sound must never read as a
+        # broken-receipt hop here just because lineage checked the wrong tree.
+        data = decisions_mod.lineage(self.tmp, "widget.py")
+        broken = [h for h in data["hops"] if h["kind"] == "broken-receipt"]
+        self.assertEqual(
+            broken, [],
+            "lineage must resolve T01's receipt against its own declared worktree, the "
+            "same lookup status._scan_evidence already makes, not against the root's "
+            "own HEAD where widget.py was never committed: %s" % data)
+        receipt_hops = [h for h in data["hops"] if h["kind"] == "receipt"]
+        self.assertTrue(receipt_hops, "the sound receipt must still appear as a plain "
+                                      "'receipt' hop: %s" % data)
 
 
 class TestConcurrentWriters(unittest.TestCase):

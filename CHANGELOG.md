@@ -6,6 +6,272 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.16 (2026-08-06)
+
+- Seal note, measured at integration: the sandbox guide's two `bound to head`
+  lines (review and handover) move at every version bump, because evidence
+  receipts stamp the tool version and that stamp reaches committed sandbox
+  content. Re-captured from the live rc.16 run (deterministic across two runs);
+  the doc-truth suite `tools/test_sbe_sandbox.py` is the check that catches the
+  drift at the next bump too.
+
+- rc.15 remeasure, Loop A round 2: BLOCKER/MAJOR A2 fixed for real, one
+  shared candidate builder replacing two independent ones.
+  Round 1's own fix for A2 added `_approval_ladder_candidate` to `build_
+  report`'s ladder UNCONDITIONALLY, gated only on `08-plan.json` existing;
+  since `lifecycle.RUNG_MISSING_APPROVAL` (40) outranks `RUNG_ACTIVE_TASK`
+  (60) and `RUNG_READY_TASK` (70), a fresh plan whose tasks had not been
+  started yet recommended chasing a pull-request approval on BOTH surfaces
+  before anyone had started the work: the ORIGINAL journey-2 disease
+  (`sbe status --team` already carried it, unfixed, before round 1),
+  unified across both surfaces instead of cured. New `_task_and_approval_
+  candidates` is now the ONE shared candidate builder `_change_ladder_
+  candidates` (`build_report`'s own ladder) and `build_team_report`'s own
+  severity-10 derivation both call, so the two surfaces cannot diverge by
+  construction. Approval is a candidate only once every task the plan
+  declares is closed clean (`_closed_clean`, the identical predicate
+  severity 9's own "nothing left to do" finding already uses); `build_team_
+  report`'s own severity 5 (approval), 6 (convergence) and 12 (evidence)
+  NO-DATA findings are excluded from its severity-10 candidate pool under
+  the SAME gate (a FAIL at any of the three stays eligible regardless of
+  task state, unchanged). A sibling divergence one rung further back is
+  fixed the same way: a fresh-intake-only repository (no plan yet) used to
+  read as `finish` ("nothing blocking here") on plain `sbe status` while
+  `sbe status --team` already named `start-ready-task` ("derive the plan");
+  `_task_and_approval_candidates` now returns that SAME candidate on both
+  surfaces when `00-intake.json` exists and `08-plan.json` does not (a
+  repository with NEITHER, the flat layout's own placeholder target, still
+  recommends nothing: `_team_changes` never discovers a change there
+  either). New `tools/test_sbe_status_team.py::TestThreeSurfaceConsistency`
+  proves all three surfaces (`sbe status`, `sbe status --team`, `sbe map`)
+  agree across four states: fresh intake only, two ready tasks unclaimed
+  (the reproduction: ready-task now wins), a task closed clean with
+  evidence and no approval saved, and evidence/convergence/review all
+  clean with approval genuinely the only thing missing. `TestFullSeveritySet
+  .test_every_change_carries_exactly_one_severity_ten_next_action`'s own
+  "highest severity" check is corrected from a raw `min(severity)`
+  comparison (which, for a fresh single-ready-task plan, happened to
+  coincide with the exact bug this fixes) to the same gated priority rule,
+  documented inline; it still proves severity 10 is derived from a real
+  recorded fact, never a filler. All four calibrated red-first: BLOCKER
+  A2's round-1 fix restored unconditionally reproduces the ready-task
+  regression; the severity-10 pool-filter removed reproduces the raw-
+  severity regression on both `TestThreeSurfaceConsistency` and
+  `TestFullSeveritySet`; the intake gate removed reproduces "derive the
+  plan" leaking onto a truly empty repository
+  (`tools/test_sbe_status.py::TestNoStores`).
+  CRITICAL (docs/book drift, disclosed, not fixed here, integration-class):
+  `python3 tools/test_sbe_book.py` still fails, unchanged from round 1's
+  hostile verdict: `compared 136 output blocks, 1 differ`.
+  `PATH=/usr/bin:/bin SBE_REPLAY_TIMEOUT=240 python3 evals/replay_book.py`
+  isolates the SAME single block: `docs/book/03-reading-the-truth.md`
+  BLOCK 1 (lines 71-99), where the recorded transcript still says
+  `team-operating-model` declared tier T1 and the live run says T3 (round
+  1's Ledger 12 reading the documented override in `design/team-operating-
+  model/00-intake.json`, untouched by this round). `docs/book/` is outside
+  this change's fence; the orchestrator's own regeneration recipe
+  (`evals/replay_book.py --write` at seal) owns closing it.
+  Battery after the last edit: `tools/test_sbe_status.py` 39 OK, `tools/
+  test_sbe_status_team.py` 40 OK (36 carried over plus 4 new), `tools/
+  test_sbe_decisions.py` 46 OK, `tools/test_sbe_golden_scenario.py` 5 OK,
+  `tools/test_sbe_team_workflow.py` 11 OK, `tools/test_sbe_map.py` 7 OK,
+  `tools/test_sbe_handover.py` 34 OK, 0 regressions, 0 counts lowered.
+
+- rc.15 remeasure, Loop A: three journey blockers and five majors closed,
+  red-first (each repro landed as a failing test before its fix; every
+  fixture calibrated by mutating a scratch copy of the source, confirming
+  red, restoring, confirming green on the real code).
+  BLOCKER A1: `sbe lineage`'s own receipt scan
+  (`decisions._lineage_receipts`) verified every receipt against the
+  resolved repository root's OWN head only, never against a claiming task's
+  own declared worktree, so a closed task's sound receipt (the state
+  `status._scan_evidence` already resolves clean, rc.11) read as a
+  `broken-receipt` hop here over the same commit:
+  reproduced with a real task worktree branched off root HEAD, its own
+  further commit and sealed receipt, registered closed with `worktree` set
+  in `.sbe/tasks.json`, where root's own HEAD never advances and the
+  covered file never exists there. `decisions.py` now builds the identical
+  `{runId: (worktree, taskId)}` lookup `status._scan_evidence` already
+  builds (new `_claimed_worktrees`) and resolves a claimed receipt's
+  `evidence.verify` against that worktree, naming the resolution on the
+  hop exactly the way status names it on its own clean entries. Proved by
+  `tools/test_sbe_decisions.py::TestLineageWorktreeResolution`.
+  BLOCKER A2: `build_report`'s LANE C1 candidate ladder (documented as
+  covering sections 1-4 plus task/review candidates) never asked
+  `10-approval.json` anything, so a change whose only outstanding
+  obligation was approval read as `finish` ("nothing blocking here") on
+  plain `sbe status` while `sbe status --team` and `sbe map` (built
+  entirely from the team report) named the SAME commit's own
+  `resolve-missing-approval`. New `_approval_ladder_candidate`, called
+  from `_change_ladder_candidates`, mirrors team's own severity-5 judgement
+  (missing, stale, or a saved `final` other than PASS) through the same
+  `lifecycle.reduce_next_action` both surfaces already share. Proved by
+  `tools/test_sbe_status_team.py::TestCanonicalNextAction.
+  test_missing_approval_is_the_same_action_id_on_both_surfaces`.
+  BLOCKER A3: after a handover is acknowledged, `12-handover.json`'s
+  `status`, `outgoingOwner` and `intendedReceiver` reached the JSON
+  `handover` array but `render_team` never read that array at all, so a
+  human running `sbe status --team` with no `--json` never saw who now
+  owned the change. `render_team` now prints one `OWNERSHIP HANDOVER` line
+  per change whose handover status is not `none`, reusing `_handover_
+  state`'s own `detail` sentence rather than re-deriving it. Proved by
+  `tools/test_sbe_status_team.py::TestHandoverIntegration.
+  test_an_acknowledged_handover_states_ownership_in_the_plain_text`.
+  MAJOR A4: the team severity table had no rung for missing evidence (a
+  plan's verification commands never run under `sbe evidence run`), so
+  that finding was crammed into severity 5, "missing approvals," alongside
+  the unrelated fact that no approval report is saved, both printing under
+  the same header. `TEAM_SEVERITIES` gains severity 12, "missing
+  evidence" (appended rather than inserted among 1-11, because renumbering
+  any existing slot would move `lifecycle.TEAM_SEVERITY_TO_RUNG`'s
+  existing entries out from under themselves); the finding moves to that
+  severity, `TEAM_BLOCKING_SEVERITIES` (replacing `team_blocking`'s bare
+  `1 <= severity <= 6` range check) names it alongside 1-6 so it still
+  exits nonzero exactly as MISSING EVIDENCE already does for plain status,
+  and `lifecycle.TEAM_SEVERITY_TO_RUNG` gains a `setdefault(12,
+  RUNG_MISSING_EVIDENCE)` registration from status.py itself (see the
+  deviation note below: this table is lifecycle.py's own by that module's
+  documented design, and belongs there once a future change is free to
+  touch that file). The JSON contract bound in `tools/test_sbe_status_
+  team.py` widens from 1..11 to 1..12 accordingly. Proved by
+  `tools/test_sbe_status_team.py::TestMissingEvidenceRung`.
+  MAJOR A6: `_team_changes` discovered a dossier only when it carried
+  `00-intake.json`, so a dossier holding a validated `08-plan.json` but no
+  intake (deleted, or a plan derived without one ever being recorded) was
+  invisible to `sbe status --team`, to plain `sbe status`'s own CR-06
+  dossier discovery, and to `sbe map` (built entirely from the team
+  report). Discovery now also fires on a validated plan (new `_has_
+  validated_plan`: a parseable `08-plan.json` carrying a non-empty `tasks`
+  list, each entry naming an `id`); `build_team_report` and `render_team`
+  gain a new, purely additive `planOnly` list (mirroring the `handover`
+  list's own additive pattern) naming every such change, labeled "exists,
+  no intake recorded yet." Proved by `tools/test_sbe_status_team.py::
+  TestPlanOnlyDiscovery`.
+  MAJOR A7: task completion was never stated plainly in the team view; a
+  reader had to notice the absence of a severity-8 "ready" finding and
+  infer completion from silence. `build_team_report` now returns a
+  `completedTasks` list (closed, non-FORCED registry records, sourced from
+  the same `_closed_clean` rule the per-task severity-9 finding already
+  uses) and `render_team` states it plainly in one header line. Proved by
+  `tools/test_sbe_status_team.py::TestCompletedTasksLine`.
+  Ledger 12: after a valid, documented tier override in `00-intake.json`
+  (the `tier`/`override`/`override_reason` shape `tools/sbe_design.py`
+  itself reads and treats as authoritative once the two tier fields agree
+  and a reason is recorded), `build_report`'s scope notes and its MISSING
+  EVIDENCE obligation gate kept using the COMPUTED tier, because `impact.
+  read_intake` always re-derives the tier from `answers` alone (by design,
+  L15) and status never separately consulted the override fields at all.
+  New `_declared_tier` reads the same two fields `sbe design` reads (never
+  replicating its reviewability threshold on the reason's word/character
+  count, which stays that gate's own job) and `build_report` now reassigns
+  `human_tier` through it once per target, so the disagreement text, the
+  scope note, and the evidence obligation all agree with the documented
+  override. Proved by `tools/test_sbe_status.py::TestTierOverride`.
+  Ledger 16: `team_blocking`'s exit-code rule is now named explicitly
+  (`TEAM_BLOCKING_SEVERITIES`, replacing a bare inline range check) with
+  its own doc comment stating exactly which severities are actionable and
+  why 7-11 are not, mirroring `any_blocking`'s existing docstring for
+  plain status. No behavior change beyond MAJOR A4's own severity-12
+  addition above: systematic empirical probing (a fully green end-to-end
+  scenario, task closed clean, convergence and approval both PASS and
+  bound to head, review approved by a non-author) already exits 0 today,
+  and this project's own golden-scenario suite explicitly calls the
+  severity-5/6 NO-DATA findings "legitimate" blockers, not a bug; no
+  scenario reproducing "every finding informational and healthy, exit 1"
+  was found. Recorded as a deviation rather than guessed at.
+  Ledger 18: NOT fixed here. The re-run-review staleness gap described
+  (no warning when `11-review.json`'s bound head differs from current,
+  without `--write`) belongs to `sbe review`'s own read path, `_cmd_
+  review` in `src/brothersbe/cli.py`, which never reads `11-review.json`
+  at all without `--write`; `reviewroute.py` is a different command
+  (`sbe review-route`) that routes specialist reviewers from a diff and
+  never reads a saved review record either. `cli.py` is outside this
+  change's fence. Recorded as a deviation rather than guessed at.
+  Battery after the last edit: `tools/test_sbe_decisions.py` 46 OK,
+  `tools/test_sbe_status.py` 39 OK, `tools/test_sbe_status_team.py` 36 OK,
+  `tools/test_sbe_handover.py`, `tools/test_sbe_map.py`,
+  `tools/test_sbe_golden_scenario.py` and `tools/test_sbe_team_workflow.py`
+  unchanged and green, 0 regressions.
+
+- The beginner sandbox guide (`docs/guides/00-sandbox.md`) is truthful again
+  after the rc.15 remeasure surfaced eight small drifts. Step 3's captured
+  `sbe_design.py artifacts` block was recaptured from a live run (the
+  `.brothersbe` project-init folder now sits beside `design/`, so a run from
+  the repo root reads two directories there, not zero; the guide's command
+  now `cd`s back to the repo root before it, matching what a real run
+  prints). The false promise that a reader's own commit hash "will read the
+  same" as the guide's is rewritten honestly: only git IDENTITY is pinned
+  into the sandbox repository, the commit DATE is pinned only inside the
+  builder's own subprocess, so a reader's live step 4 commit differs and
+  that is expected. A stale, orphaned hash (`71b0b5c910b2`, quoted nowhere
+  else on the page) is corrected to the hash the page actually prints
+  above it. Three new sentences state what the doc previously left the
+  reader to discover the hard way: the review step's vault-and-registry
+  section prints roughly eleven unfamiliar check names on a machine that
+  has one configured, varies machine to machine, and can be skipped in the
+  sandbox; that same read is read-only and expected, because the sandbox
+  does not build or switch to its own vault; and a configured vault or a
+  configured private-name list each independently raise the doctor step's
+  PASS count above what the page shows, no specific number promised,
+  because `vault` and `private-names` are two separate NO-DATA sources and
+  either or both may already read PASS on a reader's own machine.
+  `tools/test_sbe_sandbox.py` now drives step 3 from the sandbox repo root
+  (matching the guide's corrected command) and pins the newly captured
+  `scope`, `dossier:` and `artifacts` lines, calibrated by mutating each
+  line in the tracked guide file and watching the suite go red, then
+  restoring it clean. The quickstart duplicated between `README.md` and
+  `docs/SETUP.md` is deduplicated: `README.md`'s "A 60-second first run"
+  stays the one source for the eval bed and the honesty meta-test, and
+  `docs/SETUP.md` step 4 now points there for those two while keeping its
+  own gate commands (`sbe_gate.py .`, `sbe_gate.py numbers .`,
+  `sbe_gate.py --strict design`) inline, since README's section never
+  carried the bare all-four-gates advisory form.
+  `docs/KNOWN-LIMITS.md` gains one entry: a refused `sbe task open`
+  overlap leaves no durable record (no registry write, no telemetry row),
+  by design, because the registry records state that exists, never
+  attempts that failed to change it. Proven by
+  `python3 tools/test_sbe_sandbox.py` (10 tests, OK), plus
+  `grep -c 71b0b5c910b2 docs/guides/00-sandbox.md` (0) and
+  `grep -nE 'will read the same' docs/guides/00-sandbox.md` (no match).
+
+- LANE A wiring: `.github/workflows/brothersbe-gates.yml` ran nearly every
+  `tools/test_sbe_*.py` suite but was missing four that existed on disk and ran on
+  nobody's merge path: `test_sbe_sandbox.py`, `test_sbe_map.py`,
+  `test_sbe_decision_contract.py`, `test_sbe_import_hygiene.py`. All four are now
+  wired in as steps, in the position their name sorts to among the neighboring
+  suites, mirroring the existing step shape. `tools/sbe_design.py`'s
+  `check_artifacts` builds `label` (the sentence naming the written tier, the
+  computed tier, and the override's direction) and appends it on the PASS branch
+  and on the NO-DATA branch, but the FAIL-for-missing-artifacts branch dropped it,
+  exactly the branch that fires right after an override raises the tier and the
+  newly required artifacts are not there yet: a reader saw the missing list but
+  never which tier was written or why. That branch now appends the same `label`.
+  `skills/status/SKILL.md` told the reader to run `sbe fences`, which reads the
+  hand-written `STATE.md` registry this repository does not configure, a second
+  source that contradicted `sbe status`'s own `.sbe/tasks.json`-backed picture; it
+  now points at `sbe task list` instead. Proven by
+  `tools/test_sbe.py::TestDesignOverrideLabelOnMissingArtifactsFail` (calibrated:
+  red when `label` is removed from that branch in a scratch mutation, green after
+  restore, restoration verified with `git diff` clean), `python3 tools/test_sbe.py`
+  (count not lowered), the four newly wired suites each run directly and green, and
+  `grep -n 'sbe fences' skills/status/SKILL.md` returning nothing.
+- LANE A wiring, round 2: the four newly wired steps above went into the workflow
+  without going into the copy-ready CI blocks three docs carry, so a reader who
+  assembled CI from the doc fragment instead of copying the file got 4 of 42 steps
+  fewer than the shipped workflow, and `docs/guides/01-quickstart.md`'s fence under
+  "The workflow, verbatim:" stopped being verbatim. `README.md`,
+  `docs/HOW-IT-WORKS.md` and `docs/guides/01-quickstart.md` are repasted from the
+  edited workflow (quickstart's fence replaced whole, byte for byte; the other two,
+  the four missing step blocks inserted at the position their name already sorted
+  to). Proven by `python3 evals/run_evals.py`: both
+  `no-copy-ready-ci-block-shows-fewer-steps-than-the-shipped-workflow` (for these
+  three docs) and `guide-01s-verbatim-workflow-fence-is-the-shipped-workflow` are
+  green. `docs/guides/05-a-worked-engagement.md` carried the same class of
+  copy-ready CI block and the same 4-of-42 gap; the fence was extended for exactly
+  that file in the final cycle, its block is repasted from the shipped workflow in
+  this same change, and its CI fragment's gate step now names `--strict design`,
+  matching the workflow line it quotes, so the parity eval covers all four docs.
+
 ## 1.0.0-rc.15 (2026-08-05)
 
 - LANE C1 (B-003), one canonical next action: at least three independent

@@ -57,7 +57,7 @@ bin/sbe design artifacts /tmp/sbe-book-ch13/dossier
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   scope      -        read 1 dossier under /tmp/sbe-book-ch13/dossier (.); 0 of 0 director(y/ies) directly under /tmp/sbe-book-ch13/dossier contributed no dossier
   dossier: . (under /tmp/sbe-book-ch13/dossier)
-  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; examined . under /tmp/sbe-book-ch13/dossier [severity: gate]
+  artifacts  FAIL     tier T3 requires 01, 02, 03, 04, 05, 06, 07; missing: 01-purpose.md, 02-process.md, 03-adr.md, 04-technology-map.md, 05-data-model.md, 06-diagrams.md, 07-verification.md; declared override raising the tier to T3 from computed T2, reason: this hands a partner's own revenue numbers to a brand new external caller; examined . under /tmp/sbe-book-ch13/dossier [severity: gate]
 ```
 
 The override took: T3 owes one more artifact than T2 did, and none exist

@@ -1266,3 +1266,27 @@ its own, and inherits the boundary here rather than reopening it.
 Full text: `SECURITY.md`, `docs/adr/2026-08-05-gui-server-amendment.md`,
 `tools/test_sbe.py::TestAuditableSurface`,
 `tools/test_sbe.py::TestGuiNetworkAllowlistIsNarrow`.
+
+
+## A refused overlap on `sbe task open` leaves no durable record
+
+`src/brothersbe/tasks.py::cmd_open` checks a new task's declared `owns` paths
+against every OTHER open task's own `ownedPaths` (through the one shared
+`claims_overlap` / `paths_overlap` rule `tools/sbe_fence_hook.py` also uses)
+BEFORE it ever reaches the read-modify-write that appends a record and calls
+`save_registry`. A refusal prints one line to stderr ("sbe task open:
+refused. Owned path ... overlaps ...") and returns a nonzero exit code;
+nothing is appended to `.sbe/tasks.json`, and nothing in this path calls
+`tools/sbe_telemetry.py`, so no telemetry row, session log line, or registry
+field records that the attempt happened at all. Once the calling shell's own
+history or terminal scrollback is gone, so is every trace of the refusal.
+
+The silence is intended, not an oversight: the registry's job is to record
+STATE that exists (open tasks and the paths they own), never the attempts
+that failed to change it, so a refusal that changed nothing durable has
+nothing durable to write; the calling process's own exit code and stderr
+line are the whole receipt, by design, the same way an ordinary shell
+command that exits nonzero is not itself logged anywhere just because it
+failed.
+
+Full text: `src/brothersbe/tasks.py` (`cmd_open`, `claims_overlap`).

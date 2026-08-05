@@ -2743,6 +2743,69 @@ class TestMarketplaceManifest(unittest.TestCase):
                       "the CLI exited 0 but did not say Validation passed: %s" % result.stdout)
 
 
+class TestDesignOverrideLabelOnMissingArtifactsFail(unittest.TestCase):
+    """Ledger 11: `check_artifacts` in tools/sbe_design.py builds `label`, the
+    sentence naming the written tier, the computed tier, and the override's
+    direction, and appends it on the PASS branch and on the NO-DATA (tier
+    requires nothing) branch, but the FAIL-for-missing-artifacts branch, the
+    one that fires right after an override moved the tier up and the newly
+    required artifacts are not there yet, used to drop it: a reader saw only
+    the missing list, never which tier was written or why. This pins the
+    label back onto that FAIL line. Real subprocess against the real tool,
+    matching TestDossierBindingScenario23's own discipline below."""
+
+    DESIGN = os.path.join(HERE, "sbe_design.py")
+    T1_ANSWERS = {"changes_contract": False, "crosses_boundary": True,
+                  "reversible_under_hour": True, "touches_sensitive": False,
+                  "consumers": "none"}
+    PURPOSE = ("# Purpose\nProblem: x\nUsers: y\nSuccess: z\nNon-goals: w\nIf wrong: v\n")
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def _write(self, rel, obj):
+        path = os.path.join(self.dir, rel)
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(obj if isinstance(obj, str) else json.dumps(obj))
+
+    def _run(self):
+        out = subprocess.run([sys.executable, self.DESIGN, "artifacts", self.dir],
+                             capture_output=True, text=True)
+        return out.stdout + out.stderr
+
+    def _verdict(self, text):
+        # Three values, not two: a two-value (verdict, evidence) return is the
+        # shape the honesty meta-test refuses outside a check registry, and
+        # every multi-value helper in this project's test files is a 3-tuple
+        # (see TestDossierBindingScenario23._verdict below, the sibling this
+        # mirrors).
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == "artifacts":
+                return parts[1], line, text
+        return None, "NO VERDICT LINE for 'artifacts' in:\n%s" % text, text
+
+    def test_the_fail_for_missing_artifacts_after_an_override_names_the_label(self):
+        # Written tier T3, answers that compute T1: a valid override (both
+        # fields agree, reason well formed) that raises the tier. Only
+        # 01-purpose.md exists, so T3's other six required artifacts are
+        # missing and check_artifacts must FAIL, carrying the same override
+        # label the PASS and NO-DATA branches print elsewhere in that
+        # function.
+        self._write("01-purpose.md", self.PURPOSE)
+        self._write("00-intake.json", {"tier": "T3", "answers": self.T1_ANSWERS,
+                                        "override": "T3",
+                                        "override_reason": "the auditor requires the full dossier"})
+        verdict, line, _ = self._verdict(self._run())
+        self.assertEqual(verdict, "FAIL", line)
+        self.assertIn("missing:", line)
+        self.assertIn("declared override raising the tier to T3 from computed T1", line,
+                      "the FAIL-for-missing-artifacts branch must carry the same override "
+                      "label the PASS and NO-DATA branches print: %r" % line)
+        self.assertIn("reason: the auditor requires the full dossier", line)
+
+
 class TestDossierBindingScenario23(unittest.TestCase):
     """SCENARIO 23 (docs/BYPASS-COVERAGE.md row 23): a dossier from a finished
     change, left in place, reads identically to one written for the change in

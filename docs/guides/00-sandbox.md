@@ -110,6 +110,14 @@ sandbox repository's own git config, which the builder set for you, so that line
 reads the same for everyone. If any line here says FAIL, stop and fix that before
 going on; everything below assumes a clean doctor.
 
+**Your own machine may already carry one or both of the other NO-DATA lines as
+PASS.** If `BROTHERSBE_VAULT` is exported, `vault` reads PASS instead of NO-DATA;
+if a private-name list is configured (`BROTHERSBE_PRIVATE_NAMES` or
+`~/.brothersbe-private-names`), `private-names` reads PASS instead of NO-DATA. Either
+or both push the PASS count higher than what is shown above. That is not a problem:
+it just means this sandbox run is reading real setup you already have on this
+machine, the same env var or file any other `sbe` command here would read.
+
 ---
 
 ## Step 2: describe an outcome
@@ -145,14 +153,15 @@ design documentation this change owes before BrotherSBE will call it done. See t
 directly:
 
 ```bash
+cd ~/sbe-sandbox/repo
 python3 "$SBE/tools/sbe_design.py" artifacts .
 ```
 
 ```
 BROTHERSBE DESIGN CHECKS  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
-  scope      -        read 1 dossier under . (.); 0 of 0 director(y/ies) directly under . contributed no dossier
-  dossier: . (under .)
-  artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for; examined . under . [severity: gate]
+  scope      -        read 1 dossier under . (design/say-hello); 1 of 2 director(y/ies) directly under . contributed no dossier (.brothersbe)
+  dossier: design/say-hello (under .)
+  artifacts  NO-DATA  tier T0 requires no artifact, so this check opened none and there is nothing here it can vouch for; examined design/say-hello under . [severity: gate]
 ```
 
 T0 requires nothing, so this reads NO-DATA rather than PASS: nothing was checked
@@ -302,7 +311,13 @@ nowhere else: that is what "closed clean" means here, not just "the check passed
 `sbe review` reads two things every time: the scored surface (silent-failure lints,
 plus whatever your own vault and registries have to say about your habits, which is
 not about this change) and the four hard gates (numbers, migration, approval, ran).
-`--write` turns the verdict into a durable record.
+`--write` turns the verdict into a durable record. That vault-and-registry read is
+read-only and expected here: this practice sandbox does not build or switch to a
+throwaway vault of its own, so review reads whatever real `BROTHERSBE_VAULT` and
+registries you already have configured on this machine, exactly as any other `sbe
+review` would; nothing about running it inside this disposable repository writes
+back to either one. Switching to a dedicated practice environment is a step this
+ten-minute walkthrough has not reached yet.
 
 ```bash
 python3 "$SBE/bin/sbe" review design/say-hello --write --reviewer you --reviewer-type human --result approved
@@ -315,7 +330,11 @@ silent-failure-lints      NO-DATA  lint root design/say-hello holds no scannable
 CHECKS FED BY A VAULT OR REGISTRY OUTSIDE ~/sbe-sandbox/repo/design/say-hello (11 of 12, of which 10 have no source on this machine at all): a verdict here is not a statement about the code in this directory.
   ... 11 more lines here on a real run: your own vault and registry setup, almost
   all NO-DATA on a machine that has not configured either, which is normal and is
-  not about the say-hello change either way.
+  not about the say-hello change either way. On a machine that DOES have a vault or
+  registries configured, those same eleven lines print real check names instead
+  (`citation-inventory` through `review-cadence`): that whole section varies
+  machine to machine, and you can skip reading it here, because none of it is about
+  the say-hello change either way.
 
 BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVED is not a pass either)
   numbers   NO-DATA  no numbers-manifest found; if this change presents no decision figure that is correct, else add one; no numbers-manifest.json read under design/say-hello; 0 of 0 director(y/ies) directly under design/say-hello contributed no numbers-manifest.json [severity: gate]
@@ -323,7 +342,7 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVE
   approval  NO-DATA  no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct; no APPROVAL read under design/say-hello; 0 of 0 director(y/ies) directly under design/say-hello contributed no APPROVAL [severity: gate]
   ran       NO-DATA  no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt; no ran-receipt.json read under design/say-hello; 0 of 0 director(y/ies) directly under design/say-hello contributed no ran-receipt.json [severity: gate]
 
-sbe review: review record written, bound to head 886e5de52fcd, 0 finding(s) and 0 accepted risk(s):
+sbe review: review record written, bound to head fd215cbeefba, 0 finding(s) and 0 accepted risk(s):
   ~/sbe-sandbox/repo/design/say-hello/11-review.json
 
 sbe review: exit 0 means no control FAILED. It does not mean a control passed. Read the verdict lines above: NO-DATA examined nothing and WAIVED suppressed a finding, and neither one is a pass.
@@ -332,9 +351,11 @@ sbe review: exit 0 means no control FAILED. It does not mean a control passed. R
 Nothing here presents a decision figure, a migration, a money path, or SQL that
 needed to run standalone (the greeting service's own check already ran in step 6),
 so four honest NO-DATA lines, zero findings, and a written record. The head hash
-(`71b0b5c910b2` above) is your own commit from step 4; yours will read the same if
-you typed every command exactly, because this whole sandbox pins its git identity
-and dates for exactly this reason.
+(`fd215cbeefba` above) is your own commit from step 4; yours will differ, and that
+is expected: the sandbox builder pins your git IDENTITY into this repository's own
+config, but not the commit DATE, which is pinned only inside the builder's own
+subprocess calls, so your step 4 commit carries whatever moment you actually typed
+it and its hash differs accordingly.
 
 ---
 
@@ -349,7 +370,7 @@ python3 "$SBE/bin/sbe" handover prepare design/say-hello --outgoing you@example.
 ```
 
 ```
-sbe handover prepare: written, bound to head 886e5de52fcd: 1 done, 0 in flight, 0 not started, 5 evidence item(s). From you@example.invalid to teammate@example.invalid. Ownership remains with you@example.invalid until teammate@example.invalid acknowledges.
+sbe handover prepare: written, bound to head fd215cbeefba: 1 done, 0 in flight, 0 not started, 5 evidence item(s). From you@example.invalid to teammate@example.invalid. Ownership remains with you@example.invalid until teammate@example.invalid acknowledges.
   ~/sbe-sandbox/repo/design/say-hello/12-handover.json
 ```
 

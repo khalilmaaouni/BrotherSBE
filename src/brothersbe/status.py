@@ -115,7 +115,10 @@ from . import impact as impact_mod
 from . import lifecycle
 from . import tasks as tasks_mod
 from . import work as work_mod
-from .impact import DiffUnavailable, _git  # noqa: E402  (the same private helper evidence.py reuses)
+from .impact import DiffUnavailable, _git, _tier_index  # noqa: E402  (the same private
+        # helpers evidence.py and decisions.py already reuse: `_git` for the same plumbing,
+        # `_tier_index` (Ledger 12's `_declared_tier`) for the same tier-order check
+        # `decisions.py` already imports it for, rather than a second copy of TIERS here)
 
 #: How each kind reads in a report, and the command line that would record
 #: evidence for it. The NAMES are not defined here: they come from
@@ -176,6 +179,54 @@ def _receipt_kinds(receipt):
     the absence is reported rather than assumed.
     """
     return evidence_mod.declared_kinds(receipt)
+
+
+def _declared_tier(raw_intake, computed_tier):
+    """Ledger 12: the tier `tools/sbe_design.py`'s own override check would
+    treat as authoritative for this intake, read from the SAME two fields
+    it reads (`tier`, `override`, beside `override_reason`), rather than
+    the always-recomputed value `impact.read_intake` returns.
+
+    `impact.read_intake` re-derives the tier from `answers` on purpose (L15:
+    a hand-edited `tier` field is an edit, not an override, and must never
+    silently pass), and this module keeps trusting that recomputed floor
+    everywhere else. A DOCUMENTED override changes what the human declared:
+    `sbe design --strict` already accepts a `tier` field that differs from
+    the computed one once `override` names that SAME tier and
+    `override_reason` carries an actual reason, and prints the OVERRIDDEN
+    tier from then on, never the computed one. Before this function, status
+    kept printing (and gating MISSING EVIDENCE on) the computed tier even
+    after a documented, valid override, so a change `sbe design` already
+    treats as T2 could read here as the T0 its raw answers alone compute.
+
+    Returns `computed_tier` unchanged unless `raw_intake["tier"]` and
+    `raw_intake["override"]` agree with each other, both are non-None, and
+    `override_reason` is a non-empty string: exactly the shape
+    `sbe design`'s own override branch requires before IT stops printing
+    the computed tier. This function does not replicate sbe_design's own
+    reviewability threshold on the reason's word/character count (that
+    finer-grained gate is a control this module does not own, by the same
+    "never a second gate runner" law its own module docstring states); a
+    reason too short for `sbe design --strict` to accept still reads as
+    documented here, and `sbe design` remains the one place that refuses
+    it. A missing, mismatched, or blank-reasoned override reads as no
+    override at all and falls back to `computed_tier`, never blocking on it
+    the way `sbe design` does.
+    """
+    if not isinstance(raw_intake, dict):
+        return computed_tier
+    declared = raw_intake.get("tier")
+    override = raw_intake.get("override")
+    reason = raw_intake.get("override_reason")
+    if declared is None or override is None or declared != override:
+        return computed_tier
+    try:
+        _tier_index(declared)
+    except ValueError:
+        return computed_tier
+    if not isinstance(reason, str) or not reason.strip():
+        return computed_tier
+    return declared
 
 
 def _scan_evidence(root, evidence_dir):
@@ -665,36 +716,140 @@ def _review_ladder_check(root, doss, head):
     return True, None
 
 
-def _change_ladder_candidates(root, doss, head, prefix):
-    """LANE C1 (B-003): the task-active / task-ready / review-not-cleared
-    candidates for the change whose dossier is `doss`, in `lifecycle`'s own
-    rung vocabulary, for `build_report`'s `_next_action` to consider
-    alongside sections 1-4. `[]` when no `08-plan.json` exists yet at
-    `doss`: the same "nothing to derive yet" starting state `build_team_
-    report`'s own `if not plan` branch already reads as a fact, never an
-    error, so a repository with no plan anywhere never gains a candidate
-    here and `_next_action`'s output stays exactly what it was before this
-    lane.
+def _ladder_finding(rung, severity, verdict, evidence, commit, owner, reason, basis,
+                    detail):
+    """A2 ROUND 2: one task/approval/plan-readiness candidate, shaped so
+    BOTH of `_task_and_approval_candidates`'s callers can read it without
+    either one re-shaping what the other already computed. `_change_ladder_
+    candidates` (`build_report`'s own ladder) reads only `rung` and
+    `reason`, the same two keys every other candidate in that function's
+    list already carries via `lifecycle.candidate`. `build_team_report`'s
+    severity-10 derivation reads the full finding shape (`severity`,
+    `verdict`, `evidence`, `commit`, `owner`, `nextAction`) to build its own
+    recorded entry, the SAME shape `_finding` produces for every other
+    finding in that report. `change` is set to `None`: neither caller ever
+    reads it back off a candidate (team's own severity-10 entry is built
+    from the LOOP's own `name`, never from a winning candidate's `change`
+    field), so inventing one here would be a fact nobody consumes.
+    """
+    entry = _finding(None, severity, verdict, evidence, commit, owner, reason, basis,
+                     detail)
+    entry["rung"] = rung
+    entry["reason"] = reason
+    return entry
 
-    Reuses `tasks_mod.load_registry` and `work_mod._dependency_problem`,
-    the SAME primitives `build_team_report`'s own per-change loop reads the
-    identical facts through: this is the same task-readiness rule read a
-    second time for a second surface, never a second rule. An unreadable
-    registry reads as `[]` here (the existing ACTIVE CONFLICTS note already
-    names that failure elsewhere in this report; this function does not
-    invent a second, competing finding for it).
+
+def _approval_ladder_candidate(doss, head, prefix):
+    """BLOCKER A2 / A2 ROUND 2: the missing-approval candidate for the
+    change whose dossier is `doss`, in `lifecycle`'s own rung vocabulary,
+    for `_task_and_approval_candidates` to include once every task the
+    plan declares is closed clean (this function is only ever called from
+    there, after that check, for the identical "nothing left to approve
+    until nothing is left to do" reason -- see that function's own
+    docstring for why the gate moved from "a plan exists" to "the plan's
+    own work is finished").
+
+    Mirrors the IDENTICAL `10-approval.json` judgement `build_team_report`'s
+    own severity-5 finding already makes below (missing, stale, or a saved
+    `final` other than PASS), read here a second time for a second surface
+    rather than re-derived, so a second `sbe status --json` reading over the
+    SAME commit never falls through to `finish` ("nothing blocking here")
+    while `sbe status --team` and `sbe map` (built entirely from the team
+    report) both name this change's own `resolve-missing-approval`.
+    Reproduced, not theorized: `tools/test_sbe_status_team.py::
+    TestCanonicalNextAction.test_missing_approval_is_the_same_action_id_on_both_surfaces`.
+
+    A stale approval (bound to a commit that is no longer head) is
+    deliberately `RUNG_STALE_RECORD`, not this rung, mirroring team's own
+    severity-4 split for the identical fact: staleness is a different
+    finding from absence or failure, and this function keeps them apart the
+    same way team's own `_finding` calls do.
+    """
+    approval_path = os.path.join(doss, "10-approval.json")
+    approval = _read_json_or_none(approval_path)
+    if approval is None:
+        return [_ladder_finding(
+            lifecycle.RUNG_MISSING_APPROVAL, 5, "NO-DATA", approval_path, head, None,
+            "%srun sbe pr verify and save its --json output as 10-approval.json "
+            "(MISSING APPROVAL)" % prefix, "observed",
+            "no approval report is saved for this change; absence is a fact, not an "
+            "accusation")]
+    bound = approval.get("headSha")
+    if head and bound and bound != head:
+        return [_ladder_finding(
+            lifecycle.RUNG_STALE_RECORD, 4, "FAIL", approval_path, bound, None,
+            "%sre-run sbe pr verify against the current head (MISSING APPROVAL)" % prefix,
+            "derived",
+            "the approval report binds to %s but the repository head is %s: stale "
+            "approval" % (bound[:12], head[:12]))]
+    if approval.get("final") != "PASS":
+        return [_ladder_finding(
+            lifecycle.RUNG_MISSING_APPROVAL, 5, str(approval.get("final")), approval_path,
+            bound, None,
+            "%sresolve the failing controls on the pull request (MISSING APPROVAL)"
+            % prefix, "observed",
+            "the saved approval report's FINAL is %s" % approval.get("final"))]
+    return []
+
+
+def _task_and_approval_candidates(doss, head, prefix, plan, records, registry_data):
+    """A2 ROUND 2: the ONE shared plan-readiness / task-readiness /
+    approval candidate list, read IDENTICALLY by `_change_ladder_
+    candidates` (`build_report`'s own ladder) and `build_team_report`'s
+    severity-10 derivation, so the two surfaces cannot diverge by
+    construction the way round 1's BLOCKER A2 fix let them.
+
+    Reproduced, not theorized: round 1 added `_approval_ladder_candidate`
+    to this function's predecessor UNCONDITIONALLY, gated only on
+    `08-plan.json` existing. Since `RUNG_MISSING_APPROVAL` (40) outranks
+    `RUNG_ACTIVE_TASK` (60) and `RUNG_READY_TASK` (70), a fresh plan whose
+    tasks had not been started yet recommended chasing a pull-request
+    approval on BOTH surfaces before anyone had started the work -- the
+    original "review pending" journey-2 disease (see `TestCanonicalNext
+    Action`'s own module docstring), unified across both surfaces instead
+    of cured. `build_team_report`'s own severity 5 (missing approval), 6
+    (missing convergence) and 12 (missing evidence) NO-DATA findings share
+    the IDENTICAL defect for the SAME reason (none of the three is gated on
+    task completion either), which is why this function's own approval
+    candidate, and `build_team_report`'s own exclusion of those three
+    findings from its candidate pool below, are both gated on the SAME
+    fact: whether every task this plan declares is closed clean. A FAIL
+    (something already ran and failed) at severity 5, 6 or 12 is a
+    different fact from "not attempted yet" and is never gated this way,
+    on either surface.
+
+    `plan`: the parsed `08-plan.json`, or `None` when no plan exists yet for
+    this change -- in which case a SINGLE "derive the plan" candidate is
+    returned (mirroring `build_team_report`'s own severity-8 "no plan"
+    finding's text exactly, the fix for the SAME divergence one rung
+    further back: plain `sbe status` used to answer "nothing blocking here"
+    for a dossier team already named "start-ready-task" for, over the exact
+    same fresh-intake-only repository), and `records`/`registry_data` are
+    never read. `records`: this change's own task-registry rows (already
+    filtered to the plan's own declared task ids by both callers).
+    `registry_data`: the loaded registry; `None` means the registry could
+    not be read, in which case this function returns `[]` (nothing can be
+    safely judged ready or done without it), the same conservative answer
+    `_change_ladder_candidates` always gave on a registry read failure.
+
+    Approval is only ever a candidate once every task the plan declares is
+    CLOSED CLEAN (`_closed_clean`, the identical predicate `build_team_
+    report`'s own severity 9 "nothing left to do; open a PR" finding
+    already uses): there is nothing to approve until there is nothing left
+    to do, the same moment a plan stops needing an active or ready task
+    candidate at all.
     """
     plan_path = os.path.join(doss, "08-plan.json")
-    plan = _read_json_or_none(plan_path)
-    if not plan:
+    if plan is None:
+        return [_ladder_finding(
+            lifecycle.RUNG_READY_TASK, 8, "NO-DATA", plan_path, head, None,
+            "%srun sbe plan %s --write to derive the task graph" % (prefix, doss),
+            "observed",
+            "no plan exists for this change yet, so there are no tasks to ready: a "
+            "starting state to move past, not a ready task and not an error")]
+    if registry_data is None:
         return []
-    plan_tasks = plan.get("tasks", [])
-    plan_ids = set(t.get("id") for t in plan_tasks)
-    try:
-        registry_data = tasks_mod.load_registry(root)
-    except tasks_mod.RegistryUnusable:
-        return []
-    records = [r for r in registry_data.get("tasks", []) if r.get("id") in plan_ids]
+
     records_by_id = {}
     for r in records:
         records_by_id.setdefault(r.get("id"), []).append(r)
@@ -702,10 +857,14 @@ def _change_ladder_candidates(root, doss, head, prefix):
     candidates = []
     for r in records:
         if r.get("status") == "open":
-            candidates.append(lifecycle.candidate(
-                lifecycle.RUNG_ACTIVE_TASK,
+            candidates.append(_ladder_finding(
+                lifecycle.RUNG_ACTIVE_TASK, 7, "NO-DATA", "task %s" % r.get("id"), head,
+                r.get("agent"),
                 "%sfinish or check task %s with sbe work (ACTIVE TASK)"
-                % (prefix, r.get("id"))))
+                % (prefix, r.get("id")), "observed",
+                "task %s is open, held by %s" % (r.get("id"), r.get("agent"))))
+
+    plan_tasks = plan.get("tasks", [])
     if not candidates:
         for task in plan_tasks:
             tid = task.get("id")
@@ -715,12 +874,68 @@ def _change_ladder_candidates(root, doss, head, prefix):
             blockers = [b for b in
                        (work_mod._dependency_problem(registry_data, d) for d in deps) if b]
             if not blockers:
-                candidates.append(lifecycle.candidate(
-                    lifecycle.RUNG_READY_TASK,
+                candidates.append(_ladder_finding(
+                    lifecycle.RUNG_READY_TASK, 8, "NO-DATA", "task %s" % tid, head, None,
                     "%srun sbe work start %s --plan %s to begin it (READY TASK)"
-                    % (prefix, tid, plan_path)))
+                    % (prefix, tid, plan_path), "derived",
+                    "task %s's dependencies are all closed clean and it carries no "
+                    "registry record yet: ready to start" % tid))
                 break  # one is enough to name; the same "first item wins"
                        # convention every other section here already uses
+
+    all_done = bool(plan_tasks) and all(
+        _closed_clean(records_by_id.get(t.get("id"), [])) for t in plan_tasks)
+    if all_done:
+        candidates.extend(_approval_ladder_candidate(doss, head, prefix))
+
+    return candidates
+
+
+def _change_ladder_candidates(root, doss, head, prefix):
+    """LANE C1 (B-003) / A2 ROUND 2: the plan-readiness / task-active /
+    task-ready / missing-approval candidates for the change whose dossier
+    is `doss`, from the SAME `_task_and_approval_candidates` `build_team_
+    report`'s severity-10 derivation reads, plus the review-not-cleared
+    candidate (kept here rather than folded into that shared function:
+    team's own severity 11 already carries several distinct sub-findings --
+    self-review, staleness, structured findings, LANE B-006 history -- that
+    `_review_ladder_check`'s single cleared/not-cleared answer intentionally
+    does not re-derive; see that function's own docstring).
+
+    `08-plan.json` not existing yet at `doss` no longer ALWAYS short-
+    circuits to `[]`: when `00-intake.json` exists at `doss` (a real,
+    discovered change with nothing planned yet), `_task_and_approval_
+    candidates` now returns the single "derive the plan" candidate for
+    that state, the fix for the sibling divergence one rung further back
+    from BLOCKER A2 (plain `sbe status` used to answer "nothing blocking
+    here" for a fresh-intake-only repository that `sbe status --team`
+    already named "start-ready-task" for). When NEITHER `00-intake.json`
+    nor `08-plan.json` exists at `doss`, this still returns `[]`: nothing
+    has been declared yet to plan, the same "not a discovered change at
+    all" state `build_team_report`'s own `_team_changes` walker already
+    requires an intake OR a validated plan to cross (MAJOR A6), so a truly
+    empty repository (the flat single-target convention's own placeholder
+    `doss`, which need not exist on disk at all) keeps recommending nothing
+    rather than "derive a plan" for a change nobody has started. A registry
+    that cannot be read still reads as `[]` here (the existing ACTIVE
+    CONFLICTS note already names that failure elsewhere in this report;
+    this function does not invent a second, competing finding for it),
+    preserved exactly as before this round.
+    """
+    plan_path = os.path.join(doss, "08-plan.json")
+    plan = _read_json_or_none(plan_path)
+    if plan is None:
+        if not os.path.isfile(os.path.join(doss, INTAKE_REL)):
+            return []
+        return _task_and_approval_candidates(doss, head, prefix, None, [], None)
+    try:
+        registry_data = tasks_mod.load_registry(root)
+    except tasks_mod.RegistryUnusable:
+        return []
+    plan_ids = set(t.get("id") for t in plan.get("tasks", []))
+    records = [r for r in registry_data.get("tasks", []) if r.get("id") in plan_ids]
+    candidates = _task_and_approval_candidates(
+        doss, head, prefix, plan, records, registry_data)
 
     cleared, review_next = _review_ladder_check(root, doss, head)
     if not cleared:
@@ -987,6 +1202,16 @@ def build_report(path, base=None, now=None):
         # it: this is analysis of a diff and two small JSON files, never a
         # subprocess and never a new gate run.
         human_tier, _answers, intake_problem = impact_mod.read_intake(t_intake_path)
+        if human_tier is not None:
+            # Ledger 12: the same overridden-tier field sbe design reads,
+            # read a second time here rather than re-derived (see
+            # `_declared_tier`). Reassigned in place so every use of
+            # `human_tier` below (the disagreement text, the summaries
+            # entry, and the MISSING EVIDENCE obligation gate) stays in
+            # sync with the ONE effective tier, exactly the way `sbe
+            # design` treats a documented override as live everywhere it
+            # prints, not only in one note.
+            human_tier = _declared_tier(_read_json_or_none(t_intake_path), human_tier)
         idata = None
         try:
             idata = impact_mod.report(
@@ -1220,7 +1445,37 @@ TEAM_SEVERITIES = {
     # commit in front of it, and this project already treats that as
     # blocking for the other two stores.
     11: "review record",
+    # MAJOR A4: missing evidence (the plan's own verification commands were
+    # never run under `sbe evidence run`) used to be crammed into severity
+    # 5 alongside "no approval report is saved", an unrelated fact that
+    # happened to share the same slot. The plain-status side already keeps
+    # a separate MISSING EVIDENCE section, apart from its MERGE BLOCKERS;
+    # this mirrors that separation for team. Appended at 12 rather than
+    # inserted earlier: `lifecycle.TEAM_SEVERITY_TO_RUNG` (owned by
+    # lifecycle.py, not this file) maps every OTHER severity number here to
+    # its own priority rung already, and renumbering any of 1-11 would move
+    # every one of those existing mappings out from under itself. See the
+    # registration right after this dict for the one new entry that table
+    # needs for THIS number, and the docstring there for why it lives here
+    # instead of in lifecycle.py.
+    12: "missing evidence",
 }
+
+# MAJOR A4 (continued): `lifecycle.TEAM_SEVERITY_TO_RUNG` is the one table
+# `build_team_report`'s own severity-10 "next action" finding (and
+# `build_report`'s next-action reducer) both read every OTHER entry of
+# `TEAM_SEVERITIES` through, so severity 12 needs a matching entry there
+# too or `lifecycle.reduce_next_action`'s own lookup raises `KeyError` the
+# first time a severity-12 finding is ever computed for a change. That
+# table is lifecycle.py's own, by that module's explicit design ("This
+# module owns the ONE priority ladder now"), and belongs there; it is
+# registered from here, once, at import time, only because this severity
+# number is new in THIS release and the file that owns the table is not
+# one this change touches. `setdefault` rather than a plain assignment, so
+# re-importing this module twice in one process (as several of this
+# project's own fixtures do) can never raise on a second identical
+# registration.
+lifecycle.TEAM_SEVERITY_TO_RUNG.setdefault(12, lifecycle.RUNG_MISSING_EVIDENCE)
 
 
 def _finding(change, severity, verdict, evidence, commit, owner, next_action, basis,
@@ -1261,9 +1516,36 @@ def _design_roots(root):
     return roots, refusals
 
 
+def _has_validated_plan(doss):
+    """True when `doss/08-plan.json` parses as an object carrying a
+    non-empty `tasks` list, every entry itself an object naming an `id`:
+    MAJOR A6's own bar for "validated" (the same minimal shape every other
+    reader of a plan in this file, `_plan_owns` and
+    `_change_ladder_candidates` among them, already assumes without
+    checking it explicitly). A plan this loose or this broken is not a
+    dossier worth discovering on its own; it stays invisible exactly as it
+    always has, and is not what this function exists to surface."""
+    plan = _read_json_or_none(os.path.join(doss, "08-plan.json"))
+    if not isinstance(plan, dict):
+        return False
+    tasks = plan.get("tasks")
+    return bool(tasks) and isinstance(tasks, list) and all(
+        isinstance(t, dict) and t.get("id") for t in tasks)
+
+
 def _team_changes(root):
     """([(name, dossier path)], refusals): every dossier discovered under a
-    safe root, plus any designRoots entry `_design_roots` refused."""
+    safe root, plus any designRoots entry `_design_roots` refused.
+
+    MAJOR A6: a directory is discovered when it carries `00-intake.json`
+    OR a validated `08-plan.json` (see `_has_validated_plan`). Before this,
+    discovery keyed on the intake file alone, so a dossier whose intake was
+    deleted, or that a derived plan was written into without one ever being
+    recorded, was invisible to `sbe status --team`, to `sbe status`'s own
+    CR-06 dossier discovery (both call this function), and to `sbe map`
+    (built entirely from the team report): a plan and its tasks plainly
+    existed on disk and this function reported the directory as though it
+    did not."""
     changes = []
     roots, refusals = _design_roots(root)
     for rel in roots:
@@ -1272,7 +1554,8 @@ def _team_changes(root):
             continue
         for name in sorted(os.listdir(base_dir)):
             doss = os.path.join(base_dir, name)
-            if os.path.isfile(os.path.join(doss, "00-intake.json")):
+            if (os.path.isfile(os.path.join(doss, "00-intake.json"))
+                    or _has_validated_plan(doss)):
                 changes.append((name, doss))
     return changes, refusals
 
@@ -1520,6 +1803,39 @@ def _closed_clean(records):
     return any(r.get("status") == "closed" and not r.get("forced") for r in records)
 
 
+def _superseded_by_shared_ladder(finding, all_done):
+    """A2 ROUND 2: True when `finding` (one of a change's own recorded
+    findings, inside `build_team_report`) should not compete for that
+    change's severity-10 next action, because `_task_and_approval_
+    candidates` -- the SAME shared function `_change_ladder_candidates`
+    (`build_report`'s own ladder) calls -- derives the identical fact a
+    second, correctly-gated time. See that function's own docstring for why
+    the gate on severities 5, 6 and 12 is `not all_done` rather than always.
+
+    Severity 8 (both its "no plan" and "ready task" flavors) and the "open
+    task" flavor of severity 7 (verdict NO-DATA; its "forced close" FAIL
+    flavor is untouched, since nothing else derives that candidate) are
+    ALWAYS superseded. Severities 5 (missing approval), 6 (missing
+    convergence) and 12 (missing evidence) are superseded ONLY in their
+    NO-DATA ("not attempted yet") flavor, and ONLY while `not all_done`: a
+    FAIL at any of the three (something already ran and failed) is a
+    different fact from "not attempted yet" and stays eligible regardless
+    of task state, unchanged from before this round.
+
+    `finding` stays recorded in `build_team_report`'s own `findings` list
+    exactly as before either way: this only removes its candidacy for the
+    severity-10 reduction, never its disclosure.
+    """
+    severity = finding["severity"]
+    if severity == 8:
+        return True
+    if severity == 7 and finding["verdict"] == "NO-DATA":
+        return True
+    if severity in (5, 6, 12) and finding["verdict"] == "NO-DATA" and not all_done:
+        return True
+    return False
+
+
 def build_team_report(path):
     """{"root", "headCommit", "changes": [names], "findings": [...]}, findings
     sorted most severe first, deterministically."""
@@ -1551,8 +1867,22 @@ def build_team_report(path):
     open_by_change = {}
     plan_owns_by_change = {}
     handover_entries = []
+    plan_only_changes = []
     for name, doss in changes:
         change_start = len(findings)
+
+        # MAJOR A6: purely additive, mirroring the handover list right
+        # below: a change discovered ONLY because it carries a validated
+        # 08-plan.json (see `_has_validated_plan` / `_team_changes`), with
+        # no `00-intake.json` recorded for it at all, is named here by
+        # itself rather than silently read the same as an intake-bearing
+        # change everywhere else in this report.
+        if not os.path.isfile(os.path.join(doss, INTAKE_REL)):
+            plan_only_changes.append({
+                "change": name,
+                "detail": "%s carries a validated 08-plan.json but no %s: exists, "
+                         "no intake recorded yet" % (doss, INTAKE_REL),
+            })
 
         # LT-302.B: one handover entry per change, purely additive (see the
         # note above `_handover_state`, right before `build_report`): never
@@ -1575,6 +1905,19 @@ def build_team_report(path):
                     if isinstance(p, str) and p.strip():
                         plan_owns.add(p)
         plan_owns_by_change[name] = plan_owns
+
+        # A2 ROUND 2: whether every task this plan declares is closed
+        # clean, the SAME predicate the severity 9 "completed changes"
+        # finding below already computes (and `_closed_clean` itself
+        # already applies task by task) -- read once here into a variable
+        # that survives past the `if not registry_problem:` block that
+        # computes it, so the severity-10 derivation further down (which
+        # runs whether or not a plan or a readable registry exists) always
+        # has a defined answer rather than risking a `NameError` on a
+        # `plan_tasks`/`records_by_id` that a registry failure never built.
+        # Stays `False` (never gated open) exactly when severity 8/9 also
+        # stay silent: no plan, or a registry this run could not read.
+        all_done = False
 
         if registry_problem:
             findings.append(_finding(
@@ -1916,8 +2259,12 @@ def build_team_report(path):
                            ", ".join(prior_results))))
 
             if commands and not ev["clean"] and not ev["broken"]:
+                # MAJOR A4: its own severity (12, "missing evidence"), never
+                # severity 5 ("missing approvals"): the two are unrelated
+                # facts that used to share a slot, and a fresh plan owes
+                # both at once.
                 findings.append(_finding(
-                    name, 5, "NO-DATA", evidence_dir, head, None,
+                    name, 12, "NO-DATA", evidence_dir, head, None,
                     "run the plan's verification commands under sbe evidence run",
                     "observed",
                     "%d verification command(s) planned and no receipt exists yet"
@@ -1951,8 +2298,9 @@ def build_team_report(path):
                             "task %s's dependencies are all closed clean and it carries "
                             "no registry record yet: ready to start" % tid))
 
-                if plan_tasks and all(_closed_clean(records_by_id.get(t.get("id"), []))
-                                      for t in plan_tasks):
+                all_done = bool(plan_tasks) and all(
+                    _closed_clean(records_by_id.get(t.get("id"), [])) for t in plan_tasks)
+                if all_done:
                     findings.append(_finding(
                         name, 9, "PASS", os.path.join(doss, "08-plan.json"), head, None,
                         "nothing left to do for this change; open a PR and run sbe pr "
@@ -1980,14 +2328,35 @@ def build_team_report(path):
         # reducer pre-sorted by `(rung, evidence, detail)`, the exact
         # tie-break this file used before this lane, so two findings tied
         # at the same rung resolve exactly as they always have.
+        #
+        # A2 ROUND 2: `pool` below excludes exactly the findings `_task_
+        # and_approval_candidates` derives a second, correctly-gated time --
+        # the SAME shared function `_change_ladder_candidates` (`build_
+        # report`'s own ladder) calls -- so the two surfaces cannot diverge
+        # by construction the way round 1's BLOCKER A2 fix let them.
+        # Severity 8 (both its "no plan" and "ready task" flavors) and the
+        # "open task" flavor of severity 7 (verdict NO-DATA; its "forced
+        # close" FAIL flavor is untouched) are always superseded. Severities
+        # 5 (missing approval), 6 (missing convergence) and 12 (missing
+        # evidence) are superseded ONLY in their NO-DATA ("not attempted
+        # yet") flavor, and ONLY while `not all_done`: a FAIL at any of the
+        # three (something already ran and failed) is a different fact from
+        # "not attempted yet" and stays eligible regardless of task state,
+        # unchanged from before this round. Every excluded finding stays
+        # recorded above exactly as before: only its candidacy for THIS
+        # reduction is removed.
         this_change = findings[change_start:]
         if this_change:
+            pool = [f for f in this_change
+                   if not _superseded_by_shared_ladder(f, all_done)]
             ordered = sorted(
-                this_change,
+                pool,
                 key=lambda f: (lifecycle.TEAM_SEVERITY_TO_RUNG[f["severity"]],
                                f["evidence"] or "", f["detail"]))
             candidates = [dict(f, rung=lifecycle.TEAM_SEVERITY_TO_RUNG[f["severity"]])
                          for f in ordered]
+            candidates.extend(_task_and_approval_candidates(
+                doss, head, "", plan, records, registry_data))
             top = lifecycle.reduce_next_action(candidates)
             entry = _finding(
                 name, 10, top["verdict"], top["evidence"], top["commit"], top["owner"],
@@ -2050,15 +2419,54 @@ def build_team_report(path):
 
     findings.sort(key=lambda f: (f["severity"], f["change"], f["evidence"] or "",
                                  f["detail"]))
+
+    # MAJOR A7: task completion, stated plainly, sourced from the SAME
+    # closed (non-FORCED) registry records `_closed_clean` already judges
+    # per task above; a global, sorted list here rather than a second scan.
+    # `[]` when the registry could not be read at all: the existing
+    # severity-3 unavailable finding above already names that failure, and
+    # a completion list built from data this run could not read would be a
+    # guess, never a fact.
+    completed_tasks = []
+    if not registry_problem:
+        completed_tasks = sorted(
+            r.get("id") for r in registry_tasks
+            if r.get("status") == "closed" and not r.get("forced") and r.get("id"))
+
     return {"tool": "sbe status --team", "root": root, "headCommit": head,
             "changes": names, "findings": findings, "handover": handover_entries,
+            "planOnly": plan_only_changes, "completedTasks": completed_tasks,
             "basisLegend": "observed: read this run; derived: computed from observed "
                            "values; unavailable: a source that could not be read and "
                            "stays visible"}
 
 
+#: Ledger 16: the exit-code rule, named explicitly here rather than left to
+#: be reconstructed from a bare numeric range at the one call site
+#: (`team_blocking`, right below). The severity numbers `team_blocking`
+#: treats as actionable, i.e. worth a nonzero exit code: 1 through 6
+#: (broken claims, merge blockers, scope conflicts, stale evidence, missing
+#: approvals, convergence failures) plus 12 (missing evidence, MAJOR A4's
+#: own rung, mirroring MISSING EVIDENCE's place in `any_blocking`'s
+#: identical rule for plain `sbe status`).
+#: Severities 7 through 11 (active/ready/completed tasks, next action,
+#: review record) are deliberately excluded and never move the exit code on
+#: their own, by the SAME "absence is a fact, not an accusation" law
+#: `TEAM_SEVERITIES`'s own comment states for severity 11: an in-progress
+#: task, a ready one, or a review nobody has run yet is a state to report,
+#: not a reason to fail a build. Named as an explicit set, not a numeric
+#: range, because severity 12 sits outside the contiguous 1-6 span; a
+#: caller reading this constant sees the exact boundary without having to
+#: reconstruct it from a range plus an exception.
+TEAM_BLOCKING_SEVERITIES = frozenset((1, 2, 3, 4, 5, 6, 12))
+
+
 def team_blocking(data):
-    return any(1 <= f["severity"] <= 6 for f in data["findings"])
+    """The one rule this exit code follows: nonzero exactly when at least
+    one finding sits at a severity named in `TEAM_BLOCKING_SEVERITIES`.
+    This function owns that boundary in exactly one place, so a change to
+    which severities block never has to be re-derived at every call site."""
+    return any(f["severity"] in TEAM_BLOCKING_SEVERITIES for f in data["findings"])
 
 
 def render_team(data):
@@ -2066,6 +2474,15 @@ def render_team(data):
            "head %s, %d change(s): %s"
            % ((data["headCommit"] or "unresolved")[:12], len(data["changes"]),
               ", ".join(data["changes"]) or "none discovered under design/")]
+    # MAJOR A7: task completion, stated plainly, right in the header block
+    # rather than left for a reader to infer from the absence of a
+    # severity-8 "ready" finding.
+    completed = data.get("completedTasks") or []
+    if completed:
+        out.append("completed tasks: %d closed clean (%s)"
+                   % (len(completed), ", ".join(completed)))
+    else:
+        out.append("completed tasks: none closed clean yet")
     current = None
     for f in data["findings"]:
         if f["severity"] != current:
@@ -2079,4 +2496,30 @@ def render_team(data):
     if not data["findings"]:
         out.append("")
         out.append("no findings: no dossier under design/ has anything recorded to read")
+    # BLOCKER A3: the JSON `handover` array already carried `status`,
+    # `outgoingOwner` and `intendedReceiver` (LT-302.B), but this plain-text
+    # renderer never read it at all, so a human running `sbe status --team`
+    # with no --json never saw who owned a change after a handover was
+    # acknowledged. One line per change whose handover is not "none": the
+    # same `detail` sentence `_handover_state` already composed (it already
+    # says "ownership has moved to X" for an acknowledged record), read
+    # here rather than re-derived a second time.
+    handover_lines = [h for h in (data.get("handover") or [])
+                      if h.get("status") not in (None, "none")]
+    if handover_lines:
+        out.append("")
+        out.append("OWNERSHIP HANDOVER")
+        for h in handover_lines:
+            out.append("  %s: %s" % (h.get("change") or "(unnamed)", h.get("detail")))
+    # MAJOR A6: a change discovered only because it carries a validated
+    # 08-plan.json, with no 00-intake.json recorded for it, is named here
+    # by itself, the same purely-additive pattern the handover block above
+    # already uses, rather than folded silently into the ordinary change
+    # list with nothing to tell it apart.
+    plan_only = data.get("planOnly") or []
+    if plan_only:
+        out.append("")
+        out.append("PLAN-ONLY (no intake recorded)")
+        for p in plan_only:
+            out.append("  %s: %s" % (p.get("change") or "(unnamed)", p.get("detail")))
     return "\n".join(out) + "\n"

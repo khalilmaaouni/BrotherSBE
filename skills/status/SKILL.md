@@ -20,8 +20,8 @@ When `scope.storesInspected.dossiers` names a discovered dossier, also run
 `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --team --json` and read its `findings` and `changes`
 for the per-dossier detail the single-project report rolls up into one summary.
 
-Also run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" fences` to see the live write fences. A fence
-tells the user which files are currently claimed for editing and by what work, which
+Also run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" task list` to see the live task ownership. An open
+task tells the user which files are currently claimed for editing and by what work, which
 matters to anyone deciding what to touch next.
 
 If either command fails, report the failure plainly, say what you could still observe, and
