@@ -288,12 +288,14 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
 `.github/workflows/brothersbe-gates.yml` runs the gates battery on every pull request:
 
 ```yaml
-      # Windows-only bridge: the windows-latest leg aliases python3 to python
-      # before the same battery runs; Linux and macOS ignore this step.
-      - name: Alias python3 to python (Windows only ships python.exe)
+      # Windows-only guard: a no-op where python3 already resolves (the current
+      # windows-latest image), a bridge where an image ships only python.exe.
+      - name: Ensure python3 resolves (guard for images shipping only python.exe)
         run: |
-          py="$(command -v python)"
-          cp "$py" "$(dirname "$py")/python3.exe"
+          if ! command -v python3 >/dev/null 2>&1; then
+            py="$(command -v python)"
+            cp "$py" "$(dirname "$py")/python3.exe"
+          fi
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished

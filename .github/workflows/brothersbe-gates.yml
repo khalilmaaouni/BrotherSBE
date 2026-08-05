@@ -283,15 +283,18 @@ jobs:
         with:
           python-version: '3.9'
       # Windows reality, confirmed against actions/setup-python's own
-      # find-python.ts on 2026-08-05: it places only python.exe on PATH on
-      # Windows, never a python3 executable, unlike Linux and macOS where
-      # python3 is standard. Every step below still calls python3
+      # find-python.ts on 2026-08-05: some images place only python.exe on
+      # PATH; the current windows-latest image resolves python3 already (its
+      # first real run proved the unconditional copy fails as same-file), so
+      # this guard is a no-op there and a bridge only where needed. Every step below still calls python3
       # unmodified, identical to the gates job above, so this one step
       # bridges the gap instead of rewriting each of them.
-      - name: Alias python3 to python (Windows only ships python.exe)
+      - name: Ensure python3 resolves (guard for images shipping only python.exe)
         run: |
-          py="$(command -v python)"
-          cp "$py" "$(dirname "$py")/python3.exe"
+          if ! command -v python3 >/dev/null 2>&1; then
+            py="$(command -v python)"
+            cp "$py" "$(dirname "$py")/python3.exe"
+          fi
       # The approval gate accepts a signature only if THIS host verified it. A
       # runner with no public keys imported reports "cannot verify" for every
       # signed commit, which is NO-DATA and not an approval. To use the signed
