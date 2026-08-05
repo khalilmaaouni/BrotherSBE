@@ -69,6 +69,12 @@ except ImportError:  # a platform with no fcntl (untested elsewhere anyway;
 TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
 if os.path.abspath(TOOLS) not in sys.path:
     sys.path.insert(0, os.path.abspath(TOOLS))
+# KEPT INLINE ON PURPOSE, do not fold into `._toolspath`: this module is
+# loaded standalone by `tools/sbe_authority_hook.py` via
+# `spec_from_file_location`, with no package parent, so a package-relative
+# import here kills the hook's registry read and the guard fails open.
+# Proven the hard way: the 2026-08-05 fold-in attempt turned
+# `tools/test_sbe_authority_hook.py` red on exactly that failure.
 # The ONE overlap rule this project has, imported from the module that owns it.
 # A private near-copy here is how the hook and the registry stop refusing over
 # the same fence, and that failure would be silent.

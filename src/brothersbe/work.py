@@ -34,9 +34,8 @@ import shutil
 import sys
 import tempfile
 
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-if os.path.abspath(TOOLS) not in sys.path:
-    sys.path.insert(0, os.path.abspath(TOOLS))
+from ._toolspath import mount
+mount()
 # The plan validation this module reuses for start rule 1 is the SAME registry
 # `sbe plan` runs (tools/sbe_plan.py, landed in Loop 1), never a re-typed copy:
 # two validators would drift into two definitions of a valid plan.

@@ -33,10 +33,9 @@ import json
 import os
 import re
 import subprocess
-import sys
 
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-sys.path.insert(0, os.path.abspath(TOOLS))
+from ._toolspath import mount
+mount()
 from sbe_intake import compute_tier, UnreadableIntake  # noqa: E402
 
 #: Detectors. Each is (id, why it matters, the intake answer it sets, path

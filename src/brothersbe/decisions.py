@@ -103,12 +103,11 @@ except ImportError:  # a platform with no fcntl (untested elsewhere anyway;
 # raise?" differently from the tool that printed the report.
 from .impact import _git, _tier_index  # noqa: E402
 
-#: The shipped tools tree, resolved the way `evidence.py` resolves it rather
-#: than by a second spelling. It is put on `sys.path` LAZILY, inside
-#: `registries()`, never here: this module is imported by a module under
-#: `tools/` (`tools/test_sbe_decisions.py`), so importing `tools/` at module
-#: scope would be a cycle.
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
+#: `_toolspath.mount()`, the one mechanism every converged module shares, is
+#: called LAZILY, inside `registries()`, never here: this module is imported
+#: by a module under `tools/` (`tools/test_sbe_decisions.py`), so mounting
+#: `tools/` at module scope would be a cycle.
+from ._toolspath import mount
 
 #: Where packages live under a dossier, and under the repository root when
 #: there is no dossier to name. Both spelled once, here, so a writer and a
@@ -445,9 +444,7 @@ def registries():
     """
     if _REGISTRY_CACHE:
         return _REGISTRY_CACHE[0]
-    tools = os.path.abspath(TOOLS)
-    if tools not in sys.path:
-        sys.path.insert(0, tools)
+    tools = mount()
     from sbe_checks import Check, Pruner  # noqa: E402
     declarations, modules, problems = {}, [], []
     pruner = Pruner()
