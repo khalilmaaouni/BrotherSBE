@@ -1,5 +1,11 @@
 # Loop 1: The Book and the Team Install, Implementation Plan
 
+> SUPERSEDED, marked 2026-08-05 at 1.0.0-rc.11. The work this plan tracks
+> shipped on 2026-07-30 (commit 5be26b2: the book chapters, the book builder,
+> and the team install profile; recorded under the CHANGELOG entries rc.2
+> through rc.4). The unchecked boxes below are historical planning state, not
+> open work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship BrotherSBE for Dummies (a self-contained illustrated HTML book built from in-repo chapters around one runnable worked estate) plus a one-line team install with a committed team profile.

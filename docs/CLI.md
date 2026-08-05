@@ -43,6 +43,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `init` | install BrotherSBE's local footprint into a repository, dry run by default |
 | `version` | the version and the evidence schema version |
 | `plan` | derive `08-plan.json` from a dossier mechanically and validate it; an empty plan never exits 0 (delegates to `tools/sbe_plan.py`) |
+| `instruction-surface` | did a changed CLAUDE.md, `.claude/**`, `.mcp.json`, `.claude-plugin/**`, `hooks/**`, agent or skill definition, CODEOWNERS or CI workflow stay inside declared, reviewed scope (delegates to `tools/sbe_instruction_surface.py`) |
 | `work` | isolated lifecycle for one plan task: `start` (branch, worktree, fenced registry record), `check`, `finish` (postcondition AND a head-bound receipt, never an agent statement), `remove`, `brief` (a deterministic JSON work order for one task, read-only) |
 | `handover` | `prepare`/`show`/`acknowledge`/`reject`: ownership transfer is complete only after a named human receiver acknowledges; the outgoing owner stays the owner until then |
 | `pr` | `pr verify <number> --repo owner/name`: live GitHub approval evidence bound to the head sha; no credentials is NO-DATA with a remedy, never PASS |
@@ -87,7 +88,8 @@ either. `verify` and `review` print a closing line saying so, since an exit code
 
 Help means help, on every subcommand: `-h`/`--help` prints the owning surface's usage and
 exits 0 before anything is read, scanned or written. For the passthrough commands (design,
-gate, score, intake, decide, fences, plan, evidence, task, work, pr) the whole argv,
+gate, score, intake, decide, fences, plan, instruction-surface, evidence, task, work,
+handover, pr, explain, lineage) the whole argv,
 including `-h`, goes to the tool or module that owns the parsing, so the usage you see is
 that surface's own; for everything else the CLI answers directly. A flag a surface does not
 know is refused with usage and exit 2, never silently ignored: a typo must not run as if

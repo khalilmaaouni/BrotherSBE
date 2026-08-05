@@ -1,5 +1,9 @@
 # Beginner Finalization Loop: install in two commands, one honest explainer, zero contradictions
 
+> HISTORICAL, marked 2026-08-05 at 1.0.0-rc.11. Kept unedited as planning
+> history. Its headline deliverables exist on main (docs/explainer/index.html,
+> the documented install path); the CHANGELOG records what shipped and when.
+
 **Goal:** Make the beginner path real and provable: the documented install is the shortest sequence that was actually executed and verified this session, the guided surface contains no claim the tool contradicts, a self-contained HTML explainer teaches the product to a complete beginner, and the program ledger records what shipped with evidence.
 
 **Scope note, stated up front:** the master plan (program/MASTER-PLAN.md) is a 14 to 16 week program. This loop delivers the beginner slice that is achievable and verifiable on this machine today: install experience, guided-surface consistency, the explainer, and honest ledger entries. It does not claim the no-release covenant is met; the gap map in the ledger says exactly what remains.

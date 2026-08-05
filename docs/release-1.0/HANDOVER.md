@@ -1,5 +1,15 @@
 # Handover: BrotherSBE 1.0 release closure
 
+> HISTORICAL SNAPSHOT, marked 2026-08-05 at 1.0.0-rc.11. This file describes the
+> repository as it stood on 2026-08-04 and is kept unedited as history. Its claims
+> (including "Nothing is on GitHub") were true then and are not live state. The
+> repository has been on GitHub since this snapshot was written: origin/main
+> carries every merged release candidate through the current one, while
+> published version tags and releases stop at v1.0.0-rc.1; the 17 archive/*
+> tags are published under the recorded founder tag decision (17 pushed, 4
+> held), and version tagging past rc.1 stays founder gated. Live state comes
+> from `sbe status` and `git log`, never from this file.
+
 Written 2026-08-04 at the end of the session that ran the closure program.
 Audience: a fresh session, on a different machine, under a different account,
 with no access to the conversation that produced this.
