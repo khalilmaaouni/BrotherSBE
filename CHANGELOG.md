@@ -8,6 +8,15 @@ checklist's own rules.
 
 ## Unreleased
 
+- Windows round 2, from the first real run of the ported leg (run 31039904060,
+  read line by line): a `.gitattributes` with `* -text` makes every checkout
+  byte-identical (the manifest eval's own byte-level harness proved CRLF
+  conversion: committed newline, working tree carriage return); the telemetry
+  rewriter uses `os.replace` because Windows `os.rename` refuses an existing
+  target; and the path-forgery eval records a filesystem that refuses to
+  create the forging directory name as the channel honestly closed, replacing
+  a comment claim the same run disproved.
+
 - Windows integration sweep, measured at integration: the five shipped
   assertions that Windows is untested (README twice, the install and
   what-it-will-not-tell-you pages, the PARITY row) now state the truth of this

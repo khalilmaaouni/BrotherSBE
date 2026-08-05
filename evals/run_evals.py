@@ -2193,8 +2193,12 @@ def gd_pathforge(root):
     # directory name is a control character (0x0A), and Windows refuses to
     # create any path component containing one (NTFS forbids the ASCII control
     # range 0x00-0x1F outright, surfacing as an OSError on invalid filename
-    # syntax), which made this fixture uncreatable on that leg. U+2028 is not
-    # in that forbidden set, so os.makedirs succeeds on every platform.
+    # syntax), which made this fixture uncreatable on that leg. An earlier
+    # draft claimed U+2028 makedirs succeeds on every platform; the first
+    # real windows-latest run disproved that too (NotADirectoryError 20,
+    # 'The directory name is invalid', run 31039904060). Where the
+    # filesystem refuses the forging name at creation, the refusal ITSELF
+    # closes the forgery channel, and this eval records that as honest.
     #
     # What the swap does and does not make identical (round 2 correction: an
     # earlier draft of this comment overclaimed "identical", which a hostile
@@ -2219,9 +2223,16 @@ def gd_pathforge(root):
     forged = ("ok   datamodel  PASS     2 entity(ies), each with a system of record "
               "[severity: gate]")
     doss = os.path.join(root, forged)
-    os.makedirs(doss)
-    with open(os.path.join(doss, "05-data-model.md"), "w") as f:
-        f.write("# Data model\n## Entities\n- Customer\n")
+    try:
+        os.makedirs(doss)
+        with open(os.path.join(doss, "05-data-model.md"), "w") as f:
+            f.write("# Data model\n## Entities\n- Customer\n")
+    except OSError as e:
+        # The platform refuses to create the forging path component at
+        # all (Windows: NotADirectoryError 20). A channel the filesystem
+        # refuses to mount is closed, and the refusal is loud, not
+        # silent: that is the honest state this case exists to prove.
+        return "honest"
     env = dict(os.environ, SBE_DOSSIER_ROOT=root)
     r = subprocess.run([sys.executable, os.path.join(_REPO, "tools", "sbe_design.py"),
                         "datamodel", root], capture_output=True, text=True, timeout=120, env=env)

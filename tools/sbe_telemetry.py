@@ -692,7 +692,10 @@ def _rewrite_locked(path, out_lines, read_size, label):
                   % (label, os.path.basename(path), e.strerror or e))
             return None
         if size_now == read_size:
-            os.rename(tmp, path)
+            # os.replace, not os.rename: Windows rename refuses an existing
+            # target (FileExistsError 17, measured on the windows-latest leg,
+            # run 31039904060); replace overwrites atomically on every platform.
+            os.replace(tmp, path)
             renamed = True
             break
         if size_now < read_size:
