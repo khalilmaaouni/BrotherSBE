@@ -53,16 +53,15 @@ reciting the table.
 ## The project map
 
 When the user asks for a detailed picture (map, diagram, where are we, show me the
-project, full picture), build it. Probe `sbe status`, `sbe fences`, the dossier directory
-(`01-purpose`, `03-adr`, `05-data-model`, `06-diagrams`) and any decision records. Fill
-every slot of the template at `map-template.html` in this skill's folder. Write the
-result to `brothersbe-map.html` at the user's project root, then tell the user the exact
-path and that it opens in any browser and works offline.
+project, full picture), run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" map --out brothersbe-map.html`
+from the user's project root, then tell the user the exact path it wrote to and that the
+page opens in any browser and works offline.
 
-A missing source produces the honest absent-sentence the template already names for that
-slot, never a guess. The mermaid in `06-diagrams.md` is copied verbatim into the diagram
-slots; when no diagrams exist, the process slot instead carries a minimal mermaid
-flowchart of the six lifecycle stops with the current stop marked.
+Do not build this page by hand. `sbe map` renders it deterministically from canonical
+state only (the status module's own team report, the task registry, and dossier artifact
+presence), never by a model filling a template slot by slot from whatever it happened to
+read: the same repository state always produces the same page, and a missing source
+renders as an honest absence rather than a guess.
 
 ## Always close with the response contract
 
