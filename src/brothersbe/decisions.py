@@ -1897,6 +1897,37 @@ def _lineage_binding(top, artifact):
     return {"present": True, "hops": hops}
 
 
+def _claimed_worktrees(top):
+    """{runId: (worktree, taskId)} for every registry record that claims a
+    receipt by `evidenceId` and still declares a worktree that exists on
+    disk. THE SAME LOOKUP `status._scan_evidence` already builds (see that
+    function's own docstring: "A receipt CLAIMED BY A TASK RECORD verifies
+    against that task's own tree"), read here a second time for a second
+    surface rather than re-derived: a receipt sealed inside a finished
+    task's own worktree is evidence for that branch's head, and verifying
+    it against the repository top instead misreports every finished task's
+    own sound evidence as a broken claim (the rc.10 gap `status.py`
+    disclosed and fixed for `sbe status`; `sbe lineage` carried the
+    identical gap, reproduced by `tools/test_sbe_decisions.py::
+    TestLineageWorktreeResolution`, because its own receipt scan never made
+    this lookup at all). An unreadable registry returns `{}`: lineage
+    already renders that failure as its own NO-DATA hop in
+    `_lineage_binding`, and this function does not invent a second,
+    competing finding for it."""
+    from . import tasks as tasks_mod
+    try:
+        records = tasks_mod.load_registry(top).get("tasks", [])
+    except tasks_mod.RegistryUnusable:
+        return {}
+    claimed = {}
+    for record in records:
+        run_id = record.get("evidenceId")
+        worktree = record.get("worktree")
+        if run_id and worktree and os.path.isdir(worktree):
+            claimed[run_id] = (worktree, record.get("id"))
+    return claimed
+
+
 def _lineage_receipts(top, artifact):
     """The evidence-store hops, as ONE dict with keys `present` and `hops`.
 
@@ -1905,7 +1936,13 @@ def _lineage_receipts(top, artifact):
     with FAIL in its summary and it STAYS VISIBLE: a broken claim is a
     finding, never a gap. A receipt this run could not read at all is a
     NO-DATA hop naming the path, because whether it covers the artifact is
-    exactly what could not be read."""
+    exactly what could not be read.
+
+    A receipt CLAIMED BY A TASK RECORD (see `_claimed_worktrees`) verifies
+    against that task's own declared worktree, not against `top`: the same
+    resolution `status._scan_evidence` already makes, read here so `sbe
+    lineage` and `sbe status` can never disagree about the same receipt
+    again over the same commit."""
     from . import evidence as evidence_mod
     from . import tasks as tasks_mod
     store = os.path.join(top, tasks_mod.DEFAULT_EVIDENCE_DIR)
@@ -1916,6 +1953,7 @@ def _lineage_receipts(top, artifact):
             "NO-DATA: no evidence store exists at %s, so no receipt names %s. `bin/sbe "
             "evidence run -- <command>` writes one per run." % (rel_store, artifact),
             store)]}
+    claimed_by_run_id = _claimed_worktrees(top)
     paths = []
     for dirpath, _dirnames, filenames in os.walk(store):
         for filename in filenames:
@@ -1940,21 +1978,27 @@ def _lineage_receipts(top, artifact):
         if not any(_same_artifact(path, artifact) for path in covered):
             continue
         named += 1
-        judged = evidence_mod.verify(full, cwd=top)
+        run_id = receipt.get("runId")
+        verify_cwd, claimed_task = (None, None)
+        if run_id and run_id in claimed_by_run_id:
+            verify_cwd, claimed_task = claimed_by_run_id[run_id]
+        judged = evidence_mod.verify(full, cwd=verify_cwd or top)
+        resolved = (", verified in task %s's declared worktree" % claimed_task
+                    if verify_cwd else "")
         when = str(receipt.get("endedAt") or receipt.get("startedAt") or "")
         argv_text = " ".join(str(a) for a in (receipt.get("argv") or []))
         if judged["verdict"] == "FAIL":
             hops.append(_hop(
                 when, "broken-receipt",
-                "receipt %s covers %s and verifies FAIL (%s); it stays visible, because a "
-                "broken claim is a finding and never a gap"
-                % (rel, artifact, "; ".join(judged["reasons"])), full))
+                "receipt %s covers %s and verifies FAIL (%s)%s; it stays visible, because "
+                "a broken claim is a finding and never a gap"
+                % (rel, artifact, "; ".join(judged["reasons"]), resolved), full))
         else:
             hops.append(_hop(
                 when, "receipt",
-                "receipt %s covers %s: verify says %s over the run `%s`, exit code %s"
+                "receipt %s covers %s: verify says %s over the run `%s`, exit code %s%s"
                 % (rel, artifact, judged["verdict"], argv_text or "(argv not recorded)",
-                   receipt.get("exitCode")), full))
+                   receipt.get("exitCode"), resolved), full))
     if named == 0:
         hops.append(_hop(
             "", "NO-DATA",

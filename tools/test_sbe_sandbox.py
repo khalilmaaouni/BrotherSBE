@@ -143,9 +143,14 @@ class TestSandboxJourneyMatchesGuide(unittest.TestCase):
                                cwd=cls.dossier, stdin="n\nn\ny\nn\nnone\n")
         out["intake_code"], out["intake"] = code, text
 
-        # Step 3: see the risk level.
+        # Step 3: see the risk level. Run from the REPO ROOT, not the
+        # dossier, mirroring docs/guides/00-sandbox.md's own `cd
+        # ~/sbe-sandbox/repo` before this command: the dossier directory
+        # never sees the .brothersbe project-init folder sitting beside
+        # `design/`, so a run from inside the dossier can never show it, and
+        # the guide's own live-captured block names it by name.
         code, text, _err = run([os.path.join(ROOT, "tools", "sbe_design.py"),
-                                "artifacts", "."], cwd=cls.dossier)
+                                "artifacts", "."], cwd=cls.repo)
         out["design_code"], out["design"] = code, text
 
         # Step 4: accept one decision, then write it down and commit it
@@ -269,10 +274,22 @@ class TestSandboxJourneyMatchesGuide(unittest.TestCase):
     # -- step 3: see the risk level -------------------------------------------
 
     def test_step3_design_artifacts_reads_tier_t0_requires_nothing(self):
+        self.assertEqual(self.out["design_code"], 0, self.out["design"])
+        # Pins the .brothersbe project-init folder by name: run from the
+        # repo root (this suite's own cls.repo, matching the guide's `cd
+        # ~/sbe-sandbox/repo`), find_dossiers sees TWO directories directly
+        # under root (.brothersbe and design), one of which contributed no
+        # dossier, and both the scope line and the dossier header say so.
+        self.assertGuideAndLiveBothSay(
+            "  scope      -        read 1 dossier under . (design/say-hello); 1 of "
+            "2 director(y/ies) directly under . contributed no dossier "
+            "(.brothersbe)", self.out["design"])
+        self.assertGuideAndLiveBothSay(
+            "  dossier: design/say-hello (under .)", self.out["design"])
         self.assertGuideAndLiveBothSay(
             "artifacts  NO-DATA  tier T0 requires no artifact, so this check opened "
-            "none and there is nothing here it can vouch for; examined . under . "
-            "[severity: gate]", self.out["design"])
+            "none and there is nothing here it can vouch for; examined "
+            "design/say-hello under . [severity: gate]", self.out["design"])
 
     # -- step 4: accept one decision -------------------------------------------
 

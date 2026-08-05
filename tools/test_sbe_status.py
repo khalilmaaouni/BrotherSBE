@@ -367,6 +367,60 @@ class TestTierReconciliation(StatusFixture):
         self.assertNotIn("intake declared", text)
 
 
+class TestTierOverride(StatusFixture):
+    """Ledger 12: after a valid, documented tier override in 00-intake.json
+    (the same `tier`/`override`/`override_reason` shape tools/sbe_design.py
+    itself reads and treats as authoritative once the two tier fields agree
+    and a reason is recorded), status kept printing the COMPUTED tier in
+    its own scope notes and MISSING EVIDENCE obligation check, because
+    `impact.read_intake` always re-derives the tier from `answers` alone
+    and never looks at either of the other two fields. Status now reads
+    the same overridden-tier field sbe design reads."""
+
+    def test_a_documented_override_is_read_the_same_field_sbe_design_reads(self):
+        # BREAK: every answer is safe (computes T0, the same defaults
+        # StatusFixture.intake() writes), but the intake DOCUMENTS a valid
+        # override raising the tier to T2: `tier` and `override` agree,
+        # and `override_reason` carries an actual reason. Before this fix,
+        # status re-derived T0 from the answers and never asked this
+        # change for the T2 evidence its own documented override says it
+        # owes.
+        write(self.repo, "00-intake.json", json.dumps({
+            "answers": {"changes_contract": "n", "crosses_boundary": "n",
+                       "reversible_under_hour": "y", "touches_sensitive": "n",
+                       "consumers": "none"},
+            "tier": "T2", "override": "T2",
+            "override_reason": "raising deliberately: this change lands behind a "
+                                "shared library boundary several other teams still "
+                                "depend on",
+        }))
+        code, text, _ = self.status("--base", self.base)
+        self.assertNotEqual(code, 0, text)
+        self.assertIn("MISSING EVIDENCE", text)
+        self.assertIn("declared tier T2", text,
+                      "the declared tier in status's own note must be the DOCUMENTED "
+                      "override (T2), not the answers-only computed tier (T0): %s" % text)
+        for label in ("design completeness check", "hard gate", "scored surface"):
+            self.assertIn(label, text,
+                          "a documented T2 override must owe T2 evidence, the same way "
+                          "sbe design already treats the override as live: %s" % text)
+
+    def test_an_override_that_disagrees_with_the_computed_tier_but_records_no_reason_is_ignored(self):
+        # RESTORE-shaped: `override` is set, but `override_reason` is
+        # blank. sbe_design.py refuses this as FAIL; status never blocks
+        # on a malformed override (it is not a gate), so it falls back to
+        # the computed tier exactly as it always has.
+        write(self.repo, "00-intake.json", json.dumps({
+            "answers": {"changes_contract": "n", "crosses_boundary": "n",
+                       "reversible_under_hour": "y", "touches_sensitive": "n",
+                       "consumers": "none"},
+            "tier": "T2", "override": "T2", "override_reason": "",
+        }))
+        code, text, _ = self.status("--base", self.base)
+        self.assertEqual(code, 0, text)
+        self.assertNotIn("owes one", text)
+
+
 class TestActiveConflicts(StatusFixture):
     def test_overlapping_open_tasks_are_named_under_active_conflicts(self):
         code, text, _ = self.sbe("task", "open", "--id", "honest", "--agent", "alpha",

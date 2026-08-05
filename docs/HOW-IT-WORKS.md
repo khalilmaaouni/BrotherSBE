@@ -361,6 +361,8 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
         run: python3 tools/test_sbe_bypass.py
       - name: Converge fixtures (sbe converge)
         run: python3 tools/test_sbe_converge.py
+      - name: Decision contract fixtures (every key decision surface names its falsification tier)
+        run: python3 tools/test_sbe_decision_contract.py
       - name: Decision package fixtures (sbe explain, sbe lineage)
         run: python3 tools/test_sbe_decisions.py
       - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
@@ -369,12 +371,16 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
         run: python3 tools/test_sbe_golden_scenario.py
       - name: Handover fixtures (sbe handover, identity forgeries refused)
         run: python3 tools/test_sbe_handover.py
+      - name: Import hygiene fixtures (the six sys.path mounts collapsed into one)
+        run: python3 tools/test_sbe_import_hygiene.py
       - name: Instruction surface fixtures (changed authority files outside declared scope)
         run: python3 tools/test_sbe_instruction_surface.py
       - name: Interoperability fixtures (namespacing, no foreign writes, coexistence)
         run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
+      - name: Map fixtures (sbe map, a deterministic status map, never a filled template)
+        run: python3 tools/test_sbe_map.py
       - name: Plan fixtures (sbe plan)
         run: python3 tools/test_sbe_plan.py
       # This is the canned/offline suite: every GitHub API call is routed
@@ -397,6 +403,8 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
         run: python3 tools/test_sbe_review_route.py
       - name: Review skill fixtures (the skill consumes the route)
         run: python3 tools/test_sbe_review_skill_fixtures.py
+      - name: Sandbox fixtures (doc-truth for docs/guides/00-sandbox.md)
+        run: python3 tools/test_sbe_sandbox.py
       - name: Status fixtures (sbe status)
         run: python3 tools/test_sbe_status.py
       - name: Team status fixtures (sbe status --team)

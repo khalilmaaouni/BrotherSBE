@@ -235,6 +235,59 @@ class TestDiscoveryAndOrdering(TeamScenario):
         self.assertNotIn("chg-outside", data["changes"])
 
 
+class TestPlanOnlyDiscovery(TeamScenario):
+    """MAJOR A6: `_team_changes` keyed on `00-intake.json` alone, so a
+    dossier holding a validated `08-plan.json` but no intake (deleted, or
+    never recorded) was invisible to every caller of that function:
+    `sbe status --team`, `sbe status` (CR-06 dossier discovery), and
+    `sbe map`, which is built entirely from the team report."""
+
+    def test_a_dossier_with_a_validated_plan_and_no_intake_is_discovered(self):
+        doss = self._change("chg-a", "src/a.py")
+        os.remove(os.path.join(doss, "00-intake.json"))
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        self.assertIn("chg-a", data["changes"],
+                      "a dossier with a validated plan but no intake must still be "
+                      "discovered, not read as though it does not exist: %s" % text)
+        labeled = [p for p in (data.get("planOnly") or []) if p["change"] == "chg-a"]
+        self.assertEqual(len(labeled), 1, data)
+        self.assertIn("no intake recorded yet", labeled[0]["detail"], labeled)
+
+    def test_a_dossier_with_neither_intake_nor_a_validated_plan_stays_invisible(self):
+        # RESTORE-shaped: a bare, empty directory under design/ must never
+        # be discovered just because a directory exists there.
+        os.makedirs(os.path.join(self.repo, "design", "empty-dir"))
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        self.assertNotIn("empty-dir", data["changes"], text)
+
+
+class TestCompletedTasksLine(TeamScenario):
+    """MAJOR A7: task completion was never stated plainly anywhere in the
+    team view; a reader had to notice the absence of a severity-8 "ready"
+    finding and infer completion from silence."""
+
+    def test_closed_clean_tasks_are_stated_plainly_in_the_team_view(self):
+        self._change("chg-a", "src/a.py")
+        self._closed_record("T01", ["src/a.py"], agent="alice")
+        code, text, _ = self.team()
+        self.assertIn("completed task", text.lower(),
+                      "the plain team view must state task completion plainly: %s" % text)
+        self.assertIn("T01", text)
+
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        self.assertIn("T01", data.get("completedTasks") or [], text)
+
+    def test_a_forced_close_is_never_counted_as_a_completed_task(self):
+        self._change("chg-a", "src/a.py")
+        self._closed_record("T01", ["src/a.py"], agent="alice", forced=True)
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        self.assertNotIn("T01", data.get("completedTasks") or [], text)
+
+
 class TestConflictsAndForced(TeamScenario):
     def test_overlapping_open_tasks_across_changes_is_a_scope_conflict_naming_both(self):
         self._change("chg-a", "src/shared.py")
@@ -336,6 +389,24 @@ class TestFullSeveritySet(TeamScenario):
                     if f["change"] == "chg-a" and f["severity"] == 9]
         self.assertFalse(completed, "a FORCED close never satisfies completion: %s" % text)
 
+    # A2 ROUND 2: "highest severity" is no longer a raw comparison of
+    # `severity` numbers -- `severity` 5 (missing approval), 6 (missing
+    # convergence) and 12 (missing evidence), in their NO-DATA ("not
+    # attempted yet") flavor, are never the next action while a task this
+    # plan declares is still active or ready to start (no severity-9
+    # "completed changes" finding recorded for the same change), the fix
+    # `_task_and_approval_candidates` makes in `src/brothersbe/status.py`
+    # (BLOCKER/MAJOR A2, round 2): round 1's own fix for the ORIGINAL A2
+    # let missing approval outrank an unstarted ready task on both
+    # surfaces, because raw severity comparison (and this test's own prior
+    # formula) ranked 5 ahead of 7/8 regardless of task state. This mirrors
+    # `lifecycle.TEAM_SEVERITY_TO_RUNG` (`src/brothersbe/lifecycle.py`) by
+    # its OWN published numbers, read off the JSON contract rather than by
+    # importing that module, the same black-box discipline every other
+    # fixture in this file already holds to.
+    _RUNG_ORDER = {1: 0, 2: 10, 3: 20, 4: 30, 5: 40, 6: 50, 7: 60, 8: 70, 9: 90, 11: 80,
+                   12: 55}
+
     def test_every_change_carries_exactly_one_severity_ten_next_action(self):
         self._change("chg-a", "src/a.py")
         self._change("chg-b", "src/b.py")
@@ -348,11 +419,52 @@ class TestFullSeveritySet(TeamScenario):
                              "exactly one severity-10 next action per change: %s" % text)
             self.assertEqual(tens[0]["basis"], "derived", tens[0])
             lower = [f for f in own if f["severity"] < 10]
-            top = min(lower, key=lambda f: f["severity"])
-            self.assertEqual(tens[0]["nextAction"], top["nextAction"],
+            all_done = any(f["severity"] == 9 for f in own)
+            eligible = [f for f in lower
+                       if not (f["severity"] in (5, 6, 12) and f["verdict"] == "NO-DATA"
+                              and not all_done)]
+            top = min(eligible, key=lambda f: self._RUNG_ORDER[f["severity"]])
+            # `evidence`, not `nextAction`: a winning severity 5/7/8 fact is
+            # now DERIVED a second time by `_task_and_approval_candidates`
+            # rather than copied verbatim from the matching severity 5/7/8
+            # finding above (its wording carries a task id / "(READY TASK)"
+            # style suffix that finding's own text does not), but both
+            # always name the identical underlying evidence path (the same
+            # 08-plan.json, 10-approval.json or "task <id>" either way), so
+            # this still proves severity 10 was derived from the SAME fact,
+            # not a generic filler.
+            self.assertEqual(tens[0]["evidence"], top["evidence"],
                              "the severity-10 finding must actually be derived from %s's "
-                             "own highest-severity finding, not a generic filler: %s"
+                             "own highest-priority finding, not a generic filler: %s"
                              % (name, text))
+
+
+class TestMissingEvidenceRung(TeamScenario):
+    """MAJOR A4: the team severity table had no rung for missing evidence
+    (the plan's verification commands were never run under `sbe evidence
+    run`), so that finding was crammed into severity 5, "missing
+    approvals", alongside the genuinely separate fact that no approval
+    report is saved. A fresh plan owes both at once, and both used to print
+    under the SAME "5. MISSING APPROVALS" header, indistinguishable by
+    severity: the plain-status side already keeps its own MISSING EVIDENCE
+    section apart from MERGE BLOCKERS; team must mirror that separation."""
+
+    def test_missing_evidence_gets_its_own_rung_not_crammed_into_missing_approvals(self):
+        self._change("chg-a", "src/a.py")
+        code, text, _ = self.team("--json")
+        data = json.loads(text[text.index("{"):])
+        own = [f for f in data["findings"] if f["change"] == "chg-a"]
+        evidence_findings = [f for f in own if "no receipt exists yet" in f["detail"]]
+        approval_findings = [f for f in own
+                             if "no approval report is saved" in f["detail"]]
+        self.assertTrue(evidence_findings, "a fresh plan with verification commands and "
+                                          "no receipt must still report missing evidence: "
+                                          "%s" % text)
+        self.assertTrue(approval_findings, text)
+        self.assertNotEqual(
+            evidence_findings[0]["severity"], approval_findings[0]["severity"],
+            "a missing-evidence finding must not share a severity slot with a "
+            "missing-approval finding: %s" % text)
 
 
 class TestEvidenceAndConvergence(TeamScenario):
@@ -400,12 +512,15 @@ class TestJsonContractAndExit(TeamScenario):
                         "owner", "nextAction", "basis"):
                 self.assertIn(key, f, "finding missing %s: %s" % (key, f))
             self.assertIn(f["basis"], ("observed", "derived", "unavailable"))
-            # 1..11, not 1..10: severity 11 is the review-record slot, added
+            # 1..12, not 1..10: severity 11 is the review-record slot, added
             # deliberately OUTSIDE 1..6 (see TEAM_SEVERITIES in status.py) so
             # a missing review, which is every one of this repository's nine
             # merged pull requests to date, reads as NO-DATA and never as a
-            # block.
-            self.assertTrue(1 <= int(f["severity"]) <= 11, f)
+            # block. Severity 12 (MAJOR A4, "missing evidence") is INSIDE
+            # the blocking set (see TEAM_BLOCKING_SEVERITIES in status.py)
+            # even though it sits outside the contiguous 1..6 span, the same
+            # way MISSING EVIDENCE already blocks plain `sbe status`.
+            self.assertTrue(1 <= int(f["severity"]) <= 12, f)
         sevs = [int(f["severity"]) for f in data["findings"]]
         self.assertEqual(sevs, sorted(sevs), "most severe first, deterministic")
 
@@ -459,7 +574,7 @@ class TestHandoverIntegration(TeamScenario):
 
     def _assert_severity_contract_holds(self, data):
         for f in data["findings"]:
-            self.assertTrue(1 <= int(f["severity"]) <= 11,
+            self.assertTrue(1 <= int(f["severity"]) <= 12,
                             "a handover entry must never widen the findings severity "
                             "range: %s" % f)
 
@@ -539,6 +654,27 @@ class TestHandoverIntegration(TeamScenario):
         self.assertEqual(entry["status"], "rejected", entry)
         self.assertIn("not ready yet", entry["detail"], entry)
         self._assert_severity_contract_holds(data)
+
+    def test_an_acknowledged_handover_states_ownership_in_the_plain_text(self):
+        # BLOCKER A3: the JSON handover array already carries status
+        # "acknowledged", outgoingOwner and intendedReceiver, but the
+        # plain-text team view (render_team) never read the handover list
+        # at all, so a human running `sbe status --team` with no --json
+        # never saw who now owns the change.
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                      "--receiver", "bob@example.com")
+        code, text, _ = self.handover("acknowledge", doss, "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.team()
+        self.assertIn("ownership", text.lower(),
+                      "the plain team view must state who owns the change after an "
+                      "acknowledged handover: %s" % text)
+        self.assertIn("bob@example.com", text,
+                      "the plain text must name who ownership moved to: %s" % text)
+        self.assertIn("acknowledged", text)
 
     def test_two_changes_each_carry_their_own_independent_handover_entry(self):
         doss_a = self._change("chg-a", "src/a.py")
@@ -750,6 +886,228 @@ class TestCanonicalNextAction(TeamScenario):
                          "plain status and team status must name the SAME next action for "
                          "the same dossier: status=%r team=%r"
                          % (data["nextActionDetail"]["actionId"], tens[0]["actionId"]))
+
+    def _missing_approval_dossier(self):
+        # BLOCKER A2: a dossier whose ONLY outstanding obligation is
+        # approval (evidence complete for its declared tier, both plan
+        # tasks closed clean, convergence PASS and bound to the current
+        # head, no 10-approval.json ever saved). `build_report`'s own
+        # candidate list is documented as covering sections 1 to 4
+        # (broken claims, merge blockers, active conflicts, missing
+        # evidence) plus the LANE C1 task/review ladder; it never asked
+        # `_change_ladder_candidates` about approval at all, so plain
+        # `sbe status` fell through to `finish` ("nothing blocking here")
+        # while `sbe status --team` (and `sbe map`, which is built
+        # entirely from the team report) named the SAME commit's own
+        # severity-5 finding and recommended `resolve-missing-approval`.
+        name = "approval-pending"
+        doss = self._change(name, "src/approveme.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "%s dossier and source" % name)
+        head = self.git("rev-parse", "HEAD").strip()
+
+        out = os.path.join(self.repo, ".sbe", "evidence", "all.json")
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo,
+            "--covers", "src/approveme.py", "--kind", "design", "--kind", "gate",
+            "--kind", "score", "--", sys.executable, "-c", "pass")
+        self.assertEqual(code, 0, "the fixture receipt must verify sound: %s" % text)
+
+        self._closed_record("T01", ["src/approveme.py"], agent="alice", base_commit=head)
+        self._closed_record("T02", [], agent="alice", base_commit=head)
+
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "11-review.json"), "w").write(json.dumps({
+            "headSha": head, "reviewer": "carol@example.com", "reviewerType": "human",
+            "result": "approved",
+        }))
+        # No 10-approval.json: approval is the one thing left undone.
+        return name
+
+    def test_missing_approval_is_the_same_action_id_on_both_surfaces(self):
+        name = self._missing_approval_dossier()
+
+        code, data, text = self.status()
+        self.assertIn("nextActionDetail", data, text)
+        self.assertNotIn("nothing blocking here", data["nextAction"],
+                         "a dossier whose only obligation is approval must never read as "
+                         "clean: %s" % text)
+        self.assertEqual(data["nextActionDetail"]["actionId"], "resolve-missing-approval",
+                         text)
+
+        code, team_text, _ = self.team("--json")
+        team_data = json.loads(team_text[team_text.index("{"):])
+        tens = [f for f in team_data["findings"]
+               if f["change"] == name and f["severity"] == 10]
+        self.assertEqual(len(tens), 1, team_text)
+        self.assertEqual(tens[0]["actionId"], "resolve-missing-approval", team_text)
+
+        self.assertEqual(data["nextActionDetail"]["actionId"], tens[0]["actionId"],
+                         "plain status and team status must name the SAME next action for "
+                         "the same commit: status=%r team=%r"
+                         % (data["nextActionDetail"]["actionId"], tens[0]["actionId"]))
+
+
+class TestThreeSurfaceConsistency(TeamScenario):
+    """A2 ROUND 2: `sbe status`, `sbe status --team` and `sbe map` must name
+    the SAME next action for the same change, across every state the round-1
+    hostile verdict named. Round 1's own fix for BLOCKER A2 added an
+    UNCONDITIONAL missing-approval candidate to `_change_ladder_candidates`,
+    gated only on `08-plan.json` existing; since `RUNG_MISSING_APPROVAL` (40)
+    outranks `RUNG_ACTIVE_TASK` (60) and `RUNG_READY_TASK` (70), a fresh
+    plan whose tasks had not been started yet recommended chasing a pull-
+    request approval on BOTH surfaces before anyone had started the work --
+    the ORIGINAL journey-2 disease (see `TestCanonicalNextAction`'s own
+    docstring), unified across both surfaces instead of cured.
+
+    `_task_and_approval_candidates` (`src/brothersbe/status.py`) is now the
+    ONE shared candidate builder both `build_report` and `build_team_report`
+    call, so the two surfaces cannot diverge by construction; `sbe map` is
+    built entirely from `build_team_report`'s own return value (see
+    `src/brothersbe/mapgen.py`'s module docstring), so a match against team
+    is a match against map too, verified here directly rather than assumed.
+    """
+
+    def _map_page(self):
+        out_path = os.path.join(self.tmp, "map.html")
+        code, text, _ = self.sbe("map", self.repo, "--out", out_path)
+        self.assertEqual(code, 0, text)
+        return io.open(out_path, encoding="utf-8").read()
+
+    def _assert_three_surfaces_agree(self, name, why):
+        code, text, _err = self.sbe("status", self.repo, "--json")
+        data = json.loads(text[text.index("{"):])
+        self.assertIn("nextActionDetail", data, text)
+
+        code, team_text, _ = self.team("--json")
+        team_data = json.loads(team_text[team_text.index("{"):])
+        tens = [f for f in team_data["findings"]
+               if f["change"] == name and f["severity"] == 10]
+        self.assertEqual(len(tens), 1, team_text)
+
+        plain_action_id = data["nextActionDetail"]["actionId"]
+        team_action_id = tens[0]["actionId"]
+        self.assertEqual(
+            plain_action_id, team_action_id,
+            "%s: plain status and team status must name the SAME next action "
+            "for %r: status=%r team=%r" % (why, name, plain_action_id, team_action_id))
+
+        page = self._map_page()
+        # `sbe map` relativizes every string against the repository root
+        # (see `mapgen._relativize`: `value.replace(prefix, "").replace(
+        # root, ".")`, `prefix` being `root + os.sep`) before rendering it,
+        # the SAME two-step transform applied here to team's own recorded
+        # text, so the comparison is against what the page actually
+        # carries, not against an absolute path the page deliberately
+        # never bakes in.
+        relativized_next_action = (
+            tens[0]["nextAction"].replace(self.repo + os.sep, "").replace(self.repo, "."))
+        self.assertIn(
+            relativized_next_action, page,
+            "%s: sbe map's own findings table must carry the IDENTICAL next "
+            "action text team status just named for %r, since sbe map is "
+            "built entirely from build_team_report's own return value: %r"
+            % (why, name, relativized_next_action))
+        return plain_action_id
+
+    def test_a_fresh_intake_with_no_plan_yet_agrees_on_all_three_surfaces(self):
+        name = "fresh-intake"
+        doss = os.path.join(self.repo, "design", name)
+        os.makedirs(doss)
+        io.open(os.path.join(doss, "00-intake.json"), "w").write(
+            json.dumps(INTAKE, indent=2))
+        self.git("add", "-A")
+        self.git("commit", "-qm", "%s intake only, no plan yet" % name)
+
+        action_id = self._assert_three_surfaces_agree(name, "state 1: fresh intake only")
+        self.assertEqual(action_id, "start-ready-task",
+                         "a change with an intake and no plan yet must recommend "
+                         "deriving one, the same next step team already named for it")
+
+    def test_two_ready_tasks_unclaimed_with_no_evidence_yet_agrees_on_all_three_surfaces(
+            self):
+        # BLOCKER/MAJOR A2 round 2's own reproduction: a fresh plan, both
+        # tasks ready and unclaimed, no registry record, no convergence, no
+        # approval, no review, and (since a verification command is
+        # declared and never run) no evidence either.
+        name = "two-ready-tasks"
+        self._change(name, "src/tworeadytasks.py")
+
+        action_id = self._assert_three_surfaces_agree(
+            name, "state 2: two ready tasks unclaimed")
+        self.assertEqual(action_id, "start-ready-task",
+                         "a fresh plan with two unstarted, unclaimed tasks and no "
+                         "evidence, convergence, approval or review recorded yet must "
+                         "recommend starting the ready task, not chasing an approval, a "
+                         "convergence report or an evidence receipt nobody could have "
+                         "produced yet")
+
+    def test_a_task_closed_clean_with_evidence_agrees_on_all_three_surfaces(self):
+        # Both tasks closed clean, a sound evidence receipt recorded, but
+        # convergence, approval and review all left untouched (missing):
+        # approval must still win, since it outranks both on `lifecycle`'s
+        # own rung table once nothing is left for a task to do.
+        name = "closed-clean-with-evidence"
+        doss = self._change(name, "src/closedcleanwithevidence.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "%s dossier and source" % name)
+        head = self.git("rev-parse", "HEAD").strip()
+
+        out = os.path.join(self.repo, ".sbe", "evidence", "all.json")
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo,
+            "--covers", "src/closedcleanwithevidence.py", "--kind", "design",
+            "--kind", "gate", "--kind", "score", "--", sys.executable, "-c", "pass")
+        self.assertEqual(code, 0, "the fixture receipt must verify sound: %s" % text)
+
+        self._closed_record("T01", ["src/closedcleanwithevidence.py"], agent="alice",
+                            base_commit=head)
+        self._closed_record("T02", [], agent="alice", base_commit=head)
+
+        action_id = self._assert_three_surfaces_agree(
+            name, "state 3: task closed clean with evidence")
+        self.assertEqual(action_id, "resolve-missing-approval",
+                         "every task closed clean and evidence recorded: the only "
+                         "thing left to do is seek approval, even with convergence and "
+                         "review also unrecorded")
+
+    def test_evidence_complete_but_approval_genuinely_missing_agrees_on_all_three_surfaces(
+            self):
+        # Evidence complete for the declared tier, both tasks closed clean,
+        # convergence PASS and review approved, all bound to head: approval
+        # is the ONE thing left undone, isolated from every other rung.
+        name = "approval-genuinely-missing"
+        doss = self._change(name, "src/approvalgenuinelymissing.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "%s dossier and source" % name)
+        head = self.git("rev-parse", "HEAD").strip()
+
+        out = os.path.join(self.repo, ".sbe", "evidence", "all.json")
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo,
+            "--covers", "src/approvalgenuinelymissing.py", "--kind", "design",
+            "--kind", "gate", "--kind", "score", "--", sys.executable, "-c", "pass")
+        self.assertEqual(code, 0, "the fixture receipt must verify sound: %s" % text)
+
+        self._closed_record("T01", ["src/approvalgenuinelymissing.py"], agent="alice",
+                            base_commit=head)
+        self._closed_record("T02", [], agent="alice", base_commit=head)
+
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "11-review.json"), "w").write(json.dumps({
+            "headSha": head, "reviewer": "carol@example.com", "reviewerType": "human",
+            "result": "approved",
+        }))
+        # No 10-approval.json: approval is the one thing left undone.
+
+        action_id = self._assert_three_surfaces_agree(
+            name, "state 4: evidence complete, approval genuinely missing")
+        self.assertEqual(action_id, "resolve-missing-approval",
+                         "convergence PASS, review approved, evidence complete, and "
+                         "still no approval saved: approval is the one thing left, and "
+                         "must be named as such on every surface")
 
 
 if __name__ == "__main__":
