@@ -1911,6 +1911,11 @@ def gd_dedup(root):
 
 @case("verify-install-fails-over-source-in-an-excluded-path", "guard", "named and failed")
 def gd_vinstall(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
+                "sh gap beside the two excluded test scripts; its control tree "
+                "misbehaves under the Windows shell (run 31040612827, an "
+                "unnamed EXTRA file), so this leg does not measure it")
     # The completeness sentence claimed "no file exists on disk that the
     # manifest does not name" over paths the enumeration excluded by name.
     # The exclusions are now enumerated and counted on every run, and source
@@ -2026,6 +2031,11 @@ def gd_vinstall_excluded_symlink(root):
 
 @case("a-symlinked-planted-module-fails-the-install-check", "guard", "named and failed")
 def gd_vinstall_symlink(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
+                "sh gap beside the two excluded test scripts; its control tree "
+                "misbehaves under the Windows shell (run 31040612827, an "
+                "unnamed EXTRA file), so this leg does not measure it")
     # `find -type f` never returns a symlink, so a planted tools/backdoor.py
     # pointing at code OUTSIDE the tree was reported as nothing at all by
     # verify-install and imported-and-executed by the honesty suite. The check
@@ -5253,7 +5263,10 @@ def dc4(root):
     live = [l for l in out.stdout.splitlines() if l.startswith("silent-failure-lints")]
     if not live:
         return "the scorer printed no silent-failure-lints line at all"
-    live = {_re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/")}
+    # The scorer names files in the platform's separator; the doc pastes are
+    # POSIX-rendered, so live lines are separator-normalized before comparison
+    # (run 31040612827).
+    live = {_re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/").replace("\\", "/")}
     # The quickstart's first ten minutes shows a run against the READER'S OWN
     # repository, which cannot be a line about this one. A doc quote nothing
     # reproduces is the defect this guard exists for, so the worked repository
@@ -5267,7 +5280,7 @@ def dc4(root):
         yours = subprocess.run([sys.executable, SCORE, "."], capture_output=True, text=True, cwd=d)
         for l in yours.stdout.splitlines():
             if l.startswith("silent-failure-lints"):
-                live.add(_re.sub(r"\s+", " ", l))
+                live.add(_re.sub(r"\s+", " ", l).replace("\\", "/"))
     # The ETL onboarding page pastes three lint lines off one sample directory:
     # the three-hit run, the run whose only waiver carries no reason, and the run
     # whose every finding is waived and therefore reports NO-DATA rather than
@@ -5294,7 +5307,7 @@ def dc4(root):
                                  capture_output=True, text=True, cwd=d)
             for l in got.stdout.splitlines():
                 if l.startswith("silent-failure-lints"):
-                    live.add(_re.sub(r"\s+", " ", l))
+                    live.add(_re.sub(r"\s+", " ", l).replace("\\", "/"))
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
@@ -6527,6 +6540,10 @@ def x8(root):
     # A FIFO where a receipt was expected hung all three tools forever, in both
     # modes, with no verdict line at all: worse than a crash, because a crash at
     # least prints a FAIL.
+    if not hasattr(os, "mkfifo"):
+        return ("PLATFORM-GAP: os.mkfifo does not exist here, so the FIFO hang "
+                "channel cannot be mounted; the refusal path is measured on the "
+                "POSIX legs only")
     os.mkfifo(os.path.join(root, "ran-receipt.json"))
     try:
         out = subprocess.run([sys.executable, GATE, "ran", root], capture_output=True,
@@ -7432,7 +7449,10 @@ def sc1(root):
         write(d, os.path.join("a", fname), receipt)
         write(d, os.path.join("c", fname), receipt)
         os.makedirs(os.path.join(d, "b"), exist_ok=True)
-        line = gate_line(".", gate, cwd=d)
+        # Separator-normalized before the name checks: the gate names paths in
+        # the platform's own rendering (a\file on Windows, run 31040612827);
+        # the NAMING is what this case asserts, not the separator glyph.
+        line = gate_line(".", gate, cwd=d).replace("\\", "/")
         if line.split()[1:2] != ["PASS"]:
             bad.append("%s did not reach PASS over the pool: %s" % (gate, line[:90]))
             continue
@@ -7454,7 +7474,8 @@ def sc2(root):
     write(root, "a/APPROVAL", "touches the partner payout path\n")
     write(root, "c/APPROVAL", "touches the settlement path\n")
     os.makedirs(os.path.join(root, "b"), exist_ok=True)
-    line = gate_line(".", "approval", cwd=root)
+    # Separator-normalized for the same reason as the pooled case above.
+    line = gate_line(".", "approval", cwd=root).replace("\\", "/")
     for want in ("a/APPROVAL", "of 2 APPROVAL file(s) read"):
         if want not in line:
             return "the refusal does not say %r: %s" % (want, line[:140])
@@ -7905,7 +7926,14 @@ def cb6(root):
 
 
 def main():
+    # A case may return "PLATFORM-GAP: <reason>" when the platform it runs on
+    # cannot mount the scenario at all (no mkfifo, a POSIX-only script). The
+    # gap is counted apart and printed with its reason: never a pass (the
+    # guarantee went unmeasured here) and never a block (only regressions
+    # decide the exit code), the same three-state honesty the checkers keep
+    # for NO-DATA. Introduced with the windows-latest leg, run 31040612827.
     passed = failed = 0
+    gaps = []
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
@@ -7917,11 +7945,16 @@ def main():
                     verdict = run_gate(d, klass)
             except Exception as e:
                 verdict = "ERROR:%r" % e
+        if isinstance(verdict, str) and verdict.startswith("PLATFORM-GAP:"):
+            gaps.append((name, verdict[len("PLATFORM-GAP:"):].strip()))
+            print("  %-38s want=%-8s got=PLATFORM-GAP (%s)" % (name, expect, gaps[-1][1]))
+            continue
         ok = verdict == expect
         passed += ok
         failed += not ok
         print("  %-38s want=%-8s got=%-8s %s" % (name, expect, verdict, "ok" if ok else "REGRESSION"))
-    print("\n%d evals: %d passed, %d regressions." % (len(CASES), passed, failed))
+    tail = "" if not gaps else ", %d platform gap(s), each named above, never a pass" % len(gaps)
+    print("\n%d evals: %d passed, %d regressions%s." % (len(CASES), passed, failed, tail))
     sys.exit(1 if failed else 0)
 
 

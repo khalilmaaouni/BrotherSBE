@@ -68,6 +68,14 @@ VOLATILE_LINE = re.compile(
 # method name in newer interpreters while the floor this project promises
 # is 3.9.
 VOLATILE_PATH = re.compile(r"/(?:Users|home|private/tmp|tmp|var/folders)/[^\s:;,)'\"]+")
+# The same mask for Windows renderings of a path, so the comparison is
+# platform-neutral: a drive-letter absolute path, and any token joined by
+# backslashes (os.path.join on Windows). POSIX transcripts never contain
+# these shapes, so the extra masks are inert there. Added after run
+# 31040612827 showed every block differing on windows-latest only by
+# path rendering.
+VOLATILE_WINPATH = re.compile(r"[A-Za-z]:[\\/][^\s;,)'\"]+")
+VOLATILE_WINREL = re.compile(r"\b[\w.-]+(?:\\[\w.*-]+)+")
 VOLATILE_SHA = re.compile(r"\b[0-9a-f]{12,40}\b")
 VOLATILE_TESTID = re.compile(r"\((__main__\.[A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z_][A-Za-z0-9_]*\)")
 # 3.11 added fine-grained error locations: caret and tilde underline lines
@@ -92,6 +100,8 @@ def stable(text):
     text = VOLATILE_LINE.sub(
         "git diff <live-base>..HEAD over <live-count> changed file(s)", text)
     text = VOLATILE_PATH.sub("<path>", text)
+    text = VOLATILE_WINPATH.sub("<path>", text)
+    text = VOLATILE_WINREL.sub("<path>", text)
     text = VOLATILE_SHA.sub("<sha>", text)
     text = VOLATILE_TESTID.sub(r"(\1)", text)
     text = VOLATILE_CARETS.sub("", text)

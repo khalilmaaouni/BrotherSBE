@@ -6,7 +6,20 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## Unreleased
+## 1.0.0-rc.17 (2026-08-06)
+
+- Windows round 3, each fix at its root, every trigger named from run
+  31040612827: the decision store's writer lock is portable (the same
+  byte-range shape as the telemetry lock, refusal-on-timeout semantics
+  unchanged); BROTHERSBE_REGISTRIES splits on the platform path-list
+  separator because a drive path used to split at its own colon and read no
+  registry at all; the transcript comparators mask Windows path renderings
+  the same way they mask POSIX ones; three name-asserting evals compare
+  separator-normalized lines because the naming, not the glyph, is the
+  guarantee; and the eval harness gains a PLATFORM-GAP result, counted and
+  printed with its reason, never a pass and never a block, carried by the
+  FIFO case (no mkfifo exists there) and the two verify-install cases (a
+  POSIX sh script this leg does not measure, now a named gap).
 
 - Windows round 2, from the first real run of the ported leg (run 31039904060,
   read line by line): a `.gitattributes` with `* -text` makes every checkout
