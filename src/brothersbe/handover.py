@@ -80,14 +80,13 @@ from . import status as status_mod
 from . import evidence as evidence_mod
 from .impact import _git  # noqa: E402  (the same private git runner status.py reuses)
 
-# `tools/` is not a package; every other module that reaches into it inserts
-# its directory onto sys.path once and imports flat, the same way
+# `tools/` is not a package; this mounts it onto sys.path through the one
+# shared mechanism every other converged module uses, the same way
 # `brothersbe.tasks` reaches `sbe_fence_hook.paths_overlap`. Mirrored here so
 # the identity comparison this module runs is the SAME code the approval
 # gate's self-approval guard runs, not a second copy of its folding rules.
-_TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-if os.path.abspath(_TOOLS) not in sys.path:
-    sys.path.insert(0, os.path.abspath(_TOOLS))
+from ._toolspath import mount
+mount()
 import sbe_gate  # noqa: E402
 
 HANDOVER_REL = "12-handover.json"

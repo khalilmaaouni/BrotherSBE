@@ -88,9 +88,8 @@ import time
 from . import SCHEMA_VERSION, version
 from .impact import DiffUnavailable, changed_files, resolve_range, _git
 
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-if os.path.abspath(TOOLS) not in sys.path:
-    sys.path.insert(0, os.path.abspath(TOOLS))
+from ._toolspath import mount
+mount()
 from sbe_checks import answered, evidence_problem  # noqa: E402
 from sbe_telemetry import SECRET_PATTERNS  # noqa: E402
 

@@ -53,15 +53,13 @@ import io
 import json
 import os
 import re
-import sys
 
 from . import impact as impact_mod
 from .impact import DiffUnavailable, _git  # noqa: E402 -- the same private import
                                             # evidence.py already makes from this module
 
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-if os.path.abspath(TOOLS) not in sys.path:
-    sys.path.insert(0, os.path.abspath(TOOLS))
+from ._toolspath import mount
+mount()
 from sbe_telemetry import SECRET_PATTERNS  # noqa: E402
 
 SCHEMA_VERSION = "1.0"

@@ -15,11 +15,9 @@ import json
 import os
 import re
 import shlex
-import sys
 
-TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools")
-if os.path.abspath(TOOLS) not in sys.path:
-    sys.path.insert(0, os.path.abspath(TOOLS))
+from ._toolspath import mount
+mount()
 # The dossier-path extraction converge compares scope against is the SAME
 # parser `sbe plan` derives with (tools/sbe_plan.py): two parsers would drift
 # into two definitions of "a path the dossier names".

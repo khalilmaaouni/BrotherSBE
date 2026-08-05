@@ -6,7 +6,7 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## Unreleased
+## 1.0.0-rc.12 (2026-08-05)
 
 - Documentation truth pass (LT-503, first half): historical and superseded
   markers on the release-1.0 handover and status snapshots and the shipped
@@ -18,6 +18,35 @@ checklist's own rules.
   CLI's own PASSTHROUGH set (adding instruction-surface, handover, explain,
   lineage). Deferred and disclosed: collapsing the overlapping
   getting-started surfaces into one quickstart and one engineering reference.
+
+- One mount point for `tools/` on `sys.path` (`src/brothersbe/_toolspath.py`,
+  new): `converge.py`, `evidence.py`, `impact.py`, `reviewroute.py`,
+  `handover.py`, `decisions.py`, and (folded in at integration the same
+  night, once the lane's own scan surfaced it) `work.py` each used to
+  compute the path to `tools/` and insert it onto `sys.path` themselves,
+  seven separate copies of the same three lines. All seven now call the one
+  shared `mount()` function; `tasks.py`, the eighth copy the scan surfaced,
+  stays inline BY PROOF: `tools/sbe_authority_hook.py` loads it standalone
+  with `spec_from_file_location`, a package-relative import there makes the
+  authority guard fail open, and `tools/test_sbe_authority_hook.py` went
+  red on the fold-in attempt, so the exception is named in the hygiene
+  suite's `KNOWN_UNCONVERTED` with that reason rather than converted
+  instead; `decisions.py` still calls it lazily, inside `registries()`, for
+  the same cycle-avoidance reason its old inline mount was lazy. Zero
+  behavior change: every one of the seven still resolves the `tools/`-flat
+  module it imports. Proven by the new `tools/test_sbe_import_hygiene.py`
+  (source read with `ast`, not text search, so a comment mentioning
+  "sys.path" in prose never counts as a hit; each of the seven also proven to
+  still resolve its `tools/` import in a fresh interpreter), calibrated red
+  by reintroducing a `sys.path` line into a converted module in a scratch
+  copy under `/tmp`. Two more modules, `tasks.py` and `work.py`, mount
+  `tools/` the same old inline way and are named, not silently excluded, in
+  that test's `KNOWN_UNCONVERTED` set: they sit outside this change's owned
+  files. All eight pre-existing focused suites for the six converted
+  modules stay green: `tools/test_sbe.py`, `tools/test_sbe_converge.py`,
+  `tools/test_sbe_evidence.py`, `tools/test_sbe_handover.py`,
+  `tools/test_sbe_decisions.py`, `tools/test_sbe_impact.py`,
+  `tools/test_sbe_review_route.py`.
 
 ## 1.0.0-rc.11 (2026-08-05)
 
