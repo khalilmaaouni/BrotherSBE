@@ -454,7 +454,14 @@ def evaluate(dossier_dir, cwd, base, head):
             receipt_note = found["match"]
             receipt_path = os.path.join(evidence_dir, receipt_note)
             covered = (evidence_mod.load(receipt_path).get("coveredFiles") or [])
-            missing_cover = [p for p in owns if p not in covered]
+            covered_paths = set()
+            for covered_entry in covered:
+                if isinstance(covered_entry, dict):
+                    if covered_entry.get("path"):
+                        covered_paths.add(covered_entry["path"])
+                elif isinstance(covered_entry, str) and covered_entry:
+                    covered_paths.add(covered_entry)
+            missing_cover = [p for p in owns if p not in covered_paths]
             if owns and missing_cover:
                 verif_findings.append({"verdict": "FAIL",
                                        "detail": "the receipt for %s does not cover %s, "

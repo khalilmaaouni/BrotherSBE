@@ -55,22 +55,24 @@ owns-overlap mechanically (`TestFullChain.test_...`, the registry section)
 rather than trusting the plan's own shape, because the pass criterion says
 "the task registry proves it," not "the plan promises it."
 
-A genuine, disclosed engine gap this scenario surfaces (documented in
-`docs/KNOWN-LIMITS.md`, calibrated below rather than avoided): `sbe
-converge`'s VERIFICATION dimension (`src/brothersbe/converge.py`) compares a
-bare path string from a task's `owns` against `receipt["coveredFiles"]`,
-which `sbe evidence run` always writes as a list of `{path, sha256, note}`
-objects, never bare strings. The membership test (`p not in covered`) can
-therefore never match, so a writer task's OWN receipt is misreported as not
-covering its own owned path, even when it plainly does. `test_sbe_converge.
-py`'s own existing happy-path fixture never exercises this: its receipt is
-bound to the REVIEWER half of a derived migration triplet, whose `owns` is
-empty, so the membership check there is vacuously satisfied. This suite hits
-the non-empty-owns case for real (T02's own receipt) and names the exact
-FAIL text, both so the gap is provably reproducible and so a future fix has
-a red fixture to turn green. `tools/test_sbe_golden_scenario.py` may not
-change `src/brothersbe/converge.py` (an engine file, out of LT-501's
-boundary): the fixture documents the gap; it does not close it.
+Two engine gaps this scenario originally SURFACED (rc.10, documented in
+`docs/KNOWN-LIMITS.md`) were FIXED in rc.11, and the pins here were built to
+flip with the fixes, which they did: `sbe converge`'s VERIFICATION dimension
+(`src/brothersbe/converge.py`) now extracts `path` from each `coveredFiles`
+entry (`sbe evidence run` writes `{path, sha256, note}` objects) before the
+membership test, so a writer task's OWN receipt is credited with covering
+its own owned path (T02's pin asserts the PASS finding and the absence of
+the old does-not-cover text); and the evidence scan in
+`src/brothersbe/status.py` resolves a receipt claimed by a task record's
+`evidenceId` against that record's declared worktree, so a finished task's
+own receipt no longer misreads as a severity-1 broken claim against root
+HEAD (the status pin asserts zero severity-1 findings while the legitimate
+NO-DATA blockers stay named exactly, AND that the plain status JSON names
+the worktree resolution, so a scan that silently dropped the receipt still
+fails). What legitimately remains FAIL is the inherent
+property of a never-merged multi-branch team workflow: receipts for the
+OTHER tasks bind to their own branch heads, never to the head `sbe
+converge` assesses.
 """
 import ast
 import hashlib
@@ -467,16 +469,14 @@ class TestFullChain(GoldenScenarioFixture):
         # ---- converge: run for real, over T02's own branch. SCOPE and
         # DATA are meaningfully PASS (the change stays in its declared
         # scope, and the migration drops nothing the data model still
-        # documents). VERIFICATION genuinely FAILs, for two disclosed
-        # reasons: T01/T03/T04's receipts are bound to their OWN branch
-        # heads, not this one (an inherent property of a never-merged,
-        # multi-branch team workflow), and T02's OWN receipt is
-        # misreported as not covering its own owned path, a real
-        # coveredFiles-shape gap in `src/brothersbe/converge.py` this
-        # scenario discovers and documents (docs/KNOWN-LIMITS.md) rather
-        # than papers over. FINAL is FAIL by the documented rule (FAIL
-        # beats everything); this is not asserted as a surprise, it is
-        # asserted as the one demonstrably reproducible finding. ----
+        # documents). T02's OWN receipt now PASSes coverage: the
+        # coveredFiles-shape gap this scenario originally discovered
+        # (docs/KNOWN-LIMITS.md) was fixed in rc.11, and this pin was
+        # built to flip with it. VERIFICATION still FAILs for the one
+        # reason that is an inherent property of a never-merged,
+        # multi-branch team workflow: T01/T03/T04's receipts bind to
+        # their OWN branch heads, not the head assessed here. FINAL is
+        # FAIL by the documented rule (FAIL beats everything). ----
         code, text, _err = self.sbe("converge", self.dossier, "--base", self.base,
                                     "--head", head02_final, "--cwd", self.repo, "--json")
         self.assertEqual(code, 1, text)
@@ -486,9 +486,17 @@ class TestFullChain(GoldenScenarioFixture):
         self.assertEqual(by_name["DATA"]["verdict"], "PASS", by_name["DATA"])
         self.assertEqual(by_name["VERIFICATION"]["verdict"], "FAIL", by_name["VERIFICATION"])
         verification_detail = " ".join(f["detail"] for f in by_name["VERIFICATION"]["findings"])
-        self.assertIn("does not cover %s" % bs.SQL_PATH, verification_detail,
-                      "expected the documented coveredFiles-shape gap to name T02's own "
-                      "path: %s" % verification_detail)
+        self.assertNotIn("does not cover", verification_detail,
+                         "the coveredFiles-shape gap was fixed in rc.11; a does-not-cover "
+                         "finding against T02's own receipt would mean it regressed: %s"
+                         % verification_detail)
+        self.assertIn("has a sealed receipt bound to %s" % head02_final[:12],
+                      verification_detail,
+                      "expected T02's own receipt to PASS coverage against its branch "
+                      "head after the rc.11 fix: %s" % verification_detail)
+        self.assertIn("binds to", verification_detail,
+                      "expected the inherent wrong-head findings for the other tasks' "
+                      "branch-bound receipts to remain: %s" % verification_detail)
         self.assertEqual(converge_report["final"], "FAIL", converge_report)
 
         # ---- work + evidence: T03, the dependent task. T01 (its
@@ -750,15 +758,38 @@ class TestTeamModeCIPostcondition(GoldenScenarioFixture):
                          "sbe status --team --json's exit code must equal whether any "
                          "finding carries severity 1 to 6, and did not, after real task "
                          "work landed: %s" % report)
-        # This second state IS blocking, and for the disclosed reason above
-        # (a worktree-branch-bound receipt reads broken against root's own
-        # HEAD), named here so the assertion above is proven non-vacuous:
-        # the two states really do differ, and the contract holds across
-        # both, not just the trivially clean one.
+        # Since rc.11 the evidence scan resolves a receipt claimed by a task
+        # record's evidenceId against that record's declared worktree, so a
+        # finished task's own receipt verifies clean instead of misreading
+        # as a severity-1 broken claim against root HEAD. This pin was built
+        # to flip with that fix, and it flipped exactly this far: the state
+        # STAYS blocking, for the legitimate NO-DATA reasons that were
+        # always underneath (severity 5, no approval report; severity 6, no
+        # convergence report), which is itself the proof that the fix
+        # removed only the misreport and upgraded nothing else. Non-vacuity
+        # is kept two ways: no severity-1 finding may remain while the
+        # blocking severities are named exactly, and the plain status JSON
+        # must PROVE the receipt was seen and resolved against T01's
+        # declared worktree, so a scan that silently dropped the receipt
+        # cannot pass here either.
         self.assertTrue(_team_blocking(report), report)
-        broken = [f for f in report["findings"] if f["severity"] == 1]
-        self.assertTrue(broken, "expected the disclosed worktree-vs-root-HEAD evidence gap "
-                        "to surface as a severity-1 broken claim: %s" % report["findings"])
+        self.assertEqual([f for f in report["findings"] if f["severity"] == 1], [],
+                         "expected no severity-1 broken claim after the worktree "
+                         "resolution fix: %s" % report["findings"])
+        blocking_severities = sorted({f["severity"] for f in report["findings"]
+                                      if 1 <= f["severity"] <= 6})
+        self.assertEqual(blocking_severities, [5, 6],
+                         "expected exactly the two legitimate NO-DATA blockers (missing "
+                         "approval, missing convergence) and no verification misreport: "
+                         "%s" % report["findings"])
+        code_s, text_s, _err = self.sbe("status", self.repo, "--json")
+        self.assertIn(code_s, (0, 1), text_s)
+        plain = json.loads(text_s)
+        sound = plain.get("soundEvidence") or []
+        self.assertTrue(any("declared worktree" in (entry.get("finding") or "")
+                            for entry in sound),
+                        "expected T01's receipt to verify as sound evidence, resolved "
+                        "against its task record's declared worktree: %s" % sound)
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,39 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.11 (2026-08-05)
+
+The two engine gaps the LT-501 golden scenario disclosed in rc.10 are fixed,
+which unblocks the LT-503 consolidation rc.10 deliberately held.
+
+- Team status evidence resolution (`src/brothersbe/status.py`): the evidence
+  scan resolves a receipt claimed by a task record, meaning the record's
+  `evidenceId` equals the receipt's `runId`, against that record's declared
+  worktree when it still exists, so a finished task's own receipt verifies
+  clean instead of misreading as a severity-1 broken claim against root
+  HEAD. The resolution is disclosed on the entry (`verifiedIn`, `task`, and
+  the finding sentence); a claimed receipt whose worktree is gone, an
+  unclaimed receipt, and an unreadable registry still verify against root,
+  so linkage that cannot be read never upgrades a verdict. Proven by
+  `tools/test_sbe_golden_scenario.py::TestTeamModeCIPostcondition` (zero
+  severity-1 findings after real task work, the legitimate NO-DATA blockers
+  named exactly, the plain status JSON naming the worktree resolution),
+  calibrated red by suppressing the resolution in a scratch copy.
+- Converge coveredFiles membership (`src/brothersbe/converge.py`): the
+  VERIFICATION dimension extracts `path` from each `coveredFiles` entry
+  (tolerating a legacy bare-string entry) before the `owns` membership
+  test, so a writer task's own receipt is credited with covering its owned
+  paths. Proven by `tools/test_sbe_golden_scenario.py::TestFullChain` (the
+  sealed-receipt PASS finding present, the old does-not-cover text absent,
+  VERIFICATION still FAIL for the inherent wrong-head reason and FINAL
+  still FAIL by the documented rule), calibrated red by reverting the
+  extraction in a scratch copy.
+- `docs/KNOWN-LIMITS.md` LT-501 section rewritten: the two fixed gaps are
+  recorded as fixed with their proofs, and the remaining true boundary
+  (receipts for other tasks bind to their own branch heads until
+  integration outside `sbe`) stays documented instead of being deleted
+  with the fixes.
+
 ## 1.0.0-rc.10 (2026-08-05)
 
 Wave E of the lean team program, first half: the end to end proof of the
