@@ -1327,6 +1327,19 @@ def _cmd_adopt(args):
     return EXIT_OK
 
 
+def _cmd_map(args):
+    """A deterministic, offline HTML status page, built from canonical state
+    only. Not a delegation: like `evidence`, `task`, `work` and `handover`,
+    there is no tool in `tools/` behind it. See `brothersbe.mapgen` for the
+    three sources it reads (the status module's team report, the task
+    registry, dossier artifact presence) and why it never parses anyone's
+    rendered prose to fill a slot.
+    """
+    from . import mapgen as mapgen_mod
+    return mapgen_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                           exit_usage=EXIT_USAGE)
+
+
 def _cmd_status(args):
     """Blocker-first: where a change stands, read from state other commands
     already recorded. See `brothersbe.status` for exactly what it reads and
@@ -1533,6 +1546,9 @@ COMMANDS = [
      _cmd_status),
     ("init", "install BrotherSBE's local footprint into a repository, dry run by default",
      _cmd_init),
+    ("map", "a deterministic, offline HTML status page built from canonical state only: "
+            "sbe map --out FILE",
+     _cmd_map),
 ]
 
 
@@ -1548,7 +1564,7 @@ COMMANDS = [
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
     "evidence", "task", "work", "handover", "pr", "explain", "lineage",
-    "instruction-surface"))
+    "instruction-surface", "map"))
 
 
 def build_parser():

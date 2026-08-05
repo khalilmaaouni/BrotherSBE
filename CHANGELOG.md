@@ -14,13 +14,40 @@ checklist's own rules.
   POSIX `sh` scripts (`scripts/test-install-artifact.sh`,
   `scripts/test-upgrade-rollback.sh`) are skipped, each named where it is
   skipped; nothing is marked `continue-on-error` and no existing step was
-  weakened. A new step aliases `python3` to the `python.exe` that
-  `actions/setup-python` installs on Windows (it installs no `python3`
-  executable there), so every other step still calls `python3` unmodified,
-  identical to the Linux and macOS steps. Proven by
-  `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/brothersbe-gates.yml'))"`
-  parsing clean and a step-by-step diff against the existing job confirming
-  the only two steps missing from the new job are the two named exclusions.
+  weakened. The leg's own first day supplied two corrections the entry
+  records instead of hiding: the python3 bridging step became a guarded
+  no-op with an honest name after run one proved the current image already
+  resolves `python3` (the unconditional copy failed as same-file), and the
+  job declares `PYTHONUTF8=1` after run two proved two Unicode homoglyph
+  evals read their fixtures through the legacy Windows codec (the gate saw
+  mangled bytes instead of the homoglyphs it exists to catch). Proven by
+  the workflow parsing clean under PyYAML, a step-name diff against the
+  existing job confirming only the two named exclusions, and the runs
+  themselves, read as evidence rather than assumed.
+
+## 1.0.0-rc.13 (2026-08-05)
+
+- LANE PT-3, deterministic `sbe map`: `skills/help/SKILL.md`'s "project map"
+  section used to tell the MODEL to fill `skills/help/map-template.html` slot
+  by slot from whatever it happened to read, which is nondeterministic and can
+  invent data that was never actually there. `src/brothersbe/mapgen.py` (new)
+  builds the page in code instead, from exactly three canonical sources: the
+  status module's own team report (`brothersbe.status.build_team_report`,
+  imported the way `cli.py` already imports it, never parsed out of rendered
+  prose), the task registry, and dossier artifact presence (a boolean per
+  lifecycle file, never the file's content). Every user-controlled string is
+  HTML-escaped before it reaches the page, and no wall-clock timestamp or
+  machine-specific filesystem path is ever written into it, so the same
+  repository state always renders the same bytes. Routed as a new `sbe map
+  --out FILE` subcommand (`src/brothersbe/cli.py`, one `COMMANDS` entry and
+  one `PASSTHROUGH` entry, delegating to `mapgen.main`, nothing else changed
+  in that file). `skills/help/SKILL.md`'s project-map section now points at
+  this command instead of the old fill-the-template instruction. Proven by
+  `tools/test_sbe_map.py` (identical bytes across two runs of the same state,
+  every canonical section rendering from a populated fixture, an
+  HTML-injection payload in a task's own agent field arriving escaped),
+  calibrated red for the escaping test by neutralizing `_esc` in a `/tmp`
+  rsync scratch copy, never in the working tree.
 
 ## 1.0.0-rc.12 (2026-08-05)
 
