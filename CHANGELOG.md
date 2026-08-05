@@ -6,7 +6,7 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
-## Unreleased
+## 1.0.0-rc.12 (2026-08-05)
 
 - Documentation truth pass (LT-503, first half): historical and superseded
   markers on the release-1.0 handover and status snapshots and the shipped
