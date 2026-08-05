@@ -742,6 +742,8 @@ step that surfaces any design waiver as something a human is shown:
         run: sh scripts/test-upgrade-rollback.sh
       - name: Adopt and init fixtures (sbe adopt, sbe init)
         run: python3 tools/test_sbe_adopt.py
+      - name: Authority hook fixtures (undeclared edits to authority files refused)
+        run: python3 tools/test_sbe_authority_hook.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -752,6 +754,14 @@ step that surfaces any design waiver as something a human is shown:
         run: python3 tools/test_sbe_decisions.py
       - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
         run: python3 tools/test_sbe_evidence.py
+      - name: Golden scenario (the whole chain, start through acknowledge, real engine)
+        run: python3 tools/test_sbe_golden_scenario.py
+      - name: Handover fixtures (sbe handover, identity forgeries refused)
+        run: python3 tools/test_sbe_handover.py
+      - name: Instruction surface fixtures (changed authority files outside declared scope)
+        run: python3 tools/test_sbe_instruction_surface.py
+      - name: Interoperability fixtures (namespacing, no foreign writes, coexistence)
+        run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
       - name: Plan fixtures (sbe plan)
@@ -768,14 +778,28 @@ step that surfaces any design waiver as something a human is shown:
       # it stays a manual, opt-in script instead.
       - name: PR verify fixtures (sbe pr verify, canned GitHub API, offline)
         run: python3 tools/test_sbe_prverify.py
+      - name: Release invariant fixtures (distributable bytes cannot move without VERSION)
+        run: python3 tools/test_sbe_release_invariant.py
+      - name: Review record fixtures (normalized findings, commit binding, staleness)
+        run: python3 tools/test_sbe_review_record.py
+      - name: Review route fixtures (deterministic reviewer selection)
+        run: python3 tools/test_sbe_review_route.py
+      - name: Review skill fixtures (the skill consumes the route)
+        run: python3 tools/test_sbe_review_skill_fixtures.py
       - name: Status fixtures (sbe status)
         run: python3 tools/test_sbe_status.py
       - name: Team status fixtures (sbe status --team)
         run: python3 tools/test_sbe_status_team.py
       - name: Task fixtures (sbe task)
         run: python3 tools/test_sbe_tasks.py
+      - name: Team workflow fixtures (eight execution laws over one fixture)
+        run: python3 tools/test_sbe_team_workflow.py
+      - name: Version bump fixtures (one command moves every declaration site)
+        run: python3 tools/test_sbe_version_bump.py
       - name: Work fixtures (sbe work)
         run: python3 tools/test_sbe_work.py
+      - name: Work brief fixtures (sbe work brief)
+        run: python3 tools/test_sbe_work_brief.py
       # The kill criterion this wave was cut against, verbatim: an install
       # that needs a manual global settings edit. This proves a plain
       # `git archive HEAD` extracts on its own into an empty directory and

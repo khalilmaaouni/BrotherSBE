@@ -24,13 +24,13 @@ env -u BROTHERSBE_VAULT BROTHERSBE_PRIVATE_NAMES_FILE=/tmp/sbe-book-ch10-repo/no
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.9, VERSION 1.0.0-rc.9
+plugin-manifest  PASS     manifest 1.0.0-rc.10, VERSION 1.0.0-rc.10
 git              PASS     working directory is inside a git tree
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.9, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.10, evidence schema 1.0. 7 check(s): 5 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 Read `vault` the same way this book has read every other NO-DATA line since
@@ -92,13 +92,13 @@ BROTHERSBE_VAULT=/tmp/sbe-book-ch10-repo/vault BROTHERSBE_PRIVATE_NAMES_FILE=/tm
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.9, VERSION 1.0.0-rc.9
+plugin-manifest  PASS     manifest 1.0.0-rc.10, VERSION 1.0.0-rc.10
 git              PASS     working directory is inside a git tree
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            PASS     /tmp/sbe-book-ch10-repo/vault
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.9, evidence schema 1.0. 7 check(s): 6 PASS, 0 FAIL, 1 NO-DATA.
+sbe 1.0.0-rc.10, evidence schema 1.0. 7 check(s): 6 PASS, 0 FAIL, 1 NO-DATA.
 ```
 
 `vault` reads PASS, naming the path it found, nothing more. `doctor` does

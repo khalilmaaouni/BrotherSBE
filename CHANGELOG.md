@@ -6,7 +6,73 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.10 (2026-08-05)
+
+Wave E of the lean team program, first half: the end to end proof of the
+whole workflow, and the interoperability contract. LT-503 consolidation is
+deliberately held until the two engine gaps LT-501 disclosed are fixed,
+because consolidating documentation on top of known-wrong verdict paths
+would bake the wrong claims in.
+
+- Plugin interoperability minimum (LT-502, `docs/INTEROPERABILITY.md`,
+  documentation and tests, not a compatibility framework): the seven
+  guarantees the lean plan names (every skill namespaced, no generic command
+  claimed outside the namespace, no global user settings overwritten, hooks
+  installed only through the approved manifest or documented manual path,
+  coexistence with the official GitHub plugin and common MCP tools, the
+  documented CLI fallback when no companion plugin is present, and no
+  reading of another plugin's conversation), each labeled PROVEN BY TEST or
+  DOCUMENTED CONTRACT, never implied. Proven by `tools/test_sbe_interop.py`
+  (19 tests: every skill's own namespaced invocation line, a bare-command
+  scan over every skill and doc, an install-path scan for `settings.json`,
+  the real `sbe_instruction_surface.py` FAILing an undeclared `hooks/**`
+  edit and PASSing a declared, reviewed one, a synthetic companion-plugin
+  fixture proving two identically named skill directories never collide
+  once namespaced, and an AST scan for any read of another session's
+  conversation store; every scanner calibrated red, hash-verified restore,
+  green against a scratch copy, never the tracked file). `sbe doctor`
+  gained no new row: the branch taken, and why, is recorded in
+  `docs/INTEROPERABILITY.md`'s "Doctor: branch taken" section and in
+  `docs/KNOWN-LIMITS.md`.
+- LT-501, one end-to-end team scenario (`tools/test_sbe_golden_scenario.py`,
+  its builder at `tools/fixtures/golden-scenario/build_scenario.py`): the
+  real engine, no mocked core, drives start through acknowledge over one
+  deterministically built scenario repository (a backend service change, a
+  small SQL change, two ready disjoint tasks, one dependent task, one
+  planted security-sensitive configuration edit, one evidence requirement,
+  one review finding, one ownership transfer). Every pass criterion in the
+  spec's own list is proven against the real `bin/sbe`: four or fewer
+  BrotherSBE skills touched in the happy path (kickoff, review, handover,
+  read from the same JSON `skills/next/SKILL.md` reads, never from prose);
+  max three writers with no overlapping owned paths, read from the task
+  registry; every completed task closes with a real evidence receipt; only
+  the reviewers `sbe review-route` itself selects ever contribute a finding
+  (zero for a plain internal file, two for the SQL migration); a duplicate
+  finding submitted by two reviewer sources dedupes to one; the planted
+  authority-surface edit is caught by `sbe instruction-surface` and
+  calibrated in a scratch clone under `/tmp` (declared and reviewed there,
+  it is no longer caught, proving the FAIL above was never vacuous, with
+  the live scenario repository's own git history hash-verified untouched
+  before and after); no merge, rebase, push or deploy argv exists anywhere
+  in this suite's own two files (TestNoMergeLaw pattern, calibrated on a
+  scratch mutated copy); a session restart (a brand-new `sbe status --team
+  --json` subprocess) recovers every closed task purely from disk; the
+  team-mode CI postcondition (`status.team_blocking`, folded from the
+  parity triage's row 34) is proven as a contract across two real states of
+  the same scenario, not assumed clean, because this suite also discovered
+  and named two disclosed, unfixed engine gaps along the way (see
+  `docs/KNOWN-LIMITS.md`): `sbe status --team`'s evidence scan always
+  verifies a receipt against the repository root's own checked-out HEAD,
+  never a task's own worktree branch, so a finished task's own evidence
+  reads as a severity-1 broken claim by construction; and `sbe converge`'s
+  VERIFICATION dimension compares a bare path string against
+  `receipt["coveredFiles"]`, a list of objects `sbe evidence run` always
+  writes, so the membership test can never match a writer task's own owned
+  path. Both are named by exact reason text in the fixture, not routed
+  around.
+
 ## 1.0.0-rc.9 (2026-08-05)
+
 
 Wave D of the lean team program: the instruction and configuration trust
 boundary, plus the parity rows that serve the release process itself.
@@ -54,7 +120,6 @@ boundary, plus the parity rows that serve the release process itself.
   `docs/KNOWN-LIMITS.md`. Wired beside `sbe_fence_hook.py` in
   `hooks/hooks.json`, never replacing it. Proven by
   `tools/test_sbe_authority_hook.py` (43 tests).
-
 ## 1.0.0-rc.8 (2026-08-05)
 
 Wave C of the lean team program: explicit human handover.

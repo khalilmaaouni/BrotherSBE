@@ -1061,3 +1061,86 @@ arbitrary path. A case-folded hazard in a path segment none of the nine
 detected authority families ever names is out of scope by the same logic
 `_matched_surface` itself uses to decide what counts as authority-bearing at
 all, and is not a gap this file closes or claims to.
+
+## A per-task worktree branch's own evidence cannot read clean against team status or converge (LT-501)
+
+The LT-501 golden scenario (`tools/test_sbe_golden_scenario.py`) runs the
+whole team lifecycle for real: `sbe work start` opens a dedicated branch and
+linked worktree per task, never merges, rebases onto, or pushes to the
+repository root's own branch (the no-merge law, checked mechanically by the
+same suite). Driving that real chain surfaced two places where a receipt
+genuinely bound to a task's OWN verification, on its OWN branch, is
+misreported once a second, repo-root-scoped control reads it back, neither
+of which this suite may fix (`src/brothersbe/status.py` and
+`src/brothersbe/converge.py` are engine files, out of LT-501's own file
+boundary).
+
+First: `sbe status --team`'s evidence scan (`status._scan_evidence`, which
+calls `evidence.verify(path, cwd=root)`) always compares a receipt's
+`headCommit` against the repository ROOT's own currently checked-out HEAD,
+never against the task's own worktree branch the receipt was generated in.
+Since `sbe work start` always branches a task into its own linked worktree
+and the root's own branch never advances to include it, a receipt for a
+finished task's own verification command reads as a severity-1 "broken
+claim" (`headCommit ... is not the current head ...; covered file ... no
+longer exists`) the moment `sbe status --team` inspects it -- not because
+anything about the evidence is wrong, but because the root repository's own
+branch was never advanced to include that task's commits, which this
+project's own no-merge law says it never legitimately will be by `sbe`
+itself. `sbe work finish`'s own narrower verification (which does pass the
+task's own worktree as `cwd`) is unaffected; only the shared, repo-root-
+scoped `sbe status --team` evidence scan is. Proven by
+`tools/test_sbe_golden_scenario.py::TestTeamModeCIPostcondition`, which
+calibrates the documented "exit 0 only when no finding has severity 1 to 6"
+contract across two real states of the same scenario rather than assuming a
+scenario with real, finished task work can ever reach a clean one.
+
+Second, narrower: `sbe converge`'s VERIFICATION dimension
+(`src/brothersbe/converge.py`, the block computing `missing_cover`) compares
+a bare path string from a plan task's `owns` against
+`receipt["coveredFiles"]` with a plain `p not in covered` membership test.
+`sbe evidence run` always writes `coveredFiles` as a list of `{path,
+sha256, note}` objects, never bare strings, so this membership test can
+never match: a writer task's OWN receipt is misreported as "does not cover"
+its own owned path even when it plainly does, for every task whose `owns`
+is non-empty. `tools/test_sbe_converge.py`'s own existing happy-path fixture
+never exercises this, because its receipt happens to be bound to the
+REVIEWER half of a derived migration triplet, whose `owns` is empty, making
+the membership check vacuously satisfied by construction. The golden
+scenario's own SQL task (T02, `owns: ["migrations/0002_widget_index.sql"]`)
+hits the non-empty-`owns` case for real and names the exact FAIL text
+(`tools/test_sbe_golden_scenario.py::TestFullChain`), both so the gap is
+provably reproducible and so a future fix has a red fixture ready to turn
+green; that fixture asserts SCOPE and DATA read PASS for the same range
+(the parts of convergence this coveredFiles-shape gap does not touch) and
+names VERIFICATION's FAIL by its exact reason, rather than asserting FINAL
+PASS and papering over why it cannot be reached.
+
+
+## Plugin interoperability rests on platform behavior this repository cannot drive in a test (LT-502)
+
+`docs/INTEROPERABILITY.md` names seven interoperability guarantees and labels
+each one PROVEN BY TEST or DOCUMENTED CONTRACT, never implied. Four of the
+seven carry a documented-contract half that no fixture here can turn into a
+mechanical check, because the missing half is Claude Code's own runtime, not
+this repository's code: whether the harness actually prefixes every skill
+with `brothersbe:` at resolution time, whether it correctly merges two
+installed plugins' `SessionStart` and `PreToolUse` hooks rather than only
+running one, and whether a person who lacks a companion plugin actually
+reaches `docs/CLI.md` are all platform or human behavior this repository has
+no way to observe from inside a unit test. The one place a human action
+substitutes for code, the manual `~/.claude/settings.json` paste
+`docs/SETUP.md` step 3 and `docs/HOOKS.md` document for a standalone
+(non-plugin) install, is proven only on the code side (nothing in the
+install path names the file at all); that a person follows the documented
+paste correctly is not something a test can watch.
+
+`sbe doctor` (`src/brothersbe/cli.py::_doctor_checks`) gained no
+interoperability row: it is a fixed, hand-written list of tuples, not a
+discoverable check registry, and editing it sits outside LT-502's file
+boundary (documentation and tests only) and would reopen review on the
+doctor command for a change this task was not scoped to make. The contract
+is documented instead, in `docs/INTEROPERABILITY.md`'s own "Doctor: branch
+taken" section.
+
+Full text: `docs/INTEROPERABILITY.md`, `tools/test_sbe_interop.py`.
