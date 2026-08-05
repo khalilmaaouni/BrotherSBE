@@ -7,9 +7,15 @@
 #   the trailing comment; both verified against the live repositories with
 #   `git ls-remote` on 2026-07-27), so a moved tag cannot change what runs here.
 # - permissions is read-only: nothing in this workflow needs to write.
-# - The job runs on Linux and macOS. Windows is genuinely untested, not
-#   quietly implied: the two sh tools and the POSIX file-mode tests have never
-#   been exercised there (docs/KNOWN-LIMITS.md).
+# - The gates job runs on Linux and macOS, across a 3.9 floor and a newer 3.x
+#   leg. A second job below, gates-windows, runs the same battery on
+#   windows-latest pinned to 3.9 only, added 2026-08-05 (founder-approved,
+#   lane T7). It skips only the two POSIX `sh` install and upgrade scripts,
+#   named where each is skipped; everything else, including the suites that
+#   assert POSIX file permission bits, is exercised on Windows for the first
+#   time there instead of staying "genuinely untested" (docs/KNOWN-LIMITS.md
+#   still describes the pre-2026-08-05 state and is due its own update to
+#   match, out of this file's own scope to make).
 name: BrotherSBE gates
 permissions:
   contents: read
@@ -249,3 +255,218 @@ jobs:
       # ships packaging, not a release").
       - name: Upgrade and rollback test (NO-DATA until a previous tag exists, never a false pass)
         run: sh scripts/test-upgrade-rollback.sh
+
+  # BrotherSBE gates (windows leg), added 2026-08-05, founder-approved, lane
+  # T7: the same battery the gates job above runs on Linux and macOS,
+  # started from that job's full step list, on windows-latest, pinned to the
+  # 3.9 floor only (the promise on the front page; not the informational
+  # 3.x leg above, so this addition costs one job run per push, not two).
+  # continue-on-error is never set here: a red step blocks a merge exactly
+  # like the matrix above does.
+  #
+  # Two steps are skipped, each named where it is skipped: the two `sh`
+  # install and upgrade scripts (docs/KNOWN-LIMITS.md, "Windows is
+  # untested") invoke the `sh` interpreter directly, which this leg cannot
+  # supply cleanly. Everything else, including the suites that assert POSIX
+  # file permission bits (chmod, stat mode checks), now runs for real on
+  # Windows for the first time and is free to fail honestly if a POSIX
+  # assumption inside one of them does not hold there; that is the point of
+  # this leg, not a promise that every suite already passes on Windows.
+  gates-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        # Git for Windows ships bash on windows-latest by default (verified
+        # against the runner image's own software manifest on 2026-08-05),
+        # so this names no new dependency; it is what makes the multi-line
+        # steps below (set -o pipefail, grep, while read, || true) behave
+        # the same here as they do on Linux and macOS above, where bash is
+        # already the implicit default shell for an unspecified step.
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0   # the approval gate reads commit trailers and signatures
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.9'
+      # Windows reality, confirmed against actions/setup-python's own
+      # find-python.ts on 2026-08-05: it places only python.exe on PATH on
+      # Windows, never a python3 executable, unlike Linux and macOS where
+      # python3 is standard. Every step below still calls python3
+      # unmodified, identical to the gates job above, so this one step
+      # bridges the gap instead of rewriting each of them.
+      - name: Alias python3 to python (Windows only ships python.exe)
+        run: |
+          py="$(command -v python)"
+          cp "$py" "$(dirname "$py")/python3.exe"
+      # The approval gate accepts a signature only if THIS host verified it. A
+      # runner with no public keys imported reports "cannot verify" for every
+      # signed commit, which is NO-DATA and not an approval. To use the signed
+      # trailer path in CI, import the approvers' public keys first:
+      #   - run: gpg --import <<< "${{ secrets.SBE_APPROVER_PUBKEYS }}"
+      # Or standardise on the Reviewed-in: <review id> trailer, which needs no
+      # keyring at all. Doing neither is legal and honest: approvals then report
+      # NO-DATA, instead of a gate that quietly degrades into accepting any
+      # signature blob because it could not check one.
+      # Scoped to the LIVE dossier root (design/, declared by `sbe init`), not
+      # the whole checkout. The first real run of this workflow proved why the
+      # wide sweep was wrong twice over: the teaching dossier under
+      # docs/for-engineers/examples carries an APPROVAL that is DESIGNED to
+      # fail (two documents paste that refusal as the lesson), so scanning it
+      # turned pedagogy into a red build, and the same sweep let the examples'
+      # receipts print PASS lines as if they were this repository's own
+      # claims, which is worse than the red. This repository carries no live
+      # dossier today, so all four gates read NO-DATA here, printed in full:
+      # NO-DATA is never a pass, and never a manufactured failure either.
+      - name: Hard gates (numbers, migration, approval, ran) block on failure
+        run: python3 tools/sbe_gate.py --strict design
+      # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
+      # project stop blocking every unrelated merge, and the exit code cannot tell
+      # you one was used, so this step surfaces every WAIVED line as an annotation
+      # and in the job summary. A human sees it, or it is not a control. Add
+      # --strict-waivers here if you want an exemption to block outright.
+      - name: Design checks (dossier completeness) block on failure
+        run: |
+          set -o pipefail
+          python3 tools/sbe_design.py --strict . | tee design-checks.out
+      # The pattern is `^  >> `, the prefix sbe_design.py puts on a waived line, and
+      # not the word WAIVED. The banner the tool prints on every run ends "WAIVED
+      # is not a pass either", so `grep -q 'WAIVED'` was unconditionally true: every
+      # clean run told the reviewer that a .sbe-exempt had waived one or more design
+      # checks and that nothing opened a file for them, over a run in which every
+      # check opened its files. An assurance signal that always fires carries no
+      # information, and this one asserted something false, which trains a reviewer
+      # to ignore the single control that makes WAIVED visible in CI at all.
+      - name: Surface design waivers (a waiver is not a pass)
+        if: always()
+        run: |
+          if grep -qE '^  >> ' design-checks.out; then
+            grep -E '^  >> ' design-checks.out | while read -r line; do
+              echo "::warning title=BrotherSBE design waiver::$line"
+            done
+            {
+              echo '### BrotherSBE design waivers'
+              echo 'A `.sbe-exempt` waived one or more design checks. Nothing opened a file for them.'
+              echo '```'
+              grep -E '^  >> |^WAIVERS: ' design-checks.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Severity is declared per check and printed on every verdict line: --strict
+      # blocks on gate severity (the lints), and --strict-soft is the visible
+      # opt-in that makes soft-severity (graded) FAILs block too. This workflow
+      # passes both, which is this repository's choice, not a default; drop
+      # --strict-soft to let graded checks fail without stopping a merge.
+      - name: Silent-failure lints and code-graded checks block on failure
+        run: python3 tools/sbe_score.py --strict --strict-soft .
+      # The gates above are only worth what their tests are worth. These two ran
+      # on nobody's merge path until now, which made them documentation rather
+      # than a gate: a fixture no merge runs cannot stop anything.
+      - name: Regression evals (every gate against the defect it exists to catch)
+        run: python3 evals/run_evals.py
+      - name: Replay detail on failure (which excerpt blocks differ, and how)
+        if: failure()
+        run: |
+          python3 --version
+          python3 evals/replay_book.py || true
+          python3 evals/replay_guide05.py || true
+      # Two passes: the fixed sweep, then a seeded random composition of the
+      # same hollowing operations (--seed). The seeds are fixed so CI is
+      # reproducible; a failing scenario prints its seed in its id. A wider
+      # search is one more --seed here, not new test code.
+      - name: Honesty meta-test (no check may PASS over evidence it never examined)
+        run: |
+          python3 evals/test_no_data_class.py
+          python3 evals/test_no_data_class.py --quiet --seed 1 --seed 2 --seed 3
+      - name: Tool tests (redaction, permissions, identity, autosave, plugin surface, CLI)
+        run: python3 tools/test_sbe.py
+      # Both suites below existed and ran on nobody's merge path, which is the
+      # same "documentation rather than a gate" condition the comment above
+      # names. The fence hook is an enforcement boundary and the impact fixtures
+      # carry the defect that a declared tier can contradict the diff; neither
+      # is worth anything if a merge never runs it.
+      - name: Fence hook tests (the write boundary)
+        run: python3 tools/test_sbe_fence_hook.py
+      - name: Impact fixtures (a declared tier cannot contradict the diff silently)
+        run: python3 tools/test_sbe_impact.py
+      # The suites below are the same "documentation rather than a gate"
+      # condition the comment above names: each one existed on disk and ran
+      # on nobody's merge path until this step wired it in. Listed in the
+      # order tools/test_sbe*.py sorts, so a new suite dropped into tools/
+      # is easy to spot missing from this list.
+      - name: Adopt and init fixtures (sbe adopt, sbe init)
+        run: python3 tools/test_sbe_adopt.py
+      - name: Authority hook fixtures (undeclared edits to authority files refused)
+        run: python3 tools/test_sbe_authority_hook.py
+      - name: Book estate fixtures (the worked example the book's chapters paste)
+        run: python3 tools/test_sbe_book.py
+      - name: Bypass fixtures (the ways a person or an agent gets past these controls)
+        run: python3 tools/test_sbe_bypass.py
+      - name: Converge fixtures (sbe converge)
+        run: python3 tools/test_sbe_converge.py
+      - name: Decision package fixtures (sbe explain, sbe lineage)
+        run: python3 tools/test_sbe_decisions.py
+      - name: Evidence fixtures (a receipt cannot be typed by the same process it verifies)
+        run: python3 tools/test_sbe_evidence.py
+      - name: Golden scenario (the whole chain, start through acknowledge, real engine)
+        run: python3 tools/test_sbe_golden_scenario.py
+      - name: Handover fixtures (sbe handover, identity forgeries refused)
+        run: python3 tools/test_sbe_handover.py
+      - name: Instruction surface fixtures (changed authority files outside declared scope)
+        run: python3 tools/test_sbe_instruction_surface.py
+      - name: Interoperability fixtures (namespacing, no foreign writes, coexistence)
+        run: python3 tools/test_sbe_interop.py
+      - name: Install script fixtures (dry-run, missing prerequisites)
+        run: python3 tools/test_sbe_install.py
+      - name: Plan fixtures (sbe plan)
+        run: python3 tools/test_sbe_plan.py
+      # This is the canned/offline suite: every GitHub API call is routed
+      # through a fake fetch, so it needs no network and no token, and it
+      # runs on every PR. tools/test_sbe_prverify_live.py is a separate,
+      # deliberately unwired script: it needs BOTH SBE_LIVE_GH_REPO and
+      # SBE_LIVE_GH_PR plus a token discoverable the way `sbe pr verify`
+      # itself discovers one, none of which this workflow provides, and
+      # without them it already prints one NO-DATA line and exits 0 (its
+      # own docstring). Wiring it here would either skip silently on every
+      # normal run or require CI secrets this repository does not carry, so
+      # it stays a manual, opt-in script instead.
+      - name: PR verify fixtures (sbe pr verify, canned GitHub API, offline)
+        run: python3 tools/test_sbe_prverify.py
+      - name: Release invariant fixtures (distributable bytes cannot move without VERSION)
+        run: python3 tools/test_sbe_release_invariant.py
+      - name: Review record fixtures (normalized findings, commit binding, staleness)
+        run: python3 tools/test_sbe_review_record.py
+      - name: Review route fixtures (deterministic reviewer selection)
+        run: python3 tools/test_sbe_review_route.py
+      - name: Review skill fixtures (the skill consumes the route)
+        run: python3 tools/test_sbe_review_skill_fixtures.py
+      - name: Status fixtures (sbe status)
+        run: python3 tools/test_sbe_status.py
+      - name: Team status fixtures (sbe status --team)
+        run: python3 tools/test_sbe_status_team.py
+      - name: Task fixtures (sbe task)
+        run: python3 tools/test_sbe_tasks.py
+      - name: Team workflow fixtures (eight execution laws over one fixture)
+        run: python3 tools/test_sbe_team_workflow.py
+      - name: Version bump fixtures (one command moves every declaration site)
+        run: python3 tools/test_sbe_version_bump.py
+      - name: Work fixtures (sbe work)
+        run: python3 tools/test_sbe_work.py
+      - name: Work brief fixtures (sbe work brief)
+        run: python3 tools/test_sbe_work_brief.py
+      # EXCLUDED on windows-latest: this step ran `sh scripts/test-install-artifact.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows is untested").
+      # On Linux and macOS, scripts/test-install-artifact.sh above already proves
+      # the checksums manifest cannot drift from the bytes it describes; that
+      # script is excluded on this Windows leg (see the exclusion comment just
+      # above), so this step's own narrower claim, that VERSION moves when
+      # distributable bytes do, stands on its own here. fetch-depth: 0 on the
+      # checkout step above fetches full history for every branch and tag,
+      # including the origin/main remote-tracking ref this checker diffs
+      # against by default, so the base ref resolves here; a checkout that
+      # switched to a shallow clone would make this NO-DATA rather than
+      # crash, which is this tool's own stated behavior for a ref it cannot
+      # resolve, never a false pass.
+      - name: Release invariant (distributable bytes cannot move without VERSION moving)
+        run: python3 tools/sbe_release_invariant.py --strict
+      # EXCLUDED on windows-latest: this step ran `sh scripts/test-upgrade-rollback.sh`, a POSIX `sh` script never exercised on Windows (docs/KNOWN-LIMITS.md, "Windows is untested").

@@ -6,6 +6,24 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## Unreleased
+
+## Unreleased
+
+- `.github/workflows/brothersbe-gates.yml`: added a `gates-windows` job that
+  runs the gates job's full battery on `windows-latest`, pinned to the 3.9
+  floor, started from the existing job's complete step list. Only the two
+  POSIX `sh` scripts (`scripts/test-install-artifact.sh`,
+  `scripts/test-upgrade-rollback.sh`) are skipped, each named where it is
+  skipped; nothing is marked `continue-on-error` and no existing step was
+  weakened. A new step aliases `python3` to the `python.exe` that
+  `actions/setup-python` installs on Windows (it installs no `python3`
+  executable there), so every other step still calls `python3` unmodified,
+  identical to the Linux and macOS steps. Proven by
+  `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/brothersbe-gates.yml'))"`
+  parsing clean and a step-by-step diff against the existing job confirming
+  the only two steps missing from the new job are the two named exclusions.
+
 ## 1.0.0-rc.16 (2026-08-06)
 
 - Seal note, measured at integration: the sandbox guide's two `bound to head`

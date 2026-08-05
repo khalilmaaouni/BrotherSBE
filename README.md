@@ -202,6 +202,12 @@ An organization rolling this out across many repositories at once, with a tag pi
 This is what turns the gates from advisory into blocking, whichever path above you installed with. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 
 ```yaml
+      # Windows-only bridge: the windows-latest leg aliases python3 to python
+      # before the same battery runs; Linux and macOS ignore this step.
+      - name: Alias python3 to python (Windows only ships python.exe)
+        run: |
+          py="$(command -v python)"
+          cp "$py" "$(dirname "$py")/python3.exe"
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
