@@ -112,6 +112,7 @@ import time
 from . import SCHEMA_VERSION, version
 from . import evidence as evidence_mod
 from . import impact as impact_mod
+from . import lifecycle
 from . import tasks as tasks_mod
 from . import work as work_mod
 from .impact import DiffUnavailable, _git  # noqa: E402  (the same private helper evidence.py reuses)
@@ -565,11 +566,167 @@ def _section_line(items, inspected, detail):
     return ("NO-DATA. scope: %s" % detail) if not inspected else ("clean. scope: %s" % detail)
 
 
-def _next_action(sections, scope):
-    for name, items in zip(SECTION_NAMES, sections):
-        if items:
-            return "%s (%s) %s" % (items[0]["remedy"], name, _scope_sentence(scope))
-    return "nothing blocking here that this tool can see. %s" % _scope_sentence(scope)
+def _next_action(sections, scope, ladder_candidates):
+    """The whole report's one next action, LANE C1 (B-003): picked by
+    `lifecycle.reduce_next_action` over every candidate this run can name,
+    rather than this function owning its own priority order a second time.
+
+    Candidates, most urgent first: the first item of each of the four
+    blocking sections (broken claims, merge blockers, active conflicts,
+    missing evidence -- unchanged from every earlier version of this
+    function, same order, same "(SECTION NAME)" wording), every task-
+    active / task-ready / review-not-cleared candidate `ladder_candidates`
+    carries in from `_change_ladder_candidates` (new: these used to have no
+    representation here at all, which was the reproduced bug -- a dossier
+    whose only outstanding obligation was review, or an unstarted ready
+    task, read as clean because nothing here had ever looked), and a
+    fallback that guarantees this list is never empty: the sound-evidence
+    remedy when `sound_evidence` is the only thing this run found, or the
+    plain "nothing blocking" sentence when nothing was found at all. Both
+    fallback wordings, and the "(SECTION NAME)" suffix on sections 1-4, are
+    unchanged from every earlier version of this function, so a repository
+    with no plan anywhere (nothing for `ladder_candidates` to ever carry)
+    gets byte-identical output to before this lane.
+
+    `scope` is unused by the pick itself now (kept as a parameter so this
+    function's signature still names what a caller must have on hand); the
+    scope sentence is appended by `build_report` once, after this function
+    returns, exactly where it has always been appended.
+
+    Returns the reducer's own `{"actionId", "label", "reason", "basis"}`
+    dict, never a formatted string: the caller composes the rendered
+    `nextAction` text from `reason` plus its own scope sentence.
+    """
+    broken, merge, conflict, missing_evidence, sound = sections
+    candidates = []
+    if broken:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_BROKEN_CLAIM, "%s (BROKEN CLAIMS)" % broken[0]["remedy"]))
+    if merge:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_MERGE_BLOCKER, "%s (MERGE BLOCKERS)" % merge[0]["remedy"]))
+    if conflict:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_ACTIVE_CONFLICT, "%s (ACTIVE CONFLICTS)" % conflict[0]["remedy"]))
+    if missing_evidence:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_MISSING_EVIDENCE,
+            "%s (MISSING EVIDENCE)" % missing_evidence[0]["remedy"]))
+    candidates.extend(ladder_candidates)
+    if sound:
+        fallback_reason = "%s (COMPLETED EVIDENCE)" % sound[0]["remedy"]
+    else:
+        fallback_reason = "nothing blocking here that this tool can see."
+    candidates.append(lifecycle.candidate(lifecycle.RUNG_FINISH, fallback_reason))
+    return lifecycle.reduce_next_action(candidates)
+
+
+def _review_ladder_check(root, doss, head):
+    """Whether `11-review.json` at `doss` clears the review obligation, for
+    `_change_ladder_candidates` below (never for `build_team_report`'s own
+    severity-11 finding, which keeps its own richer branch-by-branch
+    `detail` text -- self-review identity, staleness, structured findings,
+    LANE B-006 history -- unchanged and untouched by this lane). Reuses the
+    SAME primitives that block already reads (`_read_review_record`,
+    `_commit_author`, `_same_identity`), so the underlying RULE -- missing,
+    malformed, stale, unresolvable author, self-reviewed, not approved, or
+    approved -- is read once, never re-derived a second time; only the
+    assembly into ONE recommended sentence is separate here.
+
+    Returns (cleared, nextAction): `nextAction` is `None` exactly when
+    `cleared` is True.
+    """
+    path = os.path.join(doss, "11-review.json")
+    state, payload = _read_review_record(path)
+    if state == "missing":
+        return False, (
+            "run sbe review %s --write --reviewer <name> --reviewer-type "
+            "human|model|independent-model --result "
+            "approved|changes-required|unverifiable to record one" % doss)
+    if state == "malformed":
+        return False, "regenerate 11-review.json with sbe review %s --write" % doss
+    review = payload
+    bound = review.get("headSha")
+    if head and bound and bound != head:
+        return False, "re-run sbe review against the current head and --write again"
+    try:
+        author_name, author_email = _commit_author(root, bound)
+    except OSError:
+        return False, ("install or repair git on this machine so the reviewed commit's "
+                       "author can be checked")
+    if author_name is None:
+        return False, ("fetch the reviewed commit so its author can be checked, or "
+                       "re-run sbe review once it is reachable")
+    if _same_identity(review.get("reviewer"), author_name, author_email):
+        return False, ("get an independent reviewer to review %s and record a fresh "
+                       "11-review.json" % doss)
+    if review.get("result") != "approved":
+        return False, "resolve what the review flagged, then record a fresh 11-review.json"
+    return True, None
+
+
+def _change_ladder_candidates(root, doss, head, prefix):
+    """LANE C1 (B-003): the task-active / task-ready / review-not-cleared
+    candidates for the change whose dossier is `doss`, in `lifecycle`'s own
+    rung vocabulary, for `build_report`'s `_next_action` to consider
+    alongside sections 1-4. `[]` when no `08-plan.json` exists yet at
+    `doss`: the same "nothing to derive yet" starting state `build_team_
+    report`'s own `if not plan` branch already reads as a fact, never an
+    error, so a repository with no plan anywhere never gains a candidate
+    here and `_next_action`'s output stays exactly what it was before this
+    lane.
+
+    Reuses `tasks_mod.load_registry` and `work_mod._dependency_problem`,
+    the SAME primitives `build_team_report`'s own per-change loop reads the
+    identical facts through: this is the same task-readiness rule read a
+    second time for a second surface, never a second rule. An unreadable
+    registry reads as `[]` here (the existing ACTIVE CONFLICTS note already
+    names that failure elsewhere in this report; this function does not
+    invent a second, competing finding for it).
+    """
+    plan_path = os.path.join(doss, "08-plan.json")
+    plan = _read_json_or_none(plan_path)
+    if not plan:
+        return []
+    plan_tasks = plan.get("tasks", [])
+    plan_ids = set(t.get("id") for t in plan_tasks)
+    try:
+        registry_data = tasks_mod.load_registry(root)
+    except tasks_mod.RegistryUnusable:
+        return []
+    records = [r for r in registry_data.get("tasks", []) if r.get("id") in plan_ids]
+    records_by_id = {}
+    for r in records:
+        records_by_id.setdefault(r.get("id"), []).append(r)
+
+    candidates = []
+    for r in records:
+        if r.get("status") == "open":
+            candidates.append(lifecycle.candidate(
+                lifecycle.RUNG_ACTIVE_TASK,
+                "%sfinish or check task %s with sbe work (ACTIVE TASK)"
+                % (prefix, r.get("id"))))
+    if not candidates:
+        for task in plan_tasks:
+            tid = task.get("id")
+            if records_by_id.get(tid):
+                continue  # already started or done: not a "ready" candidate
+            deps = [d for d in (task.get("dependsOn") or []) if isinstance(d, str)]
+            blockers = [b for b in
+                       (work_mod._dependency_problem(registry_data, d) for d in deps) if b]
+            if not blockers:
+                candidates.append(lifecycle.candidate(
+                    lifecycle.RUNG_READY_TASK,
+                    "%srun sbe work start %s --plan %s to begin it (READY TASK)"
+                    % (prefix, tid, plan_path)))
+                break  # one is enough to name; the same "first item wins"
+                       # convention every other section here already uses
+
+    cleared, review_next = _review_ladder_check(root, doss, head)
+    if not cleared:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_REVIEW_NOT_CLEARED, "%s%s (REVIEW)" % (prefix, review_next)))
+    return candidates
 
 
 # ---------------------------------------------------------------------------
@@ -718,6 +875,10 @@ def build_report(path, base=None, now=None):
     broken_claims, merge_blockers, active_conflicts = [], [], []
     missing_evidence, sound_evidence = [], []
     handover_entries = []
+    # LANE C1 (B-003): the task-ladder/review candidates `_change_ladder_
+    # candidates` finds per target, fed into `_next_action`'s reducer call
+    # below alongside sections 1-4.
+    ladder_candidates = []
 
     intake_path = os.path.join(root, INTAKE_REL)
     disposition_path = os.path.join(root, DISPOSITION_REL)
@@ -931,13 +1092,26 @@ def build_report(path, base=None, now=None):
         # wherever its own intake lives: `root` itself for the flat layout,
         # or the discovered dossier directory otherwise, exactly the same
         # split `prefix` above already reads off `label`.
-        h_entry = _handover_state(os.path.dirname(t_intake_path), head_sha)
+        target_doss = os.path.dirname(t_intake_path)
+        h_entry = _handover_state(target_doss, head_sha)
         h_entry["change"] = label
         handover_entries.append(h_entry)
 
+        # LANE C1 (B-003): the same task-active / task-ready / review-not-
+        # cleared candidates `build_team_report` derives from severities 7,
+        # 8 and 11, read here for the SAME dossier and fed into the SAME
+        # reducer `_next_action` below now uses, so a target with nothing in
+        # sections 1-4 but a task still open, ready, or a review still
+        # pending is never reported as "nothing blocking here". Empty when
+        # no `08-plan.json` exists yet at this target: a plain repository
+        # with no plan anywhere keeps producing exactly the next-action text
+        # it always has (see `_change_ladder_candidates`).
+        ladder_candidates.extend(_change_ladder_candidates(root, target_doss, head_sha, prefix))
+
     sections = (broken_claims, merge_blockers, active_conflicts, missing_evidence,
                sound_evidence)
-    next_action = _next_action(sections, scope)
+    next_action_detail = _next_action(sections, scope, ladder_candidates)
+    next_action = "%s %s" % (next_action_detail["reason"], _scope_sentence(scope))
 
     notes = {
         "brokenClaims": _section_line(
@@ -975,6 +1149,13 @@ def build_report(path, base=None, now=None):
         "soundEvidence": sound_evidence,
         "notes": notes,
         "nextAction": next_action,
+        # LANE C1 (B-003): the SAME reducer output the rendered `nextAction`
+        # string above was composed from (`reason` plus the scope
+        # sentence), carried through structured so a caller can match on
+        # `actionId` instead of parsing prose. See `lifecycle.
+        # reduce_next_action`.
+        "nextActionDetail": {k: next_action_detail[k]
+                             for k in ("actionId", "label", "reason", "basis")},
         "handover": handover_entries,
     }
 
@@ -1780,24 +1961,44 @@ def build_team_report(path):
                         "every task in the plan is closed clean in the registry"))
 
         # Severity 10: exactly one next action per change, always, derived
-        # from that change's own highest-severity finding recorded above (the
-        # lowest severity number is the most severe). A change with nothing
-        # recorded above still gets one, so the rule never has an exception.
+        # from that change's own highest-severity finding recorded above. A
+        # change with nothing recorded above still gets one, so the rule
+        # never has an exception.
+        #
+        # LANE C1 (B-003): "highest-severity" is no longer a raw comparison
+        # of `severity` numbers -- picked instead by `lifecycle.
+        # reduce_next_action`, the SAME reducer `build_report`'s own plain
+        # `nextAction` is derived through, over candidates translated from
+        # team severity to `lifecycle`'s own rung via `TEAM_SEVERITY_TO_
+        # RUNG`. That table is why this changed at all: severity 9
+        # ("completed changes") used to sort below severity 11 ("review
+        # record") as a bare integer, so a change whose tasks were all
+        # closed clean but had never been reviewed recommended "nothing
+        # left to do, open a pull request" instead of "run review" --
+        # reproduced, not theorized, by `tools/test_sbe_status_team.py`'s
+        # own `TestCanonicalNextAction`. Candidates are still handed to the
+        # reducer pre-sorted by `(rung, evidence, detail)`, the exact
+        # tie-break this file used before this lane, so two findings tied
+        # at the same rung resolve exactly as they always have.
         this_change = findings[change_start:]
         if this_change:
-            # Tie-break exactly like the report's own final sort (severity,
-            # evidence, detail), so "highest severity" means the same finding
-            # a human reading the rendered output would see first, not
-            # whichever happened to be appended first during collection.
-            top = min(this_change,
-                      key=lambda f: (f["severity"], f["evidence"] or "", f["detail"]))
-            findings.append(_finding(
+            ordered = sorted(
+                this_change,
+                key=lambda f: (lifecycle.TEAM_SEVERITY_TO_RUNG[f["severity"]],
+                               f["evidence"] or "", f["detail"]))
+            candidates = [dict(f, rung=lifecycle.TEAM_SEVERITY_TO_RUNG[f["severity"]])
+                         for f in ordered]
+            top = lifecycle.reduce_next_action(candidates)
+            entry = _finding(
                 name, 10, top["verdict"], top["evidence"], top["commit"], top["owner"],
                 top["nextAction"], "derived",
                 "next action for %s, derived from its highest-severity finding "
                 "(severity %d, %s): %s"
                 % (name, top["severity"], TEAM_SEVERITIES[top["severity"]],
-                   top["nextAction"])))
+                   top["nextAction"]))
+            entry["actionId"] = top["actionId"]
+            entry["label"] = top["label"]
+            findings.append(entry)
         else:
             findings.append(_finding(
                 name, 10, "NO-DATA", None, head, None,

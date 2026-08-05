@@ -7,7 +7,7 @@ brief that a test would have caught. Each test here guards a claim the project
 makes about itself: secrets are redacted, sensitive files are owner-only, project
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
-import glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
+import ast, glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -808,6 +808,63 @@ class TestDigestBudget(unittest.TestCase):
                           "the shrunk digest lost a required survivor: %r" % snippet)
 
 
+def _zero_network_scan_paths(root, here):
+    """The exact file set the zero-network AST scan walks, parametrized by
+    (root, here) so TestGuiNetworkAllowlistIsNarrow below can run the SAME
+    globbing logic against a throwaway scratch copy instead of a
+    reimplementation that could silently drift from the real scan. Against
+    the real repository, `here` is HERE (tools/) and `root` is its parent."""
+    return (
+        glob.glob(os.path.join(here, "*.py")) +
+        glob.glob(os.path.join(root, "src", "brothersbe", "*.py")) +
+        # Walked recursively (not skipped, not left to the top-level glob
+        # above) so any file under gui/ other than the one allow-listed
+        # server.py stays subject to the same ban as everything else. See
+        # docs/adr/2026-08-05-gui-server-amendment.md.
+        glob.glob(os.path.join(root, "src", "brothersbe", "gui", "**", "*.py"), recursive=True) +
+        glob.glob(os.path.join(root, "hooks", "**", "*.py"), recursive=True) +
+        glob.glob(os.path.join(root, "scripts", "**", "*.py"), recursive=True) +
+        [os.path.join(root, "bin", "sbe")]
+    )
+
+
+def _zero_network_allowlist(root):
+    """The zero-network scan's exact-path exceptions. src/brothersbe/gui/server.py
+    is reserved by the 2026-08-05 amendment
+    (docs/adr/2026-08-05-gui-server-amendment.md, gate LP-0301) and does not
+    exist in the real repository yet; listing it here is inert until it
+    does. Any OTHER file under src/brothersbe/gui/ is NOT in this set and
+    stays banned, which is what TestGuiNetworkAllowlistIsNarrow exercises."""
+    return {
+        os.path.join(root, "src", "brothersbe", "prverify.py"),
+        os.path.join(root, "src", "brothersbe", "gui", "server.py"),
+    }
+
+
+def _banned_import_violations(py_files, allowlisted, banned=("urllib", "requests", "socket", "http")):
+    """AST-parse each file in py_files (skipping anything in allowlisted or
+    missing on disk) and return a list of (path, [banned modules imported])
+    for every violation found. Shared by the real zero-network scan and its
+    adversarial gui/ regression test so both exercise identical logic rather
+    than two copies that could drift apart."""
+    banned = set(banned)
+    violations = []
+    for p in py_files:
+        if p in allowlisted or not os.path.exists(p):
+            continue
+        tree = ast.parse(io.open(p, errors="replace").read())
+        for node in ast.walk(tree):
+            mods = []
+            if isinstance(node, ast.Import):
+                mods = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                mods = [node.module.split(".")[0]]
+            hit = sorted(set(mods) & banned)
+            if hit:
+                violations.append((p, hit))
+    return violations
+
+
 class TestAuditableSurface(unittest.TestCase):
     def test_the_stated_line_count_tracks_the_tree(self):
         """SECURITY.md states the size of the auditable surface instead of only
@@ -845,34 +902,25 @@ class TestAuditableSurface(unittest.TestCase):
         are not banned by this scan; only urllib/requests/socket/http imports
         and curl/wget/nc invocations are. The redaction fixture in this file
         carries curl inside a string on purpose; parsing imports rather than
-        grepping text is what keeps that fixture from being a false hit."""
-        import ast
+        grepping text is what keeps that fixture from being a false hit.
+
+        The 2026-08-05 amendment (docs/adr/2026-08-05-gui-server-amendment.md,
+        gate LP-0301) reserves a second exact-path exception,
+        src/brothersbe/gui/server.py, for a loopback-only GUI workspace. That
+        path does not exist in this tree yet, so this test's result against
+        the real repository is unchanged by the reservation.
+        TestGuiNetworkAllowlistIsNarrow below proves, against a scratch
+        copy, that any OTHER file under src/brothersbe/gui/ still fails this
+        scan and that the reserved path itself does not."""
         ROOT = os.path.abspath(os.path.join(HERE, ".."))
-        banned = {"urllib", "requests", "socket", "http"}
-        # The one documented network module: sbe pr verify's GitHub API
-        # client, named in SECURITY.md and docs/KNOWN-LIMITS.md 713-731.
-        allowlisted = {os.path.join(ROOT, "src", "brothersbe", "prverify.py")}
-        py_files = (
-            glob.glob(os.path.join(HERE, "*.py")) +
-            glob.glob(os.path.join(ROOT, "src", "brothersbe", "*.py")) +
-            glob.glob(os.path.join(ROOT, "hooks", "**", "*.py"), recursive=True) +
-            glob.glob(os.path.join(ROOT, "scripts", "**", "*.py"), recursive=True) +
-            [os.path.join(ROOT, "bin", "sbe")]
-        )
-        for p in py_files:
-            if p in allowlisted:
-                continue
-            tree = ast.parse(io.open(p, errors="replace").read())
-            for node in ast.walk(tree):
-                mods = []
-                if isinstance(node, ast.Import):
-                    mods = [a.name.split(".")[0] for a in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    mods = [node.module.split(".")[0]]
-                hit = sorted(set(mods) & banned)
-                self.assertEqual([], hit,
-                                 "%s imports %s; the zero-network claim in SECURITY.md "
-                                 "is broken" % (os.path.relpath(p, ROOT), ", ".join(hit)))
+        allowlisted = _zero_network_allowlist(ROOT)
+        py_files = _zero_network_scan_paths(ROOT, HERE)
+        violations = _banned_import_violations(py_files, allowlisted)
+        self.assertEqual(
+            [], violations,
+            "; ".join("%s imports %s" % (os.path.relpath(p, ROOT), ", ".join(hit))
+                      for p, hit in violations) +
+            " -- the zero-network claim in SECURITY.md is broken")
         sh_files = (
             glob.glob(os.path.join(HERE, "*.sh")) +
             glob.glob(os.path.join(ROOT, "hooks", "**", "*.sh"), recursive=True) +
@@ -885,6 +933,49 @@ class TestAuditableSurface(unittest.TestCase):
                 self.assertFalse(re.search(r"\b(curl|wget|nc)\b", code),
                                  "%s:%d invokes curl, wget or nc; the zero-network claim "
                                  "in SECURITY.md is broken" % (os.path.relpath(p, ROOT), i))
+
+
+class TestGuiNetworkAllowlistIsNarrow(unittest.TestCase):
+    """Regression tests for the 2026-08-05 SECURITY.md amendment
+    (docs/adr/2026-08-05-gui-server-amendment.md, gate LP-0301): the zero-
+    network scan's new src/brothersbe/gui/server.py allowlist entry must be
+    an exact-path exception, not a hole the whole gui/ directory can hide
+    behind. Both tests run the PRODUCTION scan helpers
+    (_zero_network_scan_paths, _zero_network_allowlist,
+    _banned_import_violations, all defined above TestAuditableSurface)
+    against a throwaway scratch copy under /tmp rather than the real
+    repository, per the house rule that control-weakening calibration
+    happens only in a scratch copy, never against the live tree."""
+
+    def test_a_planted_banned_import_in_another_gui_file_is_caught(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            gui_dir = os.path.join(scratch, "src", "brothersbe", "gui")
+            os.makedirs(gui_dir)
+            planted = os.path.join(gui_dir, "api.py")
+            io.open(planted, "w").write("import socket\n")
+            py_files = _zero_network_scan_paths(scratch, scratch)
+            allowlisted = _zero_network_allowlist(scratch)
+            violations = _banned_import_violations(py_files, allowlisted)
+            hit_paths = [p for p, hit in violations]
+            self.assertIn(planted, hit_paths,
+                          "a planted `import socket` in gui/api.py (not "
+                          "gui/server.py) must be caught: the allowlist is an "
+                          "exact-path exception, not a directory-wide one")
+
+    def test_the_allowlisted_server_path_itself_is_not_flagged(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            gui_dir = os.path.join(scratch, "src", "brothersbe", "gui")
+            os.makedirs(gui_dir)
+            server = os.path.join(gui_dir, "server.py")
+            io.open(server, "w").write("import socket\n")
+            py_files = _zero_network_scan_paths(scratch, scratch)
+            allowlisted = _zero_network_allowlist(scratch)
+            violations = _banned_import_violations(py_files, allowlisted)
+            hit_paths = [p for p, hit in violations]
+            self.assertNotIn(server, hit_paths,
+                             "src/brothersbe/gui/server.py is the one named "
+                             "exception the 2026-08-05 amendment authorizes; "
+                             "it must not be flagged by the scan")
 
 
 class TestAutosaveRecover(unittest.TestCase):
@@ -1701,6 +1792,14 @@ class TestDoctorIdentityCheck(unittest.TestCase):
     def setUp(self):
         self.repo = tempfile.mkdtemp()
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        # B-010's project-init check (see TestDoctorProjectInitCheck below)
+        # now FAILs a bare repo, which would trip every `code == 0`
+        # assertion in this class for a reason unrelated to identity. This
+        # class is about the identity check specifically, so its fixture
+        # carries BrotherSBE's own footprint like a real installed project
+        # would, the same way `sbe doctor` is meant to be run.
+        subprocess.run([sys.executable, self.SBE, "init", self.repo, "--apply"],
+                       cwd=self.repo, capture_output=True, text=True, check=True)
 
     def tearDown(self):
         shutil.rmtree(self.repo, ignore_errors=True)
@@ -1766,6 +1865,74 @@ class TestDoctorIdentityCheck(unittest.TestCase):
         result, detail, _ = self._identity_line(out)
         self.assertEqual(result, "NO-DATA", text)
         self.assertEqual(code, 0, text)
+
+
+class TestDoctorProjectInitCheck(unittest.TestCase):
+    """LANE C3, B-010: the marketplace install path never runs `sbe init`,
+    doctor never said the project footprint was missing, and a beginner's
+    first `/brothersbe:start` landed in an uninitialized repository reading
+    `doctor`'s own `result` as PASS. `doctor` now carries a `project-init`
+    check: FAIL, detail naming the state REQUIRED-and-missing, whenever
+    `.brothersbe/config.json` is absent, so the overall JSON `result`
+    Guided mode reads (skills/start/SKILL.md step 1) can never say PASS
+    while the main capability cannot run. Real subprocess, real git, real
+    `sbe init`, nothing mocked, the same rule `TestDoctorIdentityCheck`
+    above holds to."""
+
+    ROOT = os.path.abspath(os.path.join(HERE, ".."))
+    SBE = os.path.join(ROOT, "bin", "sbe")
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def _doctor_json(self):
+        out = subprocess.run([sys.executable, self.SBE, "doctor", "--json"], cwd=self.repo,
+                             capture_output=True, text=True)
+        try:
+            data = json.loads(out.stdout)
+        except ValueError:
+            data = None
+        return out.returncode, data, out.stdout + out.stderr
+
+    @staticmethod
+    def _check(data, name):
+        for c in data["checks"]:
+            if c["name"] == name:
+                return c
+        return None
+
+    def test_an_uninitialized_repo_names_the_missing_footprint_as_required_and_missing(self):
+        code, data, text = self._doctor_json()
+        self.assertIsNotNone(data, "doctor --json did not parse: %s" % text)
+        check = self._check(data, "project-init")
+        self.assertIsNotNone(check, "doctor carries no project-init check: %s" % text)
+        self.assertEqual(check["result"], "FAIL", text)
+        self.assertIn(".brothersbe/config.json", check["detail"], text)
+        self.assertIn("REQUIRED-and-missing", check["detail"], text)
+        self.assertIn("sbe init", check["detail"], text)
+
+    def test_an_uninitialized_repo_never_reads_pass_overall(self):
+        """The defect this check exists to close: Guided mode reads
+        `result`, not the per-check list, to decide whether it is safe to
+        proceed. A missing footprint must flip that field to FAIL, or
+        Guided mode reads PASS while the main capability cannot run."""
+        code, data, text = self._doctor_json()
+        self.assertEqual(data["result"], "FAIL", text)
+        self.assertEqual(code, 1, "a FAIL check must trip doctor's exit code: %s" % text)
+
+    def test_running_sbe_init_apply_clears_the_check(self):
+        init = subprocess.run([sys.executable, self.SBE, "init", self.repo, "--apply"],
+                              capture_output=True, text=True)
+        self.assertEqual(init.returncode, 0, init.stdout + init.stderr)
+        code, data, text = self._doctor_json()
+        check = self._check(data, "project-init")
+        self.assertIsNotNone(check, text)
+        self.assertEqual(check["result"], "PASS", text)
+        self.assertIn(".brothersbe/config.json", check["detail"], text)
 
 
 class TestNoPrivateNameShips(unittest.TestCase):

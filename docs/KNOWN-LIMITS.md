@@ -1209,3 +1209,60 @@ the `ownedPaths` overlap requirement in an rsync scratch copy, which turns
 that one fixture red). `tools/test_sbe_status.py::TestDossierDiscovery`
 and its sibling classes, unmodified by this change, stay green and continue
 to pin the flat layout's byte-identical output.
+
+
+## The no-server promise is amended to no-remote-server (2026-08-05, gate LP-0301)
+
+`SECURITY.md` promised "no analytics, no account, and no server" since before
+1.0. The founder ratified keeping that promise twice, most recently
+2026-08-04 (`docs/release-1.0/FABLE-PLAN-REVIEW.md` section 8,
+`docs/plans/2026-08-04-parity-triage-verdict.md`), choosing PT-3 (a generated
+static map) over a server for the visual surface. Gate LP-0301, opened
+2026-08-05, asked for something a generated-and-reloaded page cannot be: a
+workspace a person leaves open across a session. The founder's recorded
+2026-08-05 decision amends the promise for that one narrow case:
+`docs/adr/2026-08-05-gui-server-amendment.md` is the ADR, and it is worth
+reading in full for the two alternatives it rejects (the generated page
+alone, and a cloud or remote UI) and why. The boundary that survives: no
+REMOTE server, ever; a loopback-only workspace binding `127.0.0.1` and
+nothing else is authorized for one reserved, not-yet-built module,
+`src/brothersbe/gui/server.py`.
+
+What changed on disk in this lane, and what did not. `SECURITY.md`'s promise
+paragraph and audit-grep prose are rewritten to state the amended boundary
+and point at the ADR; running the grep the document itself gives you still
+shows exactly the same single real hit it always has
+(`src/brothersbe/prverify.py`), because the reserved GUI path does not exist
+in this tree. `tools/test_sbe.py`'s zero-network AST scan
+(`_zero_network_scan_paths`, `_zero_network_allowlist`,
+`_banned_import_violations`, all above `TestAuditableSurface`) gains a
+second exact-path allowlist entry for that same reserved path, and is
+extended to walk `src/brothersbe/gui/` recursively rather than stop at the
+top level of `src/brothersbe/`, so a sibling file placed in that directory
+cannot ride along on the one allowed path's exemption.
+`TestGuiNetworkAllowlistIsNarrow` proves both directions against a scratch
+copy under `/tmp`, never against the real tree: a planted `import socket` in
+a fake `gui/api.py` is caught, and the same import in the allow-listed
+`gui/server.py` is not. No GUI code exists anywhere in the repository after
+this lane; the scan's behavior against the real tree is provably unchanged
+(the reserved glob pattern matches nothing on disk today), which is the
+entire point of reserving a path ahead of building it.
+
+The honest limit, named rather than left for a reader to discover:
+`docs/THREAT_MODEL.md`, `README.md`, and
+`design/final-release-program/01-purpose.md` all still state the
+pre-amendment "no server" wording verbatim. None of the three is an owned
+file of this lane, and none is silently reconciled here. Until a follow-up
+lane updates them, a reader who opens `docs/THREAT_MODEL.md` instead of
+`SECURITY.md` sees the old boundary, not the amended one; `SECURITY.md` is
+the one this document, the ADR, and the amended scan all agree is current.
+A second limit, equally deliberate: this lane authorizes the boundary and
+reserves the path, and nothing more. It does not design authentication on
+the loopback socket, CORS behavior, or defense against a browser-based CSRF
+request reaching a listening local port; the ADR says plainly that the lane
+which writes `src/brothersbe/gui/server.py` still owes that threat model of
+its own, and inherits the boundary here rather than reopening it.
+
+Full text: `SECURITY.md`, `docs/adr/2026-08-05-gui-server-amendment.md`,
+`tools/test_sbe.py::TestAuditableSurface`,
+`tools/test_sbe.py::TestGuiNetworkAllowlistIsNarrow`.

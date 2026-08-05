@@ -1075,6 +1075,32 @@ def _doctor_checks():
                     "working directory is inside a git tree" if inside
                     else "not inside a git tree, so nothing that reads a diff can run here"))
 
+    # FAIL, never NO-DATA and never a silent PASS: B-010. The marketplace
+    # install path never runs `sbe init`, so a beginner's first
+    # `/brothersbe:start` used to land in a repository with no local
+    # footprint and nothing here ever said so; Guided mode read `doctor`'s
+    # overall `result` as PASS while the main capability (dossiers, gates,
+    # evidence, everything `sbe design`/`sbe gate`/`sbe verify` need) could
+    # not run at all. This check makes that state REQUIRED-and-missing: a
+    # FAIL, exactly like `tools` and `plugin-manifest` above, so it joins
+    # the same `failed` list `_cmd_doctor` already computes below and the
+    # overall JSON `result` can never read PASS while the footprint is
+    # absent. See `initcmd.CONFIG_PATH` for the file this checks and `sbe
+    # init` for the fix (preview, then `--apply` once approved).
+    from . import initcmd
+    footprint = os.path.join(os.getcwd(), initcmd.CONFIG_PATH)
+    if os.path.exists(footprint):
+        out.append(("project-init", "PASS",
+                    "%s is present; this repository carries BrotherSBE's local footprint"
+                    % initcmd.CONFIG_PATH))
+    else:
+        out.append(("project-init", "FAIL",
+                    "%s is missing: this repository has never run `sbe init`, so "
+                    "BrotherSBE's main capability (dossiers, gates, evidence) cannot run "
+                    "here. REQUIRED-and-missing: preview the fix with `sbe init`, then "
+                    "apply it with `sbe init --apply` once you approve the preview"
+                    % initcmd.CONFIG_PATH))
+
     # WARNING, never FAIL and never a silent PASS: a fixture identity (an
     # example.com email, or the literal name "ci") authoring real commits is
     # the class of leak that goes unnoticed until someone reads the log by

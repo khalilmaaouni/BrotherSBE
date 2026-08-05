@@ -658,5 +658,99 @@ class TestPerChangeEvidenceScoping(TeamScenario):
                          "or silently allowed to clear an obligation: %s" % text)
 
 
+class TestCanonicalNextAction(TeamScenario):
+    """LANE C1 (B-003): one canonical next action.
+
+    Reproduced before `lifecycle.py` existed: a dossier whose ONLY
+    outstanding obligation is review (evidence complete for its declared
+    tier, both plan tasks closed clean, convergence and approval both PASS
+    and bound to the current head, no `11-review.json` written yet) got
+    THREE different answers. Plain `sbe status` never looks at task or
+    review state at all, so it read the dossier's one clean evidence
+    receipt and said "no action; this receipt is sound evidence" --
+    clean-reading, not review-pending. `sbe status --team`'s own severity-10
+    finding picked the MINIMUM raw team-severity number among this change's
+    other findings, and severity 9 ("completed changes": every plan task
+    closed clean) sorts below severity 11 ("review record") as a bare
+    integer, so it said "nothing left to do for this change; open a PR" --
+    also wrong, because review had not run. Only `/brothersbe:next`'s own
+    prose ladder, which checks team's severity 11 directly rather than
+    severity 10, would have said "run review".
+
+    Both machine surfaces must now agree: `build_report`'s `nextActionDetail`
+    and `build_team_report`'s severity-10 finding are both derived through
+    `lifecycle.reduce_next_action`, so they can no longer read the same
+    recorded state two different ways.
+    """
+
+    def status(self, *extra):
+        code, text, _err = self.sbe("status", self.repo, "--json", *extra)
+        return code, json.loads(text[text.index("{"):]), text
+
+    def _review_pending_dossier(self):
+        # A real plan, over a real dossier, exactly like every other fixture
+        # in this file (`_change`), committed so the evidence receipt below
+        # verifies clean rather than NO-DATA over a dirty tree.
+        name = "review-pending"
+        doss = self._change(name, "src/reviewme.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "%s dossier and source" % name)
+        head = self.git("rev-parse", "HEAD").strip()
+
+        # Evidence complete for every kind the declared tier owes, over the
+        # clean tree above, so MISSING EVIDENCE never fires on either
+        # surface and the evidence-store scan sees sound, not broken,
+        # evidence.
+        out = os.path.join(self.repo, ".sbe", "evidence", "all.json")
+        code, text, _ = self.sbe(
+            "evidence", "run", "--out", out, "--cwd", self.repo,
+            "--covers", "src/reviewme.py", "--kind", "design", "--kind", "gate",
+            "--kind", "score", "--", sys.executable, "-c", "pass")
+        self.assertEqual(code, 0, "the fixture receipt must verify sound: %s" % text)
+
+        # `sbe plan --write` derives two tasks for this dossier (T01 owning
+        # the source file, T02 the verification-only task); both closed
+        # clean, so neither an active nor a ready task remains.
+        self._closed_record("T01", ["src/reviewme.py"], agent="alice", base_commit=head)
+        self._closed_record("T02", [], agent="alice", base_commit=head)
+
+        # Convergence and approval both PASS, bound to the current head, so
+        # neither outranks review on team's own ladder -- written directly,
+        # the same technique `_open_record`/`_closed_record` already use for
+        # a state only a real run would otherwise produce.
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "10-approval.json"), "w").write(
+            json.dumps({"headSha": head, "final": "PASS"}))
+
+        # No 11-review.json: review is the one thing left undone.
+        return name
+
+    def test_review_pending_is_the_same_action_id_on_both_surfaces(self):
+        name = self._review_pending_dossier()
+
+        code, data, text = self.status()
+        self.assertIn("nextActionDetail", data, text)
+        self.assertNotIn("nothing blocking here", data["nextAction"],
+                         "a dossier whose only obligation is review must never read as "
+                         "clean: %s" % text)
+        self.assertEqual(data["nextActionDetail"]["actionId"], "run-review", text)
+
+        code, team_text, _ = self.team("--json")
+        team_data = json.loads(team_text[team_text.index("{"):])
+        tens = [f for f in team_data["findings"]
+               if f["change"] == name and f["severity"] == 10]
+        self.assertEqual(len(tens), 1, team_text)
+        self.assertEqual(tens[0]["actionId"], "run-review",
+                         "team's own severity-10 must not let severity 9 (\"completed "
+                         "changes\") outrank severity 11 (\"review record\") by raw integer "
+                         "comparison: %s" % team_text)
+
+        self.assertEqual(data["nextActionDetail"]["actionId"], tens[0]["actionId"],
+                         "plain status and team status must name the SAME next action for "
+                         "the same dossier: status=%r team=%r"
+                         % (data["nextActionDetail"]["actionId"], tens[0]["actionId"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

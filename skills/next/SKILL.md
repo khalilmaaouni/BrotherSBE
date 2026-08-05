@@ -6,15 +6,27 @@ description: Use when someone asks what to do next in a BrotherSBE project. Eval
 # Next
 
 One question, one answer. This skill exists so the user never has to hold the lifecycle in
-their head: you evaluate the ladder below against what you can actually observe, pick the
-FIRST rung that matches, and recommend that single action. Never list the whole ladder as
-the answer, and never offer two options when the ladder picked one.
+their head.
 
-## The priority ladder
+## LANE C1 (B-003): one canonical next action
 
-Evaluate the rungs in this exact order. Each rung names the exact JSON field or closed
-verdict word it decides from (PASS, FAIL, NO-DATA, WAIVED is the whole verdict vocabulary,
-never reworded); run the probe, read that field, and stop at the first rung that matches.
+`src/brothersbe/lifecycle.py`'s `reduce_next_action` is now the ONE place that decides which
+outstanding fact is most urgent for a change. Plain `sbe status --json`'s `nextAction`
+(a sentence) and `nextActionDetail` (`{actionId, label, reason, basis}`), and `sbe status
+--team --json`'s own severity-10 finding for each discovered change, are both derived through
+that SAME reducer, so they can no longer read the same recorded state two different ways. This
+skill's own job shrank to match: read that field and recommend exactly what it says, rather
+than re-deriving a priority ladder by hand from the rest of the JSON. Do not re-implement the
+ladder here; if it ever needs to change, it changes in `lifecycle.py`, once, for every reader.
+
+## Rungs 1-3: checks the reducer cannot run
+
+`sbe status` never starts a subprocess and never runs a NEW check over source code (its own
+module docstring names this as the reason a truthful summary stops and says so rather than run
+one); it reads state other commands already recorded. These three rungs are genuinely outside
+what `nextAction` can ever cover for exactly that reason, so they stay separate, live probes.
+Evaluate them, in this order, BEFORE trusting anything `nextAction` says, and stop at the first
+one that matches:
 
 1. **Environment broken.** Run `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" doctor --json` and read
    `result`. `FAIL` means at least one `checks[]` entry reads `FAIL`; name it (`name`,
@@ -29,54 +41,49 @@ never reworded); run the probe, read that field, and stop at the first rung that
    `scope.storesInspected.dossiers` names. A nonzero exit means the run printed a FAIL line
    somewhere; read that line for the missing or malformed artifact. Recommend
    `/brothersbe:design`.
-4. **Planned but not executed.** Read `notes.activeConflicts` from the same
-   `sbe status --json` output: it always states "N open task(s) among M total", even when
-   `activeConflicts` itself is empty. N greater than zero means a task is claimed and in
-   flight: recommend continuing it, named specifically, through the `work` subcommands
-   (`work start`, `work check`, `work finish`), each taking the task ID as its argument. When
-   `scope.storesInspected.dossiers` names a discovered dossier, also run
-   `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --team --json` and read `findings` for that
-   change's severity 7 ("active tasks", open or FORCED) and severity 8 ("ready tasks", no
-   registry record yet) entries: any severity 7 entry means continue that task, named by its
-   own `nextAction`; with no severity 7 entry but a severity 8 entry present, nothing has
-   started, recommend the `work start` command that finding's `nextAction` names.
-5. **A hard gate FAILs, or evidence is missing for the declared tier.** Run
-   `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" gate <dir> --no-decisions` (the gate check itself writes
-   nothing, per its own "writes: nothing" usage line; `--no-decisions` keeps this a plain read
-   by skipping the CLI's own decision-package write too) and read the verdict word each gate
-   line prints. Then run
-   `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --json` and read `missingEvidence`.
-   - Any gate line reads FAIL: recommend `/brothersbe:verify`, naming the failing gate.
-   - No gate reads FAIL, and `missingEvidence` is a non-empty list: recommend
-     `/brothersbe:verify`, naming the obligation its first item's `finding` states.
-   - No gate reads FAIL, and `missingEvidence` is empty: this rung does not match, even when
-     every gate above read NO-DATA. Proceed to rung 6.
-   NO-DATA alone is never a reason to recommend `/brothersbe:verify`: `sbe_gate.py`'s own exit
-   arithmetic never counts a NO-DATA verdict toward failure (`tools/sbe_gate.py:1615-1633`), a
-   T0-declared change owes no evidence at all so `missingEvidence` stays empty for it by
-   construction, and CR-08 means `sbe verify` now mints the design, gate and score receipts
-   `missingEvidence` would otherwise name, so a single `/brothersbe:verify` run on a clean tree
-   clears the obligation before this rung would ever see it again. Recommending verify with
-   nothing missing recommends a no-op, which is the loop this rung exists to close.
-6. **Review not run.** When `scope.storesInspected.dossiers` names a discovered dossier, run
-   `"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --team --json` and read `findings` for that
-   change's severity 11 ("review record") entry. No entry, or one whose `verdict` is not
-   `PASS`, means review has not cleared: recommend `/brothersbe:review`, naming that finding's
-   `detail`. In the flat single-dossier layout, check directly for `11-review.json` beside the
-   intake `scope.storesInspected.intake` names: absent means recommend `/brothersbe:review`.
-7. **Everything green.** Recommend finish guidance: write the summary, open the pull
-   request, and hand the merge decision to a human. The merge is never this skill's call.
+
+## Rung 4: everything the reducer already knows about
+
+When none of the three rungs above matches, read `nextAction` and `nextActionDetail` from the
+`sbe status --json` output rung 2 already ran (no need to run it twice). When
+`scope.storesInspected.dossiers` names a discovered dossier, also run
+`"${CLAUDE_PLUGIN_ROOT}/bin/sbe" status --team --json` and read the severity-10 finding for
+that change (`actionId`, `label`, `nextAction`, `verdict`, `owner`), the same per-change detail
+the single-project report rolls up into one line. Recommend exactly what `nextActionDetail`
+(or the matching severity-10 finding) says, naming its `actionId` and quoting its `nextAction`
+text; never re-derive a different answer from the rest of the JSON by hand.
+
+What each `actionId` means, kept here ONLY as explanation of what the reducer considers, never
+re-evaluated by hand:
+
+- `resolve-broken-claim`, `resolve-merge-blocker`, `resolve-active-conflict`: sections 1-3 of
+  the plain report, or the matching team severity (1, 2, 3). A hard gate that WAS evidenced and
+  FAILED lands here (`resolve-merge-blocker`), naming the failing receipt.
+- `provide-missing-evidence`: the declared tier owes a design, gate or score run and no receipt
+  declares one yet. Recommend `/brothersbe:verify`, which is where that run actually happens
+  and where a FAIL, if there is one, gets reported with full detail; this skill does not run
+  the check itself to preview the answer.
+- `continue-active-task`: a task is claimed and in flight. Recommend continuing it, named
+  specifically, through the `work` subcommands (`work start`, `work check`, `work finish`).
+- `start-ready-task`: a task's dependencies are all closed clean and it carries no registry
+  record yet. Recommend the `sbe work start` command the finding names.
+- `run-review`: the plan's tasks are done and evidence is clean, but review has not cleared
+  (missing, stale, self-reviewed, or not approved). Recommend `/brothersbe:review`.
+- `finish`: nothing outstanding that this tool can see. Recommend finish guidance: write the
+  summary, open the pull request, and hand the merge decision to a human. The merge is never
+  this skill's call.
 
 ## How to answer
 
 State the one recommended action, then why in exactly one sentence grounded in the field or
-verdict word you actually read: name it and its value first (for example, "missingEvidence
-names one obligation: no evidence receipt declares a gate run" rather than a paraphrase), then
-the plain-language meaning. Do not speculate about rungs you did not probe.
+verdict word you actually read: name it and its value first (for example, "nextActionDetail
+names run-review: resolve what the review flagged, then record a fresh 11-review.json" rather
+than a paraphrase), then the plain-language meaning. Do not speculate about rungs you did not
+probe.
 
 ## Always close with the response contract
 
 End every answer with, in order: where you are, what is complete, what needs attention, the
 ONE recommended next action, why, what BrotherSBE will do automatically, what decision the
-user owns, and how success will be verified. Omit an element only when it is genuinely
-empty, never because it is inconvenient.
+user owns, and how success will be verified. Omit an element only when it is genuinely empty,
+never because it is inconvenient.

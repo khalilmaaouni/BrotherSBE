@@ -42,8 +42,23 @@ paraphrase of the rendered text:
 3. **What needs attention**: `brokenClaims`, `mergeBlockers`, `activeConflicts` and
    `missingEvidence`, in that order, the same priority `nextAction` itself reads; a live fence
    from the second command is attention too, even when every section above is clean.
-4. **The single next action**: `nextAction`, verbatim. This is the same field
-   `/brothersbe:next` reads for the same state, not a separate derivation of it.
+4. **The single next action**: `nextAction` (a sentence) and `nextActionDetail` (`{actionId,
+   label, reason, basis}`), verbatim.
+
+LANE C1 (B-003): `nextAction` and `nextActionDetail` are now TRUE BY CONSTRUCTION the same
+answer `/brothersbe:next` reads for the same state, and the same answer `sbe status --team
+--json`'s own severity-10 finding gives for the matching change, because all three are derived
+through the single reducer `src/brothersbe/lifecycle.py` owns
+(`lifecycle.reduce_next_action`). Before this, `sbe status`'s blocker-first sections and `sbe
+status --team`'s severity-10 finding were two independent derivations that could name a
+different next action for the identical dossier (a temp-dir reproduction proved it: a change
+whose only outstanding obligation was review read as "nothing blocking here" from the plain
+report and "nothing left to do, open a pull request" from team's own severity-10, because
+neither surface had ever looked at review or task-readiness state, and team's raw severity
+numbering let "completed" outrank "review record" besides). That gap is closed at the source,
+not papered over here: this skill still just reads `nextAction`/`nextActionDetail` verbatim,
+it no longer has to disclaim that another surface might say something else about the same
+change.
 
 Technical detail (raw verdict lines, receipt paths, fence entries, exit codes) goes under a
 clearly separated section titled "Details", after the summary, never first. Include it: the

@@ -6,6 +6,113 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.15 (2026-08-05)
+
+- LANE C1 (B-003), one canonical next action: at least three independent
+  derivations of "what to do next" used to coexist and could disagree.
+  `status.py`'s plain `build_report` picked blocker-first over its own four
+  sections only (broken claims, merge blockers, active conflicts, missing
+  evidence), never looking at task or review state at all; `build_team_
+  report`'s severity-10 finding picked the MINIMUM raw team-severity number
+  among a change's other findings, which let severity 9 ("completed
+  changes") outrank severity 11 ("review record") as a bare integer;
+  `skills/next/SKILL.md` carried a third, hand-written priority ladder in
+  prose. Reproduced with a temp-dir dossier whose only outstanding
+  obligation was review (evidence complete, both plan tasks closed clean,
+  convergence and approval both PASS): plain `sbe status` read it as "no
+  action; this receipt is sound evidence" and `sbe status --team`'s own
+  severity-10 read it as "nothing left to do, open a pull request," both
+  wrong, because review had never run.
+  `src/brothersbe/lifecycle.py` (new) now owns the one reducer,
+  `reduce_next_action`, a pure function over a caller-supplied list of
+  `{rung, reason}` candidates that picks the most urgent by a single
+  canonical rung order (with `TEAM_SEVERITY_TO_RUNG` translating team's own
+  1..11 severity numbers into that order, deliberately placing "review not
+  cleared" ahead of "nothing outstanding" so a change is never called done
+  before it has been reviewed). `status.py`'s `build_report` now also reads
+  task-active/task-ready/review-not-cleared candidates for every target
+  through two new helpers, `_review_ladder_check` and `_change_ladder_
+  candidates` (reusing the same `_read_review_record`/`_commit_author`/
+  `_same_identity`/`tasks_mod`/`work_mod` primitives `build_team_report`
+  already reads the identical facts through, never a second copy of the
+  rule), and exposes the reducer's own `{actionId, label, reason, basis}`
+  as a new, additive `nextActionDetail` field alongside the unchanged
+  `nextAction` string. `build_team_report`'s severity-10 finding is now
+  derived through the same reducer and carries the same `actionId`/`label`.
+  A repository with no plan anywhere gets byte-identical `nextAction` text
+  to every earlier version of this file (`_next_action`'s own sections 1-4
+  ordering and wording are unchanged; the new candidates are additive).
+  `skills/next/SKILL.md`'s ladder for the parts the reducer now covers
+  (task readiness, missing evidence, review, "everything green") collapses
+  to "read `nextAction`/`nextActionDetail` and act on it"; the three
+  checks the reducer genuinely cannot run (environment, intake presence,
+  design completeness -- each requires a live subprocess `sbe status`
+  itself is built never to start) stay separate, explicit probes.
+  `skills/status/SKILL.md`'s claim that `nextAction` is "the same field
+  `/brothersbe:next` reads for the same state" is now true by construction,
+  and cites the reducer. Proven by
+  `tools/test_sbe_status_team.py::TestCanonicalNextAction` (the reproduced
+  disagreement as a red-first fixture, green after: both surfaces now
+  emit `actionId` `run-review` for the identical dossier), with
+  `tools/test_sbe_status.py`, the rest of `tools/test_sbe_status_team.py`,
+  `tools/test_sbe.py`, `tools/test_sbe_golden_scenario.py` and
+  `evals/run_evals.py` all re-verified green.
+
+- LANE C2, gate LP-0301, GUI security ADR and promise amendment (docs only, no
+  GUI code): `SECURITY.md`'s "no server" promise is amended to "no remote
+  server; a loopback-only GUI workspace is authorized," recorded in
+  `docs/adr/2026-08-05-gui-server-amendment.md`, which weighs and rejects two
+  distinct alternatives (keep the generated page only, and a cloud or remote
+  UI) before reaching the decision. `SECURITY.md`'s promise paragraph and its
+  audit-grep prose are rewritten so a reader running the file's own grep still
+  finds the truth: the reserved path, `src/brothersbe/gui/server.py`, does not
+  exist yet, so the grep shows the same single real hit it always has
+  (`src/brothersbe/prverify.py`). `tools/test_sbe.py`'s zero-network AST scan
+  gains that one named exact-path allowlist entry and is extended to walk
+  `src/brothersbe/gui/` recursively, so any OTHER file placed under `gui/`
+  stays banned; `TestGuiNetworkAllowlistIsNarrow` (new) proves both directions
+  against a scratch copy under `/tmp`, red before the scan change (a planted
+  `import socket` in a fake `gui/api.py` was not caught) and green after.
+  `docs/KNOWN-LIMITS.md` records the boundary change and names the documents
+  (`docs/THREAT_MODEL.md`, `README.md`,
+  `design/final-release-program/01-purpose.md`) that still state the
+  pre-amendment wording and are out of scope for this lane. Proven by
+  `python3 tools/test_sbe.py` (`TestAuditableSurface`,
+  `TestGuiNetworkAllowlistIsNarrow`), `python3 evals/run_evals.py`, and
+  `python3 tools/test_sbe_interop.py`, all green.
+
+- LANE C3, B-010, first start initializes: the marketplace install path never
+  ran `sbe init`, `sbe doctor` had no way to detect the missing project
+  footprint, and a beginner's first `/brothersbe:start` could land in an
+  uninitialized repository with `doctor`'s own `result` reading PASS.
+  `_doctor_checks()` (`src/brothersbe/cli.py`) now carries a `project-init`
+  check: FAIL, detail naming the state REQUIRED-and-missing, whenever
+  `.brothersbe/config.json` (`initcmd.CONFIG_PATH`) is absent, so the check
+  joins the same FAIL list the overall JSON `result` is computed from and
+  Guided mode can never read PASS while the main capability cannot run.
+  `skills/start/SKILL.md`'s opening steps now detect a `project-init` FAIL,
+  say so in plain language, and repair it through the skill's existing
+  preview-then-apply consent register (`sbe init` dry run, then `sbe init
+  --apply` only on the user's yes) before continuing to the rest of the
+  guided flow. Proven red then green by
+  `tools/test_sbe.py::TestDoctorProjectInitCheck` (an uninitialized repo
+  names the missing footprint and never reads PASS overall; `sbe init
+  --apply` clears the check), with `TestDoctorIdentityCheck`'s own fixture
+  updated to carry the footprint so its assertions stay about identity, not
+  this new check. `tools/test_sbe.py`, `evals/run_evals.py` and
+  `tools/test_sbe_instruction_surface.py` re-verified green.
+
+- Plan 12.4, Lane C4, the ten minute sandbox: a beginner can now build a small,
+  disposable, offline practice repository (`tools/fixtures/sandbox/
+  build_sandbox.py`, mirroring the golden scenario builder's idiom, smaller and
+  human-facing: one task, friendly file names, a step-naming README) and follow
+  `docs/guides/00-sandbox.md` end to end -- install health, describe an outcome,
+  see the risk level, accept one decision, start one task, run proof, review,
+  reach a prepared handover -- with every quoted command output captured from a
+  real run. Proven by `python3 tools/test_sbe_sandbox.py`, which builds the same
+  sandbox, drives the same eight steps through the real engine, and asserts the
+  guide's quoted verdict lines are what the tools actually print there.
+
 ## 1.0.0-rc.14 (2026-08-05)
 
 - LANE B-004, per-change evidence scoping: `sbe status`'s MISSING EVIDENCE
