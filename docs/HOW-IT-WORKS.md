@@ -285,9 +285,15 @@ python3 tools/sbe_score.py --strict .   # gate severity, by ratified decision
 
 ## 7. CI: where advisory becomes blocking
 
-`.github/workflows/brothersbe-gates.yml` runs seven steps on every pull request:
+`.github/workflows/brothersbe-gates.yml` runs the gates battery on every pull request:
 
 ```yaml
+      # Windows-only bridge: the windows-latest leg aliases python3 to python
+      # before the same battery runs; Linux and macOS ignore this step.
+      - name: Alias python3 to python (Windows only ships python.exe)
+        run: |
+          py="$(command -v python)"
+          cp "$py" "$(dirname "$py")/python3.exe"
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished

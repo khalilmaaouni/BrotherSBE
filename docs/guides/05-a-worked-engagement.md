@@ -677,6 +677,12 @@ repo runs all three tools, the three suites that prove they still work, and one
 step that surfaces any design waiver as something a human is shown:
 
 ```yaml
+      # Windows-only bridge: the windows-latest leg aliases python3 to python
+      # before the same battery runs; Linux and macOS ignore this step.
+      - name: Alias python3 to python (Windows only ships python.exe)
+        run: |
+          py="$(command -v python)"
+          cp "$py" "$(dirname "$py")/python3.exe"
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict .
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
