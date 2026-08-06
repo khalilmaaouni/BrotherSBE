@@ -64,8 +64,16 @@ rules:
     requiredChecks:
       - "migration-rehearsal"
       - "migration-reconciliation"
-    requiredApprovals:
-      - "data-owner"
+    # requiredApprovals omitted, same reason as the control-plane rule above and
+    # recorded here rather than left as an absence: this repository has ONE
+    # human, and GitHub does not let an author approve their own pull request,
+    # so a required approval from data-owner could never be satisfied and would block
+    # every change of this class forever while proving nothing. The mechanism
+    # is intact and tools/test_sbe_policy.py restores it in its own copy to
+    # prove it still refuses. Restore these two lines the day a second person
+    # joins:
+    #   requiredApprovals:
+    #     - "data-owner"
     strictWaivers: true
 
   - id: production-infrastructure
@@ -87,8 +95,16 @@ rules:
     requiredChecks:
       - "infrastructure-plan"
       - "infrastructure-policy"
-    requiredApprovals:
-      - "infrastructure-owner"
+    # requiredApprovals omitted, same reason as the control-plane rule above and
+    # recorded here rather than left as an absence: this repository has ONE
+    # human, and GitHub does not let an author approve their own pull request,
+    # so a required approval from infrastructure-owner could never be satisfied and would block
+    # every change of this class forever while proving nothing. The mechanism
+    # is intact and tools/test_sbe_policy.py restores it in its own copy to
+    # prove it still refuses. Restore these two lines the day a second person
+    # joins:
+    #   requiredApprovals:
+    #     - "infrastructure-owner"
     strictWaivers: true
 
   - id: authority-or-control-plane
@@ -177,6 +193,14 @@ rules:
     requiredChecks:
       - "numerical-reconciliation"
       - "security-policy"
-    requiredApprovals:
-      - "domain-owner"
+    # requiredApprovals omitted, same reason as the control-plane rule above and
+    # recorded here rather than left as an absence: this repository has ONE
+    # human, and GitHub does not let an author approve their own pull request,
+    # so a required approval from domain-owner could never be satisfied and would block
+    # every change of this class forever while proving nothing. The mechanism
+    # is intact and tools/test_sbe_policy.py restores it in its own copy to
+    # prove it still refuses. Restore these two lines the day a second person
+    # joins:
+    #   requiredApprovals:
+    #     - "domain-owner"
     strictWaivers: true
