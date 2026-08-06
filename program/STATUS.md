@@ -4,7 +4,8 @@
 Program: brothersbe-public-release
 Version target: 1.0.0
 Overall position: 100% across measured items.
-1 of 23 items measured.
+1 of 24 items measured.
+Undeclared wave 'post-release': BR-1016
 Undeclared wave 'release-blockers': BR-1011, BR-1012, BR-1013, BR-1014, BR-1015
 
 ```mermaid
@@ -42,6 +43,8 @@ gantt
     Jira and Confluence one-way exporters :BR-0520, after BR-0000, 1d
     Asana exporter :crit, BR-0521, after BR-0000 BR-0520, 1d
     Microsoft Teams notify now, bot later :crit, BR-0522, after BR-0000 BR-0520, 1d
+    section post-release
+    The three-estate evaluation, and the one part of it I must not do :crit, BR-1016, after BR-1006, 3d
     section release-blockers
     Release blocker 3  required-evidence policy engine :crit, BR-1011, after BR-1001, 1d
     Release blocker 4  registered check binding :crit, BR-1012, after BR-1011, 1d
@@ -78,6 +81,7 @@ gantt
 - BR-1013: Release blocker 2: honest trust downgrade, PROTECTED-CI removed (waits on: BR-1012)
 - BR-1014: Release blocker 1: Bash write guard and Stop reconciliation, core scope (waits on: BR-1011)
 - BR-1015: Release blocker 5: control plane protection at honest solo scope (waits on: BR-1014)
+- BR-1016: The three-estate evaluation, and the one part of it I must not do (waits on: BR-1006)
 
 ### Blocked
 - BR-0521 is blocked on BR-0520 (depends_on: not recorded as done)
@@ -97,6 +101,7 @@ gantt
 - BR-1013 is blocked on BR-1012 (depends_on: not recorded as done)
 - BR-1014 is blocked on BR-1011 (depends_on: not recorded as done)
 - BR-1015 is blocked on BR-1014 (depends_on: not recorded as done)
+- BR-1016 is blocked on BR-1006 (depends_on: not recorded as done)
 
 ### Risks and mitigations
 | item | risk | severity | mitigation |
@@ -136,6 +141,8 @@ gantt
 | BR-1013 | A doc or eval still asserts the old label and doc-truth goes red. | high | Repo-wide grep gate for the removed label wired as a test, evals repasted from live output. |
 | BR-1014 | The Stop hook fails closed on a corner case and locks an honest session out. | high | Break-glass recovery path per the review: restore the file, declare the path, or a reviewed break-glass record; refuter fixture covers each. |
 | BR-1015 | Verifier reports green against a ruleset the founder has not clicked yet. | high | The 8:00 founder checklist is the ordered step; release evidence stores the verifier output taken AFTER his clicks. |
+| BR-1016 | The harness gets built and the runs never happen, leaving a measurement apparatus that measures nothing and reads as if it did. | high | The harness ships with every measure showing NO-DATA until a real run fills it, and the release documents say the evaluation is unrun rather than pending. |
+| BR-1016 | Self-run numbers leak into a table beside independent ones and stop being distinguishable. | high | The template carries a provenance column per row naming who ran it, and refuses to render a comparison where that column is empty. |
 
 ### Documentation
 - program/MASTER-PLAN.md: exists
@@ -147,9 +154,10 @@ gantt
 - docs/PRINCIPLES.md: exists
 - to be written first, design before build, per docs/PRINCIPLES.md section 1: MISSING
 - BrotherSBE_RELEASE_BLOCKERS_FOR_FABLE.md (founder-supplied review, 2026-08-06; scope decisions in program/MASTER-PLAN-2026-08-06.md section 0): MISSING
+- program/MASTER-PLAN-2026-08-06.md, plus the founder's assessment of 2026-08-07: MISSING
 
 ### Budget
 Declared total: 6200000
 Recorded usage: 1339000
-Items with no recorded usage: 22
+Items with no recorded usage: 23
 <!-- END GENERATED PROGRAM STATUS -->
