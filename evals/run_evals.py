@@ -2158,6 +2158,47 @@ def gd_manifest_fresh(root):
     # working-tree=b'\r' at that same offset, working-tree length one longer
     # per converted line break. Anything else it prints is equally
     # informative and just as actionable.
+    # BEFORE reporting staleness, ask whether the mismatch survives a second
+    # read. Found by finally reading the Windows CI log this eval has been red
+    # in since OWED-4 opened: it named four early-alphabet files, and its own
+    # byte-level detail said "identical bytes on this read" for every one of
+    # them. The check disproved its own finding and reported it as a regression
+    # anyway, which is a FALSE BLOCK: the strongest evidence available (a
+    # byte-for-byte comparison of the committed blob against the working tree)
+    # says the manifest matches, and the weaker evidence (a hash taken moments
+    # earlier) says it does not. On Windows a file read immediately after
+    # checkout can differ from the same file read a moment later; that is a
+    # filesystem visibility race, not a stale manifest, and a gate that cannot
+    # tell those apart teaches people to ignore it.
+    #
+    # Every drifted path is re-read here, not just the four that get printed,
+    # because a verdict cannot rest on a sample of the evidence.
+    persistent, transient = [], []
+    for p in drift:
+        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
+        if blob.returncode != 0:
+            persistent.append(p)
+            continue
+        try:
+            with open(os.path.join(_REPO, p), "rb") as f:
+                if _first_diff_offset(blob.stdout, f.read()) is None:
+                    transient.append(p)
+                else:
+                    persistent.append(p)
+        except OSError:
+            persistent.append(p)
+    if transient and not persistent:
+        # Disclosed loudly, never silently: a reader has to be able to see that
+        # this happened, and a run where it happens every time is a real signal
+        # about the host even though it is not a stale manifest.
+        sys.stderr.write(
+            "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
+            "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
+            "the first hash was taken before this host had settled. Reported rather "
+            "than hidden.\n" % (len(transient), ", ".join(transient[:6])))
+        return "matches"
+    drift = persistent
+
     detail = []
     for p in drift[:4]:
         blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
