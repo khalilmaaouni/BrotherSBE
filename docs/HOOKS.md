@@ -225,6 +225,27 @@ it stays absent so the gap cannot quietly become an undeclared one. A writer
 determined to cross a fence can do it with `sh`. This hook stops the ordinary
 accident, not a determined bypass.
 
+Since BR-1014 that gap is covered by two OTHER hooks rather than by widening this
+one, and the split is the point:
+
+- `tools/sbe_bash_write_guard.py`, a `PreToolUse` hook matching `Bash`, refuses a
+  positively identified protected write (`printf > CLAUDE.md`, `python3 -c
+  open(...)`, `sed -i hooks/hooks.json`, `rm -f .sbe/tasks.json`). It reads
+  command TEXT, so it is an early warning and an immediate blocker, never a
+  proof. It fails open on anything it cannot classify, says so on stderr, and
+  never claims an allowed command was read only.
+- `tools/sbe_session_reconcile.py`, a `Stop` hook, is the AUTHORITATIVE control.
+  It reads the repository changes that actually survived against the session
+  baseline `tools/sbe_session_baseline.py` wrote at SessionStart, so a generated
+  script, a rename, a deletion or a symlink reaches it the same way an edit does.
+  It fails CLOSED, which is the opposite direction from this file and for the
+  opposite reason: it runs at the end, where failing open means the session
+  finishes with an undeclared protected change and nothing said.
+
+The same reconciliation runs in CI as `sbe scope verify --base <ref> --head HEAD
+--strict`, which reads no baseline and does not depend on Claude Code having run
+locally.
+
 **A human who edits the registry can hand themselves any fence.** The registry is
 a markdown file the operator owns, and an operator may rewrite what they own. That
 is the design. The hook makes crossing a fence a deliberate, logged edit instead of
@@ -257,6 +278,8 @@ outside every fence and is allowed.
 
 ```
 python3 tools/test_sbe_fence_hook.py
+python3 tools/test_sbe_bash_guard.py
+python3 tools/test_sbe_session_reconcile.py
 ```
 
 `TestFailOpen` is the fail-open property as a class, not as a list of instances:

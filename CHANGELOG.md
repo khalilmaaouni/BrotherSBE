@@ -6,6 +6,78 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.20 (2026-08-07)
+
+Loop B-close, four lanes, plus all five release blockers named
+by a hostile review the founder commissioned. Every claim below was produced by
+a command run after the last edit; the seal evidence is in the pull request.
+
+- Loop B-close, PARTIAL and said so: four of six preserved lanes integrated
+  after a fresh hostile re-verification of all six (one refuter per patch,
+  each re-executing the prior round's findings rather than trusting them).
+  wB2 contracts, wB3 tasks and wB4 review came back MERGE; wB5 ladder came
+  back REVISE on one finding, repaired here (a comment in handover.py claimed
+  neither status surface turns an unparseable registry into a candidate; a
+  refuter reproduced the team surface doing exactly that, so the comment now
+  states the narrower claim it can support). wB0 design and wB1 applicability
+  came back REVISE and are NOT integrated: wB1's new applicability column
+  ripples into doc-truth checkers it never taught, which is open-ended repair
+  off this release's critical path. Both are preserved and named in STATE.md
+  rather than quietly dropped.
+- New: the required-evidence policy engine (`.sbe/policy.yml`, `sbe policy
+  evaluate`). Missing required evidence is MISSING and exits nonzero; not
+  required is NOT-REQUIRED and never a manufactured pass; neither is NO-DATA,
+  which is the separation that let an absent receipt read as a clean bill of
+  health before. The detected tier is a floor that may be raised and never
+  silently lowered. The consumer action no longer skips verification because
+  an input string was empty. Found by this engine's own refuter and fixed
+  here: the grant files (`.sbe/approvals.json`, `.sbe/waivers.json`,
+  `.sbe/decisions/**`) were unclassified, so the thing that grants permission
+  sat outside the rule that guards permission.
+- New: the Bash write guard and the Stop reconciliation hook. Writes through
+  `Bash` (redirection, an interpreter, a generated script, a rename, a
+  deletion, a symlink) were outside every fence until now: the hooks only saw
+  the editor tools. The guard refuses positively identified protected writes
+  and fails open loudly rather than claiming a command is proven read-only;
+  the session baseline and the Stop hook are the authoritative control, and
+  they fail closed on a missing baseline or an unreadable registry, so a
+  deleted control is never read as permission.
+- New: `sbe protections verify`, the control-plane verifier, plus
+  `.github/CODEOWNERS`. Without a token it reports NO-DATA per fact and says
+  the release checklist treats that as blocking, rather than passing quietly.
+  Found by its refuter and fixed here, with a calibrated test: the CODEOWNERS
+  parser did not cut comments the way GitHub does, so a pattern whose only
+  owner sat behind a `#` was counted as owned.
+- Removed: `PROTECTED-CI`. It was minted whenever `SBE_CI_RUN_ID` was present,
+  and any local process can export that; the receipt seal is a checksum over
+  the receipt's own fields, so it proves the receipt was not edited afterwards
+  and proves nothing about who produced it. Following the review's own stated
+  fallback, the label is gone rather than explained away: this release mints
+  `LOCAL-ADVISORY` and `CI-CLAIMED` only, and CI-CLAIMED carries its whole
+  claim in its own sentence. Two consequences are stated rather than hidden.
+  A policy that demands protected evidence now refuses both levels, which
+  tools/test_sbe_check_registry.py asserts directly by turning the demand on.
+  And the shipped `.sbe/policy.yml` turns that demand OFF, because leaving it
+  on while no protected level exists would not make this repository strict, it
+  would make it stuck: every governed change would report UNPROTECTED forever,
+  demanding a proof nothing can currently issue. Both flip back in the change
+  that lands cryptographic attestation; docs/KNOWN-LIMITS.md carries the same
+  statement for a reader who never opens the policy file.
+- Honest scope, stated once: the GitHub ruleset itself, cryptographic
+  attestation for CI evidence, and the Claude Code end-to-end job in CI are
+  NOT in this release. The first is a human step in repository settings, the
+  other two are named fast-follows. `TEST-PROTOCOL.md` and `TESTERS.md` carry
+  that same list in the words a tester needs.
+- New: `TESTERS.md` and `TEST-PROTOCOL.md`, written for the Claude Code
+  surface: after a one-time install, a tester types slash commands and
+  sentences, never terminal commands. The red-team track asks Claude to
+  attempt each of ten documented bypasses, which is the surface these guards
+  actually defend.
+- Program: the master plan gains its acceleration amendment and the
+  release-blocker amendment; OWED-2 (the post-rc.16 remeasure) and OWED-6
+  (the tag contradiction) close with their evidence; BR-1011 to BR-1015 enter
+  the ledger.
+
 ## 1.0.0-rc.19 (2026-08-06)
 
 - The Windows leg (12 commits, rounds 1 to 4) folded into main. Its

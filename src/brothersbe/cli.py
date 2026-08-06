@@ -1295,6 +1295,41 @@ def _cmd_impact(args):
     return EXIT_OK
 
 
+def _cmd_policy(args):
+    """Which checks, tiers and approvals this change is REQUIRED to carry.
+
+    The one exit rule that matters: a requirement that is required and absent is
+    MISSING and exits 1. It is never NO-DATA, because NO-DATA meaning both
+    "nothing was required" and "what was required is not there" is the bypass
+    `brothersbe.policy` exists to close. NOT-REQUIRED is the other absence and
+    exits 0 without manufacturing a PASS.
+    """
+    from . import policy as policy_mod
+    try:
+        data = policy_mod.evaluate(
+            os.path.abspath(args.path), base=args.base, head=args.head,
+            policy_path=args.policy, receipts_dir=args.receipts_dir, dossier=args.dossier,
+            intake=args.intake, approvals_path=args.approvals, waivers_path=args.waivers,
+            decision_path=args.decision, strict_waivers=args.strict_waivers)
+    except policy_mod.PolicyUnreadable as exc:
+        sys.stderr.write(
+            "sbe policy evaluate: BLOCKED. %s\nA policy this command cannot read is not a "
+            "policy that requires nothing, so this fails closed rather than reporting a "
+            "clean change.\n" % exc)
+        return EXIT_CONTROL_FAILED
+    except policy_mod.DiffUnavailable as exc:
+        sys.stderr.write(
+            "sbe policy evaluate: BLOCKED. %s\nA change set this command could not read is "
+            "not an empty change set.\n" % exc)
+        return EXIT_CONTROL_FAILED
+    if args.json:
+        sys.stdout.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    else:
+        for line in policy_mod.render(data):
+            sys.stdout.write("%s\n" % line)
+    return EXIT_CONTROL_FAILED if data["verdict"] == "BLOCKED" else EXIT_OK
+
+
 def _cmd_review_route(args):
     """Deterministic reviewer selection from a diff: no model chooses, at
     most two specialists, and zero is a legal result. See
@@ -1412,6 +1447,19 @@ def _cmd_pr(args):
     from . import prverify as prverify_mod
     return prverify_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
                              exit_usage=EXIT_USAGE)
+
+
+def _cmd_protections(args):
+    """Repository-level protection surfaces, `verify` first. Not a delegation:
+    like `pr`, there is no tool in `tools/` behind it. The read-only `gh api`
+    client, the local CODEOWNERS leg and the four-verdict report live in
+    `brothersbe.protections`; this wrapper only routes and keeps the exit-code
+    table in one place. NO-DATA exits nonzero here for the same reason it does
+    in `pr verify`: a run that could not look has not cleared anything.
+    """
+    from . import protections as protections_mod
+    return protections_mod.main(args.rest, exit_ok=EXIT_OK,
+                                exit_failed=EXIT_CONTROL_FAILED, exit_usage=EXIT_USAGE)
 
 
 def _cmd_converge(args):
@@ -1738,6 +1786,11 @@ COMMANDS = [
                             "inside declared, reviewed scope (delegates to "
                             "sbe_instruction_surface.py)",
      lambda a: _delegate("sbe_instruction_surface.py", a.rest)),
+    ("scope", "did the changes that survived stay inside declared scope: "
+              "scope verify --base REF [--head REF] [--strict] is the CI backstop for "
+              "the Bash and Stop write boundary, scope report says what the Stop hook "
+              "would decide right now (delegates to sbe_session_reconcile.py)",
+     lambda a: _delegate("sbe_session_reconcile.py", a.rest)),
     ("evidence", "run a command and write the receipt it earned, verify one, or show one",
      _cmd_evidence),
     ("task", "the write-scope registry: open, list, fence, check, and close with the "
@@ -1751,14 +1804,18 @@ COMMANDS = [
                  "scope, contracts, data, architecture, verification", _cmd_converge),
     ("pr", "pull-request surfaces: pr verify <number> --repo owner/name checks live "
            "GitHub approval evidence, bound to the head commit", _cmd_pr),
+    ("protections", "is the repository itself protecting the control plane: protections "
+                    "verify --repository owner/name --branch main reads CODEOWNERS "
+                    "locally and the branch ruleset through gh api", _cmd_protections),
     ("explain", "print the decision package for a decision id, or for a gate or check name, "
                 "regenerating one from the shipped registry when no run has written it",
      _cmd_explain),
     ("lineage", "walk the chain for one artifact oldest to newest: binding, receipts, "
                 "decisions, notes and commits, with an evidence pointer on every hop",
      _cmd_lineage),
-    ("policy", "validate a repository policy file against its schema",
-     _not_built("policy", 3, "The policy schema does not exist yet.")),
+    ("policy", "evaluate .sbe/policy.yml against a diff: which checks, tiers and approvals "
+               "this change is REQUIRED to carry, and whether they are there",
+     _cmd_policy),
     ("exceptions", "list exceptions, their owners and their expiry",
      _not_built("exceptions", 4, "Exceptions are still free-form exemption files with no "
                                  "owner, approver or expiry to list.")),
@@ -1788,8 +1845,8 @@ COMMANDS = [
 #: refused by that same parser with a nonzero exit.
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
-    "evidence", "task", "work", "handover", "pr", "explain", "lineage",
-    "instruction-surface", "map"))
+    "evidence", "task", "work", "handover", "pr", "protections", "explain", "lineage",
+    "instruction-surface", "map", "scope"))
 
 
 def build_parser():
@@ -1828,6 +1885,47 @@ def build_parser():
             child.add_argument("--json", action="store_true", help="machine-readable output")
             child.add_argument("--strict", action="store_true",
                                help="make NO-DATA block as well, for protected CI")
+        elif name == "policy":
+            child.add_argument("action", choices=("evaluate",),
+                               help="evaluate the policy against a diff")
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository to evaluate (default: the current one)")
+            child.add_argument("--base", default=None,
+                               help="the commit or ref to diff from; without it the merge "
+                                    "base with the default branch is used, exactly as in "
+                                    "`sbe impact`")
+            child.add_argument("--head", default="HEAD", help="the commit or ref to diff to")
+            child.add_argument("--policy", default=None,
+                               help="the policy file (default: .sbe/policy.yml under the "
+                                    "repository); an unreadable one blocks, it does not "
+                                    "read as an empty policy")
+            child.add_argument("--receipts-dir", dest="receipts_dir", default=None,
+                               help="the directory of evidence receipts. An empty or absent "
+                                    "one does not skip anything: every required check then "
+                                    "reports MISSING")
+            child.add_argument("--dossier", default=None,
+                               help="a design dossier; approvals are read from its "
+                                    "12-approvals.json unless --approvals names another file")
+            child.add_argument("--intake", default=None,
+                               help="path to 00-intake.json, the tier the human declared")
+            child.add_argument("--approvals", default=None,
+                               help="a JSON list of approval records (role, approver, "
+                                    "headCommit, protected)")
+            child.add_argument("--waivers", default=None,
+                               help="a JSON list of exceptions; each needs a reason, an "
+                                    "owner, an expiry and a protected approval, and every "
+                                    "accepted one renders WAIVED, never PASS")
+            child.add_argument("--decision", default=None,
+                               help="a decision record justifying a declared tier BELOW the "
+                                    "minimum detected tier; without one, a lowering is "
+                                    "INVALID")
+            child.add_argument("--strict-waivers", dest="strict_waivers",
+                               action="store_true",
+                               help="make an accepted waiver block on EVERY rule; the rules "
+                                    "that declare strictWaivers (control plane, production "
+                                    "infrastructure, migration, money, personal and partner "
+                                    "data) block on a waiver whether or not this is passed")
+            child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name == "review-route":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository or dossier to route (default: the "

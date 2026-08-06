@@ -99,6 +99,17 @@ that is the operator's own choice, not a default trap.
 
 Two more are **present and refuse**: `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.
+
+`policy evaluate` reads `.sbe/policy.yml`, applies every matching rule to the diff, and reports one
+state per requirement: `SATISFIED`, `MISSING`, `INVALID`, `STALE`, `UNPROTECTED` or `NOT-REQUIRED`.
+Required and absent is `MISSING` and exits 1. Not required is `NOT-REQUIRED` and exits 0 without
+manufacturing a pass. Neither is `NO-DATA`, and that separation is the point: one word carrying both
+meanings is how a missing receipt kept reading as a clean bill of health. The minimum detected tier
+is a floor, so a declared tier below it is `INVALID` unless a decision record with a protected
+approval says otherwise, and an accepted exception renders `WAIVED`, never `PASS`.
+
+One more is **present and refuses**: `exceptions`.
+It names what is missing and which wave builds it, and exits 3.
 They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
 rather than printing an empty result, because a command that succeeds at nothing is the exact
 failure this project exists to stop.
@@ -269,6 +280,7 @@ it.
 ## `sbe evidence`, and the rule that makes a receipt mean something
 
 ```bash
+bin/sbe evidence run --check control-plane-tests --out evidence/control-plane.json
 bin/sbe evidence run --out evidence/tests.json -- pytest -q
 bin/sbe evidence verify evidence/tests.json
 bin/sbe evidence show evidence/tests.json
@@ -299,6 +311,25 @@ records `argvRedactions`, the count, so a reader can tell at a glance whether ar
 masked. This narrows the old limit, it does not close it: the pattern list is finite, so a
 secret in a shape none of these patterns know still reaches the receipt whole. Full statement:
 `docs/KNOWN-LIMITS.md`.
+
+**`--check <id>` runs the check REGISTERED in `.sbe/checks.yml`, and nothing on the command
+line can substitute any part of it.** The executable, the exact argument vector, the working
+directory, the covered paths and the environment all come from the registry; `--`, `--covers`
+and `--kind` beside it are refused rather than quietly overridden. The receipt records
+`checkId`, `checkKind`, `checkSpecSha256` (the digest of that check's specification), the
+executable and its hash when it is a repository file, every `runnerFiles` hash, the argument
+vector, the working directory, and the covered paths with their hashes, all sealed. `verify`
+recomputes every one of them against the registry as it stands now, so editing the check,
+renaming or modifying a runner, or changing an argument invalidates every receipt minted
+before the edit: those receipts describe a check that no longer exists. Only the allowlisted
+environment (`brothersbe.checks.ENV_ALLOWLIST`) reaches the process, and the receipt records
+how many variables were dropped.
+
+Why it exists: `run` proved a command ran, and `-- true` therefore minted a clean, sealed,
+commit-bound receipt whose only claimed identity was the `--kind` word typed beside it. A
+run WITHOUT `--check` is free form and stays available for local experimentation, and it is
+always `LOCAL-ADVISORY` however clean the tree and whatever CI run id is set, and it satisfies
+no check `.sbe/policy.yml` requires.
 
 **`--kind {design,gate,score}` records WHICH obligation this run is evidence for.** Repeatable,
 and written into the receipt as `checkKinds`, sealed with everything else. Without it the
@@ -354,7 +385,7 @@ encouraged to share.
 `--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
 verdict that does not say what it read is not trustworthy output.
 
-`show` prints the receipt and names its **trust level** every time: `PROTECTED-CI` when
+`show` prints the receipt and names its **trust level** every time: `CI-CLAIMED` when
 `SBE_CI_RUN_ID` was set by the environment AND the tree was clean, `LOCAL-ADVISORY` otherwise.
 A CI job over uncommitted edits is a local run wearing a badge, and it is labelled as one.
 
@@ -769,7 +800,7 @@ Six sections, blocker-first, and **every positive or empty line names what it in
    finding, so a reader is never told an obligation is unmet without being told that
    evidence exists which says nothing about which check it was.
 5. **COMPLETED EVIDENCE**: receipts that verify clean with a zero exit code, printed with
-   their trust label (`LOCAL-ADVISORY` or `PROTECTED-CI`) every time.
+   their trust label (`LOCAL-ADVISORY` or `CI-CLAIMED`) every time.
 6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
    plus the scope sentence naming exactly which stores this run read.
 
@@ -941,4 +972,5 @@ them refuses with usage and a nonzero exit instead of running past it, because a
 command that reads or deletes the vault must not run as if nothing were wrong. Numbers are parsed
 or absent; the tool never invents one.
 
-Two commands remain **present and refuse**: `policy` and `exceptions`.
+One command remains **present and refuses**: `exceptions`. `policy` shipped and now evaluates
+`.sbe/policy.yml` against a diff (see `sbe policy evaluate` above).

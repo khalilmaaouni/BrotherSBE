@@ -166,7 +166,7 @@ python3 -m json.tool /tmp/sbe-book-ch15-repo/.brothersbe/install-receipt.json | 
     "installedInto": "/tmp/sbe-book-ch15-repo",
     "schemaVersion": "1.0",
     "tool": "sbe init",
-    "toolVersion": "1.0.0-rc.19",
+    "toolVersion": "1.0.0-rc.20",
     "uninstallInstructions": [
         "rm -f .brothersbe/config.json",
         "rm -f design/.gitkeep",
@@ -263,15 +263,15 @@ ROOT="$(pwd)"
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE-merge-w/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.19, VERSION 1.0.0-rc.19
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.20, VERSION 1.0.0-rc.20
 git              PASS     working directory is inside a git tree
 project-init     PASS     .brothersbe/config.json is present; this repository carries BrotherSBE's local footprint
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.19, evidence schema 1.0. 8 check(s): 6 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.20, evidence schema 1.0. 8 check(s): 6 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 `vault` and `private-names` read `NO-DATA`, not `FAIL`. Neither is broken;
@@ -370,10 +370,10 @@ grep -n -A3 "^  strict:" .github/actions/sbe-consumer/action.yml
 ```
 
 ```
-56:  strict:
-57-    description: >-
-58-      'true' passes --strict to sbe impact and sbe evidence verify. For
-59-      evidence verify that makes NO-DATA block too. For impact it blocks a
+101:  strict:
+102-    description: >-
+103-      'true' passes --strict to sbe impact and sbe evidence verify. For
+104-      evidence verify that makes NO-DATA block too. For impact it blocks a
 ```
 
 "Making NO-DATA block too" is two lines of code, not folklore:
@@ -424,8 +424,13 @@ bin/sbe policy 2>&1
 ```
 
 ```
-sbe policy: NOT BUILT. The policy schema does not exist yet.
-This lands in wave 3 of the plugin conversion. It is listed here rather than hidden so nobody has to guess whether it exists, and it exits 3 rather than printing an empty result, because a command that succeeds at nothing is the failure this project exists to stop.
+usage: sbe policy [-h] [--base BASE] [--head HEAD] [--policy POLICY]
+                  [--receipts-dir RECEIPTS_DIR] [--dossier DOSSIER]
+                  [--intake INTAKE] [--approvals APPROVALS]
+                  [--waivers WAIVERS] [--decision DECISION] [--strict-waivers]
+                  [--json]
+                  {evaluate} [path]
+sbe policy: error: the following arguments are required: action
 ```
 
 ```bash

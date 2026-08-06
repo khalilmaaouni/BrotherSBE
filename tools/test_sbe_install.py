@@ -442,12 +442,20 @@ class TestSandboxedRealInstall(unittest.TestCase):
         hooks_path = os.path.join(clone_dest, "hooks", "hooks.json")
         with io.open(hooks_path, encoding="utf-8") as fh:
             hooks = json.load(fh)
+        # The FENCE hook specifically, by name. This used to take whichever
+        # command came last, which was the fence hook only for as long as it
+        # was the last PreToolUse entry in the file. BR-1014 added a Bash
+        # matcher after it, and "the last one" silently became a guard that
+        # ignores Write payloads, so this replayed the fence contract against
+        # a tool that never sees it and read the empty allow as a broken hook.
         command = None
         for entry in hooks["hooks"]["PreToolUse"]:
             for h in entry.get("hooks", []):
-                if h.get("type") == "command":
+                if h.get("type") == "command" and "sbe_fence_hook.py" in h.get("command", ""):
                     command = h["command"]
-        self.assertIsNotNone(command, "no PreToolUse command hook in the installed hooks.json")
+        self.assertIsNotNone(command,
+                             "no PreToolUse hook running sbe_fence_hook.py in the installed "
+                             "hooks.json")
         self.assertIn(
             "${CLAUDE_PLUGIN_ROOT}", command,
             "the installed hooks.json must still carry the plugin-root placeholder for "
@@ -494,6 +502,34 @@ class TestSandboxedRealInstall(unittest.TestCase):
         self.assertEqual(r2.returncode, 0, r2.stderr)
         self.assertEqual(r2.stdout, "",
                          "a file no fence line claims must be a silent allow: %s" % r2.stdout)
+
+    def test_installed_layout_wires_the_bash_and_stop_write_boundary(self):
+        """BR-1014's two new hook paths survive installation.
+
+        This is a WIRING assertion, not a behavioral one: it proves the
+        installed hooks.json names the Bash matcher and the Stop event and
+        that both scripts arrived, which is what an upgrade or a rollback can
+        silently break. Exercising the whole flow through a real Claude Code
+        plugin load is spec fixture 13 and is run locally at release; this
+        does not claim to be that."""
+        _, _, _, _, clone_dest = self._real_install(self._scratch_target(name="boundary"))
+        with io.open(os.path.join(clone_dest, "hooks", "hooks.json"), encoding="utf-8") as fh:
+            hooks = json.load(fh)
+        bash_commands = [h.get("command", "")
+                         for entry in hooks["hooks"]["PreToolUse"]
+                         if "Bash" in (entry.get("matcher") or "")
+                         for h in entry.get("hooks", [])]
+        self.assertTrue(any("sbe_bash_write_guard.py" in c for c in bash_commands),
+                        "no PreToolUse hook matches Bash: %s" % bash_commands)
+        stop_commands = [h.get("command", "")
+                         for entry in hooks["hooks"].get("Stop", [])
+                         for h in entry.get("hooks", [])]
+        self.assertTrue(any("sbe_session_reconcile.py" in c for c in stop_commands),
+                        "no Stop hook runs the reconciler: %s" % stop_commands)
+        for rel in ("tools/sbe_bash_write_guard.py", "tools/sbe_session_reconcile.py",
+                    "tools/sbe_session_baseline.py"):
+            self.assertTrue(os.path.exists(os.path.join(clone_dest, rel)),
+                            "%s did not survive installation" % rel)
 
 
 class TestTeamProfileApplication(unittest.TestCase):

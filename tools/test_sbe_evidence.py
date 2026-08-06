@@ -100,6 +100,36 @@ class EvidenceFixture(unittest.TestCase):
         proc = self.run_sbe(*argv, env=env)
         return out, proc.returncode, self.output(proc)
 
+    def register_check(self, check_id="fixture-suite"):
+        """Write a one-check `.sbe/checks.yml` into the fixture repository, with
+        its runner, and COMMIT both so the tree stays clean.
+
+        A registered run is the only shape that can reach CI-CLAIMED since the
+        check registry landed, so any fixture here that needs protected evidence
+        needs a registry to resolve the command from.
+        """
+        write(self.repo, os.path.join("scripts", "fixture-suite.py"),
+              "import sys\nsys.stdout.write('the registered suite ran\\n')\n")
+        write(self.repo, os.path.join(".sbe", "checks.yml"),
+              'schemaVersion: "1.0"\n\n'
+              'checks:\n'
+              '  %s:\n'
+              '    kind: "ran"\n'
+              '    command:\n'
+              '      executable: "python3"\n'
+              '      arguments:\n'
+              '        - "scripts/fixture-suite.py"\n'
+              '      cwd: "."\n'
+              '    covers:\n'
+              '      - "src/**"\n'
+              '    runnerFiles:\n'
+              '      - "scripts/fixture-suite.py"\n'
+              '    protectedEvidence: true\n' % check_id)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "register the fixture check")
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        return check_id
+
     def verify(self, path=None, extra=()):
         path = path or self.receipt_path()
         proc = self.run_sbe("evidence", "verify", path, "--cwd", self.repo, "--json", *extra)
@@ -243,10 +273,28 @@ class TestTheSoundCase(EvidenceFixture):
         self.assertIn("trust", text)
 
     def test_a_ci_run_id_on_a_clean_tree_reads_as_protected(self):
+        """A CI run id and a clean tree are necessary and, since the check
+        registry landed, no longer sufficient: the run must also BE a registered
+        check. So this mints one, which is the only shape that can reach
+        CI-CLAIMED now."""
+        self.register_check()
+        path = self.receipt_path("registered.json")
+        proc = self.run_sbe("evidence", "run", "--check", "fixture-suite", "--out", path,
+                            "--cwd", self.repo, env={"SBE_CI_RUN_ID": "gha-4471"})
+        self.assertEqual(proc.returncode, 0, self.output(proc))
+        self.assertEqual(self.load(path)["ciRunId"], "gha-4471")
+        text = self.output(self.run_sbe("evidence", "show", path))
+        self.assertIn("CI-CLAIMED", text, text)
+
+    def test_a_free_form_command_under_a_ci_run_id_stays_advisory(self):
+        """The calibration for the test above, and a control in its own right:
+        `-- true` in CI on a clean tree used to read CI-CLAIMED, which handed
+        the strongest label this project mints to a command nobody registered."""
         path, _code, _text = self.generate(env={"SBE_CI_RUN_ID": "gha-4471"})
         self.assertEqual(self.load(path)["ciRunId"], "gha-4471")
         text = self.output(self.run_sbe("evidence", "show", path))
-        self.assertIn("PROTECTED-CI", text, text)
+        self.assertIn("LOCAL-ADVISORY", text, text)
+        self.assertIn("free-form", text, text)
 
 
 class TestStaleness(EvidenceFixture):
@@ -709,15 +757,15 @@ class TestSchemaCompat(EvidenceFixture):
 
     def test_new_receipts_stamp_the_evidence_version(self):
         self.generate()
-        self.assertEqual(self.load()["schemaVersion"], "1.2")
+        self.assertEqual(self.load()["schemaVersion"], "1.3")
         sys.path.insert(0, os.path.join(ROOT, "src"))
         try:
             from brothersbe import evidence as mod
-            self.assertEqual(mod.EVIDENCE_SCHEMA_VERSION, "1.2")
-            self.assertEqual(mod.KNOWN_SCHEMA_VERSIONS[-1], "1.2",
+            self.assertEqual(mod.EVIDENCE_SCHEMA_VERSION, "1.3")
+            self.assertEqual(mod.KNOWN_SCHEMA_VERSIONS[-1], "1.3",
                              "the newest version must be last: _fields_for reads this tuple "
                              "as the version timeline")
-            for older in ("1.0", "1.1"):
+            for older in ("1.0", "1.1", "1.2"):
                 self.assertIn(older, mod.KNOWN_SCHEMA_VERSIONS,
                               "a bump that stops reading an older receipt is a rewrite, not a "
                               "forward-only bump")

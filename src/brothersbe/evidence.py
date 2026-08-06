@@ -57,6 +57,26 @@ records the argv right beside it so a reader can see the two disagree. A receipt
 that declares no kind clears no obligation, and one written before this field
 existed is legacy: NO-DATA for obligation purposes, never a silent pass.
 
+AND THE DECLARATION IS NO LONGER THE IDENTITY. `--kind` above closed the
+inference bypass and left the one under it standing: a declaration is a word the
+caller types, so `-- true --kind gate` still minted a clean, sealed,
+commit-bound receipt for a command that checked nothing. `sbe evidence run
+--check <id>` resolves the executable, the exact argument vector, the working
+directory, the covered paths and the environment out of `.sbe/checks.yml`, a
+registry inside the protected control plane, and accepts NO substitution: a
+command after `--`, a `--covers` or a `--kind` beside it is refused rather than
+quietly overridden. The receipt records `checkId`, `checkKind`,
+`checkSpecSha256`, the executable and its hash, every runner file hash, the argv
+and the working directory, all sealed, and `verify` recomputes every one of them
+against the registry as it stands NOW, so a redefined check or a modified runner
+invalidates the receipts minted before it. The free-form mode stays for local
+experimentation and it is always LOCAL-ADVISORY, whatever the tree state and
+whatever CI run id is set, because nothing outside the caller says what it was.
+What this still cannot prove is the registry itself: an entry pointing an
+important-sounding id at a command that checks nothing is a false registry, and
+what defends against that is `.sbe/checks.yml` being in the control-plane rule
+of `.sbe/policy.yml`, not anything computed here.
+
 ARGV IS DIFFERENT, AND ONLY PARTLY FIXED. Unlike stdout and stderr, `argv` has
 to be recorded as text: a receipt whose command was paraphrased proves nothing
 about what happened. So a credential typed ON the command line used to be
@@ -86,6 +106,7 @@ import sys
 import time
 
 from . import SCHEMA_VERSION, version
+from . import checks as check_registry
 from .impact import DiffUnavailable, changed_files, resolve_range, _git
 
 from ._toolspath import mount
@@ -99,7 +120,7 @@ from sbe_telemetry import SECRET_PATTERNS  # noqa: E402
 #: OLDEST FIRST, and the order is load-bearing: `_fields_for` reads it as the
 #: version timeline, so a receipt is never judged by a field its own version
 #: postdates.
-KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2")
+KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2", "1.3")
 
 #: The version NEW receipts are stamped with. Evidence-local on purpose: the
 #: package-wide SCHEMA_VERSION governs other stores (the task registry, the
@@ -108,8 +129,11 @@ KNOWN_SCHEMA_VERSIONS = ("1.0", "1.1", "1.2")
 #: `argvRedactions` beside the recorded argv. "1.2" adds `checkKinds` and
 #: `checkKindsSource`, the declared identity of the check this run is offered
 #: as. FORWARD ONLY: no receipt already on disk is rewritten by this bump, and
-#: every older version stays readable under its own contract.
-EVIDENCE_SCHEMA_VERSION = "1.2"
+#: every older version stays readable under its own contract. "1.3" adds the
+#: REGISTERED check binding (`checkId`, `checkKind`, `checkSpecSha256`,
+#: `checkBinding`, `checkIdSource`): which registered check ran, resolved from
+#: `.sbe/checks.yml` rather than declared by the caller.
+EVIDENCE_SCHEMA_VERSION = "1.3"
 
 GENERATOR = "sbe evidence run"
 
@@ -135,7 +159,7 @@ REQUIRED_FIELDS = (
     "schemaVersion", "generator", "generatorVersion", "runId", "argv",
     "argvRedactions", "startedAt", "endedAt", "durationSeconds", "exitCode",
     "headCommit", "stdoutSha256", "stderrSha256", "environment", "toolVersions",
-    "workingTreeDirty", "coveredFilesSource", "checkKindsSource",
+    "workingTreeDirty", "coveredFilesSource", "checkKindsSource", "checkIdSource",
 )
 
 #: The facts the seal covers. Deliberately every fact a forger would have to
@@ -156,6 +180,13 @@ SEALED_FIELDS = (
     "environment", "toolVersions", "workingTreeDirty", "ciRunId",
     "coveredFiles", "coveredFilesSource", "repository", "checkKinds",
     "checkKindsSource",
+    # The registered binding is sealed for the reason the whole registry
+    # exists: an UNSEALED checkId could be typed into an existing free-form
+    # receipt afterwards, which is the hand authoring this module refuses
+    # everywhere else, and it would hand `true` the identity of a registered
+    # migration rehearsal. Sealed, a registered identity can only come from a
+    # run this wrapper resolved out of `.sbe/checks.yml` itself.
+    "checkId", "checkKind", "checkSpecSha256", "checkBinding", "checkIdSource",
 )
 
 #: Which fields each schema version INTRODUCED, so `_fields_for` can judge a
@@ -164,6 +195,7 @@ SEALED_FIELDS = (
 FIELDS_INTRODUCED_IN = (
     ("1.1", ("argvRedactions",)),
     ("1.2", ("checkKinds", "checkKindsSource")),
+    ("1.3", ("checkId", "checkKind", "checkSpecSha256", "checkBinding", "checkIdSource")),
 )
 
 
@@ -360,6 +392,41 @@ def kind_declaration_gap(receipt):
             "command ran and not evidence that any named obligation was met")
 
 
+def registered_check_id(receipt):
+    """The REGISTERED check this receipt was minted for, or None.
+
+    The one reader of the field, so every consumer asks the same question the
+    same way. `checkKinds` is deliberately not consulted here: a kind is a word
+    the caller typed and an id is a name this wrapper resolved out of
+    `.sbe/checks.yml`, and folding them together is the defect this schema
+    version closes.
+    """
+    cid = receipt.get("checkId")
+    if isinstance(cid, str) and cid.strip():
+        return cid.strip()
+    return None
+
+
+def check_identity_note(check_id, spec_sha=None):
+    """The provenance sentence written into `checkIdSource`, every time.
+
+    Written unconditionally, including for a free-form run, because the absence
+    of a registered identity is itself the fact a reader needs: a receipt with
+    no id and no sentence beside it is indistinguishable from one whose
+    generator predates the registry, and those are different situations. One
+    value, not a pair: this is a note, never a verdict.
+    """
+    if not check_id:
+        return ("no --check was given, so this run is FREE FORM: the command came from the "
+                "caller, not from .sbe/checks.yml. Free-form evidence is LOCAL-ADVISORY "
+                "whatever else is true of it, and it satisfies no required policy check; "
+                "rerun through `sbe evidence run --check <id>` for evidence that does")
+    return ("resolved from .sbe/checks.yml at generation time: check %s, specification digest "
+            "%s. The executable, the argument vector, the working directory and the covered "
+            "paths came from the registry and no argument on the command line could replace "
+            "any of them" % (check_id, spec_sha))
+
+
 def working_tree_dirty(cwd):
     """(dirty, detail). A repository git cannot answer for is reported, never
     assumed clean: 'no output from git status' and 'git did not run' look
@@ -401,13 +468,37 @@ def compute_seal(receipt):
     return _sha256_bytes(blob)
 
 
-def trust_level(receipt):
-    """LOCAL-ADVISORY or PROTECTED-CI, and the sentence saying why.
+#: The one sentence every surface uses for this level, so the wording a
+#: reader sees can never drift from what the code actually checked.
+CLAIMED_SENTENCE = ("CI-CLAIMED means CI shaped metadata was recorded but no protected "
+                    "identity was verified.")
 
-    PROTECTED-CI needs both a CI run id minted by the environment AND a clean
-    tree at generation time. A CI job running over uncommitted edits is not
-    protected by being CI; it is a local run wearing a badge.
+
+def trust_level(receipt):
+    """LOCAL-ADVISORY or CI-CLAIMED, and the sentence saying why.
+
+    CI-CLAIMED needs three things: the run was a REGISTERED check, a CI run id
+    was recorded by the environment, and the tree was clean at generation time. A
+    CI job running over uncommitted edits is not protected by being CI; it is a
+    local run wearing a badge. And a free-form command in CI is not protected
+    either, however clean the tree: nothing outside the caller says which check
+    it was, so `-- true` under a CI run id would otherwise read as the strongest
+    evidence this project can mint.
+
+    The registration condition applies from schema 1.3 onward ONLY. A receipt
+    written before the registry existed is judged by its own version's contract,
+    the same way every other field here is: re-reading an old receipt under a
+    rule its generator could not satisfy would relabel evidence nobody changed.
     """
+    declared = answered(receipt.get("schemaVersion"))
+    knows_registry = (declared in KNOWN_SCHEMA_VERSIONS
+                      and KNOWN_SCHEMA_VERSIONS.index(declared)
+                      >= KNOWN_SCHEMA_VERSIONS.index("1.3"))
+    if knows_registry and registered_check_id(receipt) is None:
+        return ("LOCAL-ADVISORY",
+                "this receipt was minted for a free-form command rather than a check "
+                "registered in .sbe/checks.yml, so nothing outside the caller says which check "
+                "it is. Free-form evidence is advisory whatever else is true of it")
     ci = answered(receipt.get("ciRunId"))
     dirty = receipt.get("workingTreeDirty")
     if ci is None:
@@ -419,13 +510,32 @@ def trust_level(receipt):
                 "a CI run id is recorded (%s) but the working tree was dirty or unreadable at "
                 "generation time, and a run over uncommitted edits is not protected by being "
                 "CI" % ci)
-    return ("PROTECTED-CI",
-            "minted under CI run id %s on a clean tree, by an environment the agent does not "
-            "set for itself" % ci)
+    # BR-1013, the honest downgrade. This branch used to return PROTECTED-CI,
+    # which any local process could obtain by exporting SBE_CI_RUN_ID: the seal
+    # is a checksum over the receipt's own fields, so it proves the receipt was
+    # not edited afterwards and proves nothing about who produced it. Until a
+    # cryptographic attestation binds a receipt to a repository, a workflow and
+    # a commit, the strongest honest thing this project can say is that CI
+    # shaped metadata was recorded. There is deliberately no level above this
+    # one: a policy that demands protected evidence now finds nothing that can
+    # satisfy it, and says so, which is the correct answer while the proof does
+    # not exist.
+    return ("CI-CLAIMED",
+            "%s A run id (%s) was recorded on a clean tree, and nothing here verified who "
+            "set it" % (CLAIMED_SENTENCE, ci))
 
 
-def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds=None):
+def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds=None,
+             check_id=None, registry_path=None):
     """Run `argv` and return the receipt describing what actually happened.
+
+    `check_id`, when given, is the REGISTERED mode and it is the mode this
+    module now exists for. The executable, the argument vector, the working
+    directory, the covered paths and the environment all come from
+    `.sbe/checks.yml`; `argv`, `covers` and `kinds` must be empty, and a caller
+    that supplies any of them is refused rather than quietly overridden, because
+    a substitution that succeeds silently is exactly the caller-supplied command
+    the registry replaces.
 
     The command runs HERE. Nothing in the signature accepts a duration, an exit
     code or an output digest, which is the whole point: those three are the
@@ -449,8 +559,45 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds
     a receipt: no exit code was ever observed, so there is nothing honest to
     seal, and the caller's stderr names what happened instead.
     """
+    # THE REGISTERED PATH, resolved before anything else: every refusal below
+    # has to happen before a process starts, because a receipt that could not be
+    # written is a run whose result nobody records.
+    spec = binding = None
+    run_env = None
+    covers_from_registry = None
+    if check_id:
+        if argv:
+            raise ReceiptUnreadable(
+                "`--check %s` resolves its command from .sbe/checks.yml and a command was also "
+                "given after `--`. There is no substitution on this path: drop the `-- "
+                "<command...>`, or drop `--check` and mint a free-form LOCAL-ADVISORY receipt "
+                "that satisfies no required check" % check_id)
+        if covers:
+            raise ReceiptUnreadable(
+                "`--check %s` takes its covered paths from the registry's `covers` globs, so "
+                "`--covers` is refused here: a coverage list the caller supplies is the same "
+                "substitution as a command the caller supplies, one field further along"
+                % check_id)
+        if kinds:
+            raise ReceiptUnreadable(
+                "`--check %s` takes its kind from the registry, so `--kind` is refused here. A "
+                "caller-declared kind beside a registered id is the free-form declaration this "
+                "registry replaced" % check_id)
+        path = registry_path or check_registry.default_registry_path(cwd)
+        try:
+            registry = check_registry.load_registry(path)
+            spec = check_registry.resolve(registry, check_id)
+            binding, run_env = check_registry.binding_of(cwd, spec, path)
+            covers_from_registry = check_registry.covered_paths(cwd, spec)
+        except check_registry.RegistryUnreadable as exc:
+            raise ReceiptUnreadable(
+                "no receipt was written for check %r: %s" % (check_id, exc))
+        argv = check_registry.expected_argv(spec)
+        kinds = None
+
     if not argv:
-        raise ReceiptUnreadable("no command to run: `sbe evidence run` needs `-- <command...>`")
+        raise ReceiptUnreadable("no command to run: `sbe evidence run` needs `-- <command...>` "
+                                "or `--check <id>`")
 
     # Refused BEFORE the command runs, not after: a receipt that could not be
     # written is a run whose result nobody records, so the argument that makes
@@ -465,7 +612,12 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds
             % (", ".join(repr(k) for k in unknown), ", ".join(CHECK_KIND_NAMES)))
 
     covered_source = "explicit --covers"
-    if covers:
+    if covers_from_registry is not None:
+        covered_paths = covers_from_registry
+        covered_source = ("the registered check %s, whose covers globs (%s) matched %d tracked "
+                          "file(s)" % (check_id, ", ".join(spec["covers"]),
+                                       len(covers_from_registry)))
+    elif covers:
         covered_paths = list(covers)
     else:
         try:
@@ -483,10 +635,22 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds
 
     dirty, dirty_detail = working_tree_dirty(cwd)
 
+    # A registered check runs in the directory its registry entry names,
+    # resolved against the repository root, and inherits ONLY the allowlisted
+    # environment. A free-form run keeps today's behavior exactly: the
+    # repository root and the caller's own environment.
+    run_dir = cwd
+    if spec is not None:
+        run_dir = os.path.abspath(os.path.join(cwd, spec["command"]["cwd"]))
+        if not os.path.isdir(run_dir):
+            raise ReceiptUnreadable(
+                "check %s is registered to run in %r, which does not exist under %s, so no "
+                "command was started" % (check_id, spec["command"]["cwd"], cwd))
+
     started = time.time()
     try:
-        proc = subprocess.run(list(argv), cwd=cwd, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, timeout=timeout)
+        proc = subprocess.run(list(argv), cwd=run_dir, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=timeout, env=run_env)
     except OSError as exc:
         raise ReceiptUnreadable(
             "the command did not start, so there is no run to write a receipt about: %s" % exc)
@@ -562,6 +726,15 @@ def generate(cwd, argv, base=None, head="HEAD", covers=None, timeout=None, kinds
         # the command line above and a filename could spell three obligations.
         "checkKinds": declared,
         "checkKindsSource": kind_declaration_note(declared),
+        # WHICH REGISTERED CHECK, resolved from .sbe/checks.yml rather than
+        # declared beside the command. None on the free-form path, and the
+        # sentence below says so rather than leaving a reader to infer it.
+        "checkId": check_id or None,
+        "checkKind": spec["kind"] if spec else None,
+        "checkSpecSha256": check_registry.spec_sha256(spec) if spec else None,
+        "checkBinding": binding,
+        "checkIdSource": check_identity_note(
+            check_id, check_registry.spec_sha256(spec) if spec else None),
     }
     receipt["runId"] = compute_seal(receipt)
     return receipt
@@ -762,6 +935,32 @@ def _check_kinds(receipt):
     return None
 
 
+def _check_registered(receipt, cwd):
+    """(problems, note). Does the registered check this receipt names still
+    exist, unchanged, and does this receipt still describe it?
+
+    Delegates every comparison to `brothersbe.checks.binding_problems`, which
+    owns the registry: recomputing the specification digest here would be a
+    second implementation of the same rule, and the two would drift.
+
+    A receipt that names NO registered check is not a problem at this layer.
+    Its consequence lives where it belongs: `trust_level` reads it as
+    LOCAL-ADVISORY and the policy engine refuses it for any required check, so
+    a free-form receipt is honest evidence of a command that ran and never a
+    registered check that passed.
+    """
+    check_id = registered_check_id(receipt)
+    if check_id is None:
+        return [], ("no registered check is named, so this is free-form evidence: advisory, "
+                    "and it satisfies no required policy check")
+    problems = check_registry.binding_problems(receipt, cwd)
+    if problems:
+        return problems, None
+    return [], ("registered check %s still matches .sbe/checks.yml: specification digest, "
+                "command, working directory, runner hashes and coverage all re-checked"
+                % check_id)
+
+
 def _check_seal(receipt):
     claimed = answered(receipt.get("runId"))
     actual = compute_seal(receipt)
@@ -919,6 +1118,13 @@ def verify(path, cwd=None, exclude_dirs=None):
     if kinds_problem:
         problems.append(kinds_problem)
 
+    inspected.append("the registered check binding against %s"
+                     % os.path.join(cwd, check_registry.REGISTRY_REL))
+    registered_problems, registered_note = _check_registered(receipt, cwd)
+    problems.extend(registered_problems)
+    if registered_note:
+        notes.append(registered_note)
+
     inspected.append("the runId seal over %d run fact(s)" % len(
         _fields_for(answered(receipt.get("schemaVersion")), SEALED_FIELDS)))
     seal_problem = _check_seal(receipt)
@@ -994,6 +1200,21 @@ def render(receipt, path):
         "not recorded" if redactions is None else
         "no (0 secret-shaped token(s) matched; the command above is verbatim)" if redactions == 0
         else "yes, %d secret-shaped token(s); the command above is NOT verbatim" % redactions))
+    check_id = registered_check_id(receipt)
+    out.append("check id       %s" % (check_id or "none: FREE FORM, so this receipt is "
+                                                  "advisory and satisfies no required check"))
+    if check_id:
+        binding = receipt.get("checkBinding") or {}
+        out.append("check kind     %s" % (receipt.get("checkKind") or "not recorded"))
+        out.append("check spec     sha256 %s from %s"
+                   % (receipt.get("checkSpecSha256"),
+                      binding.get("registryPath") or "not recorded"))
+        for entry in (binding.get("runnerFiles") or []):
+            out.append("  runner %-12s %s" % (str(entry.get("sha256"))[:12],
+                                              entry.get("path")))
+        out.append("check env      %s" % (binding.get("environmentNote") or "not recorded"))
+    out.append("check source   %s" % (receipt.get("checkIdSource")
+                                      or "not recorded (this receipt predates the registry)"))
     kinds = sorted(declared_kinds(receipt))
     out.append("check kinds    %s" % (", ".join(kinds) if kinds else "none declared"))
     out.append("kind source    %s" % (receipt.get("checkKindsSource")
@@ -1060,6 +1281,14 @@ def _parser():
                           "This is a declaration, not a proof: the wrapper runs the command, "
                           "it does not inspect what the command checks"
                           % "|".join(CHECK_KIND_NAMES))
+    run.add_argument("--check", default=None, dest="check",
+                     help="run the check registered under this id in .sbe/checks.yml. The "
+                          "executable, the arguments, the working directory and the covered "
+                          "paths all come from the registry and NOTHING on this command line "
+                          "replaces any of them. Without it the run is free form: advisory "
+                          "evidence that satisfies no required policy check")
+    run.add_argument("--checks-file", default=None, dest="checks_file",
+                     help="read the registry from this path instead of <cwd>/.sbe/checks.yml")
     run.add_argument("--base", default=None, help="the commit to diff from for --covers")
     run.add_argument("--head", default="HEAD", help="the commit this receipt is made against")
     run.add_argument("--cwd", default=".", help="the repository to run in")
@@ -1101,16 +1330,18 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
         return exit_usage
 
     if args.sub == "run":
-        if not command:
+        if not command and not args.check:
             sys.stderr.write("sbe evidence run: no command given. Usage: sbe evidence run "
-                             "--out receipt.json -- <command...>. This wrapper runs the "
-                             "command itself; there is nothing here that accepts a duration "
-                             "or an exit code you typed.\n")
+                             "--check <id> --out receipt.json, or sbe evidence run --out "
+                             "receipt.json -- <command...>. This wrapper runs the command "
+                             "itself; there is nothing here that accepts a duration or an "
+                             "exit code you typed.\n")
             return exit_usage
         try:
             receipt = generate(os.path.abspath(args.cwd), command, base=args.base,
                                head=args.head, covers=args.covers, timeout=args.timeout,
-                               kinds=args.kind)
+                               kinds=args.kind, check_id=args.check,
+                               registry_path=args.checks_file)
         except ReceiptUnreadable as exc:
             sys.stderr.write("sbe evidence run: no receipt written. %s\n" % exc)
             return exit_failed
@@ -1127,7 +1358,14 @@ def main(rest, exit_ok=0, exit_failed=1, exit_usage=2):
             return exit_failed
         level, why = trust_level(receipt)
         sys.stdout.write(
-            "\nsbe evidence run: receipt written to %s. Trust %s (%s). Command exited %d in "
+            "\nsbe evidence run: %s\n"
+            % ("registered check %s (kind %s, specification digest %s)"
+               % (receipt["checkId"], receipt["checkKind"],
+                  str(receipt["checkSpecSha256"])[:12]) if receipt["checkId"]
+               else "FREE FORM run: no registered check, so this receipt is advisory and "
+                    "satisfies no required policy check"))
+        sys.stdout.write(
+            "sbe evidence run: receipt written to %s. Trust %s (%s). Command exited %d in "
             "%.3fs, over %d covered file(s) from %s. Declared check kind(s): %s. stdout and "
             "stderr are recorded as digests only. argv held %d secret-shaped token(s) and "
             "%s.\n"

@@ -146,7 +146,7 @@ receipt, so LOCAL-ADVISORY is never something a reader has to remember.
 
 Nothing stops: anybody who has read `src/brothersbe/evidence.py`. The seal is
 tamper evidence, not a signature: the input is the receipt itself and there is
-no key. `PROTECTED-CI` is only as trustworthy as whatever set `SBE_CI_RUN_ID`.
+no key. `CI-CLAIMED` says exactly that and no more: whatever set `SBE_CI_RUN_ID` is unverified, which is why no label above it exists in this release.
 And nothing checks that the command was the RIGHT command: a receipt for `true`
 is a flawless receipt for a run that tested nothing.
 
@@ -320,7 +320,7 @@ Gets: the ability to report a green gate over a red tree, and the secrets in
 that job.
 
 Stopped by: nothing here. The gates run ON the runner, so a compromised runner
-is a compromised verdict. `PROTECTED-CI` on a receipt records that
+is a compromised verdict. `CI-CLAIMED` on a receipt records that
 `SBE_CI_RUN_ID` was set by the environment; it does not authenticate it, and
 nothing here can tell a run id minted by a CI system from one an agent exported
 into its own shell.

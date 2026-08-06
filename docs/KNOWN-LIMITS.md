@@ -392,7 +392,7 @@ moved. What that does NOT establish, stated where the behavior is:
   there is no key. A locally generated receipt is therefore never more than
   LOCAL-ADVISORY, and `show` says so on every receipt rather than leaving it to
   the reader to remember.
-- `PROTECTED-CI` is only as trustworthy as the environment that set
+- `CI-CLAIMED` is only as trustworthy as the environment that set
   `SBE_CI_RUN_ID`. Nothing here can tell a run id minted by a CI system from one
   an agent exported into its own shell. The label states where the value came
   from; it does not authenticate it. What makes it worth having is that a
@@ -1468,3 +1468,66 @@ Full text: `src/brothersbe/tasks.py` (`RECORD_FIELDS`, `migrate_registry`,
 `tools/test_sbe_tasks.py` (`TestChangeScopedIdentity`, `TestSchemaMigration`),
 `tools/test_sbe_work.py` (`TestChangeScopedStart`,
 `TestStartTwoDossiersUnderDefaultFlags`, `TestBriefUnscopedLookupNeverRaises`).
+## A registered check binds a command, and cannot say the command is a good check (BR-1012)
+
+`.sbe/checks.yml` and `src/brothersbe/checks.py` close a real hole: `sbe
+evidence run --check <id>` resolves the executable, the argument vector, the
+working directory, the covered globs and the runner files out of the registry,
+takes no substitution from the caller, and seals `checkId`, `checkKind`,
+`checkSpecSha256` and the whole binding into the receipt, so `sbe evidence
+verify` can prove afterwards that the REGISTERED command ran, with the
+registered arguments, over the files that check covers, against runner bytes
+that still hash the same. A redefined check, a renamed or edited runner, a
+changed argument vector, or a receipt whose coverage sits outside the check's
+own globs, each invalidate the old receipt by name.
+
+What none of that proves is that the registered command performs a real check.
+A registry entry pointing `migration-rehearsal` at a script that prints nothing
+and exits zero would produce receipts that verify perfectly, and this module
+cannot read the script's intent any more than the wrapper under it can read a
+free-form command's. The only defence is that `.sbe/checks.yml` sits in the
+control-plane rule of `.sbe/policy.yml`, so changing it owes control-plane
+evidence and a protected approval from somebody who is not the agent proposing
+the change. That is a review control, not a computed one, and it is stated here
+rather than implied by the strength of the hashes around it.
+
+Two narrower residuals, named rather than folded into the sentence above. An
+executable resolved from PATH (`python3`) is NOT hashed, because a digest of one
+machine's interpreter is not reproducible on another, so the binding covers the
+runner FILES and not the interpreter that reads them. And a check this
+repository owes but has not built (`migration-rehearsal`,
+`migration-reconciliation`, `claude-plugin-e2e`, `numerical-reconciliation`,
+`security-policy`) is listed under `unregistered:` with its reason instead of
+being registered against a script that does not exist: the policy engine reports
+MISSING for those, which blocks, and that is the honest state and not a gap the
+registry papers over.
+
+Full text: `src/brothersbe/checks.py`, `.sbe/checks.yml`,
+`src/brothersbe/evidence.py` (`trust_level`, `_check_registered`).
+
+## There is no protected evidence level in this release
+
+`PROTECTED-CI` used to be minted whenever `SBE_CI_RUN_ID` was set. Any local
+process can export that variable, and the receipt seal is a checksum over the
+receipt's own fields, so it proves the receipt was not edited afterwards and
+proves nothing at all about who produced it. A label must never be stronger
+than its evidence, so the label was removed rather than explained away.
+
+Two consequences, both stated where they bite rather than only here:
+
+1. The strongest level this release mints is `CI-CLAIMED`, whose own sentence
+   is the whole claim: CI shaped metadata was recorded but no protected
+   identity was verified.
+2. `.sbe/policy.yml` ships with `protectedEvidenceRequired: false`. The
+   mechanism is intact and still refuses both `LOCAL-ADVISORY` and
+   `CI-CLAIMED` when a policy turns it on, which
+   `tools/test_sbe_check_registry.py` asserts directly. It is off here because
+   turning it on while no protected level exists would not make this
+   repository strict, it would make it stuck: every governed change would
+   report UNPROTECTED forever, demanding a proof nothing can currently issue.
+
+Both flip in the same change that lands cryptographic attestation binding a
+receipt to its repository, workflow, commit and run. Until then, any document
+claiming this project can prove where a receipt came from is wrong, and this
+entry is the correction.
+

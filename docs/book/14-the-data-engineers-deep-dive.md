@@ -264,10 +264,12 @@ read 3 orders from orders.csv
 aggregated 2 region(s) for 2026-07-01
 wrote 3 rows to daily_totals
 
-sbe evidence run: receipt written to .sbe/evidence/pipeline-run.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 3 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to .sbe/evidence/pipeline-run.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 3 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 209.50
 
-sbe evidence run: receipt written to .sbe/evidence/reconcile-run.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to .sbe/evidence/reconcile-run.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 Two receipts, two exit codes of 0, both LOCAL-ADVISORY for the plain reason

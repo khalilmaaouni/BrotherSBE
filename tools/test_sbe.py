@@ -1532,8 +1532,29 @@ class TestCliSurface(unittest.TestCase):
         # it when wave 9 built the adoption kit: each is now a real command. The
         # list is the wave-by-wave record of what is still owed, so a name leaves
         # it only when something stands behind it.
-        unbuilt = ["policy", "exceptions"]
+        # `policy` left this list when the required-evidence engine shipped: it
+        # now reads .sbe/policy.yml, evaluates a diff against it and exits 1 on
+        # a MISSING requirement. The assertion below pins the direction, so a
+        # regression that reduced it back to a refusal fails here rather than
+        # passing as "still unbuilt, as declared".
+        unbuilt = ["exceptions"]
+        built_since = ["policy"]
         known = [n for (n, _h, _r) in cli.COMMANDS]
+        for name in built_since:
+            self.assertIn(name, known, "%s vanished from the command table" % name)
+            # A REAL invocation, not `--help`. Asking argparse for help exits 0
+            # before any runner is reached, so a `--help` probe here passed just
+            # as happily against the NOT BUILT stub and asserted nothing at all.
+            # `--base HEAD` is an empty range, which is the cheapest run that
+            # still goes all the way through the command.
+            out = self._run(name, "evaluate", ".", "--base", "HEAD", "--json")
+            self.assertNotEqual(out.returncode, cli.EXIT_NOT_BUILT,
+                                "%s exited %d (NOT BUILT) after it shipped; a built command "
+                                "that refuses is worse than one that never existed"
+                                % (name, out.returncode))
+            self.assertNotIn("NOT BUILT", out.stderr + out.stdout)
+            self.assertIn("\"verdict\"", out.stdout,
+                          "%s produced no report: %s%s" % (name, out.stdout, out.stderr))
         for name in unbuilt:
             self.assertIn(name, known, "%s vanished from the command table" % name)
             out = self._run(name)

@@ -52,6 +52,25 @@
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/tools/sbe_fence_hook.py\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/tools/sbe_bash_write_guard.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/tools/sbe_session_reconcile.py\""
+          }
+        ]
       }
     ]
   }
