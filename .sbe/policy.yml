@@ -126,9 +126,22 @@ rules:
     minimumTier: "T3"
     requiredChecks:
       - "control-plane-tests"
-      - "claude-plugin-e2e"
-    requiredApprovals:
-      - "control-plane-owner"
+      # claude-plugin-e2e is NOT listed, and the omission is the honest half of
+      # a pair. `.sbe/checks.yml` records it under `unregistered` with its
+      # reason: the real Claude Code end to end gate is not built, so naming it
+      # here would demand a receipt from a runner that does not exist, and this
+      # repository would block its own control-plane changes forever while
+      # proving nothing. It is owed as OWED-10 in program/OWED.json, and it
+      # returns to this list in the same change that registers its runner. A
+      # required check whose registry entry says it cannot exist is a
+      # contradiction, not a control.
+    # requiredApprovals is omitted for the same class of reason, stated rather
+    # than left as a silent gap: this repository has ONE human, and GitHub does
+    # not let an author approve their own pull request, so a required approval
+    # from a control-plane owner could never be satisfied here. The rule returns
+    # the day a second person joins, which docs/KNOWN-LIMITS.md also records.
+    # An adopter repository with two or more people restores the two lines
+    # above and below this comment and gets the full control.
     strictWaivers: true
 
   - id: api-or-event-contract

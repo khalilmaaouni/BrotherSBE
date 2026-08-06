@@ -334,6 +334,37 @@ def changed_entries(cwd, base, head):
     return entries
 
 
+
+#: Path shapes whose CONTENT is an example rather than a change to the estate:
+#: test files, fixtures and documentation. A path glob still matches these
+#: normally, so a policy that names `docs/**` still governs docs; only the
+#: content sniffer is held back.
+EXAMPLE_SURFACES = (
+    "tools/test_*.py", "tests/*", "tests/**/*", "*_test.py", "test_*.py",
+    "*/fixtures/*", "*/fixtures/**/*", "evals/*", "evals/**/*",
+    "docs/*", "docs/**/*",
+)
+
+
+def _is_example_surface(path):
+    """True when a content signal must not fire on this path.
+
+    Found by running this engine against its own repository, which is the only
+    place it could have been found: the tests that PROVE a migration is caught
+    contain the migration text, and the guides that TEACH the migration gate
+    quote the DDL they teach. Sniffing their added lines demanded a migration
+    rehearsal receipt for a change that touches no database at all, and the
+    rule that fires on everything is the rule an operator learns to waive.
+
+    Scoped deliberately narrowly. A path glob is untouched, so a policy naming
+    `docs/**` or `tests/**` still governs those paths; what is held back is the
+    inference FROM CONTENT that a file describes a change to production state.
+    A real migration living in a directory nobody declared is still caught,
+    because it does not live on one of these surfaces.
+    """
+    normalized = str(path).replace("\\", "/")
+    return any(path_matches(pattern, normalized) for pattern in EXAMPLE_SURFACES)
+
 def _signal_pattern(signal):
     detector_id = SIGNAL_DETECTORS[signal]
     for det_id, _why, _sets, _path_pat, content_pat in DETECTORS:
@@ -364,7 +395,8 @@ def match_rules(policy, entries, cwd, base, head):
                 if path_matches(pattern, path):
                     why = "path matches %s" % pattern
                     break
-            if why is None and rule["contentSignals"] and entry["status"] != "D":
+            if (why is None and rule["contentSignals"] and entry["status"] != "D"
+                    and not _is_example_surface(path)):
                 body = added_lines(cwd, base, head, path).lower()
                 for signal in rule["contentSignals"]:
                     if re.search(_signal_pattern(signal), body):

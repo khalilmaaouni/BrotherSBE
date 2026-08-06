@@ -101,6 +101,33 @@ class PolicyFixture(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", message)
         return git(self.repo, "rev-parse", "HEAD")
 
+    def demand_the_full_template(self):
+        """Turn the demanding settings ON in THIS fixture's copy of the policy.
+
+        The SHIPPED policy is scoped to what this repository can actually
+        satisfy today: no protected evidence level exists to demand
+        (BR-1013), the Claude Code end to end runner is not built
+        (OWED-10), and a single human cannot approve their own pull
+        request. Each omission is written into `.sbe/policy.yml` beside
+        the line it removed. The mechanism itself is untouched, and these
+        tests are what proves that: they restore the full template in
+        their own copy and assert the engine still refuses everything it
+        should.
+        """
+        path = os.path.join(self.repo, ".sbe", "policy.yml")
+        with open(path) as handle:
+            text = handle.read()
+        text = text.replace("protectedEvidenceRequired: false",
+                            "protectedEvidenceRequired: true")
+        needle = '    requiredChecks:\n      - "control-plane-tests"'
+        assert needle in text, "the shipped control-plane rule changed shape"
+        text = text.replace(needle, needle
+                            + '\n      - "claude-plugin-e2e"'
+                            + '\n    requiredApprovals:'
+                            + '\n      - "control-plane-owner"', 1)
+        write(self.repo, os.path.join(".sbe", "policy.yml"), text)
+        self.commit("this fixture demands the full template")
+
     def evaluate(self, *extra):
         """The JSON report and the exit code, as an object with both on it.
 
@@ -208,6 +235,7 @@ class MigrationEvidence(PolicyFixture):
         saying INVALID about it would be a lie the operator would waste an hour
         on.
         """
+        self.demand_the_full_template()
         # The receipt below is minted through the REGISTERED path, which is the
         # only way to carry a check id since `.sbe/checks.yml` landed: checkId
         # is inside SEALED_FIELDS now, so hand-writing the name of an obligation
@@ -285,6 +313,40 @@ class WhatMatches(PolicyFixture):
         for record in result.report["requirements"]:
             self.assertEqual(record["state"], "NOT-REQUIRED", record["requirement"])
         self.assert_no_no_data(result.report)
+
+    def test_ddl_inside_a_test_file_does_not_demand_a_migration_rehearsal(self):
+        """Content signals must not fire on test, fixture and documentation
+        surfaces, and this is the direction that keeps the engine usable.
+
+        Found by running this engine against its own repository, which is the
+        only place it could have been found: the tests that PROVE a migration
+        is caught contain the migration text, so the sniffer demanded a
+        migration rehearsal receipt for a change that touches no database at
+        all. A rule that fires on every file discussing a migration is a rule
+        an operator learns to waive."""
+        write(self.repo, os.path.join("tools", "test_sbe_example.py"),
+              'SQL = "CREATE TABLE greeting_log (id INTEGER PRIMARY KEY);"\n'
+              'DROP = "ALTER TABLE greeting_log DROP COLUMN name;"\n')
+        self.commit("a test fixture that quotes DDL")
+        result = self.evaluate()
+        self.assertIsNotNone(result.report, result.stderr)
+        self.assertNotIn("database-migration",
+                         [r["id"] for r in result.report["matchedRules"]],
+                         "a test file quoting DDL activated the migration rule")
+
+    def test_the_same_ddl_in_a_real_migration_still_fires(self):
+        """The calibration for the exclusion above. Without it, the exclusion
+        could be silently over-broad and this engine would stop catching the
+        thing it exists to catch, with every test still green."""
+        write(self.repo, os.path.join("db", "0002_drop_a_column.sql"),
+              "ALTER TABLE greeting_log DROP COLUMN name;\n")
+        self.commit("a real migration outside every declared directory")
+        result = self.evaluate()
+        self.assertIsNotNone(result.report, result.stderr)
+        self.assertIn("database-migration",
+                      [r["id"] for r in result.report["matchedRules"]],
+                      "a real migration carrying the same DDL was not caught, so the "
+                      "exclusion above is too broad and the gate is now blind")
 
     def test_an_api_schema_deletion_requires_contract_compatibility_evidence(self):
         """Required test 5.
@@ -372,6 +434,7 @@ class ApprovalsAndBypasses(PolicyFixture):
         no control-plane-owner approval is MISSING an approval, and MISSING
         blocks: an approval nobody gave is not an approval nobody needed.
         """
+        self.demand_the_full_template()
         self._touch_control_plane()
         result = self.evaluate()
         self.assertIsNotNone(result.report, result.stderr)
@@ -412,6 +475,7 @@ class ApprovalsAndBypasses(PolicyFixture):
         the evaluator with no dossier still blocks, and that no step in the
         action is gated on an empty input at all.
         """
+        self.demand_the_full_template()
         self._touch_control_plane()
         result = self.evaluate("--dossier", "")
         self.assertIsNotNone(result.report, result.stderr)
@@ -435,6 +499,7 @@ class ApprovalsAndBypasses(PolicyFixture):
         the control plane rule declares strictWaivers: an exception on it
         records the decision, it does not clear it.
         """
+        self.demand_the_full_template()
         self._touch_control_plane()
         complete = {"ruleId": "authority-or-control-plane",
                     "requirement": "approval:control-plane-owner",
@@ -547,7 +612,23 @@ class PolicyFileItself(PolicyFixture):
         self.assertEqual(ids, ["api-or-event-contract", "authority-or-control-plane",
                                "database-migration", "money-personal-or-partner-data",
                                "production-infrastructure"])
-        self.assertTrue(loaded["protectedEvidenceRequired"])
+        # The shipped file turns the protected demand OFF, and the reason
+        # is asserted rather than trusted: no protected trust level exists
+        # in this release, so demanding one would block every governed
+        # change forever while proving nothing. The mechanism is proven by
+        # the tests above, which turn the demand back on in their own copy.
+        self.assertFalse(loaded["protectedEvidenceRequired"])
+        with open(SHIPPED_POLICY) as handle:
+            body = handle.read()
+        for phrase in ("protectedEvidenceRequired: false", "stuck", "attestation"):
+            self.assertIn(phrase, body,
+                          "the shipped policy turns a demand off without recording %r, "
+                          "so a reader is told what it does and not why" % phrase)
+        for phrase in ("claude-plugin-e2e", "OWED-10", "ONE human"):
+            self.assertIn(phrase, body,
+                          "the shipped policy omits a requirement without naming %r, and "
+                          "an omission nobody explained cannot be told apart from an "
+                          "oversight" % phrase)
         for rule in loaded["rules"]:
             if rule["id"] == "api-or-event-contract":
                 continue
