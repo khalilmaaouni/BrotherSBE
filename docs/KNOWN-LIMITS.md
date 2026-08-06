@@ -1296,3 +1296,112 @@ command that exits nonzero is not itself logged anywhere just because it
 failed.
 
 Full text: `src/brothersbe/tasks.py` (`cmd_open`, `claims_overlap`).
+
+
+## Task identity becomes (change, taskId); the headline collision it closes, and what remains (card 1)
+
+This AMENDS "status --team reads the estate, it does not phone anyone",
+above: that entry's "structural fact this view had to design around rather
+than fix" (plan task ids are per-change, every derived plan starts at T01,
+while the task registry was one global table keyed by id alone) is now
+partly closed at its root, in the registry itself, rather than only worked
+around downstream. `src/brothersbe/tasks.py`'s record schema gains a
+`change` field (schemaVersion 1.0 to 1.1); a task's identity is the pair
+(`change`, `id`), not `id` alone. `sbe work start` stamps `change` from the
+dossier basename (the same string its branch name already carried,
+`sbe/<change>/<taskId>`), so T01 derived from one dossier no longer refuses
+to open because an unrelated dossier's own T01 is open. `sbe task open`
+gains `--change` directly for the same reason; omitted, a task's change is
+the empty, unscoped string, colliding by id alone exactly as every task did
+before this pair existed. A bare id given to `sbe task close` / `sbe work
+check|finish|remove` still resolves unambiguously in the overwhelming common
+case of one match; when it resolves to open (or recorded) tasks in more than
+one change, `AmbiguousTaskId` refuses and names every colliding
+(change, id) pair rather than guessing, and `--change` disambiguates (the
+value given is STRIPPED before comparison, the same way `sbe task open
+--change` strips it before storing, so a padded value that opened cleanly
+stays addressable by the identical padded string on `close`/`check`/
+`finish`/`remove`; a mismatch here was fixed in the same round this file's
+own "does not close" list below was corrected). `sbe work start`'s
+WORKTREE directory (not just the registry record) also closes the headline
+collision under its own documented DEFAULT flags: see the second bullet
+below.
+
+What this does NOT close, stated here because a fix that oversells itself is
+worse than none:
+
+- **`sbe work brief`'s own dependency and already-claimed checks stay
+  unscoped, by id alone**, the SAME collision class `sbe work start` closes.
+  `tools/test_sbe_work_brief.py`, a separate suite outside this change's
+  fence, pins that unscoped behavior with fixtures written before the
+  `change` field existed; moving `cmd_brief` to scoped checks the way
+  `cmd_start` moved is left for a follow-up that also extends that suite.
+  `_dependency_problem` (`src/brothersbe/work.py`) takes an optional
+  `change`; `cmd_brief` passes none, `cmd_start` passes its own `change_id`.
+  Because it is unscoped, `brief`'s already-claimed lookup never resolves to
+  more than a single, last-appended record by design; it uses
+  `_last_record_any_change`, a dedicated lookup that NEVER raises
+  `AmbiguousTaskId`, precisely because `brief` carries no `--change` flag to
+  recover with if it did (an earlier build of this pair called the shared,
+  change-aware `_find_record` here instead, which raised on an id spanning
+  more than one change and told the operator to pass a flag `brief` does not
+  have; fixed, `tools/test_sbe_work.py::TestBriefUnscopedLookupNeverRaises`).
+- **`sbe work start`'s WORKTREE directory now closes the headline
+  collision under its own documented DEFAULT flags.** The branch name
+  already carried `change` before this fix (`sbe/<change>/<taskId>`) and
+  never collided; the worktree path defaults to
+  `<repository's parent>/<repo>-sbe-<taskId>`, unchanged from before, for a
+  SINGLE dossier (the common case, and the only case every example in
+  `docs/guides/00-sandbox.md` and `docs/book/` exercises). When that plain
+  default path is ALREADY TAKEN (routinely true after upgrading, since
+  every derived plan starts fresh at "T01" and a sibling dossier's own T01
+  is often already running), `sbe work start` now falls back automatically,
+  and says so out loud on stdout, to a subdirectory of the same parent named
+  for THIS dossier's own change id, so a SECOND dossier's identical task id
+  starts cleanly with no extra flag. What remains, by design, not by gap: an
+  operator who passes an EXPLICIT `--worktree-dir` and points two dossiers
+  at the identical directory by hand still collides there; that is the
+  operator's own choice, never a default trap, and `--worktree-dir` never
+  falls back. Proven by
+  `tools/test_sbe_work.py::TestStartTwoDossiersUnderDefaultFlags` (a REAL
+  second `sbe work start`, two real derived plans, both under true default
+  flags with no `--worktree-dir` at all, alongside a companion test proving
+  the explicit-shared-directory case still refuses).
+- **A pre-migration (schema 1.0) record has no recoverable dossier.**
+  Nothing it carries says which change produced it, so `migrate_registry`
+  does not guess one: every migrated record adopts the empty, unscoped
+  change, stated as a fact about old data, not a promise that migrated
+  records are disambiguated from each other. Migration is explicit,
+  versioned, and runs ONLY on the first WRITE after this build lands
+  (`cmd_open`, `cmd_close`); `sbe task list|fence|check` read a 1.0 registry
+  as-is and never persist a migrated copy themselves. A 1.0 record already
+  carrying a non-string `change` (a hand-edit) refuses the whole migration
+  by name; nothing is silently coerced or rewritten. **The flip side of the
+  same fact, not stated by the round this migration landed in:** identity is
+  now the `(change, id)` pair, so a migrated OPEN record's empty change also
+  no longer collides with a DIFFERENT, non-empty change stamped onto a fresh
+  `sbe task open` / `sbe work start` for the SAME id. An operator's first
+  change-scoped start after upgrading, for an id that already carries a
+  legacy OPEN record, SUCCEEDS rather than refusing (before this pair
+  existed, one global OPEN-by-id-alone check would have refused it
+  outright), leaving TWO OPEN records for one id; a bare
+  `close`/`check`/`finish`/`remove` on that id becomes ambiguous, and
+  `--change ''` is the working escape hatch that still addresses the legacy
+  record on its own. Proven by
+  `tools/test_sbe_tasks.py::TestSchemaMigration::
+  test_a_migrated_open_legacy_record_no_longer_blocks_a_change_scoped_reopen`.
+- **`status --team` and `sbe handover`, both outside this change's fence,
+  are unchanged.** The registry now CARRIES the data that would let
+  `status.py`'s "attributed to changes best-effort by id" and
+  `handover.py`'s own per-id registry scan read the pair instead of
+  guessing by id; neither reads it yet. The "structural fact" sentence in
+  the entry above still describes their behavior accurately today, only no
+  longer the registry's own.
+
+Full text: `src/brothersbe/tasks.py` (`RECORD_FIELDS`, `migrate_registry`,
+`_find_open`, `AmbiguousTaskId`, `_normalize_change`), `src/brothersbe/work.py`
+(`_find_record`, `_last_record_any_change`, `_dependency_problem`, `cmd_start`,
+`cmd_brief`, `_worktree_path`), `docs/CLI.md` (`sbe task`, `sbe work`),
+`tools/test_sbe_tasks.py` (`TestChangeScopedIdentity`, `TestSchemaMigration`),
+`tools/test_sbe_work.py` (`TestChangeScopedStart`,
+`TestStartTwoDossiersUnderDefaultFlags`, `TestBriefUnscopedLookupNeverRaises`).

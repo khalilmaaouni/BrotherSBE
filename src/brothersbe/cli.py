@@ -632,6 +632,36 @@ def _archive_prior_review(path, history_path):
     return True
 
 
+def _derive_review_result(claimed_result, structured_findings):
+    """The stored review result: computed from `structured_findings`, never
+    trusted verbatim from `claimed_result` (the reviewer's own `--result`
+    flag), so a record can no longer assert an overall result its own
+    findings contradict.
+
+    The rule is deliberately the ONE this schema already stores rather than
+    a second, competing notion of "serious enough to fail": a finding still
+    `status == "open"` AND already marked `blocking` by `_merge_finding_
+    group` (LT-202's own severity/confidence/verification bar, computed once
+    there and never re-derived here) means the change is not approved, full
+    stop, regardless of what `claimed_result` says. `blocking` is already
+    False for a finding left `"arbitration"` (see `_merge_finding_group`'s
+    own comment on why), so an unresolved contradiction between two
+    reviewers never forces a result here either; that stays its own
+    NO-DATA, read at `sbe status --team` time.
+
+    Returns `claimed_result` UNCHANGED the moment no open blocking finding
+    exists: an absence of blocking findings is never proof the other way,
+    that the reviewer's own judgement (a hand-entered `"changes-required"`
+    or `"unverifiable"` for a reason this schema cannot see) should be
+    overridden UP to `"approved"`. Only a downgrade to `"changes-required"`
+    is ever derived; an upgrade is never invented from silence.
+    """
+    for finding in structured_findings:
+        if finding.get("status") == "open" and finding.get("blocking"):
+            return "changes-required"
+    return claimed_result
+
+
 def _record_review(target, lines, args, structured_findings=None):
     """Write one durable review record, `11-review.json`, into the dossier at
     `target`, and SAY on stdout what was written.
@@ -684,6 +714,25 @@ def _record_review(target, lines, args, structured_findings=None):
     still gets) omits both new fields entirely, so a record written without
     `--findings-json` is byte-for-byte what CR-09 already wrote: no reader of
     an old record sees a field it does not understand.
+
+    THE RESULT IS DERIVED, NEVER TAKEN ON FAITH, the same moment structured
+    findings exist to derive it from. `args.result` is the reviewer's own
+    claim, typed on the command line; `_derive_review_result` (above) is
+    asked what the findings themselves say, and its answer, not the claim,
+    is what `record["result"]` holds: every existing reader of `"result"`
+    (`status.py`'s ladder check and its severity-11 pass/fail judgement,
+    `handover.py`) already reads that one key, so this alone is what makes
+    those surfaces see the derived result rather than the asserted one,
+    with no read-side change required. The claim itself is never discarded:
+    it is kept verbatim in `rawClaim`, and `resultDisagreement` states
+    outright whether the two differ, so "the record contradicts itself" is
+    never something a reader has to notice by diffing two fields on their
+    own. Both are written ONLY when `structured_findings` is not `None`,
+    the identical gate `findingsSchemaVersion`/`structuredFindings` already
+    use just above, for the identical reason: with no structured findings
+    there is nothing to derive a result FROM, `result` stays exactly
+    `args.result`, and a record written without `--findings-json` carries
+    neither new field, byte-for-byte what it always wrote.
     """
     try:
         try:
@@ -708,6 +757,17 @@ def _record_review(target, lines, args, structured_findings=None):
             return
         head_sha = git.stdout.strip()
 
+        # The stored result: derived from the findings when there are
+        # findings to derive it from, never taken on faith from the
+        # reviewer's own claim. See `_derive_review_result` and this
+        # function's own docstring for why `result` (below) rather than
+        # `args.result` is what every existing reader of `"result"` sees.
+        result = args.result
+        disagreement = False
+        if structured_findings is not None:
+            result = _derive_review_result(args.result, structured_findings)
+            disagreement = result != args.result
+
         record = {
             "schemaVersion": SCHEMA_VERSION,
             "tool": "sbe review",
@@ -715,7 +775,7 @@ def _record_review(target, lines, args, structured_findings=None):
             "headSha": head_sha,
             "reviewer": args.reviewer,
             "reviewerType": args.reviewer_type,
-            "result": args.result,
+            "result": result,
             "findings": findings,
             "acceptedRisks": list(args.accept_risk or []),
             "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -723,6 +783,8 @@ def _record_review(target, lines, args, structured_findings=None):
         if structured_findings is not None:
             record["findingsSchemaVersion"] = _FINDINGS_SCHEMA_VERSION
             record["structuredFindings"] = structured_findings
+            record["rawClaim"] = args.result
+            record["resultDisagreement"] = disagreement
         path = os.path.join(os.path.abspath(target), "11-review.json")
         history_path = os.path.join(os.path.abspath(target), _REVIEW_HISTORY_FILENAME)
         # LANE B-006: archive whatever `path` currently holds BEFORE it is
@@ -746,11 +808,18 @@ def _record_review(target, lines, args, structured_findings=None):
     if structured_findings is not None:
         struct_note = ", %d structured finding(s)" % len(structured_findings)
     history_note = (", 1 prior record archived to %s" % history_path) if archived else ""
+    disagreement_note = ""
+    if disagreement:
+        disagreement_note = (
+            "\nsbe review: result DERIVED from findings, not the reviewer's own claim: "
+            "the record stores %r, an open blocking finding made that necessary, but "
+            "--result claimed %r; both are on record (result, rawClaim).\n"
+            % (record["result"], record["rawClaim"]))
     sys.stdout.write(
         "\nsbe review: review record written, bound to head %s, %d finding(s) and %d "
-        "accepted risk(s)%s%s:\n  %s\n"
+        "accepted risk(s)%s%s:\n  %s\n%s"
         % (head_sha[:12], len(findings), len(record["acceptedRisks"]), struct_note,
-           history_note, path))
+           history_note, path, disagreement_note))
 
 
 def _record_tier_decision(root, data, intake_path, machine_readable):

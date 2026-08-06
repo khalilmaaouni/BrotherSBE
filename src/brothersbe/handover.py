@@ -75,6 +75,7 @@ except ImportError:  # a platform with no fcntl: refuse to write unlocked
     fcntl = None      # rather than reopen the race the lock exists to close
 
 from . import SCHEMA_VERSION
+from . import lifecycle
 from . import tasks as tasks_mod
 from . import status as status_mod
 from . import evidence as evidence_mod
@@ -491,35 +492,180 @@ def _evidence_entries(dossier, root, head):
 
 
 # ---------------------------------------------------------------------------
-# nextAction: one deterministic sentence, priority-ordered so the same state
-# always derives the same action (no timestamps, no ordering jitter, the
-# same law `status.build_team_report`'s own `_next_action` is held to).
+# nextAction: LOOP B: this used to be a private priority chain (`for kind in
+# ("convergence", "approval", "review"): ...`, then a separate dirty-tree
+# check, then receipts, then in-flight, then not-started), the FOURTH
+# hand-rolled next-action ladder `lifecycle.py`'s own module docstring names
+# (`status.build_report`'s old `_next_action`, `build_team_report`'s raw
+# severity-number pick, and `/brothersbe:next`'s prose ladder were the other
+# three). It now builds a list of candidates the identical way `status.py`'s
+# own `_next_action` does -- one `lifecycle.candidate(rung, reason)` per
+# outstanding fact, calling `status.py`'s OWN approval/task/review candidate
+# builder (`_change_ladder_candidates`) directly rather than re-deriving any
+# of those three judgements a second, weaker way -- and reduces through the
+# ONE canonical `lifecycle.reduce_next_action`. On every fact `status.py`
+# ALSO computes (approval, convergence, task readiness, review), this module
+# can no longer disagree with `sbe status` or `sbe status --team` about which
+# one is most urgent for the same commit. It can still, correctly, report a
+# MORE urgent action than either surface would: `lifecycle.RUNG_UNCOMMITTED_
+# STATE` (a dirty working tree) and the task-registry-unusable candidate
+# below both name facts neither `status.py` surface ever inspects at all
+# (a plain `sbe status` never checks working-tree cleanliness; the
+# unparseable-registry case is the narrower claim, verified by an
+# independent refuter on one fixture and true of the PLAIN surface only,
+# since `sbe status --team` does surface an unusable registry through its
+# own report -- see `_handover_candidates`'s own docstring below), so
+# agreement is a claim about the facts both sides share, never a claim that
+# the two surfaces read the identical set of facts for the same commit.
 # ---------------------------------------------------------------------------
 
-def _derive_next_action(evidence_entries, in_flight, not_started, worktrees, receiver):
-    for kind in ("convergence", "approval", "review"):
-        hit = next((e for e in evidence_entries if e["kind"] == kind and e["status"] != "current"),
-                   None)
-        if hit:
-            return "resolve %s: %s" % (kind, hit["detail"])
+def _handover_candidates(root, dossier, head, evidence_entries, worktrees, receiver, all_done):
+    """The candidate list `_derive_next_action` reduces, most of it built by
+    calling functions `status.py` already owns rather than copied here:
+
+      - convergence, at `lifecycle.RUNG_STALE_RECORD` (bound to a commit that
+        moved, always eligible) or `lifecycle.RUNG_CONVERGENCE_FAILURE` (its
+        own `final` is not PASS, always eligible; OR absent, but ONLY once
+        `all_done` -- mirroring `status.py`'s own `_superseded_by_shared_
+        ladder`'s identical gate on its severity-6 finding: an unattempted
+        convergence report is not yet a problem while a task is still open
+        or ready, the SAME BLOCKER A2 reasoning this module's approval
+        candidate below already follows, applied to the one other fact this
+        module reads unconditionally from `evidence_entries` rather than
+        importing a status.py candidate builder for) -- read off
+        `evidence_entries`' own `kind == "convergence"` entry (`_bound_entry`
+        above already judges it the SAME commit-bound way `status.
+        build_team_report`'s own severity-4/6 findings do; there is no
+        separate importable convergence-candidate function in `status.py` to
+        call instead, since team's own check is inlined there, not factored
+        out).
+      - approval's NO-DATA/absent verdict is deliberately NOT read here
+        unconditionally the way the deleted private ladder read it: it
+        comes ONLY from `status_mod._change_ladder_candidates` below, gated
+        on every plan task being closed clean (`status_mod._approval_
+        ladder_candidate`, called from inside that function). An
+        UNCONDITIONAL absent-approval check here would reintroduce, for
+        this module alone, the exact "nag about approval before any task
+        work has even started" divergence BLOCKER A2 closed for
+        `status.py` (see `_task_and_approval_candidates`'s own docstring).
+        ROUND 2: a recorded approval FAILURE, or a STALE approval, is a
+        different fact from "not attempted yet" and IS read unconditionally
+        -- `status_mod._approval_ladder_candidate` (the SAME function,
+        called a second time here rather than copied) is called directly,
+        outside the `all_done` gate, and its result kept only when its own
+        `verdict` is not `"NO-DATA"`, mirroring `status_mod._superseded_by_
+        shared_ladder`'s identical rule for team's own severity-5 finding
+        exactly ("a FAIL at any of the three ... stays eligible regardless
+        of task state," that function's own docstring). Before this round,
+        a genuine recorded FAIL never reached this module's `nextAction`
+        while any task was still open, because `_task_and_approval_
+        candidates` gates the WHOLE `_approval_ladder_candidate` call on
+        `all_done`, FAIL branch included (status.py:886-889) -- a
+        suppression `build_team_report` never has, since it builds its own
+        severity-5 finding directly, outside that gate, and only filters
+        the NO-DATA flavor back out at selection time. Calling the same
+        function twice when `all_done` is True and approval genuinely
+        failed adds two IDENTICAL candidates at the identical rung (same
+        function, same arguments): never two competing wordings for one
+        fact, just a redundant, harmless second copy the reducer's own
+        first-wins tie-break discards.
+      - a task registry that cannot be parsed (`.sbe/tasks.json` exists but
+        is malformed) is its OWN candidate, at `lifecycle.RUNG_ACTIVE_
+        CONFLICT` -- ROUND 2: `status_mod._change_ladder_candidates`
+        swallows `tasks_mod.RegistryUnusable` and returns `[]`
+        (status.py:931-934; see that function's own docstring for why --
+        `build_report`'s ACTIVE CONFLICTS section names the identical
+        failure as a display-only NO-DATA note there, `_section_line` over
+        an empty list, never as a next-action candidate on that surface
+        either). `_classify_tasks` already builds a `task-registry:
+        unavailable` evidence entry for exactly this state (read back
+        below, from `evidence_entries`); before this round it was disclosed
+        but never turned into a candidate, so a dossier whose registry
+        cannot be read fell straight through every task/approval/review
+        check to the `RUNG_FINISH` fallback while its OWN record still
+        listed every plan task as "not started" and the registry as
+        unreadable side by side -- a self-contradicting record whose
+        `nextAction` told the receiver to simply review and acknowledge it.
+      - a dirty worktree, at `lifecycle.RUNG_UNCOMMITTED_STATE`: no fact in
+        `status.py`'s own ladder corresponds to this (a plain `sbe status`
+        never inspects working-tree cleanliness), so it is built here, at
+        the rung `lifecycle.py` reserves for it.
+      - a stale or unavailable evidence receipt, at
+        `lifecycle.RUNG_MISSING_EVIDENCE`.
+      - task-active, task-ready, review-not-cleared and gated approval (once
+        every task is closed clean), via `status_mod._change_ladder_
+        candidates` called directly: the SAME candidates `build_report` and
+        `build_team_report`'s severity-10 finding are both derived from,
+        imported rather than re-derived from this module's own `in_flight`/
+        `not_started` lists the way the deleted private ladder did (which
+        picked `in_flight[0]`/`not_started[0]` with no dependency check at
+        all -- `_change_ladder_candidates`'s own ready-task selection skips
+        a task whose dependencies are not all closed clean, a check the
+        deleted ladder never made).
+      - the fallback, at `lifecycle.RUNG_FINISH`: review this handover,
+        naming `receiver`, so the list handed to `reduce_next_action` is
+        never empty even when nothing above fired.
+    """
+    candidates = []
+
+    # ROUND 2 / MAJOR: an unparseable task registry is its own candidate,
+    # never a silent empty list. See this function's own docstring above.
+    registry_hit = next((e for e in evidence_entries if e["kind"] == "task-registry"), None)
+    if registry_hit is not None:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_ACTIVE_CONFLICT,
+            "resolve the task registry: %s" % registry_hit["detail"]))
+
+    conv = next((e for e in evidence_entries if e["kind"] == "convergence"), None)
+    if conv is not None and conv["status"] == "stale":
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_STALE_RECORD, "resolve convergence: %s" % conv["detail"]))
+    elif conv is not None and conv["status"] == "unavailable":
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_CONVERGENCE_FAILURE, "resolve convergence: %s" % conv["detail"]))
+    elif conv is not None and conv["status"] == "absent" and all_done:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_CONVERGENCE_FAILURE, "resolve convergence: %s" % conv["detail"]))
+
+    # ROUND 2 / MAJOR: a recorded approval FAILURE or a STALE approval must
+    # never be suppressed by the `all_done` gate: reuse `status_mod._
+    # approval_ladder_candidate` directly (never copied) and keep its result
+    # whenever it is not the NO-DATA/absent verdict, mirroring `status_mod.
+    # _superseded_by_shared_ladder`'s identical "a FAIL stays eligible
+    # regardless of task state" rule for team's own severity-5 finding. See
+    # this function's own docstring above.
+    approval_finding = status_mod._approval_ladder_candidate(dossier, head, "")
+    if approval_finding and approval_finding[0]["verdict"] != "NO-DATA":
+        candidates.append(approval_finding[0])
+
     dirty = [w for w in worktrees if w.get("dirty")]
     if dirty:
         w = dirty[0]
         named = (", ".join(w["files"][:5]) + (", ..." if len(w["files"]) > 5 else "")) \
             if w["files"] else w["detail"]
-        return "commit or stash the uncommitted state in %s: %s" % (w["path"], named)
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_UNCOMMITTED_STATE,
+            "commit or stash the uncommitted state in %s: %s" % (w["path"], named)))
+
     receipt_hit = next((e for e in evidence_entries
                         if e["kind"] == "receipt" and e["status"] != "current"), None)
     if receipt_hit:
-        return "resolve evidence: %s" % receipt_hit["detail"]
-    if in_flight:
-        t = in_flight[0]
-        return "continue task %s (owned by %s)" % (t["id"], t.get("agent") or "unassigned")
-    if not_started:
-        t = not_started[0]
-        return "start task %s" % t["id"]
-    return "%s: review this handover with sbe handover show and acknowledge or reject it" \
-        % receiver
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_MISSING_EVIDENCE, "resolve evidence: %s" % receipt_hit["detail"]))
+
+    candidates.extend(status_mod._change_ladder_candidates(root, dossier, head, ""))
+
+    candidates.append(lifecycle.candidate(
+        lifecycle.RUNG_FINISH,
+        "%s: review this handover with sbe handover show and acknowledge or reject it"
+        % receiver))
+    return candidates
+
+
+def _derive_next_action(root, dossier, head, evidence_entries, worktrees, receiver, all_done):
+    candidates = _handover_candidates(
+        root, dossier, head, evidence_entries, worktrees, receiver, all_done)
+    return lifecycle.reduce_next_action(candidates)["reason"]
 
 
 # ---------------------------------------------------------------------------
@@ -619,8 +765,14 @@ def cmd_prepare(args, exit_ok, exit_failed, exit_usage):
         if registry_problem:
             evidence_entries.insert(0, {"kind": "task-registry", "path": ".sbe/tasks.json",
                                         "status": "unavailable", "detail": registry_problem})
-        next_action = _derive_next_action(evidence_entries, in_flight, not_started, worktrees,
-                                          receiver)
+        # LOOP B: the SAME "every plan task closed clean" predicate
+        # `status.py`'s own `_superseded_by_shared_ladder` gates its
+        # severity-6 (convergence) and severity-5 (approval) NO-DATA
+        # candidacy on, read here off the buckets `_classify_tasks` already
+        # produced rather than re-derived a second way.
+        all_done = bool(plan and plan.get("tasks")) and not in_flight and not not_started
+        next_action = _derive_next_action(root, dossier, head, evidence_entries, worktrees,
+                                          receiver, all_done)
         record = {
             "schemaVersion": SCHEMA_VERSION,
             "headSha": head,

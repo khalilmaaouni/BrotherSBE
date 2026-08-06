@@ -252,6 +252,18 @@ captured.
 - date: plan dated 2026-07-31
 - limit: planned endpoint only; the domain serves nothing today and no installer exists, which the plan itself gates behind wave 3
 
+## https://claude.com/claude-code
+- claim: the product page a tester follows to obtain the Claude Code client this plugin requires
+- population: the vendor's own product landing page for Claude Code
+- date: linked from TESTERS.md, captured 2026-08-06
+- limit: vendor page naming its own product, not a measurement, and its install instructions may change without notice here
+
+## https://github.com/khalilmaaouni/BrotherSBE/issues/new?template=tester-report.md
+- claim: the issue form testers file findings through, prefilled with this repository's tester report template
+- population: this repository's own GitHub issue tracker, tester-report template
+- date: template added 2026-08-06
+- limit: a link into this repository's own tracker, so it carries no external evidence at all, and it resolves only while that template file exists
+
 ## https://claude.com/plugins
 - claim: Claude's public plugin browser exists as a distribution surface the plan targets
 - population: the plan's ecosystem reference list, section 15

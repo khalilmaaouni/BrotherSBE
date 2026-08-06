@@ -764,5 +764,342 @@ class TestFrozenSnapshot(HandoverScenario):
                                         "as staleness: %s" % after)
 
 
+# ---------------------------------------------------------------------------
+# LOOP B: `handover.py`'s next action must equal an INDEPENDENT reduction
+# built from the SAME `status.py` candidate builder `_handover_candidates`
+# itself calls (`_change_ladder_candidates`), fed the ACTUAL `worktrees`/
+# `evidence` this run recorded (`12-handover.json`'s own schema fields, read
+# back rather than re-derived live, so the comparison is against exactly
+# what was persisted). This deliberately imports `brothersbe` internals,
+# the SAME `sys.path.insert(0, .../"src")` / `from brothersbe import X` /
+# `sys.path.pop(0)` technique `tools/test_sbe_status.py`'s own `reseal`
+# already uses, rather than the pure black-box CLI style the rest of this
+# file keeps: `sbe status --team` cannot stand in for "the reducer" here,
+# because it does not discover a change at all without either an intake or
+# a validated plan, and has no notion of working-tree dirtiness whatsoever
+# (LOOP B's new `lifecycle.RUNG_UNCOMMITTED_STATE`, which `status.py` never
+# computes), so no black-box surface on its own can name it.
+# ---------------------------------------------------------------------------
+
+def _reduce_independently(root, dossier, head, worktrees, evidence_entries, receiver,
+                          all_done):
+    """The candidate list handed to `lifecycle.reduce_next_action`, built
+    the SAME way `handover._handover_candidates` builds it, but assembled
+    here directly rather than by calling that function -- so a test
+    comparing its result against `handover.py`'s own persisted `nextAction`
+    is not simply calling the function under test a second time and
+    comparing it to itself. The task-active/task-ready/review-not-cleared/
+    gated-approval piece is still `status.py`'s own `_change_ladder_
+    candidates`, called directly (never copied), as is the ROUND 2
+    unconditional approval-FAILURE/staleness read (`status_mod._approval_
+    ladder_candidate`, called a second time, directly, never copied); only
+    the registry-unusable, convergence, dirty-worktree and receipt pieces,
+    which have no importable status.py equivalent, are mirrored here in the
+    small number of lines `_handover_candidates` itself uses for them.
+
+    `root`/`dossier` are realpath-resolved before use, mirroring
+    `handover._real` exactly: on macOS a tmp dir is a `/var/...` symlink to
+    `/private/var/...`, and `status_mod._change_ladder_candidates` composes
+    its own reason text from whichever spelling of `dossier` it is handed,
+    so an unresolved path here would make the text comparison below fail on
+    a path-spelling difference that carries no meaning."""
+    root = os.path.realpath(os.path.abspath(root))
+    dossier = os.path.realpath(os.path.abspath(dossier))
+    sys.path.insert(0, os.path.join(HERE, "..", "src"))
+    try:
+        from brothersbe import lifecycle, status as status_mod
+    finally:
+        sys.path.pop(0)
+
+    candidates = []
+
+    # ROUND 2: mirrors `_handover_candidates`'s own new registry-unusable
+    # candidate, independently, at the identical rung and text.
+    registry_hit = next((e for e in evidence_entries if e["kind"] == "task-registry"), None)
+    if registry_hit is not None:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_ACTIVE_CONFLICT,
+            "resolve the task registry: %s" % registry_hit["detail"]))
+
+    conv = next((e for e in evidence_entries if e["kind"] == "convergence"), None)
+    if conv is not None and conv["status"] == "stale":
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_STALE_RECORD, "resolve convergence: %s" % conv["detail"]))
+    elif conv is not None and conv["status"] == "unavailable":
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_CONVERGENCE_FAILURE, "resolve convergence: %s" % conv["detail"]))
+    elif conv is not None and conv["status"] == "absent" and all_done:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_CONVERGENCE_FAILURE, "resolve convergence: %s" % conv["detail"]))
+
+    # ROUND 2: mirrors `_handover_candidates`'s own new unconditional
+    # approval-FAILURE/staleness read, independently, calling the SAME
+    # status.py function this test file's other candidates already call
+    # (never copied), kept only when its own verdict is not NO-DATA.
+    approval_finding = status_mod._approval_ladder_candidate(dossier, head, "")
+    if approval_finding and approval_finding[0]["verdict"] != "NO-DATA":
+        candidates.append(approval_finding[0])
+
+    dirty = [w for w in worktrees if w.get("dirty")]
+    if dirty:
+        w = dirty[0]
+        named = (", ".join(w["files"][:5]) + (", ..." if len(w["files"]) > 5 else "")) \
+            if w["files"] else w["detail"]
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_UNCOMMITTED_STATE,
+            "commit or stash the uncommitted state in %s: %s" % (w["path"], named)))
+
+    receipt_hit = next((e for e in evidence_entries
+                        if e["kind"] == "receipt" and e["status"] != "current"), None)
+    if receipt_hit:
+        candidates.append(lifecycle.candidate(
+            lifecycle.RUNG_MISSING_EVIDENCE, "resolve evidence: %s" % receipt_hit["detail"]))
+
+    candidates.extend(status_mod._change_ladder_candidates(root, dossier, head, ""))
+
+    candidates.append(lifecycle.candidate(
+        lifecycle.RUNG_FINISH,
+        "%s: review this handover with sbe handover show and acknowledge or reject it"
+        % receiver))
+    return lifecycle.reduce_next_action(candidates)
+
+
+class TestCanonicalNextAction(HandoverScenario):
+    """Reproduced before this lane: `handover.py`'s own `_derive_next_action`
+    checked convergence, then approval, then review, in that FIXED order,
+    regardless of `lifecycle.py`'s own rung values, and only THEN fell
+    through to its own separate `in_flight`/`not_started` picks (no
+    dependency check at all). A dossier with a plan nobody has touched yet
+    (both tasks ready, no convergence recorded) recommended "resolve
+    convergence" -- convergence was always checked first -- even though
+    `status.py`'s own canonical ladder gates an unattempted convergence
+    report behind every task being closed clean (mirroring the identical
+    BLOCKER A2 gate `_task_and_approval_candidates`'s own docstring
+    describes for approval), so the real answer here is to start the ready
+    task.
+    """
+
+    def test_mid_handover_action_equals_the_reducers_pick(self):
+        """A plan exists, nothing has been started (no task registry, no
+        convergence/approval/review): the canonical winner is the ready
+        task, at `lifecycle.RUNG_READY_TASK` (70) -- NOT "resolve
+        convergence" (`lifecycle.RUNG_CONVERGENCE_FAILURE`, 50), which is
+        exactly what the deleted private ladder would have picked instead,
+        since it checked convergence unconditionally before ever looking at
+        task state."""
+        doss = self._change("chg-mid", "src/mid.py")
+        head = self.commit_all("dossier")
+
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        data = self._read_handover(doss)
+
+        self.assertFalse(data["worktrees"][0]["dirty"], data)
+        self.assertEqual(len(data["inFlight"]), 0, data)
+        self.assertEqual(len(data["notStarted"]), 2, data)
+        reduced = _reduce_independently(
+            self.repo, doss, head, data["worktrees"], data["evidence"],
+            "bob@example.com", all_done=False)
+
+        self.assertEqual(reduced["actionId"], "start-ready-task",
+                         "the fixture itself must exercise the ready-task-outranks-"
+                         "unattempted-convergence divergence, or this test proves nothing: %s"
+                         % reduced)
+        self.assertEqual(data["nextAction"], reduced["reason"],
+                         "handover's own next action must equal an INDEPENDENT reduction "
+                         "over status.py's own _change_ladder_candidates: handover=%r "
+                         "reducer=%r" % (data["nextAction"], reduced["reason"]))
+        self.assertNotIn("convergence", data["nextAction"], "an unattempted convergence "
+                         "report must not outrank a ready task before any work has even "
+                         "started: %s" % data)
+
+    def test_acknowledged_handover_action_equals_the_reducers_pick(self):
+        """Every task closed clean, convergence/approval/review all PASS
+        and bound to head -- but, as those three files can only read as
+        CURRENT by existing on disk bound to the very commit that is HEAD,
+        they cannot also be part of that commit (a file cannot commit its
+        own resulting hash), so they sit uncommitted. The canonical winner
+        is therefore the dirty worktree, at
+        `lifecycle.RUNG_UNCOMMITTED_STATE` (52) -- not the
+        `lifecycle.RUNG_FINISH` fallback `status.py`'s OWN ladder would
+        reach for this same task/approval/review state (`status.py` has no
+        notion of working-tree cleanliness at all): the one fact this
+        module adds beyond status.py's canonical ladder. Acknowledging
+        afterward must not re-derive it (a prepared record is a frozen
+        snapshot, `TestFrozenSnapshot` above)."""
+        doss = self._change("chg-ack", "src/ack.py")
+        self.commit_all("dossier")
+        self._closed_record("T01", ["src/ack.py"], agent="alice")
+        self._closed_record("T02", [], agent="alice")
+        # .sbe/tasks.json does not self-reference a commit hash, so (unlike
+        # convergence/approval/review below) it CAN be committed without a
+        # staleness paradox, keeping the ONLY dirty files below the three
+        # gate records this test is actually about. `head` is read AFTER
+        # this commit, so the gate records below bind to the SAME commit
+        # that is HEAD when `sbe handover prepare` actually runs.
+        head = self.commit_all("close tasks")
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "10-approval.json"), "w").write(
+            json.dumps({"headSha": head, "final": "PASS"}))
+        io.open(os.path.join(doss, "11-review.json"), "w").write(json.dumps({
+            "headSha": head, "reviewer": "carol@example.com", "reviewerType": "human",
+            "result": "approved",
+        }))
+
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        prepared = self._read_handover(doss)
+
+        self.assertTrue(prepared["worktrees"][0]["dirty"], prepared)
+        for rel in ("09-convergence.json", "10-approval.json", "11-review.json"):
+            self.assertTrue(any(rel in f for f in prepared["worktrees"][0]["files"]), prepared)
+        reduced = _reduce_independently(
+            self.repo, doss, head, prepared["worktrees"], prepared["evidence"],
+            "bob@example.com", all_done=True)
+
+        self.assertEqual(reduced["actionId"], "resolve-uncommitted-state",
+                         "the fixture itself must leave every status.py-visible fact "
+                         "satisfied, or this test proves nothing: %s" % reduced)
+        self.assertEqual(prepared["nextAction"], reduced["reason"],
+                         "handover's own next action must equal an INDEPENDENT reduction: "
+                         "handover=%r reducer=%r" % (prepared["nextAction"], reduced["reason"]))
+
+        code, text, _ = self.handover("acknowledge", doss, "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        acknowledged = self._read_handover(doss)
+        self.assertEqual(acknowledged["nextAction"], prepared["nextAction"],
+                         "a prepared record is a frozen snapshot: acknowledging must not "
+                         "re-derive nextAction")
+
+
+# ---------------------------------------------------------------------------
+# ROUND 2: two Majors the hostile verdict on round 1 confirmed real.
+# ---------------------------------------------------------------------------
+
+class TestApprovalFailureNeverSuppressed(HandoverScenario):
+    """MAJOR, round 2 hostile verdict: a recorded approval FAILURE, or a
+    STALE approval, must compete for handover's own next action regardless
+    of whether every plan task is closed clean -- mirroring status.py's OWN
+    `_superseded_by_shared_ladder` rule for its severity-5 finding exactly
+    (a FAIL stays eligible regardless of task state; only the NO-DATA/
+    absent flavor is gated behind `all_done`). Before this fix,
+    `_handover_candidates` read approval ONLY through `status_mod._change_
+    ladder_candidates`, whose own `_task_and_approval_candidates` gates the
+    WHOLE `_approval_ladder_candidate` call -- FAIL branch included --
+    behind `all_done` (status.py:886-889), so a genuine recorded FAIL, or a
+    staleness, never reached handover's own `nextAction` while task T01 was
+    still open: the dirty working tree these self-referencing gate records
+    always sit in, uncommitted (the same paradox `TestCanonicalNextAction`'s
+    own module docstring names), won instead, at `lifecycle.RUNG_
+    UNCOMMITTED_STATE` (52) -- the failure was never named at all.
+    """
+
+    def test_a_recorded_approval_failure_outranks_an_open_task(self):
+        doss = self._change("chg-fail-approval", "src/failappr.py")
+        self._open_record("T01", ["src/failappr.py"], agent="alice")
+        head = self.commit_all("dossier with an open task")
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "10-approval.json"), "w").write(
+            json.dumps({"headSha": head, "final": "FAIL"}))
+
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        data = self._read_handover(doss)
+
+        self.assertEqual(len(data["inFlight"]), 1, data)
+        self.assertEqual(len(data["notStarted"]), 1, data)
+        self.assertEqual(
+            data["nextAction"],
+            "resolve the failing controls on the pull request (MISSING APPROVAL)",
+            "a recorded approval FAILURE must never be suppressed just because task T01 "
+            "is still open: %s" % data)
+
+        reduced = _reduce_independently(
+            self.repo, doss, head, data["worktrees"], data["evidence"],
+            "bob@example.com", all_done=False)
+        self.assertEqual(reduced["actionId"], "resolve-missing-approval", reduced)
+        self.assertEqual(data["nextAction"], reduced["reason"],
+                         "handover's own next action must equal an INDEPENDENT reduction: "
+                         "handover=%r reducer=%r" % (data["nextAction"], reduced["reason"]))
+
+    def test_a_stale_approval_outranks_an_open_task(self):
+        doss = self._change("chg-stale-approval", "src/staleappr.py")
+        self._open_record("T01", ["src/staleappr.py"], agent="alice")
+        head = self.commit_all("dossier with an open task")
+        io.open(os.path.join(doss, "09-convergence.json"), "w").write(
+            json.dumps({"final": "PASS", "head": head}))
+        io.open(os.path.join(doss, "10-approval.json"), "w").write(
+            json.dumps({"headSha": "a" * 40, "final": "PASS"}))
+
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        data = self._read_handover(doss)
+
+        self.assertEqual(
+            data["nextAction"],
+            "re-run sbe pr verify against the current head (MISSING APPROVAL)",
+            "a STALE approval must never be suppressed just because task T01 is still "
+            "open: %s" % data)
+
+        reduced = _reduce_independently(
+            self.repo, doss, head, data["worktrees"], data["evidence"],
+            "bob@example.com", all_done=False)
+        self.assertEqual(reduced["actionId"], "refresh-stale-record", reduced)
+        self.assertEqual(data["nextAction"], reduced["reason"], data)
+
+
+class TestUnparseableRegistrySurfacesAsCandidate(HandoverScenario):
+    """MAJOR, round 2 hostile verdict: when `.sbe/tasks.json` cannot be
+    parsed, `status_mod._change_ladder_candidates` swallows `tasks_mod.
+    RegistryUnusable` and returns `[]` (status.py:931-934), stripping every
+    task/approval/review candidate at once. Before this fix,
+    `_handover_candidates` built a `task-registry: unavailable` evidence
+    entry for exactly this state but never turned it into a candidate, so
+    nothing was left and the `RUNG_FINISH` fallback won: the prepared
+    record self-contradicted itself, listing every plan task as
+    "not started" and an unreadable fence registry side by side, while
+    `nextAction` told the named human receiver to simply review and
+    acknowledge the handover.
+    """
+
+    def test_an_unreadable_registry_is_its_own_candidate_never_a_silent_fallback(self):
+        doss = self._change("chg-bad-registry", "src/badreg.py")
+        reg_dir = os.path.join(self.repo, ".sbe")
+        os.makedirs(reg_dir, exist_ok=True)
+        io.open(os.path.join(reg_dir, "tasks.json"), "w").write("{not json at all")
+        head = self.commit_all("dossier with a broken registry")
+
+        code, text, _ = self.handover("prepare", doss, "--outgoing", "alice@example.com",
+                                      "--receiver", "bob@example.com")
+        self.assertEqual(code, 0, text)
+        data = self._read_handover(doss)
+
+        self.assertEqual(len(data["notStarted"]), 2, data)
+        registry_entries = [e for e in data["evidence"] if e["kind"] == "task-registry"]
+        self.assertEqual(len(registry_entries), 1, data)
+        self.assertEqual(registry_entries[0]["status"], "unavailable", data)
+
+        fallback = ("bob@example.com: review this handover with sbe handover show and "
+                   "acknowledge or reject it")
+        self.assertNotEqual(
+            data["nextAction"], fallback,
+            "an unreadable task registry must never silently fall through to the plain "
+            "review-and-acknowledge fallback while it also lists every plan task as "
+            "not-started: %s" % data)
+        self.assertIn("does not parse", data["nextAction"], data)
+
+        reduced = _reduce_independently(
+            self.repo, doss, head, data["worktrees"], data["evidence"],
+            "bob@example.com", all_done=False)
+        self.assertEqual(reduced["actionId"], "resolve-active-conflict", reduced)
+        self.assertEqual(data["nextAction"], reduced["reason"], data)
+
+
 if __name__ == "__main__":
     unittest.main()

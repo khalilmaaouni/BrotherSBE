@@ -15,6 +15,22 @@ touched by this module, and the overlap rule is IMPORTED from it rather than
 re-typed, so the fence a hook refuses over and the fence this registry refuses
 over cannot drift into two different fences.
 
+A task's identity is the pair (`change`, `id`), not `id` alone. Every derived
+plan starts fresh at "T01" (`tools/sbe_plan.py`), so two different dossiers
+routinely produce a task called "T01", and a registry that keyed a task by
+`id` alone could not tell them apart: opening "T01" in dossier B refused
+because "T01" was open in unrelated dossier A. `--change` (default the empty,
+unscoped string, unchanged behavior for a bare `sbe task open`) records which
+change a task belongs to, and every lookup that used to compare `id` alone
+now compares the pair, EXCEPT owned-path overlap: two writers over the same
+file collide regardless of which change either declares, because the file
+does not care which dossier asked for it. A bare id, given with no `--change`,
+still resolves unambiguously in the overwhelmingly common case of exactly one
+match; when it resolves to more than one open (or, for `sbe work`, recorded)
+task across different changes, that is genuine ambiguity, refused by
+`AmbiguousTaskId` naming every colliding (change, id) pair rather than
+guessing which one a bare id meant.
+
 WHAT THIS DOES NOT DO, stated here because a control that oversells itself is
 worse than none:
 
@@ -44,6 +60,29 @@ worse than none:
     comparison: opening a task writes both, so counting either would make an
     ordinary single-writer flow unable to close clean without --force, which
     is this control's own kill criterion.
+  - A pre-migration (schema 1.0) record carried no `change` at all, and there
+    is nothing left to read that would say what dossier produced it: the
+    migration (below) gives it the empty, unscoped change rather than a
+    guessed one. Two records that both migrated to the empty change still
+    collide by id alone, exactly as every record did before this pair
+    existed; this is a stated fact about old data, never a promise that
+    migrated records are disambiguated. The FLIP SIDE of the same fact, not
+    stated by round 1: a migrated OPEN record's empty change also no longer
+    collides with a DIFFERENT, non-empty change stamped onto a fresh open of
+    the SAME id (identity is the pair now, and `''` != `'design/dossier-a'`).
+    Before this pair existed, one global OPEN-by-id-alone check would have
+    refused that reopen outright; now it succeeds, leaving TWO OPEN records
+    for one id, and a bare `sbe task close <id>` on it becomes ambiguous.
+    `--change ''` still addresses the legacy record on its own. See
+    `docs/KNOWN-LIMITS.md` and `TestSchemaMigration` in `tools/test_sbe_tasks.py`.
+  - `sbe work start`'s branch name already carries the change
+    (`sbe/<change>/<taskId>`, `src/brothersbe/work.py`), so two dossiers'
+    same-named task never collide on the branch. Its WORKTREE directory does
+    not: `<repo>-sbe-<taskId>` is keyed by task id alone, so starting the
+    same task id from two different dossiers AT THE SAME TIME still collides
+    at that path even though this registry now permits both records open.
+    That is a filesystem-layout gap, not a registry identity gap, and it is
+    not closed here; see `docs/KNOWN-LIMITS.md`.
 
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. Maturity: INTERNAL-EVAL, exercised on this repository's fixtures
@@ -83,8 +122,12 @@ from sbe_fence_hook import paths_overlap  # noqa: E402
 #: Registry schema versions this module knows how to read. An unknown version
 #: is refused rather than parsed hopefully, and NEVER silently reset: a
 #: registry this module cannot read still records somebody's open fences.
-KNOWN_REGISTRY_VERSIONS = ("1.0",)
-REGISTRY_VERSION = "1.0"
+#: "1.0" predates the `change` field: a task's identity was `id` alone.
+#: "1.1" is the current shape, identity (change, taskId); `migrate_registry`
+#: (below) is the ONLY place a "1.0" registry is turned into "1.1", and it
+#: runs only on a write path (`cmd_open`, `cmd_close`), never merely a read.
+KNOWN_REGISTRY_VERSIONS = ("1.0", "1.1")
+REGISTRY_VERSION = "1.1"
 
 #: The registry file, repo-relative, POSIX spelling. One file, no service.
 REGISTRY_REL = ".sbe/tasks.json"
@@ -105,11 +148,20 @@ DEFAULT_EVIDENCE_DIR = ".sbe/evidence"
 ROLES = ("writer", "reviewer")
 STATUSES = ("open", "closed", "abandoned")
 
-#: Every field a task record carries. Exactly these; "abandoned" is a legal
-#: status value in the schema, and nothing in this wave writes it yet.
-RECORD_FIELDS = ("id", "agent", "role", "worktree", "ownedPaths", "readOnlyPaths",
-                 "baseCommit", "expiry", "status", "verifyCommand", "evidenceId",
-                 "openedAt", "closedAt")
+#: The exact field set of a schema-1.0 record, frozen history: it predates
+#: `change` and is kept ONLY so a 1.0 registry can still be READ (never
+#: written again in this shape) long enough for `migrate_registry` to lift
+#: it to 1.1. Nothing new is ever added here.
+RECORD_FIELDS_1_0 = ("id", "agent", "role", "worktree", "ownedPaths", "readOnlyPaths",
+                     "baseCommit", "expiry", "status", "verifyCommand", "evidenceId",
+                     "openedAt", "closedAt")
+
+#: Every field a CURRENT (1.1) task record carries. Exactly these; "abandoned"
+#: is a legal status value in the schema, and nothing in this wave writes it
+#: yet. `change` is the first half of a task's identity, the pair
+#: (change, id): the empty string means unscoped, the same collide-by-id-alone
+#: behavior a bare `sbe task open` always had.
+RECORD_FIELDS = RECORD_FIELDS_1_0 + ("change",)
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -129,10 +181,56 @@ class DiffUnavailable(Exception):
     about scope having been kept."""
 
 
+class AmbiguousTaskId(RegistryUnusable):
+    """A bare task id, given with no `--change`, matches more than one record
+    across different changes for the lookup being made (more than one OPEN
+    record for `_find_open`; more than one distinct change's record at all
+    for `sbe work`'s own `_find_record`). Identity is the (change, taskId)
+    pair, and returning whichever match happened to be first or last would
+    reopen exactly the T01-in-two-dossiers collision this pair exists to
+    close, so this is raised instead, naming every colliding pair, and the
+    caller decides from there (most callers ask for `--change` to disambiguate).
+
+    Subclasses `RegistryUnusable` on purpose, as a safety net only: every call
+    site this module and `work.py` control catches this specifically for its
+    own correctly-prefixed refusal message, but `RegistryUnusable` is already
+    caught at the top of both `main()` functions, so a call site that forgets
+    to catch this still exits with a clear reason instead of an uncaught
+    traceback. It is not, conceptually, "the registry cannot support a
+    decision at all": the registry is fine, the caller just owes `--change`.
+    """
+    def __init__(self, task_id, matches):
+        self.task_id = task_id
+        self.matches = matches
+        pairs = ", ".join("(change=%r, id=%r)" % (m.get("change") or "", task_id)
+                          for m in matches)
+        super(AmbiguousTaskId, self).__init__(
+            "task id %r is not unique without --change: %d matching record(s): %s. Pass "
+            "--change to say which." % (task_id, len(matches), pairs))
+
+
 def _iso(epoch):
     """ISO 8601 in UTC, to the second, with an explicit Z, the same spelling
     the evidence receipts use."""
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+def _normalize_change(value):
+    """A `--change` value, stripped exactly the way `cmd_open` strips it
+    before storing (`(args.change or "").strip()`), or `value` unchanged
+    when it is not a string (`None`, meaning the flag was never given at
+    all, must stay `None`: that is what tells `_find_open` / `_find_record`
+    to search every change rather than one specific one).
+
+    Every READ site that looks a task up by `--change` (`cmd_close` here,
+    and `cmd_check` / `cmd_finish` / `cmd_remove` in `work.py`) must run the
+    given value through this before comparing, or a padded value that opened
+    fine (stored stripped, by `cmd_open`) becomes permanently unreachable: a
+    raw, un-stripped read compares `'  pad  '` against the stored `'pad'`,
+    never matches, and refuses with a message that misleadingly reads as 'no
+    such open task' for a task that IS open.
+    """
+    return value.strip() if isinstance(value, str) else value
 
 
 def _git(args, cwd):
@@ -185,13 +283,71 @@ def load_registry(root):
     if not isinstance(tasks, list) or not all(isinstance(t, dict) for t in tasks):
         raise RegistryUnusable("%s: 'tasks' is not a list of records; refusing rather "
                                "than resetting" % path)
+    # Version-aware: a schema-1.0 record never carried `change` at all, and
+    # requiring it here would refuse every pre-migration registry outright,
+    # which is exactly the "silently reset" this function exists to never do.
+    # `migrate_registry` is the ONLY place a 1.0 record gains `change`.
+    required = RECORD_FIELDS if version == REGISTRY_VERSION else RECORD_FIELDS_1_0
     for record in tasks:
-        missing = [f for f in RECORD_FIELDS if f not in record]
+        missing = [f for f in required if f not in record]
         if missing:
             raise RegistryUnusable("%s: task %r is missing field(s) %s; refusing rather "
                                    "than guessing what they held"
                                    % (path, record.get("id", "(no id)"), ", ".join(missing)))
     return data
+
+
+def migrate_registry(data):
+    """`data`, upgraded to `REGISTRY_VERSION` ("1.1") if it is not already
+    there. Returns a NEW dict; the one passed in is never mutated. Already-1.1
+    data is returned unchanged (no-op, not an error).
+
+    A schema-1.0 record carried no `change`, and nothing else it holds says
+    what dossier produced it (see the module docstring's list of what this
+    control does not do): this does NOT guess one. Every migrated record
+    adopts the empty, unscoped change "", the same collide-by-id-alone
+    behavior it always had, stated honestly rather than invented. The
+    consequence for `_find_open` specifically: a migrated OPEN record's
+    change="" no longer collides with a DIFFERENT, non-empty change stamped
+    onto a fresh `sbe task open` / `sbe work start` for the SAME id, so an
+    operator's first change-scoped start after upgrading can leave TWO OPEN
+    records for one id (see the module docstring's own bullet on this).
+
+    This is the ONLY function that turns a 1.0 registry into the 1.1 shape,
+    and it is called ONLY from a write path (`cmd_open`, `cmd_close`), right
+    before the read-modify-write those commands are already inside: the
+    on-disk file changes shape on the FIRST WRITE after this build lands,
+    never merely by being read. `list`, `fence` and `check` read a 1.0
+    registry as-is (`record.get("change")` handles its absence) and never
+    call this, so they never persist a migrated copy themselves.
+
+    A registry this function cannot migrate is refused BY NAME, never
+    silently rewritten: an unknown predecessor version (defensive; `open`/
+    `close` only ever reach this after `load_registry` has already refused
+    any version outside `KNOWN_REGISTRY_VERSIONS`, but a caller that built
+    `data` some other way, e.g. a test, gets the same refusal), or a 1.0
+    record that already carries a `change` key of a type this migration was
+    never told how to interpret (a hand-edit, most likely): that record is
+    named and the whole migration is refused, not coerced.
+    """
+    version = data.get("schemaVersion")
+    if version == REGISTRY_VERSION:
+        return data
+    if version != "1.0":
+        raise RegistryUnusable("cannot migrate registry schema version %r to %s; the only "
+                               "known predecessor is 1.0" % (version, REGISTRY_VERSION))
+    migrated = []
+    for record in data.get("tasks") or []:
+        existing = record.get("change")
+        if "change" in record and not isinstance(existing, str):
+            raise RegistryUnusable(
+                "task %r in a registry declared schemaVersion 1.0 already carries a "
+                "non-string 'change' field (%r); refusing to migrate rather than "
+                "guessing what it means" % (record.get("id", "(no id)"), existing))
+        new_record = dict(record)
+        new_record.setdefault("change", "")
+        migrated.append(new_record)
+    return {"schemaVersion": REGISTRY_VERSION, "tasks": migrated}
 
 
 def save_registry(root, data):
@@ -381,11 +537,28 @@ def postcondition(root, task, evidence_dir=DEFAULT_EVIDENCE_DIR):
             "receiptViolations": receipt_violations}
 
 
-def _find_open(data, task_id):
-    for t in data["tasks"]:
-        if t.get("id") == task_id and t.get("status") == "open":
-            return t
-    return None
+def _find_open(data, task_id, change=None):
+    """The single OPEN record for `task_id`, or None when there is none.
+
+    Identity is the (change, taskId) pair. When `change` is given, only an
+    OPEN record whose own `change` equals it can match (never ambiguous: the
+    caller already said which one it means). When `change` is omitted and
+    MORE than one OPEN record shares this `task_id` across different changes,
+    the bare id cannot say which one is meant, and this raises
+    `AmbiguousTaskId` naming every one, rather than silently returning
+    whichever happens to be first in the list, the exact
+    T01-open-in-two-dossiers collision this pair exists to close.
+    """
+    matches = [t for t in data["tasks"]
+              if t.get("id") == task_id and t.get("status") == "open"]
+    if change is not None:
+        for t in matches:
+            if (t.get("change") or "") == change:
+                return t
+        return None
+    if len(matches) > 1:
+        raise AmbiguousTaskId(task_id, matches)
+    return matches[0] if matches else None
 
 
 def cmd_open(args, exit_ok, exit_failed, exit_usage):
@@ -405,15 +578,19 @@ def cmd_open(args, exit_ok, exit_failed, exit_usage):
                          % args.base)
         return exit_usage
     owns = list(args.owns or [])
-    # From here down is the read-modify-write: the registry is read, checked
-    # against every other open task, and (on success) rewritten, all under
-    # one lock, so a second `sbe task open` racing this one cannot read the
-    # same tasks list before this write lands and silently overwrite it.
+    change = (args.change or "").strip()
+    # From here down is the read-modify-write: the registry is read, migrated
+    # to the current schema if it still carries the last one, checked against
+    # every other open task, and (on success) rewritten, all under one lock,
+    # so a second `sbe task open` racing this one cannot read the same tasks
+    # list before this write lands and silently overwrite it.
     with _registry_lock(root):
         data = load_registry(root)
-        if _find_open(data, args.id):
-            sys.stderr.write("sbe task open: refused. Task id %r already exists and is open; "
-                             "close it or pick another id.\n" % args.id)
+        data = migrate_registry(data)
+        if _find_open(data, args.id, change=change):
+            sys.stderr.write(
+                "sbe task open: refused. Task (change=%r, id=%r) already exists and is "
+                "open; close it or pick another id.\n" % (change, args.id))
             return exit_usage
         for other in open_tasks(data):
             for mine in owns:
@@ -437,6 +614,7 @@ def cmd_open(args, exit_ok, exit_failed, exit_usage):
                     return exit_usage
         record = {
             "id": args.id,
+            "change": change,
             "agent": args.agent,
             "role": args.role,
             "worktree": os.path.abspath(args.worktree) if args.worktree else None,
@@ -452,6 +630,10 @@ def cmd_open(args, exit_ok, exit_failed, exit_usage):
         }
         data["tasks"].append(record)
         save_registry(root, data)
+    # UNCHANGED from before this pair existed, on purpose: docs/guides/
+    # 00-sandbox.md and tools/test_sbe_sandbox.py (both outside this
+    # change's fence) pin this exact line byte-for-byte. `sbe task list`,
+    # below, is where the change a task belongs to becomes visible instead.
     sys.stdout.write("sbe task open: %s is open. %s (%s) owns %d path(s): %s. Base %s. "
                      "Close runs the diff postcondition against exactly this "
                      "declaration.\n"
@@ -506,10 +688,18 @@ def cmd_close(args, exit_ok, exit_failed, exit_usage):
     # is durable, not merely after this lock is taken.
     with _registry_lock(root):
         data = load_registry(root)
-        task = _find_open(data, args.id)
+        data = migrate_registry(data)
+        change = _normalize_change(getattr(args, "change", None))
+        try:
+            task = _find_open(data, args.id, change=change)
+        except AmbiguousTaskId as exc:
+            sys.stderr.write("sbe task close: %s\n" % exc)
+            return exit_usage
         if task is None:
-            sys.stderr.write("sbe task close: no OPEN task with id %r in %s\n"
-                             % (args.id, registry_path(root)))
+            sys.stderr.write(
+                "sbe task close: no OPEN task with id %r%s in %s\n"
+                % (args.id, (" in change %r" % change) if change else "",
+                   registry_path(root)))
             return exit_usage
         try:
             result = postcondition(root, task, evidence_dir=args.evidence_dir)
@@ -592,6 +782,12 @@ def cmd_list(args, exit_ok, exit_failed, exit_usage):
     if not live:
         sys.stdout.write("sbe task list: no open tasks in %s\n" % registry_path(root))
         return exit_ok
+    # UNCHANGED column layout, on purpose: docs/book/07-the-task-registry.md
+    # (outside this change's fence) pins this line byte-for-byte against live
+    # output. `sbe task list --json`, above, already carries `change` for
+    # every task (it dumps the raw records), so the pair is still readable
+    # here without moving text a doc-truth suite this change cannot touch
+    # already pinned.
     for t in live:
         sys.stdout.write("%-20s %-10s %-8s base %s  owns: %s%s\n"
                          % (t["id"], t.get("agent", ""), t.get("role", ""),
@@ -681,6 +877,10 @@ def _parser():
                                                   "read from at close")
     op.add_argument("--verify", required=True, help="the command that will prove the "
                                                     "work, recorded with the task")
+    op.add_argument("--change", default=None,
+                    help="the change (dossier) this task belongs to; identity is the "
+                         "(change, taskId) pair. Omitted means the empty, unscoped change: "
+                         "collides by id alone, the same as before this pair existed")
     op.add_argument("--owns", action="append", default=[],
                     help="a repo-relative path this task owns; repeatable")
     op.add_argument("--read-only", action="append", default=[], dest="read_only",
@@ -699,6 +899,9 @@ def _parser():
 
     cl = sub.add_parser("close", help="run the diff postcondition and close on PASS")
     cl.add_argument("id")
+    cl.add_argument("--change", default=None,
+                    help="disambiguate when this id is open in more than one change; "
+                         "required only when it is (AmbiguousTaskId names every pair)")
     cl.add_argument("--force", action="store_true",
                     help="close anyway, recording who and why; the close is marked "
                          "FORCED and is never read as clean")

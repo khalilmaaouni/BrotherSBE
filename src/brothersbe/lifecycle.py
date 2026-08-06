@@ -24,6 +24,22 @@ outstanding fact worth acting on, each naming a `rung` from the table below
 -- and call `reduce_next_action` to pick the single most urgent one. Neither
 function invents its own tie-break or its own idea of which comes first.
 
+LOOP B: a FOURTH hand-rolled ladder was found in `handover.py`'s own
+`_derive_next_action` (a private `for kind in ("convergence", "approval",
+"review"): ...` sequence, checked in that fixed order regardless of this
+module's own rungs, followed by its own separate dirty-worktree, receipt,
+active-task and ready-task checks). It is now folded in the same way:
+`handover.py`'s `_handover_candidates` builds a candidate list, calling
+`status.py`'s own `_change_ladder_candidates` directly for the facts that
+function already owns (active task, ready task, review, and approval's
+NO-DATA/absent verdict, gated on every task being closed clean), and
+`status.py`'s own `_approval_ladder_candidate` a second time, unconditionally,
+for a recorded approval FAILURE or staleness (ROUND 2: never gated the way
+the NO-DATA verdict is, mirroring `status_mod._superseded_by_shared_ladder`'s
+identical rule) -- rather than re-deriving any of those judgements a second,
+weaker way -- and reduces through `reduce_next_action` exactly like every
+other surface here.
+
 Python floor is 3.9: no match statements, no `X | Y` annotations. Standard
 library only. This module reads nothing and writes nothing; it is a pure
 function over facts its callers already gathered, by the same "never a
@@ -42,6 +58,17 @@ RUNG_ACTIVE_CONFLICT = 20
 RUNG_STALE_RECORD = 30
 RUNG_MISSING_APPROVAL = 40
 RUNG_CONVERGENCE_FAILURE = 50
+#: LOOP B: `handover.py`'s own candidate for a dirty, uncommitted worktree at
+#: the moment a handover is prepared. No fact in `status.py`'s own ladder
+#: corresponds to this: a plain `sbe status` never inspects working-tree
+#: cleanliness, so this rung is not borrowed from an existing team severity
+#: the way `handover.py`'s convergence, approval and review candidates are
+#: (see `TEAM_SEVERITY_TO_RUNG`). Placed between convergence failure and
+#: missing evidence: uncommitted state risks losing work outright, which
+#: `handover.py` has always treated as more urgent than a stale evidence
+#: receipt but less urgent than a broken or missing convergence/approval
+#: gate (see that module's `_handover_candidates`).
+RUNG_UNCOMMITTED_STATE = 52
 RUNG_MISSING_EVIDENCE = 55
 RUNG_ACTIVE_TASK = 60
 RUNG_READY_TASK = 70
@@ -61,6 +88,7 @@ _RUNGS = (
     (RUNG_STALE_RECORD, "refresh-stale-record", "stale record"),
     (RUNG_MISSING_APPROVAL, "resolve-missing-approval", "missing approval"),
     (RUNG_CONVERGENCE_FAILURE, "resolve-convergence-failure", "convergence failure"),
+    (RUNG_UNCOMMITTED_STATE, "resolve-uncommitted-state", "uncommitted state"),
     (RUNG_MISSING_EVIDENCE, "provide-missing-evidence", "missing evidence"),
     (RUNG_ACTIVE_TASK, "continue-active-task", "active task"),
     (RUNG_READY_TASK, "start-ready-task", "ready task"),

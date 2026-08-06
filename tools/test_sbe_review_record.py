@@ -745,6 +745,69 @@ class TestNormalizeReviewFindingsUnit(unittest.TestCase):
             self.assertFalse(structured[0]["blocking"], introduced)
             self.assertEqual(structured[0]["introducedByChange"], introduced)
 
+    def test_derive_review_result_downgrades_over_an_open_blocking_finding(self):
+        """The exact defect this feature closes: a reviewer's own claim of
+        `"approved"` must never survive next to a finding this schema
+        already computed as `blocking` and still `"open"`."""
+        structured, errors = self.cli.normalize_review_findings([dict(_GOOD_FINDING)])
+        self.assertEqual(errors, [])
+        self.assertTrue(structured[0]["blocking"], "fixture assumption: this finding blocks")
+        self.assertEqual(structured[0]["status"], "open", "fixture assumption: open by default")
+        derived = self.cli._derive_review_result("approved", structured)
+        self.assertEqual(derived, "changes-required")
+
+    def test_derive_review_result_leaves_the_claim_unchanged_with_no_blocking_finding(self):
+        entry = dict(_GOOD_FINDING, severity="minor")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertFalse(structured[0]["blocking"])
+        for claim in ("approved", "changes-required", "unverifiable"):
+            self.assertEqual(self.cli._derive_review_result(claim, structured), claim)
+
+    def test_derive_review_result_leaves_the_claim_unchanged_with_no_findings_at_all(self):
+        self.assertEqual(self.cli._derive_review_result("approved", []), "approved")
+
+    def test_derive_review_result_ignores_a_blocking_finding_already_fixed(self):
+        """`blocking` is computed independently of `status` at merge time
+        (severity/confidence/verification alone), so a finding the schema
+        still marks `blocking` but that every source agrees is `"fixed"`,
+        with proof, is not `"open"` any more: the derivation reads `status`
+        itself, not `blocking` alone, and a resolved finding never forces a
+        result down."""
+        entry = dict(_GOOD_FINDING, status="fixed", verification="pytest -k duplicate")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "fixed")
+        self.assertEqual(self.cli._derive_review_result("approved", structured), "approved")
+
+    def test_derive_review_result_never_forces_a_result_from_pending_arbitration(self):
+        """A finding left in `"arbitration"` by a status contradiction is
+        already `blocking: False` by `_merge_finding_group`'s own
+        construction (an unresolved disagreement is never a settled
+        blocker); derivation must not reintroduce a forced result here
+        either, the same "the record never judges itself ahead of
+        adjudication" law `_merge_finding_group`'s docstring states."""
+        fixed = dict(_GOOD_FINDING, reviewer="r1", status="fixed",
+                     verification="pytest -k duplicate")
+        rejected = dict(_GOOD_FINDING, reviewer="r2", status="rejected",
+                        disposition={"evidence": "reproduced locally: no duplicate order"})
+        structured, errors = self.cli.normalize_review_findings([fixed, rejected])
+        self.assertEqual(errors, [])
+        self.assertEqual(structured[0]["status"], "arbitration")
+        self.assertFalse(structured[0]["blocking"])
+        self.assertEqual(self.cli._derive_review_result("approved", structured), "approved")
+
+    def test_derive_review_result_never_upgrades_a_stricter_claim(self):
+        """Derivation only ever downgrades toward `"changes-required"`; it
+        never invents an `"approved"` from an absence of blocking findings,
+        overriding a reviewer's own `"unverifiable"` or hand-entered
+        `"changes-required"` the other way."""
+        entry = dict(_GOOD_FINDING, severity="minor")
+        structured, errors = self.cli.normalize_review_findings([entry])
+        self.assertEqual(errors, [])
+        self.assertEqual(self.cli._derive_review_result("unverifiable", structured),
+                         "unverifiable")
+
     def test_a_reviewer_can_never_accept_its_own_risk(self):
         entry = dict(_GOOD_FINDING, reviewer="alice", status="accepted",
                      disposition={"by": "alice", "reason": "low volume today",
@@ -1078,6 +1141,113 @@ class TestStatusReadsStructuredFindings(ReviewScenario):
         self.assertEqual(hits[0]["verdict"], "NO-DATA", hits)
         self.assertIn("1 pending arbitration", hits[0]["detail"])
         self.assertIn("adjudicat", hits[0]["nextAction"])
+
+
+class TestResultDerivation(ReviewScenario):
+    """The record's own `result` is DERIVED from `structuredFindings`, never
+    trusted verbatim from `--result`: an open finding this schema already
+    marked `blocking` forces `"changes-required"` regardless of what the
+    reviewer claimed, the reviewer's own claim preserved verbatim beside it
+    in `rawClaim`, with `resultDisagreement` stating outright whether the
+    two differ. `TestNormalizeReviewFindingsUnit` above covers the pure
+    function (`cli._derive_review_result`) directly; this class proves the
+    same rule end to end, through the real command line and back through
+    `sbe status --team`, which is what actually closes the founder card:
+    the fix is only real if the surface a human or Fable reads sees it."""
+
+    def _write_findings_file(self, findings):
+        path = os.path.join(self.tmp, "findings.json")
+        io.open(path, "w", encoding="utf-8").write(json.dumps(findings))
+        return path
+
+    def _result_hits(self, change="chg-a"):
+        """The review record's own pass/fail/derived-result finding at
+        severity 11, isolated from the sibling structured-findings
+        sub-finding (`TestStatusReadsStructuredFindings._struct_hits`'s own
+        filter, inverted) and from the LANE B-006 same-head history
+        disclosure, neither of which this class is about."""
+        _code, hits, _text = self.team_findings(change, 11)
+        return [f for f in hits if "structured" not in f["detail"].lower()
+                and "prior verdict" not in f["detail"].lower()]
+
+    def test_a_claim_of_approved_over_an_open_blocking_finding_stores_derived_changes_required(self):
+        """CALIBRATED fixture for the founder card: the claim says
+        `approved`, the record's own open blocking finding says otherwise,
+        and the STORED result must be the derived one, not the claim."""
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        findings_path = self._write_findings_file([dict(_GOOD_FINDING)])
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer",
+                                 "Independent Reviewer", "--reviewer-type", "human",
+                                 "--result", "approved", "--findings-json", findings_path)
+        self.assertEqual(code, 0, text)
+        record = json.loads(io.open(os.path.join(doss, "11-review.json"),
+                                    encoding="utf-8").read())
+        self.assertEqual(record["result"], "changes-required",
+                         "an open blocking finding must force the STORED result down, "
+                         "regardless of what --result claimed: %s" % record)
+        self.assertEqual(record["rawClaim"], "approved",
+                         "the reviewer's own claim must survive verbatim beside the "
+                         "derivation: %s" % record)
+        self.assertTrue(record["resultDisagreement"], record)
+        self.assertIn(
+            "result DERIVED from findings", text,
+            "a disagreement between the claim and the derivation must be said "
+            "explicitly on stdout, not left for a reader to notice by diffing two "
+            "fields themselves: %s" % text)
+
+    def test_status_team_reads_the_derived_result_never_the_reviewers_own_claim(self):
+        """THE severity-11 finding `sbe status --team` prints for this
+        record must read the DERIVED result: today's defect is a record
+        that can assert `approved` while its own findings say otherwise, and
+        read as a clean PASS anyway. `cli.py` stores the derived value under
+        the SAME `"result"` key `status.py` already reads, so this is proof
+        the read side sees it correctly with no change to status.py itself."""
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        findings_path = self._write_findings_file([dict(_GOOD_FINDING)])
+        self.sbe("review", doss, "--write", "--reviewer", "Independent Reviewer",
+                 "--reviewer-type", "human", "--result", "approved",
+                 "--findings-json", findings_path)
+        hits = self._result_hits()
+        self.assertTrue(hits, hits)
+        self.assertEqual(hits[0]["verdict"], "changes-required",
+                         "sbe status --team must never read this record as approved: %s"
+                         % hits)
+        self.assertNotEqual(hits[0]["verdict"], "PASS", hits)
+
+    def test_a_claim_that_agrees_with_the_findings_carries_no_disagreement(self):
+        doss, _head, _out = self._make_clean_change("chg-a", "src/a.py")
+        entry = dict(_GOOD_FINDING, severity="minor")  # never blocks
+        findings_path = self._write_findings_file([entry])
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer",
+                                 "Independent Reviewer", "--reviewer-type", "human",
+                                 "--result", "approved", "--findings-json", findings_path)
+        self.assertEqual(code, 0, text)
+        record = json.loads(io.open(os.path.join(doss, "11-review.json"),
+                                    encoding="utf-8").read())
+        self.assertEqual(record["result"], "approved")
+        self.assertEqual(record["rawClaim"], "approved")
+        self.assertFalse(record["resultDisagreement"], record)
+        self.assertNotIn("result DERIVED from findings", text)
+
+    def test_without_findings_json_the_record_carries_no_derivation_fields_either(self):
+        """Extends the LT-202 additive contract
+        (`TestWriteFindingsJson.test_without_findings_json_the_record_carries_neither_new_field`)
+        to the two fields this card adds: with no structured findings there
+        is nothing to derive a result FROM, so a plain `--write` (no
+        `--findings-json`) must still write exactly what it always wrote,
+        `rawClaim` and `resultDisagreement` included among the fields it
+        never adds."""
+        doss = self._change("chg-a", "src/a.py")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "chg-a dossier and source")
+        code, text, _ = self.sbe("review", doss, "--write", "--reviewer", "Independent",
+                                 "--reviewer-type", "human", "--result", "approved")
+        self.assertEqual(code, 0, text)
+        record = json.loads(io.open(os.path.join(doss, "11-review.json"),
+                                    encoding="utf-8").read())
+        self.assertEqual(record["result"], "approved")
+        self.assertNotIn("rawClaim", record)
+        self.assertNotIn("resultDisagreement", record)
 
 
 if __name__ == "__main__":
