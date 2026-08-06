@@ -1,5 +1,5 @@
 id: BR-1008
-title: "Loop G: the Codex track"
+title: "Loop G: foreign runtimes, Codex first, then Gemini, Copilot, Antigravity and Cursor"
 why: >
   A foreign runtime consumes the brief and state schemas Loop B seals. This is the
   one milestone three slice funded now, and the founder ratified on 2026-08-05 that
@@ -34,3 +34,23 @@ risks:
 blocked_by: []
 alerts:
   - "Explicitly NOT a tag blocker, listed so nobody promotes it into one by accident."
+# FOUNDER AUTHORIZATION 2026-08-07, recorded with the decision NOT to act on it
+# tonight. He installed Gemini, Codex, Copilot, Antigravity and Cursor and
+# granted full control to build and test integrations while he slept. I did not
+# start them, and this is the reasoning rather than a silence:
+#   - His own commissioned review ends "anything outside these five fixes is not
+#     a release priority", and the release was one battery and one CI run from
+#     done when the message arrived.
+#   - The ratified plan puts foreign runtimes in Loop G, after the 1.0.0 tag and
+#     after M2, because they consume the contracts Loop B ships.
+#   - Credentials were my third reason and he removed it: he confirmed he is
+#     signed in to all five, so the testing half IS reachable. Sequencing is
+#     what stands, not access. The release goes first because it is nearly
+#     done and because his own review says so; the runtime work starts the
+#     moment it merges, and being signed in means that work can be really
+#     exercised rather than only written.
+# What the authorization DOES change: this item now covers all five runtimes
+# rather than Codex alone, and the credential-free half (the instruction
+# surface each runtime reads, and the capability matrix saying what is verified
+# where) starts as soon as the release is merged. What would flip the decision:
+# him saying the integrations matter more than the noon release.

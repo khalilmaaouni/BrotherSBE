@@ -31,7 +31,7 @@ gantt
     section Windows, under an explicit founder exception
     Windows  diagnose the manifest first pass reader :BR-1007, 1d
     section Codex track, never gating the tag
-    Loop G  the Codex track :crit, BR-1008, after BR-1001, 1d
+    Loop G  foreign runtimes, Codex first, then Gemini, Copilot, Antigravity and Cursor :crit, BR-1008, after BR-1001, 1d
     section The guided layer slice
     Guided layer vertical slice (start, next, status, help, README opening, program ledger) :done, BR-0000, 1d
     Guided project navigator, Claude slice :active, BR-0201, after BR-0000, 1d
@@ -70,7 +70,7 @@ gantt
 - BR-1004: Loop E: guided operations and the human benchmark kit (waits on: BR-1003)
 - BR-1005: Loop F: team and maintainability closed (waits on: BR-1004)
 - BR-1006: The 1.0.0 release packet (waits on: BR-1005)
-- BR-1008: Loop G: the Codex track (waits on: BR-1001)
+- BR-1008: Loop G: foreign runtimes, Codex first, then Gemini, Copilot, Antigravity and Cursor (waits on: BR-1001)
 - BR-1009: sbe watchdog: the 20-minute drift audit, shipped and on by default (waits on: BR-1000)
 - BR-1010: Unit testing protocol, end to end, for backend developers and QA (waits on: BR-1009)
 - BR-1011: Release blocker 3: required-evidence policy engine (waits on: BR-1001)
