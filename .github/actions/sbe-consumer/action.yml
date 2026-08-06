@@ -111,6 +111,53 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Evidence is produced by the run that does the work. This step asks the
+    # policy which registered checks THIS diff requires, runs each one for
+    # real, and writes the receipts into the runner's own temporary directory.
+    #
+    # It is deliberately NOT a fallback to receipts committed into the
+    # repository. A receipt checked in by an author and merely read by a later
+    # job is the thing this project refuses: the job that reads it proves
+    # nothing about the run that made it. Minting here, in the job, is the
+    # honest version of the same convenience.
+    #
+    # A caller who passes receipts-dir keeps full control and this step mints
+    # nothing. A check the registry does not define is skipped here and still
+    # reported MISSING below, which is the correct outcome for an obligation
+    # nobody has built a runner for yet.
+    - name: sbe evidence run (mint the registered checks this diff requires)
+      id: mint
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_BASE: ${{ inputs.base }}
+        SBE_POLICY: ${{ inputs.policy }}
+        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+      run: |
+        set -u
+        if [ -n "$SBE_RECEIPTS_DIR" ]; then
+          echo "receipts-dir was supplied, so this step minted nothing."
+          echo "dir=$SBE_RECEIPTS_DIR" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        MINTED="${RUNNER_TEMP:-/tmp}/sbe-minted"
+        mkdir -p "$MINTED"
+        DISCOVERY="$MINTED/.discovery.json"
+        set -- policy evaluate . --json
+        if [ -n "$SBE_BASE" ]; then set -- "$@" --base "$SBE_BASE"; fi
+        if [ -n "$SBE_POLICY" ]; then set -- "$@" --policy "$SBE_POLICY"; fi
+        "$SBE_PATH" "$@" > "$DISCOVERY" || true
+        REQUIRED=$(python3 "$GITHUB_ACTION_PATH/required_checks.py" < "$DISCOVERY")
+        rm -f "$DISCOVERY"
+        if [ -z "$REQUIRED" ]; then
+          echo "this diff requires no registered check; nothing to mint."
+        fi
+        for CHECK in $REQUIRED; do
+          echo "running registered check: $CHECK"
+          "$SBE_PATH" evidence run --check "$CHECK" --out "$MINTED/$CHECK.json" || \
+            echo "check $CHECK produced no passing receipt; the evaluation below reports it."
+        done
+        echo "dir=$MINTED" >> "$GITHUB_OUTPUT"
     # ALWAYS RUNS, AND HAS NO `if:`. That absence is the control. Every other
     # step in this file used to carry `if: inputs.X != ''`, so a caller who
     # passed nothing got a green job that had verified nothing, and the way
@@ -125,7 +172,7 @@ runs:
         SBE_PATH: ${{ inputs.sbe-path }}
         SBE_BASE: ${{ inputs.base }}
         SBE_POLICY: ${{ inputs.policy }}
-        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+        SBE_RECEIPTS_DIR: ${{ steps.mint.outputs.dir }}
         SBE_DOSSIER: ${{ inputs.dossier }}
         SBE_INTAKE: ${{ inputs.intake }}
         SBE_APPROVALS: ${{ inputs.approvals }}
@@ -200,7 +247,7 @@ runs:
       shell: bash
       env:
         SBE_PATH: ${{ inputs.sbe-path }}
-        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+        SBE_RECEIPTS_DIR: ${{ steps.mint.outputs.dir }}
         SBE_STRICT: ${{ inputs.strict }}
       run: |
         set -eu

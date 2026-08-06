@@ -305,6 +305,8 @@ This is what turns the gates from advisory into blocking, whichever path above y
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
+      - name: Consumer minting fixtures (the job produces the evidence it demands)
+        run: python3 tools/test_sbe_consumer_mint.py
       - name: Converge fixtures (sbe converge)
         run: python3 tools/test_sbe_converge.py
       - name: Decision contract fixtures (every key decision surface names its falsification tier)
@@ -446,7 +448,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 59 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 60 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

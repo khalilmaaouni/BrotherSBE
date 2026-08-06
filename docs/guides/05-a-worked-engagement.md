@@ -767,6 +767,8 @@ step that surfaces any design waiver as something a human is shown:
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
+      - name: Consumer minting fixtures (the job produces the evidence it demands)
+        run: python3 tools/test_sbe_consumer_mint.py
       - name: Converge fixtures (sbe converge)
         run: python3 tools/test_sbe_converge.py
       - name: Decision contract fixtures (every key decision surface names its falsification tier)
