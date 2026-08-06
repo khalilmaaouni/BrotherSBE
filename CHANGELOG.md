@@ -63,6 +63,22 @@ a command run after the last edit; the seal evidence is in the pull request.
   demanding a proof nothing can currently issue. Both flip back in the change
   that lands cryptographic attestation; docs/KNOWN-LIMITS.md carries the same
   statement for a reader who never opens the policy file.
+- Three defects found by running the new engine against THIS repository, which
+  is its first consumer, and each fixed with calibrated tests rather than
+  waived. First, content signals fired on examples: the tests that prove a
+  migration is caught contain the migration text, and the guides that teach the
+  gate quote the DDL they teach, so a change touching no database was required
+  to produce a rehearsal receipt. Content signals now skip test, fixture, eval
+  and documentation surfaces; path globs are untouched, and a real migration
+  outside every declared directory is still caught. Second, the shipped policy
+  required what its own registry says cannot exist (an unbuilt end-to-end
+  runner, and an approval one human cannot give themselves), which would have
+  blocked every control-plane change here forever; both are omitted with the
+  reason written beside the line, and the structure test asserts those reasons
+  are present. Third, staleness judged by the head commit alone made kept
+  evidence permanently stale, because writing a receipt moves the head; it now
+  reconciles a head mismatch against the covered files' own recorded hashes and
+  stays stale unless every one still matches.
 - Honest scope, stated once: the GitHub ruleset itself, cryptographic
   attestation for CI evidence, and the Claude Code end-to-end job in CI are
   NOT in this release. The first is a human step in repository settings, the
