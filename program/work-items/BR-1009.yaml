@@ -1,0 +1,48 @@
+id: BR-1009
+title: "sbe watchdog: the drift audit as a shipped command"
+why: >
+  The founder asked on 2026-08-06 for a watchdog on progress and drift risk, kept
+  as a core attribute rather than a session habit. Phase 0 delivered the session
+  half (a cheap read only agent on a schedule, asking a fixed question list) and
+  the written half (docs/PRINCIPLES.md section 7). The durable half does not
+  exist: when the session ends, the schedule dies with it, and the question list
+  is prose rather than a command. This item makes the deterministic questions a
+  command, so the audit runs the same way for anyone, on any machine, and so a
+  model is asked to judge only what a command could not already answer.
+persona_need: "P3 agent orchestrator, and P1 founder who is told the truth between checkpoints"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: phase-0
+milestone: M1
+depends_on:
+  - "BR-1000"
+spec: docs/PRINCIPLES.md
+acceptance:
+  - "sbe watchdog reports, for every registered fence, whether its worktree modified a file outside that fence, naming the file"
+  - "it reports any commit created in a worker worktree, because workers never commit"
+  - "it reports a lane whose declared files are absent or empty as stalled"
+  - "it reports any em dash or en dash in the changed set"
+  - "it reports NO-DATA, never clean, when the fence registry or a worktree it names is missing"
+  - "it writes nothing and fixes nothing, proven by a test asserting the tree is byte identical after a run"
+  - "python3 tools/test_sbe_watchdog.py prints OK"
+estimated_days: 1
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 300000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "A watchdog that can write is a watchdog that can hide its own findings."
+    mitigation: "Read only by construction, with a test asserting the tree is byte identical after a run."
+    severity: high
+  - risk: "Admitted while Phase 0 was in flight, which is the scope creep the plan's own one-loop rule exists to prevent."
+    mitigation: "Recorded as a work item with its persona need, done-check and budget rather than built inside Phase 0, and it opens only when the owed register allows it."
+    severity: medium
+blocked_by:
+  - "Phase 0 must land first: this reads the fence registry that Phase 0's dispatch gate defines."
+alerts:
+  - "Deliberately NOT built inside Phase 0. The session watchdog and the written principle cover the founder's ask today; this makes it mechanical and portable."
