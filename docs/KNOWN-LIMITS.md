@@ -674,12 +674,18 @@ from what is absent:
   claimed nowhere beyond here.
 
 The upgrade-rollback script carries one limit of its own, stated where the
-behavior is rather than only here: as of this wave, this repository has cut
-no tag (`docs/RELEASE.md`), so `scripts/test-upgrade-rollback.sh` finds no
-previous release to upgrade FROM and reports NO-DATA rather than PASSED,
-every time it runs, until the first tag exists. A NO-DATA verdict here is not
-a weaker pass; it is the honest absence of the one fixture the script needs,
-named as exactly that.
+behavior is rather than only here. This paragraph used to say the repository
+had cut no tag, so the script could only ever report NO-DATA. That stopped
+being true and the text did not follow: `git tag -l` lists v1.0.0-rc.1 and
+v1.0.0-rc.2, and `sh scripts/test-upgrade-rollback.sh` therefore takes its
+REAL path, upgrading from the previous tag to HEAD and back. Two things
+follow. First, the script's verdict is now a genuine PASS or FAIL about this
+repository, not an absence. Second, it fails honestly when the working tree
+disagrees with `CHECKSUMS.sha256`, which is what a stale manifest looks like
+from the rollback side, so run `scripts/checksums.sh CHECKSUMS.sha256` last
+in any change that moves shipped bytes. A NO-DATA verdict remains possible in
+a clone with no tags at all, and there it still means the honest absence of
+the one fixture the script needs, never a weaker pass.
 
 Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
 `scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`

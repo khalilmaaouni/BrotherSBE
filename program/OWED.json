@@ -47,10 +47,12 @@
   {
    "id": "OWED-6",
    "title": "KNOWN-LIMITS tag contradiction, doc says no tag exists while two tags exist",
-   "state": "open",
+   "state": "closed",
    "deferred_by_founder": true,
    "deferral_reason": "Scheduled into Loop C by the approved plan rather than pulled forward.",
-   "closes_in": "BR-1002"
+   "closes_in": "BR-1002",
+   "closed_at": "2026-08-06",
+   "closure_evidence": "docs/KNOWN-LIMITS.md no longer claims the repository cut no tag. Live evidence quoted in the new text: git tag -l lists v1.0.0-rc.1 and v1.0.0-rc.2, and sh scripts/test-upgrade-rollback.sh takes its real upgrade path. The stale-manifest failure mode is named with its fix (checksums last)."
   },
   {
    "id": "OWED-7",
