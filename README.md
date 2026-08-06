@@ -202,6 +202,25 @@ An organization rolling this out across many repositories at once, with a tag pi
 This is what turns the gates from advisory into blocking, whichever path above you installed with. Copy [`.github/workflows/brothersbe-gates.yml`](.github/workflows/brothersbe-gates.yml) into the repo you want guarded, or add its steps to an existing job:
 
 ```yaml
+      - name: Line endings stay bytes (autocrlf off before any file exists)
+        # The tracked manifest hashes exact bytes and .gitattributes rides
+        # INSIDE the checkout, so files extracted before it lands in the
+        # working tree could still be converted by the runner's default
+        # autocrlf: rounds 1 to 3 of this leg watched the same four
+        # early-alphabet files (.brothersbe/config.json, the two
+        # .claude-plugin manifests, .gitattributes itself) hash stale on
+        # first read and identical on re-read (run 31042529271). Turning
+        # conversion off before checkout removes the ordering race the
+        # in-tree attributes file cannot close by itself.
+        run: git config --global core.autocrlf false
+      # Windows-only guard: a no-op where python3 already resolves (the current
+      # windows-latest image), a bridge where an image ships only python.exe.
+      - name: Ensure python3 resolves (guard for images shipping only python.exe)
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            py="$(command -v python)"
+            cp "$py" "$(dirname "$py")/python3.exe"
+          fi
       - name: Hard gates (numbers, migration, approval, ran) block on failure
         run: python3 tools/sbe_gate.py --strict design
       # A waiver is not a pass. `.sbe-exempt` lets a template library or a finished
@@ -352,7 +371,7 @@ The same disclosure the checks demand of evidence, applied to the project itself
 
 - **Measured:** the eval counts, the meta-test scenario count, the lint numbers and the defect-reinjection record ([INVARIANTS.md](INVARIANTS.md)) are recomputed by the suites that print them; a doc quoting a stale one fails an eval.
 - **Run on one estate only:** every threshold in `tables/`, every baseline in [RUBRIC.md](RUBRIC.md), and the hooks in daily use. They are defaults where you are, not measurements of your estate.
-- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. Windows is untested, and the shipped CI covers Linux and macOS only. The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have been executed for `v1.0.0-rc.1` (tagged and pushed to origin); `v1.0.0-rc.2` is tagged locally but, as of this writing, not yet pushed.
+- **Never executed anywhere else:** this project's CI workflow has run in its own repository and in nobody else's; no external adoption is claimed. A windows-latest leg runs the same battery as the Linux and macOS legs, with two POSIX sh scripts excluded by name (docs/KNOWN-LIMITS.md, "Windows CI runs, with named gaps"). The release tag and push steps in [docs/RELEASE.md](docs/RELEASE.md) have been executed for `v1.0.0-rc.1` (tagged and pushed to origin); `v1.0.0-rc.2` is tagged locally but, as of this writing, not yet pushed.
 
 The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md).
 
@@ -361,7 +380,7 @@ The full list, one heading per limit, is [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMIT
 - Python 3, standard library only. There is no `pip install`, no lockfile, and no dependency to audit beyond the tree itself.
 - git (the autosave, the approval gate, and the manifest all read it).
 - Claude Code with hooks, for the session wiring above. The checkers run fine without it: every tool is a plain script you can run by hand.
-- A POSIX shell for the two `sh` tools. Linux and macOS are what CI runs; Windows is untested.
+- A POSIX shell for the two `sh` tools; CI runs Linux, macOS, and Windows, with those two scripts excluded on Windows by name.
 
 ## Uninstall
 
@@ -412,7 +431,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 35 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 49 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

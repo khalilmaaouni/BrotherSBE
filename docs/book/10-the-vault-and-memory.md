@@ -23,15 +23,15 @@ env -u BROTHERSBE_VAULT BROTHERSBE_PRIVATE_NAMES_FILE=/tmp/sbe-book-ch10-repo/no
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.18, VERSION 1.0.0-rc.18
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE-merge-w/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.19, VERSION 1.0.0-rc.19
 git              PASS     working directory is inside a git tree
 project-init     FAIL     .brothersbe/config.json is missing: this repository has never run `sbe init`, so BrotherSBE's main capability (dossiers, gates, evidence) cannot run here. REQUIRED-and-missing: preview the fix with `sbe init`, then apply it with `sbe init --apply` once you approve the preview
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.18, evidence schema 1.0. 8 check(s): 5 PASS, 1 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.19, evidence schema 1.0. 8 check(s): 5 PASS, 1 FAIL, 2 NO-DATA.
 ```
 
 Read `vault` the same way this book has read every other NO-DATA line since
@@ -92,15 +92,15 @@ BROTHERSBE_VAULT=/tmp/sbe-book-ch10-repo/vault BROTHERSBE_PRIVATE_NAMES_FILE=/tm
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.18, VERSION 1.0.0-rc.18
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE-merge-w/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.19, VERSION 1.0.0-rc.19
 git              PASS     working directory is inside a git tree
 project-init     FAIL     .brothersbe/config.json is missing: this repository has never run `sbe init`, so BrotherSBE's main capability (dossiers, gates, evidence) cannot run here. REQUIRED-and-missing: preview the fix with `sbe init`, then apply it with `sbe init --apply` once you approve the preview
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            PASS     /tmp/sbe-book-ch10-repo/vault
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.18, evidence schema 1.0. 8 check(s): 6 PASS, 1 FAIL, 1 NO-DATA.
+sbe 1.0.0-rc.19, evidence schema 1.0. 8 check(s): 6 PASS, 1 FAIL, 1 NO-DATA.
 ```
 
 `vault` reads PASS, naming the path it found, nothing more. `doctor` does

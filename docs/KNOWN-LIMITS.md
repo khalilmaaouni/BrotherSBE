@@ -278,11 +278,74 @@ what its entry recorded; its own verdict sentence states that limit.
 Re-checking content against the live page is a human job at review time. Full
 text: `docs/CITATIONS.md` (preamble), `docs/HOW-IT-WORKS.md` (section 6).
 
-## Windows is untested
+## Windows CI runs, with named gaps
 
-The shipped CI runs Linux and macOS. The two `sh` tools and the POSIX file
-modes have never been exercised on Windows, and `SECURITY.md` already treats a
-POSIX mode there as a courtesy.
+A `windows-latest` leg runs the same battery as the Linux and macOS legs,
+added 2026-08-05. The two POSIX `sh` install and upgrade scripts are still
+skipped there by name (they need a POSIX shell this leg does not carry), and
+`SECURITY.md`'s owner-only 0600 file modes remain a courtesy on a filesystem
+that does not enforce POSIX permission bits.
+
+The telemetry writer lock (migrate, dedup) no longer degrades unconditionally
+on Windows: it is `fcntl.flock` where that exists and `msvcrt.locking` where
+it does not, with the same refusal wording either way, so a Windows run can
+actually take the lock and run a maintenance rewrite instead of always
+falling into the no-lock path this page's next section describes. Full text:
+`tools/sbe_telemetry.py` (`_writer_lock`). A round-2 read found the first
+version of this lock had no test that could fail if its byte-range reset
+(`os.lseek(fd, 0, os.SEEK_SET)` before `msvcrt.locking`) were deleted; a
+calibration fixture now records the real file descriptor position at every
+`msvcrt.locking` call under a fake `msvcrt` and asserts it is 0. Run against
+a scratch copy of the source with the reset before the LOCK call deleted, the
+fixture goes red, proving that reset load-bearing. The same fixture could not
+be made to go red by deleting a second reset that used to sit before the
+UNLOCK call: nothing between a successful lock and this function's own
+unlock ever moves that file descriptor's position, so it is already 0 there.
+That second reset was dead code and was removed rather than kept behind an
+assertion that could never fail. Full text: `tools/test_sbe.py`
+(`TestWriterLockByteRangeCalibration`).
+
+Three gaps this leg's reads surfaced remain open, disclosed rather than
+hidden:
+
+- The honesty meta-test's ACCESS scenario axis (chmod, broken symlink,
+  symlink loop, FIFO) genuinely does not run on Windows: `os.mkfifo` does not
+  exist there and a chmod bit does not take read access away the way it does
+  on POSIX. The suite already declares this by name in its own output rather
+  than silently running fewer scenarios; a shipped doc's pasted summary line
+  states the suite's scenario count as a platform-independent property of
+  its checks and registries, not as what any one run's ACCESS axis actually
+  exercised. Full text: `evals/test_no_data_class.py` (`ACCESS_APPLIES`,
+  `access_cases`, `counts`).
+- The tracked-manifest integrity eval read several files as stale on
+  Windows's first CI reads, and this could not be reproduced from a POSIX
+  machine. Rather than guess at a fix, the same eval now reads the git blob
+  and the working-tree file as raw bytes for each stale path and reports the
+  first offset where they disagree, so the next Windows run states what
+  differs instead of only that something does. Checkout-time line-ending
+  conversion is the leading theory (no `.gitattributes` in this repository
+  pins the working tree's line endings on any platform), but it is stated
+  as a theory, not a finding, until a Windows run's own byte-level output
+  confirms or refutes it. Full text: `evals/run_evals.py`
+  (`gd_manifest_fresh`, `the-tracked-manifest-matches-the-tree-it-ships-with`).
+- The shipped-doc consistency eval (`dc2` in `evals/run_evals.py`) matched
+  its own regex against a doc's pasted "N module(s)" figure and then never
+  compared the number it matched to anything: any module count in a shipped
+  doc read as consistent. It now derives the expected module count the same
+  way `evals/test_no_data_class.py`'s own `main()` does, by counting what
+  `load_tool_modules()` discovers when the suite runs, never from a number
+  written into either file, and compares it. That correction has nothing to
+  do with Windows: run on this POSIX machine, `README.md` and
+  `docs/for-engineers/01-install-and-first-run.md` had both drifted to "35
+  module(s)" while the suite discovered 43, as tool modules were added with
+  no gate to catch the pasted figures falling behind. Both pasted figures
+  are now updated to 43 (the count this branch's own live run produced) and
+  `dc2` passes against them. Treat any module count pasted into a doc as a
+  snapshot of one run, not a promise: the true figure is always whatever
+  `load_tool_modules()` finds when `evals/test_no_data_class.py` runs next,
+  and it will drift again the next time a tool module is added; `dc2`
+  catching that drift, rather than the literal number staying 43 forever,
+  is the actual guarantee here.
 
 ## Every threshold was measured on one estate
 

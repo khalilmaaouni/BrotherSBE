@@ -6,6 +6,43 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.19 (2026-08-06)
+
+- The Windows leg (12 commits, rounds 1 to 4) folded into main. Its
+  windows-latest CI job (gates-windows) arrives still RED: one Windows eval
+  failure is open as owed item OWED-4, and on the folded head run 31043311726
+  showed gates-windows as the only red job while the four POSIX gates legs
+  and the consumer checks were green. The merge law is measured on those five
+  legs; the red sixth leg is reported, not silenced, and per the constitution
+  a CI workflow change that would soften it is a human edit, proposed to the
+  founder rather than made here. Nothing in the job was weakened at the fold.
+
+
+- Windows round 4, the declared final round of the night: conversion is off
+  BEFORE checkout (a workflow step, because .gitattributes rides inside the
+  checkout it needs to protect: rounds 1 to 3 watched the same four
+  early-alphabet files hash stale on first read only), the same step pasted
+  into all three copy-ready doc blocks and the quickstart fence, and the two
+  transcript-replay evals become named PLATFORM-GAPs off POSIX: run
+  31042529271 showed every live capture collapsing to one line because the
+  replay harness itself is bash against POSIX-captured transcripts, so that
+  guarantee is measured on the POSIX legs and says so.
+
+
+- `.github/workflows/brothersbe-gates.yml`: added a `gates-windows` job that
+  runs the gates job's full battery on `windows-latest`, pinned to the 3.9
+  floor, started from the existing job's complete step list. Only the two
+  POSIX `sh` scripts (`scripts/test-install-artifact.sh`,
+  `scripts/test-upgrade-rollback.sh`) are skipped, each named where it is
+  skipped; nothing is marked `continue-on-error` and no existing step was
+  weakened. A new step aliases `python3` to the `python.exe` that
+  `actions/setup-python` installs on Windows (it installs no `python3`
+  executable there), so every other step still calls `python3` unmodified,
+  identical to the Linux and macOS steps. Proven by
+  `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/brothersbe-gates.yml'))"`
+  parsing clean and a step-by-step diff against the existing job confirming
+  the only two steps missing from the new job are the two named exclusions.
+
 ## 1.0.0-rc.18 (2026-08-06)
 
 Phase 0 of the approved master plan: program visibility and the dispatch gate,
@@ -34,6 +71,184 @@ B-close seal that this number was once pencilled for moves to rc.19.)
 - Doc truth per the counts law: eval counts repasted from live output (527 to
   530) in six docs, the moved lint line repasted, 27 research citations added
   to the inventory with honest limit lines.
+## 1.0.0-rc.17 (2026-08-06)
+
+- Windows round 3, each fix at its root, every trigger named from run
+  31040612827: the decision store's writer lock is portable (the same
+  byte-range shape as the telemetry lock, refusal-on-timeout semantics
+  unchanged); BROTHERSBE_REGISTRIES splits on the platform path-list
+  separator because a drive path used to split at its own colon and read no
+  registry at all; the transcript comparators mask Windows path renderings
+  the same way they mask POSIX ones; three name-asserting evals compare
+  separator-normalized lines because the naming, not the glyph, is the
+  guarantee; and the eval harness gains a PLATFORM-GAP result, counted and
+  printed with its reason, never a pass and never a block, carried by the
+  FIFO case (no mkfifo exists there) and the two verify-install cases (a
+  POSIX sh script this leg does not measure, now a named gap).
+
+- Windows round 2, from the first real run of the ported leg (run 31039904060,
+  read line by line): a `.gitattributes` with `* -text` makes every checkout
+  byte-identical (the manifest eval's own byte-level harness proved CRLF
+  conversion: committed newline, working tree carriage return); the telemetry
+  rewriter uses `os.replace` because Windows `os.rename` refuses an existing
+  target; and the path-forgery eval records a filesystem that refuses to
+  create the forging directory name as the channel honestly closed, replacing
+  a comment claim the same run disproved.
+
+- Windows integration sweep, measured at integration: the five shipped
+  assertions that Windows is untested (README twice, the install and
+  what-it-will-not-tell-you pages, the PARITY row) now state the truth of this
+  branch: a windows-latest leg runs the battery with the two POSIX sh scripts
+  excluded by name, and every citation of the deleted KNOWN-LIMITS heading
+  points at its replacement. SECURITY.md's auditable-surface figure restated
+  from a fresh measure (36,152 lines, 2026-08-06); the pasted meta-test line in
+  README and the install page repasted to the derived 46 modules; quickstart's
+  verbatim workflow fence repasted from this branch's workflow.
+
+- Windows porting lane, the `gates-windows` leg's first read acted on, then a
+  hostile round-2 review corrected three ways the first pass had understated
+  what it proved (each noted below at its finding):
+  1. `tools/sbe_telemetry.py`'s writer lock (`_writer_lock`) was `fcntl`-only,
+     so on Windows it always yielded unheld and `migrate`/`dedup` always
+     refused to rewrite, never running at all there. It is now portable,
+     `fcntl.flock` where that exists and `msvcrt.locking` where it does not,
+     never both in one interpreter, with identical refusal wording on POSIX
+     (the two shared refusal sentences now name both primitives rather than
+     only `fcntl`, since a platform lacking one may still have the other).
+     Round 2: the first pass proved the lock itself but shipped no test that
+     could fail if the `msvcrt` byte-range reset (`os.lseek(fd, 0,
+     os.SEEK_SET)` before `msvcrt.locking`) were deleted. A calibration
+     fixture (`tools/test_sbe.py`, `TestWriterLockByteRangeCalibration`) now
+     records the real file descriptor position at every `msvcrt.locking`
+     call under a fake `msvcrt` and asserts it is 0; run against a scratch
+     copy with the pre-LOCK reset deleted, it goes red. A second reset that
+     used to sit before the UNLOCK call could not be made to go red by the
+     same fixture under any mutation, because nothing between a successful
+     lock and this function's own unlock ever moves that descriptor's
+     position; it was dead code and is removed, not kept behind an
+     assertion that could never fail. Round 3: that fixture asserted fd
+     position only and never made two openers actually contend, so
+     `msvcrt.locking`'s raise-and-retry path, and the timeout refusal
+     `migrate`/`dedup` print to the operator, ran on no committed test.
+     `TestWriterLockContentionCalibration` (`tools/test_sbe.py`) adds a
+     range-aware fake whose `locking()` raises when the byte range a caller
+     wants is already held by a different fd; opener A takes the lock and
+     holds it, opener B (a short timeout) is asserted refused only after
+     its OWN retry loop has attempted the lock more than once, not on the
+     first failure. A scratch mutant that turns the retry's
+     `time.sleep(0.05)` into an immediate `break` collapses B to exactly
+     one attempt and the fixture goes red.
+  2. One eval fixture (`evals/run_evals.py`, `gd_pathforge`, case
+     `a-directory-name-cannot-write-verdict-lines-into-the-report`) built a
+     dossier directory whose name embedded a raw newline (0x0A) to prove a
+     report-forgery defense; Windows refuses any path component containing
+     an ASCII control character (OSError 22, confirmed verbatim against this
+     branch's own CI run). The fixture now embeds U+2028 LINE SEPARATOR
+     instead, a character `sbe_checks._LINE_BREAKS` and Python's
+     `str.splitlines()` both already treat as a line boundary exactly like
+     `\n`, so that half of the defense (flattening onto one report line) is
+     exercised the same way on every platform. Round 2 correction: an
+     earlier draft of this entry and the fixture's own comment claimed the
+     swap exercises "the identical code path" / "the same defense... on
+     every platform". False as written: a literal `\n` is also Unicode
+     category Cc, so `one_line()`'s separate Cc/Cf/Cs visible-escape loop
+     independently catches it even if `_LINE_BREAKS` regressed; U+2028 is
+     category Zl, outside that loop, so this fixture is caught by
+     `_LINE_BREAKS` alone, a strictly MORE sensitive probe of that one
+     mechanism, not an equivalent substitution for the redundant coverage
+     the literal newline happened to also exercise.
+  3. The tracked-manifest eval (`gd_manifest_fresh`) read several files as
+     stale on Windows with no way to reproduce it from a POSIX machine. It
+     now reads the git-tracked blob and the working-tree file as raw bytes
+     for each stale path and reports the first offset where they disagree,
+     so the next Windows run states the byte-level cause. No portable
+     content fix is applied: the leading theory is checkout-time
+     line-ending conversion (no `.gitattributes` pins the tree's line
+     endings), but `.gitattributes` sits outside this branch's writable
+     scope, and the theory is stated as a theory pending that run's own
+     evidence, per the standing rule against guessing twice.
+  4. The honesty meta-test's shipped-doc consistency check (`dc2` in
+     `evals/run_evals.py`) reads `evals/test_no_data_class.py`'s `counts()`
+     to verify a doc's pasted summary line, but `counts()` called the
+     platform-gated `access_cases()`, so a host where `ACCESS_APPLIES` is
+     False (Windows, or POSIX as root) computed 192 fewer scenarios than
+     POSIX (32 checks times the 6 ACCESS scenarios each, confirmed against
+     this branch's own CI run: 3588 there against 3780 on POSIX and in the
+     shipped docs). `access_cases` takes a `force` parameter now;
+     `counts()` passes `force=True` so the figure it reports is the suite's
+     platform-independent shape, while `main()`'s real run (unchanged) still
+     runs, and discloses, fewer scenarios on a host where they do not apply.
+     Round 2 found this finding was not actually closed: `dc2` matched its
+     own regex against a doc's pasted module count and then never compared
+     the number it matched to anything, so that figure could drift with
+     nothing to catch it, live and on POSIX, unrelated to Windows. `dc2`
+     now derives the expected module count from the same `load_tool_
+     modules()` discovery `main()` runs (`counts()` returns it as a fifth
+     value, never a number written into either file) and compares it. Run
+     on this POSIX machine, that correction showed `README.md` and
+     `docs/for-engineers/01-install-and-first-run.md` both asserting "35
+     module(s)" where the suite discovers 43; round 2 disclosed this as
+     uncorrectable from this lane's then-fence rather than chasing it.
+     Round 3: the fence was extended to exactly these two files for exactly
+     this figure. Both are now updated from "35 module(s)" to "43
+     module(s)" (this branch's live count, `python3 evals/test_no_data_
+     class.py`'s own last line, reproduced verbatim), and `dc2` passes
+     against them (see `docs/KNOWN-LIMITS.md`).
+  Proven: `python3 evals/run_evals.py` now runs one REGRESSION on POSIX on
+  this branch (was two through round 2), not introduced by defective code:
+  `the-tracked-manifest-matches-the-tree-it-ships-with`, which reads this
+  entry's own uncommitted, in-scope edits as drift against
+  `CHECKSUMS.sha256` (a file outside every lane's writable scope; the eval
+  returns to matching once the manifest is regenerated at the usual point
+  in this repository's release process). `no-shipped-doc-prints-a-meta-
+  test-count-the-meta-test-does-not-produce` (finding 4 above) is CLOSED
+  this round: `README.md` and `docs/for-engineers/01-install-and-first-
+  run.md` are updated to "43 module(s)" and the case now reads `ok`. The
+  renamed U+2028 fixture and the manifest harness verified directly, each
+  also proven red under its reintroduced defect in a scratch copy and green
+  restored; `access_cases`/`counts()` verified both on this POSIX host and
+  under a monkeypatched `ACCESS_APPLIES=False` (simulated Windows), red
+  before `force=True` and green after, against the real shipped-doc text.
+  The Windows lock path (`msvcrt` is not importable here) is proven by two
+  fixtures in `tools/test_sbe.py`, both green with the real code and both
+  independently proven red under a reintroduced defect in a scratch copy,
+  restoration confirmed byte-identical after each:
+  `TestWriterLockByteRangeCalibration`, a fake `msvcrt` recording the real
+  file descriptor position at every call, both the pre-LOCK reset (load-
+  bearing, red when deleted) and the removed pre-UNLOCK reset (dead, could
+  not be made to fail); and `TestWriterLockContentionCalibration`, a
+  range-aware fake `msvcrt` whose `locking()` raises on an overlapping
+  range held by a different fd, real code retries several times (7 on this
+  run, timing-dependent but never fewer than 2, which the fixture asserts)
+  against a 0.3s timeout before refusing (`held=False`), a scratch mutant
+  with the retry's `time.sleep(0.05)` replaced by `break` collapses that to
+  exactly 1 attempt before the same refusal. `python3 tools/test_sbe.py`
+  stays green (`OK`, 102 tests) with both classes included.
+  `docs/KNOWN-LIMITS.md`'s
+  "Windows is untested" section is replaced with a read of what this leg's
+  actual runs showed, its remaining named gaps (now three, the module-count
+  gap above added), and pointers to the fixes. Two further findings from
+  the same CI run are out of this entry's scope and untouched here: a
+  POSIX-only `os.mkfifo` eval case, and an `fcntl`-only lock in
+  `src/brothersbe/decisions.py` unrelated to the telemetry ledger.
+  Round 3 also found a problem this lane caused itself: round 2's own new
+  code (the `msvcrt` branch's comments in `tools/sbe_telemetry.py` and
+  `TestWriterLockByteRangeCalibration` in `tools/test_sbe.py`) had been
+  trimmed for wording, not for correctness, to pull `tools/`'s measured
+  line count back under `TestAuditableSurface`'s 15 percent drift ceiling
+  against `SECURITY.md`'s stated figure, rather than by correcting that
+  figure; the margin left (14.9851 percent, 4 lines of headroom against a
+  122-line budget at base) meant the very next line added anywhere in
+  `tools/` would flip it red. That is fixed the way the test's own failure
+  message names: `SECURITY.md`'s stated line count is re-measured and
+  restated rather than gamed. Before, on this branch: `29,963` lines
+  (dated 2026-08-05). After this round's own additions, including
+  restoring the trimmed comments and the new
+  `TestWriterLockContentionCalibration` class above: `34,575` lines
+  (`wc -l tools/*.py tools/*.sh`, dated 2026-08-06 in `SECURITY.md`),
+  0 percent drift against itself, real headroom restored rather than
+  borrowed from comment density.
+
 
 ## 1.0.0-rc.16 (2026-08-06)
 

@@ -99,7 +99,7 @@ estate. Re-measure. `NO-DATA` is a legal score.
 ## It has never run in anyone else's CI
 
 Every green run the project cites happened in its own repository. No external
-adoption is claimed. Windows is untested; the shipped CI covers Linux and macOS.
+adoption is claimed. CI runs Linux, macOS, and a windows-latest leg with two named POSIX-script exclusions; no external adoption is implied by any of it.
 
 ## The telemetry writer lock needs a filesystem that honors flock
 

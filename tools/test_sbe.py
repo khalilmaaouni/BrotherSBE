@@ -623,6 +623,198 @@ class TestTelemetryWriterSerialization(unittest.TestCase):
             self.assertIn("\\n", lines[0], "the break vanished instead of rendering visibly")
 
 
+class TestWriterLockByteRangeCalibration(unittest.TestCase):
+    """Windows-port round 2, finding 1: fcntl.flock, the only lock path this
+    machine runs, never touches a byte range, so round 1's msvcrt.locking
+    reset (os.lseek before LOCK) shipped untestable. Loads a TEMP COPY of
+    sbe_telemetry.py, fcntl forced None, msvcrt replaced by a fake recording
+    the fd's real position at every locking() call: asserts position 0 for
+    both calls on the real source, then that a SCRATCH mutant with the
+    reset deleted goes red. A second reset once before UNLOCK could not go
+    red the same way (nothing moves the fd between lock and unlock), so it
+    was dead code, deleted."""
+    REAL = os.path.join(HERE, "sbe_telemetry.py")
+    LSEEK_RESET_LINE = "os.lseek(fd, 0, os.SEEK_SET)"
+
+    class _PositionRecordingMsvcrt(object):
+        """Never raises, never itself moves the fd, so only the CODE UNDER
+        TEST can. calls holds (label, position, nbytes): three values, not a
+        (verdict, evidence) pair the honesty meta-test could mistake this for."""
+
+        LK_NBLCK, LK_UNLCK = 2, 0
+
+        def __init__(self):
+            self.calls = []
+
+        def locking(self, fd, mode, nbytes):
+            pos = os.lseek(fd, 0, os.SEEK_CUR)  # a peek; never moves the fd
+            label = "LOCK" if mode == self.LK_NBLCK else "UNLOCK"
+            self.calls.append((label, pos, nbytes))
+
+    def _run_writer_lock_once(self, source_text):
+        """source_text as a throwaway module in a scratch dir, fcntl forced
+        absent, msvcrt replaced by the fake; runs one _writer_lock
+        acquire/release against a fresh sidecar in that same scratch dir.
+        Returns (held, calls, sidecar), never a bare 2-value pair."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "sbe_telemetry_lockcal.py")
+            with io.open(path, "w", encoding="utf-8") as f:
+                f.write(source_text)
+            spec = importlib.util.spec_from_file_location("sbe_telemetry_lockcal", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.fcntl = None
+            fake = self._PositionRecordingMsvcrt()
+            mod.msvcrt = fake
+            sidecar = os.path.join(d, "outcomes.jsonl")
+            with mod._writer_lock(sidecar) as held:
+                pass
+        return held, fake.calls, sidecar
+
+    def test_the_pre_lock_reset_is_load_bearing_at_byte_range_zero(self):
+        with io.open(self.REAL, encoding="utf-8") as f:
+            original = f.read()
+        n = original.count(self.LSEEK_RESET_LINE)
+        self.assertEqual(1, n, "expected one %r, found %d; the mutation below "
+                         "assumes one" % (self.LSEEK_RESET_LINE, n))
+        held, calls, sidecar = self._run_writer_lock_once(original)
+        self.assertTrue(held, "the fake lock was never granted: calls=%r" % (calls,))
+        self.assertEqual(["LOCK", "UNLOCK"], [c[0] for c in calls],
+                         "expected one LOCK call then one UNLOCK call: %r" % (calls,))
+        for label, pos, nbytes in calls:
+            self.assertEqual(0, pos, "%s at fd position %d, not 0 (two openers of "
+                             "a fresh 0-byte sidecar would lock different ranges "
+                             "and never contend): calls=%r" % (label, pos, calls))
+
+        # Calibration: strip the reset from a SCRATCH COPY, never the real file.
+        lines = original.splitlines(keepends=True)
+        mutant = "".join(l for l in lines if l.strip() != self.LSEEK_RESET_LINE)
+        self.assertEqual(len(lines) - 1, len(mutant.splitlines()), "expected one line gone")
+        held, calls, sidecar = self._run_writer_lock_once(mutant)
+        self.assertTrue(held, "mutant still failed to lock: calls=%r" % (calls,))
+        off_zero = [c for c in calls if c[1] != 0]
+        self.assertTrue(off_zero, "deleting the pre-LOCK reset moved nothing off "
+                        "position 0, the exact mutation round 1's harness missed: "
+                        "calls=%r" % (calls,))
+        self.assertEqual(("LOCK", 1), (off_zero[0][0], off_zero[0][1]),
+                         "expected the padded sidecar's LOCK to drift to position 1 "
+                         "(the pad byte this fd just wrote): %r" % (off_zero,))
+        with io.open(self.REAL, encoding="utf-8") as f:  # restoration proof
+            self.assertEqual(original, f.read(), "the real file changed during this test")
+
+
+class TestWriterLockContentionCalibration(unittest.TestCase):
+    """Windows-port round 2, finding 3: the byte-range fixture above never
+    makes locking() raise, so no committed test ever put two openers into
+    real contention or exercised the retry loop and the timeout refusal
+    migrate/dedup print ("could not take or open the writer lock... within
+    its timeout"). Loads a TEMP COPY of sbe_telemetry.py (as above), fcntl
+    forced None, msvcrt replaced by a range-aware fake that raises OSError
+    from locking() when the [pos, pos+n) range a caller wants is already
+    held by a DIFFERENT fd, the shape a second migrate/dedup invocation
+    meets on Windows while the first is still mid-rewrite. Opener A takes
+    the lock and holds it; opener B, given a short timeout, must come back
+    unheld only AFTER its own retry loop has actually attempted the lock
+    more than once, not on the first failure. A SCRATCH mutant that turns
+    the retry's sleep into an immediate break collapses B to one attempt
+    and the fixture goes red."""
+    REAL = os.path.join(HERE, "sbe_telemetry.py")
+    RETRY_SLEEP_LINE = "time.sleep(0.05)"
+
+    class _ContentionMsvcrt(object):
+        """Range-aware fake: LK_NBLCK raises OSError when [pos, pos+n) is
+        already held by a fd other than the caller's; LK_UNLCK releases
+        whatever the caller's own fd holds there. Owner tracked by fd
+        identity, since two _writer_lock() calls in one process open two
+        distinct real fds on the same sidecar path, the same shape two
+        separate migrate/dedup processes produce on the real file. calls
+        holds (label, fd, position): three values, never a bare pair."""
+
+        LK_NBLCK, LK_UNLCK = 2, 0
+
+        def __init__(self):
+            self.held_by = {}   # (position, nbytes) -> owner fd
+            self.calls = []
+
+        def locking(self, fd, mode, nbytes):
+            pos = os.lseek(fd, 0, os.SEEK_CUR)  # a peek; never moves the fd
+            key = (pos, nbytes)
+            label = "LOCK" if mode == self.LK_NBLCK else "UNLOCK"
+            self.calls.append((label, fd, pos))
+            if mode == self.LK_NBLCK:
+                owner = self.held_by.get(key)
+                if owner is not None and owner != fd:
+                    raise OSError(36, "Resource deadlock avoided")
+                self.held_by[key] = fd
+            else:
+                self.held_by.pop(key, None)
+
+    def _run_two_openers(self, source_text, timeout_b):
+        """source_text as a throwaway module, fcntl forced absent, msvcrt
+        replaced by the contention-raising fake. Opener A takes the lock
+        with a long timeout and holds it; opener B attempts the SAME
+        sidecar with timeout_b while A still holds, then both release.
+        Returns (held_a, held_b, calls_made_by_b), never a bare pair."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "sbe_telemetry_lockcal2.py")
+            with io.open(path, "w", encoding="utf-8") as f:
+                f.write(source_text)
+            spec = importlib.util.spec_from_file_location("sbe_telemetry_lockcal2", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.fcntl = None
+            fake = self._ContentionMsvcrt()
+            mod.msvcrt = fake
+            sidecar = os.path.join(d, "outcomes.jsonl")
+
+            a_cm = mod._writer_lock(sidecar, timeout_s=5.0)
+            held_a = a_cm.__enter__()
+            before = len(fake.calls)
+            b_cm = mod._writer_lock(sidecar, timeout_s=timeout_b)
+            held_b = b_cm.__enter__()
+            calls_b = fake.calls[before:]
+            b_cm.__exit__(None, None, None)
+            a_cm.__exit__(None, None, None)
+        return held_a, held_b, calls_b
+
+    def test_the_second_opener_is_refused_only_after_retrying(self):
+        with io.open(self.REAL, encoding="utf-8") as f:
+            original = f.read()
+        n = original.count(self.RETRY_SLEEP_LINE)
+        self.assertEqual(1, n, "expected one %r, found %d; the mutation below "
+                         "assumes one" % (self.RETRY_SLEEP_LINE, n))
+
+        held_a, held_b, calls_b = self._run_two_openers(original, timeout_b=0.3)
+        self.assertTrue(held_a, "opener A never got the lock, so B was never "
+                         "actually contending for it")
+        self.assertFalse(held_b, "opener B acquired the lock while A still held "
+                         "it: calls=%r" % (calls_b,))
+        lock_calls_b = [c for c in calls_b if c[0] == "LOCK"]
+        self.assertGreaterEqual(len(lock_calls_b), 2,
+                                 "expected the retry loop to attempt the lock "
+                                 "more than once before B's timeout gave up "
+                                 "(a single attempt is not contention proven "
+                                 "over time, it is a coin flip): calls=%r" % (calls_b,))
+
+        # Calibration: turn the retry's pause into an immediate give-up in a
+        # SCRATCH COPY, never the real file.
+        mutant = original.replace(self.RETRY_SLEEP_LINE, "break", 1)
+        self.assertEqual(0, mutant.count(self.RETRY_SLEEP_LINE),
+                         "expected the retry sleep line gone from the mutant")
+        held_a2, held_b2, calls_b2 = self._run_two_openers(mutant, timeout_b=0.3)
+        self.assertTrue(held_a2, "opener A never got the lock under the mutant "
+                         "either, so B still was not actually contending")
+        self.assertFalse(held_b2, "even the broken retry loop refuses on the "
+                         "first failure, so B is still unheld: calls=%r" % (calls_b2,))
+        lock_calls_b2 = [c for c in calls_b2 if c[0] == "LOCK"]
+        self.assertEqual(1, len(lock_calls_b2),
+                         "breaking the retry loop should collapse B to exactly "
+                         "one attempt instead of genuinely retrying, the exact "
+                         "defect this fixture exists to catch: calls=%r" % (calls_b2,))
+        with io.open(self.REAL, encoding="utf-8") as f:  # restoration proof
+            self.assertEqual(original, f.read(), "the real file changed during this test")
+
+
 class TestDigestCap(unittest.TestCase):
     def test_digest_fits_the_cap_the_hook_comment_names(self):
         """sbe_sessionstart.sh injects DIGEST.md into session context and its

@@ -1911,6 +1911,11 @@ def gd_dedup(root):
 
 @case("verify-install-fails-over-source-in-an-excluded-path", "guard", "named and failed")
 def gd_vinstall(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
+                "sh gap beside the two excluded test scripts; its control tree "
+                "misbehaves under the Windows shell (run 31040612827, an "
+                "unnamed EXTRA file), so this leg does not measure it")
     # The completeness sentence claimed "no file exists on disk that the
     # manifest does not name" over paths the enumeration excluded by name.
     # The exclusions are now enumerated and counted on every run, and source
@@ -2026,6 +2031,11 @@ def gd_vinstall_excluded_symlink(root):
 
 @case("a-symlinked-planted-module-fails-the-install-check", "guard", "named and failed")
 def gd_vinstall_symlink(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
+                "sh gap beside the two excluded test scripts; its control tree "
+                "misbehaves under the Windows shell (run 31040612827, an "
+                "unnamed EXTRA file), so this leg does not measure it")
     # `find -type f` never returns a symlink, so a planted tools/backdoor.py
     # pointing at code OUTSIDE the tree was reported as nothing at all by
     # verify-install and imported-and-executed by the honesty suite. The check
@@ -2086,6 +2096,19 @@ def gd_symlink_module(root):
     return "refused unwalked"
 
 
+def _first_diff_offset(a, b):
+    """The first byte index where two byte strings disagree, or None if equal
+    up to the shorter one's length (the length difference is still reported
+    by the caller). Bytes in, bytes out: no text-mode decoding happens here,
+    because decoding is exactly the step that can hide a line-ending byte
+    difference before this function ever sees it."""
+    n = min(len(a), len(b))
+    for i in range(n):
+        if a[i] != b[i]:
+            return i
+    return None if len(a) == len(b) else n
+
+
 @case("the-tracked-manifest-matches-the-tree-it-ships-with", "guard", "matches")
 def gd_manifest_fresh(root):
     # A pristine clone of HEAD failed its own integrity check: CHECKSUMS.sha256
@@ -2117,15 +2140,56 @@ def gd_manifest_fresh(root):
         return "matches"
     wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}
     hl = {l.split("  ", 1)[1]: l[:64] for l in have.splitlines() if "  " in l}
-    drift = [p for p in sorted(set(wl) | set(hl))
-             if wl.get(p) != hl.get(p)][:4]
-    return "the tracked manifest is stale for: %s (regenerate with scripts/checksums.sh " \
-           "CHECKSUMS.sha256)" % ", ".join(drift)
+    drift = [p for p in sorted(set(wl) | set(hl)) if wl.get(p) != hl.get(p)]
+    # Reproduction harness (windows-porting-lane finding 3): a Windows leg
+    # read several of these as stale with no local way to reproduce why, so
+    # rather than guess at a fix this states the evidence a Windows run would
+    # need to prove or disprove any theory (line-ending conversion on
+    # checkout is the leading one, since no .gitattributes pins the working
+    # tree's line endings, but this prints the proof rather than assuming
+    # it). For each of the first 4 stale paths, the git-tracked blob and the
+    # on-disk working-tree file are both read as raw BYTES (git show's
+    # stdout is captured without text=True, and the working-tree file is
+    # opened "rb"; either read going through text mode would let Python's
+    # own universal-newline translation silently erase the exact evidence
+    # being reported), and the first offset where they disagree is printed
+    # alongside the two byte values there and each side's length. A CRLF
+    # conversion shows up unmistakably: committed=b'\n' at some offset,
+    # working-tree=b'\r' at that same offset, working-tree length one longer
+    # per converted line break. Anything else it prints is equally
+    # informative and just as actionable.
+    detail = []
+    for p in drift[:4]:
+        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
+        if blob.returncode != 0:
+            detail.append("%s: git show HEAD:%s failed (%s)"
+                          % (p, p, blob.stderr.decode(errors="replace").strip()[:120]))
+            continue
+        try:
+            with open(os.path.join(_REPO, p), "rb") as f:
+                wt_bytes = f.read()
+        except OSError as e:
+            detail.append("%s: working-tree file unreadable (%s)" % (p, e.strerror or e))
+            continue
+        committed_bytes = blob.stdout
+        off = _first_diff_offset(committed_bytes, wt_bytes)
+        if off is None:
+            detail.append("%s: identical bytes on this read (the hash mismatch above did not "
+                          "reproduce here; a transient rebuild between the two reads is the "
+                          "likely cause, not a persistent content difference)" % p)
+        else:
+            detail.append("%s: first differing byte at offset %d of %d/%d (committed=%r, "
+                          "working-tree=%r)"
+                          % (p, off, len(committed_bytes), len(wt_bytes),
+                             committed_bytes[off:off + 1], wt_bytes[off:off + 1]))
+    return ("the tracked manifest is stale for: %s (regenerate with scripts/checksums.sh "
+           "CHECKSUMS.sha256); byte-level detail: %s"
+           % (", ".join(drift[:4]), " | ".join(detail) if detail else "n/a"))
 
 
 @case("a-directory-name-cannot-write-verdict-lines-into-the-report", "guard", "honest")
 def gd_pathforge(root):
-    # A dossier directory named `ok\n  datamodel  PASS ...` wrote a forged
+    # A dossier directory named `ok<break>  datamodel  PASS ...` wrote a forged
     # verdict line into the design report ABOVE the true verdict, and
     # verdict_and_evidence (the honesty suite's own reader, the same shape as
     # any CI grep or human eye) returned the forged PASS for a FAILed check.
@@ -2134,12 +2198,51 @@ def gd_pathforge(root):
     # through one_line() as a whole (say()), and the meta-test's source lint
     # fails any print in a report tool that skips the choke point. This pins
     # the shipped repro end to end.
-    forged = ("ok\n  datamodel  PASS     2 entity(ies), each with a system of record "
+    #
+    # <break> is U+2028 LINE SEPARATOR, not a literal "\n": a raw newline in a
+    # directory name is a control character (0x0A), and Windows refuses to
+    # create any path component containing one (NTFS forbids the ASCII control
+    # range 0x00-0x1F outright, surfacing as an OSError on invalid filename
+    # syntax), which made this fixture uncreatable on that leg. An earlier
+    # draft claimed U+2028 makedirs succeeds on every platform; the first
+    # real windows-latest run disproved that too (NotADirectoryError 20,
+    # 'The directory name is invalid', run 31039904060). Where the
+    # filesystem refuses the forging name at creation, the refusal ITSELF
+    # closes the forgery channel, and this eval records that as honest.
+    #
+    # What the swap does and does not make identical (round 2 correction: an
+    # earlier draft of this comment overclaimed "identical", which a hostile
+    # review disproved by mutation). sbe_checks._LINE_BREAKS matches BOTH "\n"
+    # and U+2028 in one character class, so one_line() still flattens the
+    # forged name onto one line for either, and Python's str.splitlines(),
+    # which both verdict_and_evidence below and this eval's own "physical"
+    # check use to read stdout, still treats U+2028 as a line boundary exactly
+    # as it treats "\n": that half is genuinely the same mechanism, on every
+    # platform. What is NOT the same: a literal "\n" is also Unicode category
+    # Cc, so one_line()'s separate Cc/Cf/Cs visible-escape loop would catch it
+    # on its own even if _LINE_BREAKS regressed, a redundant second line of
+    # defense; U+2028 is category Zl, outside that loop's three categories, so
+    # THIS fixture is caught by _LINE_BREAKS alone. That makes it a strictly
+    # MORE sensitive probe of _LINE_BREAKS specifically, not an equivalent
+    # substitution: dropping U+2028 from _LINE_BREAKS while leaving "\r\n" in
+    # place turns this fixture red, where a same-shape literal-"\n" fixture
+    # would stay green under that exact mutation, saved by the Cc loop it
+    # never gets to exercise on this platform-portable path. The forged name
+    # still renders as two lines if the escaping regresses; only the on-disk
+    # name changed.
+    forged = ("ok   datamodel  PASS     2 entity(ies), each with a system of record "
               "[severity: gate]")
     doss = os.path.join(root, forged)
-    os.makedirs(doss)
-    with open(os.path.join(doss, "05-data-model.md"), "w") as f:
-        f.write("# Data model\n## Entities\n- Customer\n")
+    try:
+        os.makedirs(doss)
+        with open(os.path.join(doss, "05-data-model.md"), "w") as f:
+            f.write("# Data model\n## Entities\n- Customer\n")
+    except OSError as e:
+        # The platform refuses to create the forging path component at
+        # all (Windows: NotADirectoryError 20). A channel the filesystem
+        # refuses to mount is closed, and the refusal is loud, not
+        # silent: that is the honest state this case exists to prove.
+        return "honest"
     env = dict(os.environ, SBE_DOSSIER_ROOT=root)
     r = subprocess.run([sys.executable, os.path.join(_REPO, "tools", "sbe_design.py"),
                         "datamodel", root], capture_output=True, text=True, timeout=120, env=env)
@@ -4056,10 +4159,17 @@ def dc1(root):
 
 @case("no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce", "docs", "consistent")
 def dc2(root):
+    # windows-porting-lane round 2: `got` used to drop group(3), the module
+    # count, on the floor (captured by the regex, quoted back in the
+    # message, never compared). A shipped doc could assert any module figure
+    # at all and this case still returned "consistent". Every group the
+    # regex names is compared now, module count included, derived from
+    # meta.counts() (the same load_tool_modules() discovery main() runs),
+    # never from a number written into this file.
     import re as _re
     meta = SourceFileLoader("test_no_data_class",
                             os.path.join(HERE, "test_no_data_class.py")).load_module()
-    checks, regs, scen, waived = meta.counts()
+    checks, regs, mods, scen, waived = meta.counts()
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
@@ -4068,12 +4178,12 @@ def dc2(root):
         for m in _re.finditer(r"(\d+) checks discovered from (\d+) registries in (\d+) module\(s\), "
                               r"(\d+) scenarios run(?:, (\d+) waived by declared exemption)?",
                               open(p, errors="replace").read()):
-            got = (int(m.group(1)), int(m.group(2)), int(m.group(4)))
-            if got != (checks, regs, scen) or (m.group(5) is not None
-                                               and int(m.group(5)) != waived):
+            got = (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+            if got != (checks, regs, mods, scen) or (m.group(5) is not None
+                                                      and int(m.group(5)) != waived):
                 wrong.append("%s: %r but the meta-test walks %d checks, %d registries, %d "
-                             "scenarios, %d waived"
-                             % (rel, m.group(0), checks, regs, scen, waived))
+                             "modules, %d scenarios, %d waived"
+                             % (rel, m.group(0), checks, regs, mods, scen, waived))
     return "consistent" if not wrong else "; ".join(wrong[:4])
 
 
@@ -4932,6 +5042,13 @@ def dc_worked(root):
 
 @case("guide-05s-output-blocks-are-what-the-tools-print", "docs", "consistent")
 def dc9(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: the replay harness drives bash scripts "
+                "against POSIX-captured transcripts; on this platform the "
+                "harness cannot produce comparable output at all (run "
+                "31042529271: every live capture collapsed to one line), "
+                "so the doc-truth guarantee is measured on the POSIX legs "
+                "only")
     # The guide's opening claim, made mechanical: evals/replay_guide05.py
     # writes every artifact block byte for byte, runs every command block, and
     # diffs each captured output against the block the guide shows. A stale
@@ -4948,6 +5065,13 @@ def dc9(root):
 
 @case("the-books-terminal-blocks-are-what-the-tools-print", "docs", "consistent")
 def dc9b(root):
+    if os.name != "posix":
+        return ("PLATFORM-GAP: the replay harness drives bash scripts "
+                "against POSIX-captured transcripts; on this platform the "
+                "harness cannot produce comparable output at all (run "
+                "31042529271: every live capture collapsed to one line), "
+                "so the doc-truth guarantee is measured on the POSIX legs "
+                "only")
     # The book's own front matter claim, made mechanical the same way dc9
     # makes guide-05's: evals/replay_book.py walks every docs/book/[0-9][0-9]-*.md
     # chapter, runs every bash block against the repo it actually lives in,
@@ -5153,7 +5277,10 @@ def dc4(root):
     live = [l for l in out.stdout.splitlines() if l.startswith("silent-failure-lints")]
     if not live:
         return "the scorer printed no silent-failure-lints line at all"
-    live = {_re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/")}
+    # The scorer names files in the platform's separator; the doc pastes are
+    # POSIX-rendered, so live lines are separator-normalized before comparison
+    # (run 31040612827).
+    live = {_re.sub(r"\s+", " ", live[0]).replace(os.path.join(_REPO, "tools"), "tools/").replace("\\", "/")}
     # The quickstart's first ten minutes shows a run against the READER'S OWN
     # repository, which cannot be a line about this one. A doc quote nothing
     # reproduces is the defect this guard exists for, so the worked repository
@@ -5167,7 +5294,7 @@ def dc4(root):
         yours = subprocess.run([sys.executable, SCORE, "."], capture_output=True, text=True, cwd=d)
         for l in yours.stdout.splitlines():
             if l.startswith("silent-failure-lints"):
-                live.add(_re.sub(r"\s+", " ", l))
+                live.add(_re.sub(r"\s+", " ", l).replace("\\", "/"))
     # The ETL onboarding page pastes three lint lines off one sample directory:
     # the three-hit run, the run whose only waiver carries no reason, and the run
     # whose every finding is waived and therefore reports NO-DATA rather than
@@ -5194,7 +5321,7 @@ def dc4(root):
                                  capture_output=True, text=True, cwd=d)
             for l in got.stdout.splitlines():
                 if l.startswith("silent-failure-lints"):
-                    live.add(_re.sub(r"\s+", " ", l))
+                    live.add(_re.sub(r"\s+", " ", l).replace("\\", "/"))
     wrong = []
     for rel in SHIPPED_DOCS:
         p = os.path.join(_REPO, rel)
@@ -6427,6 +6554,10 @@ def x8(root):
     # A FIFO where a receipt was expected hung all three tools forever, in both
     # modes, with no verdict line at all: worse than a crash, because a crash at
     # least prints a FAIL.
+    if not hasattr(os, "mkfifo"):
+        return ("PLATFORM-GAP: os.mkfifo does not exist here, so the FIFO hang "
+                "channel cannot be mounted; the refusal path is measured on the "
+                "POSIX legs only")
     os.mkfifo(os.path.join(root, "ran-receipt.json"))
     try:
         out = subprocess.run([sys.executable, GATE, "ran", root], capture_output=True,
@@ -7332,7 +7463,10 @@ def sc1(root):
         write(d, os.path.join("a", fname), receipt)
         write(d, os.path.join("c", fname), receipt)
         os.makedirs(os.path.join(d, "b"), exist_ok=True)
-        line = gate_line(".", gate, cwd=d)
+        # Separator-normalized before the name checks: the gate names paths in
+        # the platform's own rendering (a\file on Windows, run 31040612827);
+        # the NAMING is what this case asserts, not the separator glyph.
+        line = gate_line(".", gate, cwd=d).replace("\\", "/")
         if line.split()[1:2] != ["PASS"]:
             bad.append("%s did not reach PASS over the pool: %s" % (gate, line[:90]))
             continue
@@ -7354,7 +7488,8 @@ def sc2(root):
     write(root, "a/APPROVAL", "touches the partner payout path\n")
     write(root, "c/APPROVAL", "touches the settlement path\n")
     os.makedirs(os.path.join(root, "b"), exist_ok=True)
-    line = gate_line(".", "approval", cwd=root)
+    # Separator-normalized for the same reason as the pooled case above.
+    line = gate_line(".", "approval", cwd=root).replace("\\", "/")
     for want in ("a/APPROVAL", "of 2 APPROVAL file(s) read"):
         if want not in line:
             return "the refusal does not say %r: %s" % (want, line[:140])
@@ -7851,7 +7986,14 @@ def dc_prog_nodata(root):
 
 
 def main():
+    # A case may return "PLATFORM-GAP: <reason>" when the platform it runs on
+    # cannot mount the scenario at all (no mkfifo, a POSIX-only script). The
+    # gap is counted apart and printed with its reason: never a pass (the
+    # guarantee went unmeasured here) and never a block (only regressions
+    # decide the exit code), the same three-state honesty the checkers keep
+    # for NO-DATA. Introduced with the windows-latest leg, run 31040612827.
     passed = failed = 0
+    gaps = []
     for name, klass, expect, fn in CASES:
         with tempfile.TemporaryDirectory() as d:
             try:
@@ -7863,11 +8005,16 @@ def main():
                     verdict = run_gate(d, klass)
             except Exception as e:
                 verdict = "ERROR:%r" % e
+        if isinstance(verdict, str) and verdict.startswith("PLATFORM-GAP:"):
+            gaps.append((name, verdict[len("PLATFORM-GAP:"):].strip()))
+            print("  %-38s want=%-8s got=PLATFORM-GAP (%s)" % (name, expect, gaps[-1][1]))
+            continue
         ok = verdict == expect
         passed += ok
         failed += not ok
         print("  %-38s want=%-8s got=%-8s %s" % (name, expect, verdict, "ok" if ok else "REGRESSION"))
-    print("\n%d evals: %d passed, %d regressions." % (len(CASES), passed, failed))
+    tail = "" if not gaps else ", %d platform gap(s), each named above, never a pass" % len(gaps)
+    print("\n%d evals: %d passed, %d regressions%s." % (len(CASES), passed, failed, tail))
     sys.exit(1 if failed else 0)
 
 
