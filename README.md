@@ -312,6 +312,8 @@ This is what turns the gates from advisory into blocking, whichever path above y
         run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
+      - name: Public install path (the two commands the front page promises)
+        run: python3 tools/test_sbe_public_install.py
       - name: Map fixtures (sbe map, a deterministic status map, never a filled template)
         run: python3 tools/test_sbe_map.py
       - name: Plan fixtures (sbe plan)
@@ -431,7 +433,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 58 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 59 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

@@ -787,6 +787,8 @@ step that surfaces any design waiver as something a human is shown:
         run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
+      - name: Public install path (the two commands the front page promises)
+        run: python3 tools/test_sbe_public_install.py
       - name: Map fixtures (sbe map, a deterministic status map, never a filled template)
         run: python3 tools/test_sbe_map.py
       - name: Plan fixtures (sbe plan)
