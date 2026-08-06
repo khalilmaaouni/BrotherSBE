@@ -1,0 +1,34 @@
+id: BR-1012
+title: "Release blocker 4: registered check binding"
+why: >
+  A receipt proves a command ran, not that the correct command ran. A caller can label true as a migration check and mint clean evidence.
+persona_need: "P3 orchestrator, P2 team relying on receipts"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: release-blockers
+milestone: M0
+depends_on:
+  - "BR-1011"
+spec: BrotherSBE_RELEASE_BLOCKERS_FOR_FABLE.md (founder-supplied review, 2026-08-06; scope decisions in program/MASTER-PLAN-2026-08-06.md section 0)
+acceptance:
+  - ".sbe/checks.yml protected registry exists with checkId, command, covers, runnerFiles, protectedEvidence"
+  - "sbe evidence run --check resolves the registered command and refuses caller substitution; records checkSpecSha256 and runner hashes"
+  - "verify recomputes the spec hash; changed spec, runner or arguments invalidate old receipts"
+  - "free-form commands stay LOCAL-ADVISORY and never satisfy a required policy check"
+  - "the 10 required tests of blockers file item 4 pass"
+estimated_days: 0.5
+# Budget recorded as a FORECAST, not a cap: the founder removed token limiters
+# for this sprint by explicit order (2026-08-06 late evening, decision window
+# round 2). Spend is still measured and reported at close.
+token_budget: 800000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Spec hashing misses a runner dependency and a stale receipt survives a behavior change."
+    mitigation: "runnerFiles hashes are part of the signed spec surface; refuter fixture mutates the runner and asserts invalidation."
+    severity: high
+blocked_by: []
+alerts: []

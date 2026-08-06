@@ -1,0 +1,33 @@
+id: BR-1013
+title: "Release blocker 2: honest trust downgrade, PROTECTED-CI removed"
+why: >
+  PROTECTED-CI is currently minted off an environment variable any local process can export. The label is stronger than the evidence. Founder chose the honest fallback the review itself offers: remove the label until real attestation exists.
+persona_need: "Every reader of a trust label"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: release-blockers
+milestone: M0
+depends_on:
+  - "BR-1012"
+spec: BrotherSBE_RELEASE_BLOCKERS_FOR_FABLE.md (founder-supplied review, 2026-08-06; scope decisions in program/MASTER-PLAN-2026-08-06.md section 0)
+acceptance:
+  - "the string PROTECTED-CI no longer exists in shipped code or docs except the fast-follow note"
+  - "SBE_CI_RUN_ID presence yields CI-CLAIMED with the approved sentence; absence yields LOCAL-ADVISORY"
+  - "a policy requiring protected evidence refuses both LOCAL-ADVISORY and CI-CLAIMED"
+  - "tests 1, 9 and 10 of blockers file item 2 pass"
+estimated_days: 0.5
+# Budget recorded as a FORECAST, not a cap: the founder removed token limiters
+# for this sprint by explicit order (2026-08-06 late evening, decision window
+# round 2). Spend is still measured and reported at close.
+token_budget: 400000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "A doc or eval still asserts the old label and doc-truth goes red."
+    mitigation: "Repo-wide grep gate for the removed label wired as a test, evals repasted from live output."
+    severity: high
+blocked_by: []
+alerts: []

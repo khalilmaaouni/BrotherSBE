@@ -1,0 +1,33 @@
+id: BR-1015
+title: "Release blocker 5: control plane protection at honest solo scope"
+why: >
+  The controls live in the repository they protect. Solo scope tonight: CODEOWNERS, a protections verifier, and the solo-operator limit named in writing. The GitHub ruleset clicks are the founder hand step; attestation and CI e2e are named fast-follows.
+persona_need: "P2 team adopting the controls, P3 orchestrator"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: release-blockers
+milestone: M0
+depends_on:
+  - "BR-1014"
+spec: BrotherSBE_RELEASE_BLOCKERS_FOR_FABLE.md (founder-supplied review, 2026-08-06; scope decisions in program/MASTER-PLAN-2026-08-06.md section 0)
+acceptance:
+  - ".github/CODEOWNERS exists covering the control plane paths"
+  - "sbe protections verify --strict reports live ruleset state, NO-DATA without a token, and the release checklist treats that NO-DATA as blocking"
+  - "the solo-operator limit is named in TESTERS.md and README named-limits sections"
+  - "local Claude Code e2e evidence recorded against the release commit: plugin loads, hooks fire, a protected Bash write is refused, a task-scoped write succeeds"
+estimated_days: 0.5
+# Budget recorded as a FORECAST, not a cap: the founder removed token limiters
+# for this sprint by explicit order (2026-08-06 late evening, decision window
+# round 2). Spend is still measured and reported at close.
+token_budget: 600000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Verifier reports green against a ruleset the founder has not clicked yet."
+    mitigation: "The 8:00 founder checklist is the ordered step; release evidence stores the verifier output taken AFTER his clicks."
+    severity: high
+blocked_by: []
+alerts: []

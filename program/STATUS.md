@@ -4,7 +4,8 @@
 Program: brothersbe-public-release
 Version target: 1.0.0
 Overall position: 100% across measured items.
-1 of 18 items measured.
+1 of 23 items measured.
+Undeclared wave 'release-blockers': BR-1011, BR-1012, BR-1013, BR-1014, BR-1015
 
 ```mermaid
 gantt
@@ -41,6 +42,12 @@ gantt
     Jira and Confluence one-way exporters :BR-0520, after BR-0000, 1d
     Asana exporter :crit, BR-0521, after BR-0000 BR-0520, 1d
     Microsoft Teams notify now, bot later :crit, BR-0522, after BR-0000 BR-0520, 1d
+    section release-blockers
+    Release blocker 3  required-evidence policy engine :crit, BR-1011, after BR-1001, 1d
+    Release blocker 4  registered check binding :crit, BR-1012, after BR-1011, 1d
+    Release blocker 2  honest trust downgrade, PROTECTED-CI removed :crit, BR-1013, after BR-1012, 1d
+    Release blocker 1  Bash write guard and Stop reconciliation, core scope :crit, BR-1014, after BR-1011, 1d
+    Release blocker 5  control plane protection at honest solo scope :crit, BR-1015, after BR-1014, 1d
 ```
 
 ### Finished
@@ -66,6 +73,11 @@ gantt
 - BR-1008: Loop G: the Codex track (waits on: BR-1001)
 - BR-1009: sbe watchdog: the 20-minute drift audit, shipped and on by default (waits on: BR-1000)
 - BR-1010: Unit testing protocol, end to end, for backend developers and QA (waits on: BR-1009)
+- BR-1011: Release blocker 3: required-evidence policy engine (waits on: BR-1001)
+- BR-1012: Release blocker 4: registered check binding (waits on: BR-1011)
+- BR-1013: Release blocker 2: honest trust downgrade, PROTECTED-CI removed (waits on: BR-1012)
+- BR-1014: Release blocker 1: Bash write guard and Stop reconciliation, core scope (waits on: BR-1011)
+- BR-1015: Release blocker 5: control plane protection at honest solo scope (waits on: BR-1014)
 
 ### Blocked
 - BR-0521 is blocked on BR-0520 (depends_on: not recorded as done)
@@ -80,6 +92,11 @@ gantt
 - BR-1009 is blocked on BR-1000 (depends_on: not recorded as done)
 - BR-1009 is blocked on Phase 0 must land first: this reads the fence registry that Phase 0's dispatch gate defines. (blocked_by: free-text blocker)
 - BR-1010 is blocked on BR-1009 (depends_on: not recorded as done)
+- BR-1011 is blocked on BR-1001 (depends_on: not recorded as done)
+- BR-1012 is blocked on BR-1011 (depends_on: not recorded as done)
+- BR-1013 is blocked on BR-1012 (depends_on: not recorded as done)
+- BR-1014 is blocked on BR-1011 (depends_on: not recorded as done)
+- BR-1015 is blocked on BR-1014 (depends_on: not recorded as done)
 
 ### Risks and mitigations
 | item | risk | severity | mitigation |
@@ -114,6 +131,11 @@ gantt
 | BR-1009 | Admitted while Phase 0 was in flight, which is the scope creep the plan's own one-loop rule exists to prevent. | medium | Recorded as a work item with its persona need, done-check and budget rather than built inside Phase 0, and it opens only when the owed register allows it. |
 | BR-1010 | A testing protocol that duplicates what the gates already enforce would create two sources of truth about what a passing test means. | medium | The design phase maps every protocol rule to an existing gate or lint first; only genuinely new rules get new enforcement, per the reuse before build law. |
 | BR-1010 | Admitted mid program by founder priority, ahead of the owed remeasure and Loop B close. | medium | Recorded as a named founder deferral: the remeasure moves behind BR-1009 and BR-1010 by his explicit call of 2026-08-06, visible in the owed register rather than silently. |
+| BR-1011 | Policy matching misses a rename or deletion and a sensitive change slips the net. | high | Null-delimited git diff parsing with explicit A/M/D/R/T handling, hostile refuter fixtures for rename and delete paths. |
+| BR-1012 | Spec hashing misses a runner dependency and a stale receipt survives a behavior change. | high | runnerFiles hashes are part of the signed spec surface; refuter fixture mutates the runner and asserts invalidation. |
+| BR-1013 | A doc or eval still asserts the old label and doc-truth goes red. | high | Repo-wide grep gate for the removed label wired as a test, evals repasted from live output. |
+| BR-1014 | The Stop hook fails closed on a corner case and locks an honest session out. | high | Break-glass recovery path per the review: restore the file, declare the path, or a reviewed break-glass record; refuter fixture covers each. |
+| BR-1015 | Verifier reports green against a ruleset the founder has not clicked yet. | high | The 8:00 founder checklist is the ordered step; release evidence stores the verifier output taken AFTER his clicks. |
 
 ### Documentation
 - program/MASTER-PLAN.md: exists
@@ -124,9 +146,10 @@ gantt
 - docs/adr/2026-08-05-gui-server-amendment.md: exists
 - docs/PRINCIPLES.md: exists
 - to be written first, design before build, per docs/PRINCIPLES.md section 1: MISSING
+- BrotherSBE_RELEASE_BLOCKERS_FOR_FABLE.md (founder-supplied review, 2026-08-06; scope decisions in program/MASTER-PLAN-2026-08-06.md section 0): MISSING
 
 ### Budget
 Declared total: 6200000
 Recorded usage: 1339000
-Items with no recorded usage: 17
+Items with no recorded usage: 22
 <!-- END GENERATED PROGRAM STATUS -->
