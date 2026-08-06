@@ -1,0 +1,41 @@
+id: BR-1001
+title: "Loop B-close: the owed remeasure, six lanes re-verified and integrated, sealed as rc.18"
+why: >
+  Loop B's contracts are the foundation every later loop consumes: versioned brief
+  and state schemas, the applicability engine, change scoped task identity, review
+  derived from findings, and the fourth ladder folded. Six lane patches exist and
+  three were interrupted mid third round. The post rc.16 remeasure is owed and is
+  the first act here, because every score claim before it is an rc.15 number.
+persona_need: "P2 small engineering team, P3 orchestrator, and the foundation for P1's workspace"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: loop-b
+milestone: M1
+depends_on:
+  - "BR-1000"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "the owed post rc.16 remeasure has run and its numbers are recorded"
+  - "each of the three interrupted lanes has a fresh hostile verdict"
+  - "all six lanes integrated, version 1.0.0-rc.18, checksums last"
+  - "five green CI legs and a post merge battery on main"
+  - "the loop's own remeasure recorded before any later fence opens"
+estimated_days: 2
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 2000000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Three lane patches may contain partial round three state and are labelled UNVERIFIED."
+    mitigation: "One hostile verifier per interrupted lane against its round two verdict file before any integration; a dead writer's tree is evidence, never product."
+    severity: high
+  - risk: "Many new Python files move the baked lint counts, and the applicability column moves gate lines in shipped docs."
+    mitigation: "Enumerate and repaste every affected block from live runs, then let the doc truth evals arbitrate."
+    severity: medium
+blocked_by: []
+alerts: []

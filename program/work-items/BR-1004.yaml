@@ -1,0 +1,37 @@
+id: BR-1004
+title: "Loop E: guided operations and the human benchmark kit"
+why: >
+  The north star check is that someone who has never seen the product can complete
+  one governed change without reading internal documentation and without typing a
+  terminal command they do not understand. This loop builds the guided surfaces
+  that make that possible and ships the kit that measures it.
+persona_need: "P1 non-engineer founder"
+owner: fable-orchestrator
+reviewer: journey-refuter
+status: not_started
+wave: loop-e
+milestone: M1
+depends_on:
+  - "BR-1003"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "objective wizard, decision studio, plan board, work cockpit, proof and review centers"
+  - "a preview token before every apply, and error objects carrying remedies"
+  - "the journey refuter completes a full change without one terminal command"
+  - "the human benchmark kit ships"
+  - "gui and beginner dimensions at mechanical nine"
+estimated_days: 2
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 2000000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Human numbers cannot exist until real people run the kit, which happens after the tag by the founder's own ratified score bar."
+    mitigation: "The kit gates the packet; the numbers do not. Nothing claims a human result before one exists."
+    severity: medium
+blocked_by: []
+alerts: []

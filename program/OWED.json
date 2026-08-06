@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "note": "The owed items register. No new loop fence opens while any item here is open and not deferred by the founder, per the master plan approved 2026-08-06. Read by tools/sbe_dispatch.py loop-open.",
+  "items": [
+    {
+      "id": "OWED-1",
+      "title": "Phase 0 dispatch gate, program visibility, watchdog, principles",
+      "state": "open",
+      "deferred_by_founder": false,
+      "deferral_reason": null,
+      "closes_in": "BR-1000"
+    },
+    {
+      "id": "OWED-2",
+      "title": "Post rc.16 remeasure, owed since rc.16 merged",
+      "state": "open",
+      "deferred_by_founder": false,
+      "deferral_reason": null,
+      "closes_in": "BR-1001, its first act"
+    },
+    {
+      "id": "OWED-3",
+      "title": "Loop B integration and the rc.18 seal, six lanes preserved as patches",
+      "state": "open",
+      "deferred_by_founder": false,
+      "deferral_reason": null,
+      "closes_in": "BR-1001"
+    },
+    {
+      "id": "OWED-4",
+      "title": "Windows one eval diagnosis, funded 2026-08-06",
+      "state": "open",
+      "deferred_by_founder": true,
+      "deferral_reason": "Founder granted an explicit parallel exception on 2026-08-06: it runs on its own branch with its own budget and gates nothing.",
+      "closes_in": "BR-1007"
+    },
+    {
+      "id": "OWED-5",
+      "title": "Telemetry double writer fix in the BrotherModeUp estate",
+      "state": "open",
+      "deferred_by_founder": true,
+      "deferral_reason": "Outside this repository. Waits on one founder line in that session's own channel; a relayed approval is second hand under its rules.",
+      "closes_in": "outside this repository"
+    },
+    {
+      "id": "OWED-6",
+      "title": "KNOWN-LIMITS tag contradiction, doc says no tag exists while two tags exist",
+      "state": "open",
+      "deferred_by_founder": true,
+      "deferral_reason": "Scheduled into Loop C by the approved plan rather than pulled forward.",
+      "closes_in": "BR-1002"
+    },
+    {
+      "id": "OWED-7",
+      "title": "CHECKSUMS drift eval truncates long lists undisclosed",
+      "state": "open",
+      "deferred_by_founder": true,
+      "deferral_reason": "Scheduled into Loop F by the approved plan.",
+      "closes_in": "BR-1005"
+    },
+    {
+      "id": "OWED-8",
+      "title": "Instruction surface has no parser for workflow YAML, lands as honest NO-DATA",
+      "state": "open",
+      "deferred_by_founder": true,
+      "deferral_reason": "Accepted and declared gap; Loop F may close it or it stays declared.",
+      "closes_in": "BR-1005 or stays declared"
+    },
+    {
+      "id": "OWED-9",
+      "title": "Worktree and registry hygiene",
+      "state": "closed",
+      "deferred_by_founder": false,
+      "deferral_reason": null,
+      "closes_in": "closed 2026-08-06: archive at Documents/BrotherSBE-worktree-archive-2026-08-06, bm_store verify healthy 0 problems"
+    }
+  ]
+}

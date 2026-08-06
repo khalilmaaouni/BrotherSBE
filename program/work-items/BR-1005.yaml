@@ -1,0 +1,38 @@
+id: BR-1005
+title: "Loop F: team and maintainability closed"
+why: >
+  Maintainability sits at 5.0, the lowest of the six dimensions, and the team
+  dimension needs completion and acknowledged ownership as scored rows rather than
+  rendered facts. This loop pays that debt once the surfaces above it stop moving.
+persona_need: "P2 small engineering team and P3 orchestrator"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: loop-f
+milestone: M1
+depends_on:
+  - "BR-1004"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "work in progress limits enforced in code with recorded overrides"
+  - "completion and acknowledged ownership become SCORED rows"
+  - "stale claims first class"
+  - "boilerplate consolidation past 2 of 31 files"
+  - "the CHECKSUMS drift eval truncation fixed with a calibrated fixture"
+  - "a small ADR on keeping version stamps out of committed sandbox content"
+  - "team past 9.1 and maintainability at nine, refuter checked"
+estimated_days: 1
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 2000000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Boilerplate consolidation touches many files at once, which is the shape that breaks baked counts and doc truth suites together."
+    mitigation: "Generated docs where hand written ones drift, and the evals arbitrate every count rather than any prediction."
+    severity: medium
+blocked_by: []
+alerts: []

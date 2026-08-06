@@ -1,0 +1,47 @@
+id: BR-1000
+title: "Phase 0: the dispatch gate, program visibility, watchdog and encoded principles"
+why: >
+  Three of the founder's four correction points of 2026-08-06 have no mechanical
+  control today: agents were dispatched without a declared capability profile or
+  budget, new work opened while owed work sat unfinished, and program progress
+  lived in hand maintained prose that drifts. This phase turns those rules into
+  checks that run, and makes program progress a generated artifact with a drift
+  test rather than a promise.
+persona_need: "P3 agent orchestrator, and P1 founder who cannot see where the program stands"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: in_progress
+wave: phase-0
+milestone: M1
+depends_on: []
+spec: design/phase-0/SPEC.md
+acceptance:
+  - "python3 tools/test_sbe_program.py prints OK"
+  - "python3 tools/test_sbe_dispatch.py prints OK"
+  - "sbe program status --write regenerates program/STATUS.md and a second run is byte identical"
+  - "sbe program check exits 1 when STATUS.md is stale and 0 when fresh"
+  - "the dispatch gate refuses a brief missing a capability profile, a budget, a file list or a done check, naming every problem in one run"
+  - "the dispatch gate refuses loop open when program/OWED.json records an open item, and refuses as NO-DATA when that file is absent"
+  - "python3 evals/run_evals.py at or above the session baseline with 0 regressions"
+  - "docs/PRINCIPLES.md exists and the plan points at it"
+estimated_days: 1
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 1800000
+tokens_used: null
+started_at: 2026-08-06
+completed_at: null
+evidence: []
+risks:
+  - risk: "Scope grew from the dispatch gate alone to four deliverables, so the declared 600k budget was raised to 1,800k before start."
+    mitigation: "Re-scope declared in STATE.md and to the founder before any dispatch; the cap stops work rather than sliding."
+    severity: medium
+  - risk: "Lane A tests point at the live program ledger as a fixture while this migration changes that ledger, so a count assertion could break at integration."
+    mitigation: "The orchestrator re-runs both suites on the MERGED tree, which is where a count assertion surfaces, and rejects the lane back rather than patching its test."
+    severity: medium
+  - risk: "Every new .py file moves the repository's baked lint counts."
+    mitigation: "The counts law: run the evals and copy the printed numbers, never predict them."
+    severity: low
+blocked_by: []
+alerts: []
