@@ -1,0 +1,133 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "unittest",
+    "tools/test_sbe.py",
+    "tools/test_sbe_interop.py"
+  ],
+  "argvRedactions": 0,
+  "baseCommit": "184c1e2c8ada3353bf3c5ddaa0e4ee76bda2347d",
+  "checkBinding": {
+    "argv": [
+      "python3",
+      "-m",
+      "unittest",
+      "tools/test_sbe.py",
+      "tools/test_sbe_interop.py"
+    ],
+    "covers": [
+      "src/brothersbe/cli.py",
+      "bin/sbe",
+      "tables/architecture.json"
+    ],
+    "cwd": ".",
+    "environmentAllowlist": [
+      "PATH",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LC_CTYPE",
+      "TZ",
+      "TMPDIR",
+      "TEMP",
+      "TMP",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "SYSTEMROOT",
+      "COMSPEC",
+      "PATHEXT",
+      "USERPROFILE",
+      "SBE_CI_RUN_ID",
+      "CI",
+      "GITHUB_RUN_ID",
+      "GITHUB_SHA",
+      "GITHUB_REPOSITORY"
+    ],
+    "environmentDropped": 50,
+    "environmentKept": [
+      "HOME",
+      "LC_CTYPE",
+      "LOGNAME",
+      "PATH",
+      "SHELL",
+      "TMPDIR",
+      "USER"
+    ],
+    "environmentNote": "50 variable(s) outside the allowlist were dropped before the command started; a check steered by an exported variable is a check the caller can change without touching the registry",
+    "executable": {
+      "note": "resolved from PATH rather than from this repository, so its bytes are not hashed: a digest of one machine's interpreter is not reproducible on another",
+      "path": "python3",
+      "resolved": null,
+      "sha256": null
+    },
+    "protectedEvidence": true,
+    "registryPath": ".sbe/checks.yml",
+    "runnerFiles": [
+      {
+        "note": null,
+        "path": "tools/test_sbe.py",
+        "sha256": "d8ca12ede70094a19389b6406941ed15561d2432378e213a19120685c063236c"
+      },
+      {
+        "note": null,
+        "path": "tools/test_sbe_interop.py",
+        "sha256": "34f15c77755c1ff1f6bad3e83040b11b34c06c3361a78b96b75f8f54cd5d5068"
+      }
+    ]
+  },
+  "checkId": "contract-compatibility",
+  "checkIdSource": "resolved from .sbe/checks.yml at generation time: check contract-compatibility, specification digest f513384ab25c5886bf50ea1ac4118ec7a8c340f2605cc48c862a0543749e6ac7. The executable, the argument vector, the working directory and the covered paths came from the registry and no argument on the command line could replace any of them",
+  "checkKind": "contract",
+  "checkKinds": [],
+  "checkKindsSource": "no --kind was given, so this receipt declares no check kind and satisfies no design, gate or score obligation. A kind is never inferred from the recorded command line; that inference is the defect this field replaced",
+  "checkSpecSha256": "f513384ab25c5886bf50ea1ac4118ec7a8c340f2605cc48c862a0543749e6ac7",
+  "ciRunId": null,
+  "coveredFiles": [
+    {
+      "note": null,
+      "path": "bin/sbe",
+      "sha256": "f13902b7c64f2282f6103a6dd110bee118cb1c34b5257a33de0c4d1f290666a9"
+    },
+    {
+      "note": null,
+      "path": "src/brothersbe/cli.py",
+      "sha256": "8db5e21dcd83364ad9a2e1a797e52b0cff2d84a77dab76e9c2e5cb2305fd1054"
+    },
+    {
+      "note": null,
+      "path": "tables/architecture.json",
+      "sha256": "99b0abc292302527a4dba66308ede22407a6a2ecf7cd764bd154bf22830ac768"
+    }
+  ],
+  "coveredFilesSource": "the registered check contract-compatibility, whose covers globs (src/brothersbe/cli.py, bin/sbe, tables/architecture.json) matched 3 tracked file(s)",
+  "durationSeconds": 33.770776,
+  "endedAt": "2026-08-06T13:50:18Z",
+  "endedAtEpoch": 1786024218.286885,
+  "environment": "macOS-26.5.2-arm64-arm-64bit",
+  "exitCode": 0,
+  "generator": "sbe evidence run",
+  "generatorVersion": "1.0.0-rc.20",
+  "headCommit": "f5b7a642110209ae6ba9b9de201503af6fc89b93",
+  "outputPolicy": "digests only; raw stdout and stderr are never persisted, because a receipt is shared and a secret in output would be shared with it",
+  "repository": {
+    "remote": "https://github.com/khalilmaaouni/BrotherSBE.git",
+    "remoteNote": null,
+    "root": "/Users/khalil.maaouni/Documents/BrotherSBE"
+  },
+  "runId": "380ea4fab1803f980baa42fb7e5fd6c705d5b1b57445355be87ebf35d8707bb8",
+  "schemaVersion": "1.3",
+  "startedAt": "2026-08-06T13:49:44Z",
+  "startedAtEpoch": 1786024184.516109,
+  "stderrBytes": 291915,
+  "stderrSha256": "0561da5020f994965aa52dc685c37fc2bf039778102063b22a5d815ed167e391",
+  "stdoutBytes": 162,
+  "stdoutSha256": "ce8fc8262bcc7c66790082ee5fd556ca5aa1f462da1833abf3541f3bfa4bd25e",
+  "toolVersions": {
+    "python": "3.9.6",
+    "sbe": "1.0.0-rc.20"
+  },
+  "workingTreeDetail": "0 uncommitted path(s)",
+  "workingTreeDirty": false
+}

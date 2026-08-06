@@ -1,0 +1,185 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "unittest",
+    "tools/test_sbe_authority_hook.py",
+    "tools/test_sbe_fence_hook.py",
+    "tools/test_sbe_bypass.py"
+  ],
+  "argvRedactions": 0,
+  "baseCommit": "184c1e2c8ada3353bf3c5ddaa0e4ee76bda2347d",
+  "checkBinding": {
+    "argv": [
+      "python3",
+      "-m",
+      "unittest",
+      "tools/test_sbe_authority_hook.py",
+      "tools/test_sbe_fence_hook.py",
+      "tools/test_sbe_bypass.py"
+    ],
+    "covers": [
+      "hooks/**",
+      "tools/sbe_*hook*.py",
+      "tools/sbe_*guard*.py",
+      "src/brothersbe/evidence.py",
+      "src/brothersbe/checks.py",
+      "src/brothersbe/policy.py",
+      ".sbe/policy.yml",
+      ".sbe/checks.yml"
+    ],
+    "cwd": ".",
+    "environmentAllowlist": [
+      "PATH",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "LC_CTYPE",
+      "TZ",
+      "TMPDIR",
+      "TEMP",
+      "TMP",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "SYSTEMROOT",
+      "COMSPEC",
+      "PATHEXT",
+      "USERPROFILE",
+      "SBE_CI_RUN_ID",
+      "CI",
+      "GITHUB_RUN_ID",
+      "GITHUB_SHA",
+      "GITHUB_REPOSITORY"
+    ],
+    "environmentDropped": 50,
+    "environmentKept": [
+      "HOME",
+      "LC_CTYPE",
+      "LOGNAME",
+      "PATH",
+      "SHELL",
+      "TMPDIR",
+      "USER"
+    ],
+    "environmentNote": "50 variable(s) outside the allowlist were dropped before the command started; a check steered by an exported variable is a check the caller can change without touching the registry",
+    "executable": {
+      "note": "resolved from PATH rather than from this repository, so its bytes are not hashed: a digest of one machine's interpreter is not reproducible on another",
+      "path": "python3",
+      "resolved": null,
+      "sha256": null
+    },
+    "protectedEvidence": true,
+    "registryPath": ".sbe/checks.yml",
+    "runnerFiles": [
+      {
+        "note": null,
+        "path": "tools/test_sbe_authority_hook.py",
+        "sha256": "29e23c2cea6cef9b85ce05d8fc914ece5a9d9d478c5e5410afe843b37b805782"
+      },
+      {
+        "note": null,
+        "path": "tools/test_sbe_fence_hook.py",
+        "sha256": "779369141fe73a990319b53e33e1b6c271c628c10d93d65c6d165f552a71236b"
+      },
+      {
+        "note": null,
+        "path": "tools/test_sbe_bypass.py",
+        "sha256": "108b41dd12a3240f78241283235486e31c9dd42e5bbdbe332bebe5938d7ab73f"
+      },
+      {
+        "note": null,
+        "path": "tools/sbe_authority_hook.py",
+        "sha256": "ccef39f882f22650999f0e6dcf2792ad91593e73f632b284a8e08675327718d7"
+      },
+      {
+        "note": null,
+        "path": "tools/sbe_fence_hook.py",
+        "sha256": "eb4ef8fc24af54bb4c01d341d5fb7a7ba9cea1daa60ee7a0f3ecf469f2866abb"
+      }
+    ]
+  },
+  "checkId": "control-plane-tests",
+  "checkIdSource": "resolved from .sbe/checks.yml at generation time: check control-plane-tests, specification digest e8758f7fa74b15c655e40c52f1c527dd8d138d87e8c61cbd992a3366d9e6aa34. The executable, the argument vector, the working directory and the covered paths came from the registry and no argument on the command line could replace any of them",
+  "checkKind": "ran",
+  "checkKinds": [],
+  "checkKindsSource": "no --kind was given, so this receipt declares no check kind and satisfies no design, gate or score obligation. A kind is never inferred from the recorded command line; that inference is the defect this field replaced",
+  "checkSpecSha256": "e8758f7fa74b15c655e40c52f1c527dd8d138d87e8c61cbd992a3366d9e6aa34",
+  "ciRunId": null,
+  "coveredFiles": [
+    {
+      "note": null,
+      "path": ".sbe/checks.yml",
+      "sha256": "fe634e662b6e1949afbf191c4792cf3b34d06e03cb3a57b86bb77bd19617151d"
+    },
+    {
+      "note": null,
+      "path": ".sbe/policy.yml",
+      "sha256": "5aa746de4ead06e4cd29551dd20f07193e971635c30cfdff9e7b406dde996249"
+    },
+    {
+      "note": null,
+      "path": "hooks/hooks.json",
+      "sha256": "e3adde923f2b75c54730daf03678d1d22fdd83ff6c61d32de633fac2093e6e26"
+    },
+    {
+      "note": null,
+      "path": "src/brothersbe/checks.py",
+      "sha256": "c0788ee81b727772c83f28cca523d0a9b5db959a745ea7ef2caf89d40d05b9ea"
+    },
+    {
+      "note": null,
+      "path": "src/brothersbe/evidence.py",
+      "sha256": "e50010e392dfea16516ad5d8d5740d0e510fb673393c8a88cc405775cef5234c"
+    },
+    {
+      "note": null,
+      "path": "src/brothersbe/policy.py",
+      "sha256": "cd5b522630a5e4b6ac3896f9d4202b4915496b5c3a920ffa7cab2b1935ce07e1"
+    },
+    {
+      "note": null,
+      "path": "tools/sbe_authority_hook.py",
+      "sha256": "ccef39f882f22650999f0e6dcf2792ad91593e73f632b284a8e08675327718d7"
+    },
+    {
+      "note": null,
+      "path": "tools/sbe_bash_write_guard.py",
+      "sha256": "cd620d8c8220f1538929fd1517d3ac1d716a4f3d30eecf78e125931acae44580"
+    },
+    {
+      "note": null,
+      "path": "tools/sbe_fence_hook.py",
+      "sha256": "eb4ef8fc24af54bb4c01d341d5fb7a7ba9cea1daa60ee7a0f3ecf469f2866abb"
+    }
+  ],
+  "coveredFilesSource": "the registered check control-plane-tests, whose covers globs (hooks/**, tools/sbe_*hook*.py, tools/sbe_*guard*.py, src/brothersbe/evidence.py, src/brothersbe/checks.py, src/brothersbe/policy.py, .sbe/policy.yml, .sbe/checks.yml) matched 9 tracked file(s)",
+  "durationSeconds": 3.20513,
+  "endedAt": "2026-08-06T13:49:44Z",
+  "endedAtEpoch": 1786024184.399773,
+  "environment": "macOS-26.5.2-arm64-arm-64bit",
+  "exitCode": 0,
+  "generator": "sbe evidence run",
+  "generatorVersion": "1.0.0-rc.20",
+  "headCommit": "f5b7a642110209ae6ba9b9de201503af6fc89b93",
+  "outputPolicy": "digests only; raw stdout and stderr are never persisted, because a receipt is shared and a secret in output would be shared with it",
+  "repository": {
+    "remote": "https://github.com/khalilmaaouni/BrotherSBE.git",
+    "remoteNote": null,
+    "root": "/Users/khalil.maaouni/Documents/BrotherSBE"
+  },
+  "runId": "31c3cabe6dcb80a00cbb77ebbf5acf1c28c4d4a4f41b20ef52236fffffcc0b9e",
+  "schemaVersion": "1.3",
+  "startedAt": "2026-08-06T13:49:41Z",
+  "startedAtEpoch": 1786024181.194643,
+  "stderrBytes": 223,
+  "stderrSha256": "eb3ea5db20b6ec8b4bd9e9c1c8dcb6c3ca9a029b30701f5d2834ee64f118286f",
+  "stdoutBytes": 0,
+  "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "toolVersions": {
+    "python": "3.9.6",
+    "sbe": "1.0.0-rc.20"
+  },
+  "workingTreeDetail": "0 uncommitted path(s)",
+  "workingTreeDirty": false
+}
