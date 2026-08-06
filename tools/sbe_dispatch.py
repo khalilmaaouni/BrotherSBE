@@ -41,7 +41,7 @@ line over a budget it never measured. See _budget_problem and its docstring.
 import json, math, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sbe_checks import answered
+from sbe_checks import answered, say
 
 #: The "this file could not be read at all" sentinel. It is a unique object and
 #: deliberately NOT None, because a file whose entire content is the valid JSON
@@ -442,32 +442,42 @@ def _read_json_arg(args):
         return None, "%s does not parse as JSON (%s)" % (source, type(e).__name__)
 
 
+def _say_usage():
+    # Mirrors sbe_gate.py's help path: the usage text goes out line by line
+    # through the say() choke point, because the verdict-source lint reads
+    # _say_usage() as an unflattened report line (a NAME is not a bare string
+    # constant to a source lint), and it is right: one choke point, no
+    # exceptions, is the whole rule.
+    for usage_line in USAGE.splitlines():
+        say(usage_line)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if any(a in ("-h", "--help") for a in argv):
-        print(USAGE)
+        _say_usage()
         return 0
     if not argv:
-        print(USAGE)
-        print("sbe_dispatch: a subcommand is required (brief or loop-open).")
+        _say_usage()
+        say("sbe_dispatch: a subcommand is required (brief or loop-open).")
         return 2
     cmd, rest = argv[0], argv[1:]
 
     if cmd == "brief":
         brief, err = _read_json_arg(rest)
         if err:
-            print(USAGE)
-            print("sbe_dispatch: %s" % err)
+            _say_usage()
+            say("sbe_dispatch: %s" % err)
             return 2
         problems = validate_brief(brief)
         if problems:
-            print("sbe_dispatch: brief REFUSED (%d problem(s)):" % len(problems))
+            say("sbe_dispatch: brief REFUSED (%d problem(s)):" % len(problems))
             for p in problems:
-                print("  - %s" % p)
+                say("  - %s" % p)
             return 1
-        print("sbe_dispatch: brief PASS: objective, model_tier, token_budget, files, "
-              "done_check and tier are all present and valid, and the agent-count scaling "
-              "check for tier %s passed." % brief.get("tier"))
+        say("sbe_dispatch: brief PASS: objective, model_tier, token_budget, files, "
+            "done_check and tier are all present and valid, and the agent-count scaling "
+            "check for tier %s passed." % brief.get("tier"))
         return 0
 
     if cmd == "loop-open":
@@ -478,39 +488,39 @@ def main(argv=None):
             a = rest[i]
             if a == "--state":
                 if i + 1 >= len(rest):
-                    print(USAGE)
-                    print("sbe_dispatch: --state needs a PATH argument")
+                    _say_usage()
+                    say("sbe_dispatch: --state needs a PATH argument")
                     return 2
                 state_path = rest[i + 1]
                 i += 2
             elif a == "--owed":
                 if i + 1 >= len(rest):
-                    print(USAGE)
-                    print("sbe_dispatch: --owed needs a PATH argument")
+                    _say_usage()
+                    say("sbe_dispatch: --owed needs a PATH argument")
                     return 2
                 owed_path = rest[i + 1]
                 i += 2
             else:
-                print(USAGE)
-                print("sbe_dispatch: %r is not a recognized option for loop-open" % (a,))
+                _say_usage()
+                say("sbe_dispatch: %r is not a recognized option for loop-open" % (a,))
                 return 2
         if not state_path or not owed_path:
-            print(USAGE)
-            print("sbe_dispatch: loop-open needs both --state PATH and --owed PATH")
+            _say_usage()
+            say("sbe_dispatch: loop-open needs both --state PATH and --owed PATH")
             return 2
         problems = check_loop_open(state_path, owed_path)
         if problems:
-            print("sbe_dispatch: loop-open REFUSED (%d problem(s)):" % len(problems))
+            say("sbe_dispatch: loop-open REFUSED (%d problem(s)):" % len(problems))
             for p in problems:
-                print("  - %s" % p)
+                say("  - %s" % p)
             return 1
-        print("sbe_dispatch: loop-open PASS: no unfinished, undeferred owed item was found, "
-              "and the recorded budget spend was measured against its recorded cap and is "
-              "not exhausted.")
+        say("sbe_dispatch: loop-open PASS: no unfinished, undeferred owed item was found, "
+            "and the recorded budget spend was measured against its recorded cap and is "
+            "not exhausted.")
         return 0
 
-    print(USAGE)
-    print("sbe_dispatch: %r is not a recognized subcommand (brief, loop-open)." % (cmd,))
+    _say_usage()
+    say("sbe_dispatch: %r is not a recognized subcommand (brief, loop-open)." % (cmd,))
     return 2
 
 
