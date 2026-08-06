@@ -204,14 +204,36 @@ It reports; it never fixes. Its purpose is to keep both the orchestrator and the
 founder honest between checkpoints, and it is deliberately dumb and mechanical so
 it cannot be talked out of a finding.
 
-**The watchdog cadence is a standing founder rule (2026-08-06): every 20
-minutes while work is in flight, on by default.** Not armed on request, armed
-because a session is working. The session-level watchdog (a cheap-model cron in
-the orchestrating session) covers today; the product-level half is BR-1009, the
-`sbe watchdog` command shipped ON BY DEFAULT: the deterministic question list as
-a command any scheduler or hook can run every 20 minutes on any machine, with
-opt-out recorded rather than assumed. A watchdog that must be remembered is a
-watchdog that is off exactly when it is needed.
+**The watchdog cadence is a standing founder rule (2026-08-06, refined the same
+day after three lived audits): the watchdog BREATHES WITH THE WORK, on by
+default.** A fixed clock audits the calendar; a synced one audits the risk, and
+risk tracks what is moving. The ratified policy:
+
+- IN FLIGHT (any open fence or engine run): every 20 minutes, full audit of
+  both directions: the workers (fence violations, forbidden commits, stalls,
+  dashes) and the orchestrator (spend against the declared budget, declared
+  round adherence, the state file agreeing with the owed register).
+- IDLE at founder gates (no fence, nothing running): an hourly three-command
+  probe, snapping back to 20 minutes the instant a fence opens.
+- EVENTS BEAT THE CLOCK: an engine round finishing, a seal starting, or a push
+  each fire an audit immediately and reset the timer.
+- Cadence never stretches wider than half the shortest expected phase, so no
+  phase can start and fully derail between two looks.
+- REPORT CONTRACT, three levels: HEARTBEAT (clean, idle) is a ledger line and
+  never chat; PULSE (clean, in flight) is a ledger line with chat only at mode
+  transitions, the morning report carrying the tally; ALARM (a finding) is
+  immediate, in the error-card shape, with exactly one recommended next
+  action. A boundary violation or a worker commit STOPS THE LINE: no new
+  dispatch until the finding is answered. Silence is verified by the tally,
+  never assumed.
+
+The session-level watchdog covers today; the product half is BR-1009, `sbe
+watchdog`, shipped ON BY DEFAULT: mode auto-detected from the fence registry
+and engine state, cadence in configuration with 20 and 60 as the shipped
+defaults, exit 0 clean and 1 on a finding, silent on success so schedulers and
+hooks can run it without noise, opt-out recorded rather than assumed. A
+watchdog that must be remembered is a watchdog that is off exactly when it is
+needed.
 
 `[human]` for most of this, `[checked: the no-data sweep and the four hard gates]`
 for the evidence layer, `[checked: the watchdog's own question list]` for the

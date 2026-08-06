@@ -26,7 +26,10 @@ acceptance:
   - "it reports any em dash or en dash in the changed set"
   - "it reports NO-DATA, never clean, when the fence registry or a worktree it names is missing"
   - "it writes nothing and fixes nothing, proven by a test asserting the tree is byte identical after a run"
-  - "the default cadence is 20 minutes, read from configuration with the founder rule as the shipped default, never hardcoded at call sites"
+  - "mode is auto-detected from the fence registry and engine state: in flight, integrating, or idle; the check list matches the mode"
+  - "cadence lives in configuration with 20 minutes in flight and 60 idle as the shipped defaults, snap-back on fence-open, never hardcoded at call sites"
+  - "it audits the orchestrator too: recorded spend against the declared budget, and the state file agreeing with the owed register, each a named check"
+  - "report contract: exit 0 and silent on clean, exit 1 with a JSON finding plus a one-line human summary; a boundary violation or worker commit is flagged stop-the-line"
   - "the audit is armed by default when a session or CI run starts work in a governed repository; disabling it is an explicit recorded opt-out, not an absence"
   - "python3 tools/test_sbe_watchdog.py prints OK"
 estimated_days: 1
