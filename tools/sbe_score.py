@@ -36,7 +36,10 @@ from sbe_checks import (Check, run_guarded, answered, vacuous, all_vacuous, deri
 # registry file.
 REGISTRIES = []
 REGISTRY_DENIALS = []
-for _pat in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":"):
+# os.pathsep, not a literal colon: on Windows a drive path like C:\x would
+# split at its own drive colon and match nothing, reading NO registry and
+# reporting NO-DATA (proven live by the windows-latest leg, run 31040612827).
+for _pat in os.environ.get("BROTHERSBE_REGISTRIES", "").split(os.pathsep):
     if _pat.strip():
         _hits, _denied = glob_with_denials(_pat.strip())
         REGISTRIES.extend(_hits)

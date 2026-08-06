@@ -93,8 +93,12 @@ from importlib.machinery import SourceFileLoader
 
 try:
     import fcntl
-except ImportError:  # a platform with no fcntl (untested elsewhere anyway;
-    fcntl = None      # `write_package` refuses to write unlocked rather than
+except ImportError:          # every non-POSIX platform (Windows: msvcrt below)
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None             # `write_package` refuses to write unlocked rather than
                        # reopen the race the lock exists to close)
 
 # `_git` is the same private helper `status.py` reuses. `_tier_index` is
@@ -301,11 +305,11 @@ def _store_lock(decisions_dir):
     `DecisionUnwritable` instead of yielding: nothing is recorded rather than
     recorded unprotected.
     """
-    if fcntl is None:
+    if fcntl is None and msvcrt is None:
         raise DecisionUnwritable(
-            "this platform has no fcntl, so the decision store at %s cannot be locked "
-            "for a safe write; nothing was recorded rather than writing unprotected "
-            "against a concurrent writer" % decisions_dir)
+            "this platform has neither fcntl nor msvcrt, so the decision store at %s "
+            "cannot be locked for a safe write; nothing was recorded rather than "
+            "writing unprotected against a concurrent writer" % decisions_dir)
     try:
         os.makedirs(decisions_dir, exist_ok=True)
     except OSError as exc:
@@ -323,7 +327,19 @@ def _store_lock(decisions_dir):
         deadline = time.time() + _LOCK_TIMEOUT_S
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    # Same byte-range shape as tools/sbe_telemetry.py's writer
+                    # lock (pad to one byte, anchor at offset 0, lock [0, 1)):
+                    # msvcrt regions anchor at the CURRENT position, so every
+                    # opener must target the same range or two writers never
+                    # contend. The refusal-on-timeout policy above is this
+                    # store's own and unchanged.
+                    if os.fstat(fd).st_size < 1:
+                        os.write(fd, b"0")
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
                 held = True
                 break
             except OSError:
