@@ -77,6 +77,30 @@
    "deferred_by_founder": false,
    "deferral_reason": null,
    "closes_in": "closed 2026-08-06: archive at Documents/BrotherSBE-worktree-archive-2026-08-06, bm_store verify healthy 0 problems"
+  },
+  {
+   "id": "OWED-10",
+   "title": "The Claude Code end to end job in CI (item 5.4), needs an API key secret",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Founder decision 2026-08-06: local end to end evidence at release, CI wiring as a fast-follow behind a repository secret he adds.",
+   "closes_in": "a follow-up once the secret exists"
+  },
+  {
+   "id": "OWED-11",
+   "title": "Loop B lanes wB0 and wB1, held out at REVISE",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "a follow-up loop; work preserved in git stash and delivery/blocker-patches/wB0-wB1-partial-repairs-2026-08-06.patch"
+  },
+  {
+   "id": "OWED-12",
+   "title": "Cryptographic attestation for CI evidence, and the protected level it restores",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "the change that lands GitHub OIDC attestation; that same change flips .sbe/policy.yml protectedEvidenceRequired back to true"
   }
  ]
 }
