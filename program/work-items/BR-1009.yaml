@@ -31,6 +31,7 @@ acceptance:
   - "it audits the orchestrator too: recorded spend against the declared budget, and the state file agreeing with the owed register, each a named check"
   - "report contract: exit 0 and silent on clean, exit 1 with a JSON finding plus a one-line human summary; a boundary violation or worker commit is flagged stop-the-line"
   - "the audit is armed by default when a session or CI run starts work in a governed repository; disabling it is an explicit recorded opt-out, not an absence"
+  - "the blocker audit (question H, added 2026-08-06 after the watchdog missed a real stall): every claimed wait names the recorded decision that makes it founder owned, and a wait already covered by standing authority is an alarm class finding (stalled delivery), never a clean heartbeat"
   - "python3 tools/test_sbe_watchdog.py prints OK"
 estimated_days: 1
 # cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
