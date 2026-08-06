@@ -100,7 +100,7 @@ Real tail:
   the-approval-verdict-names-which-approval-file-it-read want=named    got=named    ok
   an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else want=disclosed got=disclosed ok
 
-530 evals: 530 passed, 0 regressions.
+531 evals: 531 passed, 0 regressions.
 ```
 
 Exit code 0. Each case is a real defect turned into a fixture, plus an assertion

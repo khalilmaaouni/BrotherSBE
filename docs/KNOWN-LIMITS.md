@@ -347,6 +347,61 @@ hidden:
   catching that drift, rather than the literal number staying 43 forever,
   is the actual guarantee here.
 
+One of those gaps closed on 2026-08-07 and is recorded here as closed rather
+than deleted, because the reason it was declared was wrong and that matters
+more than the entry: two eval cases had been marked PLATFORM-GAP with the
+reason "its control tree misbehaves under the Windows shell (run 31040612827,
+an unnamed EXTRA file)". The Windows shell was not the cause. The fixtures
+write their `CHECKSUMS.sha256` through Python text mode, which on Windows
+emits CRLF, and `scripts/verify-install.sh` read the carriage return as part
+of every path, so every file the manifest named reported MISSING and every
+file on disk reported EXTRA. That was reproduced on POSIX by writing the same
+manifest with `newline="\r\n"`, fixed at the root in
+`scripts/verify-install.sh` (the trailing return is stripped and the count of
+lines it was stripped from is printed, never removed in silence), and pinned
+by the eval `a-crlf-manifest-verifies-instead-of-reporting-every-file-missing`,
+which runs on every leg and goes red against a copy of the script with the
+strip deleted. `verify-install-fails-over-source-in-an-excluded-path` declares
+no platform gap any more. This also means an adopter verifying an installation
+against a manifest that ever passed through a text-mode write or a
+line-ending-normalising transport was told their install looked like a planted
+backdoor, on any platform.
+
+## One Windows eval failure is open and unidentified (OWED-4)
+
+The `gates-windows` job was still red at the 1.0.0-rc.19 fold: run
+31043311726 showed it as the only failing leg, with one eval failure, while
+the four POSIX gates legs and the consumer checks were green. Which eval is
+not recorded anywhere in this repository, and it cannot be derived from a
+POSIX machine.
+
+The single fact a Windows run has to establish is the `got=` line: the one
+line of `python3 evals/run_evals.py` on `windows-latest` that ends
+`REGRESSION`, quoted verbatim with its case name and its verdict string. That
+line already exists in run 31043311726's log for the "Regression evals" step;
+nobody has read it back into this repository. Until somebody does, no fix for
+it can be honest, because every candidate below is a theory:
+
+- `a-symlink-inside-an-excluded-path-fails-the-install-check` asserts that
+  `verify-install.sh` prints `EXCLUDED-NON-REGULAR` for a symlink created by
+  `os.symlink`. On Windows that is an NTFS reparse point, and nothing here
+  establishes that the Git-for-Windows shell's file tests read it as
+  non-regular. Its sibling `a-symlinked-planted-module-fails-the-install-check`
+  declares exactly this as its PLATFORM-GAP; this one declares nothing and is
+  free to fail.
+- `a-symlinked-source-directory-is-disclosed-not-silent` calls `os.symlink`
+  on a DIRECTORY without `target_is_directory=True`, which is ignored on POSIX
+  and load-bearing on Windows.
+- `the-tracked-manifest-matches-the-tree-it-ships-with` was the previous
+  round's suspect and should have been closed by turning line-ending
+  conversion off before checkout, but that has never been confirmed against a
+  Windows run's own byte-level output either.
+
+Every axis a POSIX host CAN force was forced before this entry was written:
+the whole suite was re-run with text-mode writes translating to CRLF in this
+interpreter and in every child interpreter it spawns, which reproduced exactly
+the two verify-install failures fixed above and no others.
+
 ## Every threshold was measured on one estate
 
 `tables/`, the RUBRIC baselines, and the lint's own numbers were measured
