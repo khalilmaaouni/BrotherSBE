@@ -61,6 +61,22 @@ waves:
     work_items: BR-0601 to BR-0607
     token_budget: 1340000
 
+# The delivery groupings the shipped work items actually carry. These predate the
+# wave schedule above and were never declared here, which meant seven real items
+# named a wave no reader could resolve. Found on 2026-08-06 by the Phase 0
+# reporter's hostile refuter and fixed in the data rather than worked around in
+# the reader: an item may not name a grouping the program record does not know.
+delivery_groupings:
+  - id: guided-experience
+    name: The guided layer slice
+    work_items: BR-0000, BR-0201, BR-0310
+  - id: release-readiness
+    name: Release readiness
+    work_items: BR-0301
+  - id: team-control
+    name: Team control and ownership
+    work_items: BR-0520, BR-0521, BR-0522
+
 # Release gate categories, one per plan section 11.x. A stable release requires
 # every gate in every category to pass; a documented no-go is a valid outcome.
 release_gates:
