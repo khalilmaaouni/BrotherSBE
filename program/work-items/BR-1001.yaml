@@ -1,5 +1,5 @@
 id: BR-1001
-title: "Loop B-close: the owed remeasure, six lanes re-verified and integrated, sealed as rc.18"
+title: "Loop B-close: the owed remeasure, six lanes re-verified and integrated, sealed as rc.20"
 why: >
   Loop B's contracts are the foundation every later loop consumes: versioned brief
   and state schemas, the applicability engine, change scoped task identity, review
@@ -18,7 +18,7 @@ spec: program/MASTER-PLAN-2026-08-06.md
 acceptance:
   - "the owed post rc.16 remeasure has run and its numbers are recorded"
   - "each of the three interrupted lanes has a fresh hostile verdict"
-  - "all six lanes integrated, version 1.0.0-rc.18, checksums last"
+  - "all six lanes integrated, version 1.0.0-rc.20, checksums last (relabel recorded in the master plan amendment: the windows fold consumed rc.19)"
   - "five green CI legs and a post merge battery on main"
   - "the loop's own remeasure recorded before any later fence opens"
 estimated_days: 2

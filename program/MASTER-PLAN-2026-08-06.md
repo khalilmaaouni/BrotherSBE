@@ -1,6 +1,26 @@
 # BrotherSBE unified master plan: vision, architecture, sequence, deployment
 
-**Status:** DRAFT for founder approval. No development starts until Khalil approves this document.
+**Status:** RATIFIED. Phase 0 was built and sealed under this plan (rc.18), and the founder ratified the plan's operation, plus the acceleration amendment below, through twenty decision windows on 2026-08-06 (five rounds, session 6e125dab). The amendment is the current sequence where it differs from sections 6 and 7.
+
+## 0. Acceleration amendment (founder ratified 2026-08-06 evening)
+
+The founder's order: deliver a repository complete enough to share with testers as fast as safety allows, and merge every branch carrying real work into main. This amendment records what that changes. Where it conflicts with the sequence in sections 6 and 7, this section wins; nothing below touches the verification laws, the founder-only list, or the budget caps.
+
+**M0, a new milestone ahead of M1: the tester-shareable repo.** Contents: the Windows lane folded into main (sealed rc.19), Loop B-close plus Loop C sealed together (rc.20), TESTERS.md with an issue template, and the invite draft in the founder's hands. The repository stays public; supported platforms for testers are macOS and Linux, Windows explicitly experimental. M1 (the tag), M2 (human-validated), M3 (reach) keep their meanings.
+
+**The evening reorder, a founder decision with its alternatives recorded.** The ratified order had BR-1009 (watchdog build) and BR-1010 (unit testing protocol) in front of Loop B-close. The founder moved both BEHIND M0 on 2026-08-06 evening. Alternatives considered and declined: keeping the order (the tester share would slip past tonight), and running BR-1009 as a parallel lane tonight (declined for one-night coordination risk). What would flip it back: a control failure tonight that the watchdog would have caught.
+
+**Version relabel, labels only, no scope moved.** The Windows fold consumed rc.19, so the Loop B-close seal becomes rc.20. Work item BR-1001 carried the stale label from an earlier renumbering and is corrected in the same change as this amendment.
+
+**The Windows CI leg arrives red, and stays visible.** One Windows eval failure is open as OWED-4. The merge law is measured on the five legs that have always gated (the four POSIX gates legs and the consumer checks); the red sixth leg is reported in the changelog and in TESTERS.md, never silenced. Softening it (continue-on-error) is a CI workflow change, which by the constitution is a human edit: proposed to the founder as a card, not made by a session.
+
+**Acceleration mechanics folded in from the 2026-08-06 morning order** (the handover's accelerated plan, now landed here as the single copy): standing exception for parallel lanes whose fences are provably disjoint, one-round appetites with circuit breakers for loops D and E (an overrun stops and raises a founder card, never silently extends), human validation wholly at the founder as M2 with the benchmark kit shipping as a Loop E feature, and BR-1009 plus BR-1010 as one train where possible once they run.
+
+**Parking lot, by the backlog admission rule (an item that cannot name its north-star objective does not ride the schedule):** BR-0520 (Jira and Confluence exporters), BR-0521 (Asana exporter), BR-0522 (Teams notify), the BR-0201 guided navigator remainder, and the BR-0301 marketplace-path remainder are parked to the M2 close review. M3 reach items stay parked as section 10 already states.
+
+**After M0:** the program continues immediately to BR-1009, BR-1010, then loops D, E, F and the packet, per the founder's same-evening answer; tester feedback folds in as it arrives.
+
+**Status:** superseded header preserved for the record: this document was drafted for founder approval on 2026-08-06 and no development started before Phase 0's approval.
 **Date:** 2026-08-06. **Designed by:** Fable (session 1341aa6f), from the founder's four correction points, the 2026-08-06 handover, the 2026-07-31 wave plan, 19 decisions the founder ratified today through decision windows, and a refuted research sweep (appendix, section 11).
 **Relationship to earlier plans:** this document is the single north star. It reconciles the strategic framing of program/MASTER-PLAN.md (2026-07-31) and the loop plan in the 2026-08-06 handover, both of which stay on disk as source records. Where they conflicted, this document names the conflict and the resolution instead of pretending there was none.
 

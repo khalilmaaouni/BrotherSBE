@@ -16,7 +16,7 @@ gantt
     sbe watchdog  the 20-minute drift audit, shipped and on by default :crit, BR-1009, after BR-1000, 1d
     Unit testing protocol, end to end, for backend developers and QA :crit, BR-1010, after BR-1009, 1d
     section Contracts, the foundation everything consumes
-    Loop B-close  the owed remeasure, six lanes re-verified and integrated, sealed as rc.18 :crit, BR-1001, after BR-1000, 2d
+    Loop B-close  the owed remeasure, six lanes re-verified and integrated, sealed as rc.20 :crit, BR-1001, after BR-1000, 2d
     section Install to nine
     Loop C  the install story to nine :crit, BR-1002, after BR-1001, 1d
     section Workspace foundation, loopback only
@@ -57,7 +57,7 @@ gantt
 - BR-0520: Jira and Confluence one-way exporters (waits on: BR-0000)
 - BR-0521: Asana exporter (waits on: BR-0000, BR-0520)
 - BR-0522: Microsoft Teams notify now, bot later (waits on: BR-0000, BR-0520)
-- BR-1001: Loop B-close: the owed remeasure, six lanes re-verified and integrated, sealed as rc.18 (waits on: BR-1000)
+- BR-1001: Loop B-close: the owed remeasure, six lanes re-verified and integrated, sealed as rc.20 (waits on: BR-1000)
 - BR-1002: Loop C: the install story to nine (waits on: BR-1001)
 - BR-1003: Loop D: the workspace foundation, loopback only (waits on: BR-1002)
 - BR-1004: Loop E: guided operations and the human benchmark kit (waits on: BR-1003)
