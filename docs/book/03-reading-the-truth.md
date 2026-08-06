@@ -75,7 +75,7 @@ BROKEN CLAIMS:
   NO-DATA. scope: no evidence store found at /tmp/sbe-book-ch03/.sbe/evidence; disposition absent
 
 MERGE BLOCKERS:
-  clean. scope: dossier final-release-program intake /tmp/sbe-book-ch03/design/final-release-program/00-intake.json (tier T3); dossier lifecycle-blockers intake /tmp/sbe-book-ch03/design/lifecycle-blockers/00-intake.json (tier T2); dossier team-operating-model intake /tmp/sbe-book-ch03/design/team-operating-model/00-intake.json (tier T3); no task registry found at /tmp/sbe-book-ch03/.sbe/tasks.json; git diff f77787c72b60..HEAD over 0 changed file(s)
+  clean. scope: dossier final-release-program intake /tmp/sbe-book-ch03/design/final-release-program/00-intake.json (tier T3); dossier lifecycle-blockers intake /tmp/sbe-book-ch03/design/lifecycle-blockers/00-intake.json (tier T2); dossier release-blockers intake /tmp/sbe-book-ch03/design/release-blockers/00-intake.json (tier T3); dossier team-operating-model intake /tmp/sbe-book-ch03/design/team-operating-model/00-intake.json (tier T3); no task registry found at /tmp/sbe-book-ch03/.sbe/tasks.json; git diff f77787c72b60..HEAD over 0 changed file(s)
 
 ACTIVE CONFLICTS:
   NO-DATA. scope: no task registry found at /tmp/sbe-book-ch03/.sbe/tasks.json
@@ -87,6 +87,9 @@ MISSING EVIDENCE:
   - dossier lifecycle-blockers: no evidence receipt declares a design completeness check run, and declared tier T2 owes one
   - dossier lifecycle-blockers: no evidence receipt declares a hard gate run, and declared tier T2 owes one
   - dossier lifecycle-blockers: no evidence receipt declares a scored surface run, and declared tier T2 owes one
+  - dossier release-blockers: no evidence receipt declares a design completeness check run, and declared tier T3 owes one
+  - dossier release-blockers: no evidence receipt declares a hard gate run, and declared tier T3 owes one
+  - dossier release-blockers: no evidence receipt declares a scored surface run, and declared tier T3 owes one
   - dossier team-operating-model: no evidence receipt declares a design completeness check run, and declared tier T3 owes one
   - dossier team-operating-model: no evidence receipt declares a hard gate run, and declared tier T3 owes one
   - dossier team-operating-model: no evidence receipt declares a scored surface run, and declared tier T3 owes one
@@ -94,7 +97,7 @@ MISSING EVIDENCE:
 COMPLETED EVIDENCE:
   NO-DATA. scope: no evidence store found at /tmp/sbe-book-ch03/.sbe/evidence
 
-NEXT ACTION: run `bin/sbe design --strict <dossier>` through `sbe evidence run --kind design` to record it (MISSING EVIDENCE) scope: intake absent; disposition absent; evidence store absent; task registry absent; dossiers discovered: final-release-program, lifecycle-blockers, team-operating-model; diff git diff f77787c72b60..HEAD over 0 changed file(s)
+NEXT ACTION: run `bin/sbe design --strict <dossier>` through `sbe evidence run --kind design` to record it (MISSING EVIDENCE) scope: intake absent; disposition absent; evidence store absent; task registry absent; dossiers discovered: final-release-program, lifecycle-blockers, release-blockers, team-operating-model; diff git diff f77787c72b60..HEAD over 0 changed file(s)
 
 sbe status: exit 1. at least one of BROKEN CLAIMS, MERGE BLOCKERS, ACTIVE CONFLICTS or MISSING EVIDENCE carries an item above.
 ```

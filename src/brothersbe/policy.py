@@ -68,6 +68,7 @@ library only, and the YAML subset parser is this repository's own
 (`brothersbe.program`), not a dependency.
 """
 import datetime
+import hashlib
 import io
 import json
 import os
@@ -558,12 +559,19 @@ def _check_state(check_id, receipts, cwd, head_sha, protected_required):
     for item, source in candidates:
         receipt = item["receipt"]
         recorded_head = receipt.get("headCommit")
-        if isinstance(recorded_head, str) and head_sha and recorded_head != head_sha:
+        moved = _covered_files_that_moved(cwd, receipt)
+        if (isinstance(recorded_head, str) and head_sha and recorded_head != head_sha
+                and moved is not False):
+            detail = ("every covered file is unreadable or unrecorded, so nothing here can "
+                      "say whether the evidence still describes this tree"
+                      if moved is None else
+                      "and %d covered file(s) changed since: %s"
+                      % (len(moved), ", ".join(moved[:4])))
             state, why = ("STALE",
-                          "receipt %s offers %s but was made against commit %s, not %s. "
-                          "Evidence made against a different commit is evidence about a "
+                          "receipt %s offers %s but was made against commit %s, not %s, %s. "
+                          "Evidence made against a different program is evidence about a "
                           "different program" % (os.path.basename(item["path"]), check_id,
-                                                 recorded_head[:12], head_sha[:12]))
+                                                 recorded_head[:12], head_sha[:12], detail))
         else:
             result = evidence_mod.verify(item["path"], cwd=cwd)
             if result["verdict"] == "FAIL":
@@ -614,6 +622,53 @@ def _check_state(check_id, receipts, cwd, head_sha, protected_required):
             best = (state, why, source)
     return best
 
+
+
+def _covered_files_that_moved(cwd, receipt):
+    """Which of a receipt's covered files differ from the tree today.
+
+    Returns a list of paths (possibly empty), or None when nothing could be
+    read and the question is unanswerable.
+
+    Why this exists, found by dogfooding: a receipt COMMITTED into the
+    repository it describes can never be bound to the commit that contains it,
+    because writing it moves the head. Judging staleness by the head commit
+    alone therefore made committed evidence permanently stale, which pushes
+    every operator toward not committing evidence at all. The honest question
+    is not whether the head moved, it is whether what the receipt covered
+    moved, and the receipt already records a hash per covered file, so the
+    question can be asked rather than assumed.
+
+    Deliberately conservative in both directions. An empty list (nothing moved)
+    is the ONLY reading that lets a head mismatch pass, and False is returned
+    for that case so the caller cannot confuse it with the unreadable case.
+    Any covered file that changed, vanished or cannot be hashed keeps the
+    receipt stale and is named.
+    """
+    covered = receipt.get("coveredFiles")
+    if not isinstance(covered, list) or not covered:
+        return None
+    moved, readable = [], 0
+    for entry in covered:
+        if not isinstance(entry, dict):
+            return None
+        path = entry.get("path")
+        recorded = entry.get("sha256")
+        if not isinstance(path, str) or not isinstance(recorded, str):
+            return None
+        full = os.path.join(cwd, path)
+        try:
+            with io.open(full, "rb") as handle:
+                actual = hashlib.sha256(handle.read()).hexdigest()
+        except (IOError, OSError):
+            moved.append("%s (unreadable)" % path)
+            continue
+        readable += 1
+        if actual != recorded:
+            moved.append(path)
+    if not readable:
+        return None
+    return False if not moved else moved
 
 def _state_rank(state):
     """Lower is better. A change carrying one good receipt and one broken copy of

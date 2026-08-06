@@ -128,6 +128,50 @@ class PolicyFixture(unittest.TestCase):
         write(self.repo, os.path.join(".sbe", "policy.yml"), text)
         self.commit("this fixture demands the full template")
 
+    def register_and_mint_rehearsal(self):
+        """Register a migration rehearsal, run it for real, return the receipt path.
+
+        Extracted from the protected-evidence test so more than one case can
+        rest on a REAL receipt: minted through the registered path, sealed,
+        and written outside the repository so minting it never dirties the
+        tree it covers.
+        """
+        write(self.repo, os.path.join("scripts", "rehearse-migration.py"),
+              "import sys\nsys.stdout.write('rehearsed\\n')\n")
+        write(self.repo, os.path.join(".sbe", "checks.yml"),
+              'schemaVersion: "1.0"\n\n'
+              'checks:\n'
+              '  migration-rehearsal:\n'
+              '    kind: "migration"\n'
+              '    command:\n'
+              '      executable: "python3"\n'
+              '      arguments:\n'
+              '        - "scripts/rehearse-migration.py"\n'
+              '      cwd: "."\n'
+              '    covers:\n'
+              '      - "migrations/**"\n'
+              '    runnerFiles:\n'
+              '      - "scripts/rehearse-migration.py"\n'
+              '    protectedEvidence: true\n')
+        self.base = self.commit("register the migration rehearsal")
+        write(self.repo, os.path.join("migrations", "001_add_orders.sql"),
+              "CREATE TABLE orders (id integer primary key);\n")
+        self.commit("add a migration")
+        receipts = os.path.join(self.tmp, "receipts")
+        if not os.path.isdir(receipts):
+            os.makedirs(receipts)
+        out_path = os.path.join(receipts, "rehearsal.json")
+        env = dict(os.environ)
+        env.pop("SBE_CI_RUN_ID", None)
+        out = subprocess.run(
+            [sys.executable, SBE, "evidence", "run", "--check", "migration-rehearsal",
+             "--out", out_path],
+            cwd=self.repo, capture_output=True, text=True, env=env)
+        self.assertTrue(os.path.exists(out_path),
+                        "the fixture could not mint a receipt: %s%s"
+                        % (out.stdout, out.stderr))
+        return receipts
+
     def evaluate(self, *extra):
         """The JSON report and the exit code, as an object with both on it.
 
@@ -347,6 +391,38 @@ class WhatMatches(PolicyFixture):
                       [r["id"] for r in result.report["matchedRules"]],
                       "a real migration carrying the same DDL was not caught, so the "
                       "exclusion above is too broad and the gate is now blind")
+
+    def test_a_receipt_stays_current_when_nothing_it_covered_moved(self):
+        """Staleness asks whether the covered files moved, not whether the head did.
+
+        Found by dogfooding this engine on its own repository: a receipt
+        committed into the tree it describes can never be bound to the
+        commit that contains it, because writing it moves the head.
+        Judging by the head alone made such evidence permanently stale,
+        which teaches an operator not to keep evidence at all.
+        """
+        receipts = self.register_and_mint_rehearsal()
+        write(self.repo, "UNRELATED.md", "a note this receipt never covered\n")
+        self.commit("an unrelated file moves the head")
+        result = self.evaluate("--receipts-dir", receipts)
+        self.assertIsNotNone(result.report, result.stderr)
+        self.assertNotEqual(self.state_of(result.report, "check:migration-rehearsal"),
+                            "STALE",
+                            "a receipt went stale because an unrelated file moved the "
+                            "head, so committed evidence could never be current")
+
+    def test_a_receipt_goes_stale_when_a_covered_file_moves(self):
+        """The calibration for the rule above. Without it the coverage check
+        could be vacuous and every receipt would read as current forever."""
+        receipts = self.register_and_mint_rehearsal()
+        write(self.repo, os.path.join("migrations", "001_add_orders.sql"),
+              "ALTER TABLE t DROP COLUMN c;\n")
+        self.commit("the covered migration itself changes")
+        result = self.evaluate("--receipts-dir", receipts)
+        self.assertIsNotNone(result.report, result.stderr)
+        self.assertEqual(self.state_of(result.report, "check:migration-rehearsal"),
+                         "STALE",
+                         "a covered file changed and the receipt was still accepted")
 
     def test_an_api_schema_deletion_requires_contract_compatibility_evidence(self):
         """Required test 5.
