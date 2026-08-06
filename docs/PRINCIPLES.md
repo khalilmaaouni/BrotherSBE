@@ -204,6 +204,15 @@ It reports; it never fixes. Its purpose is to keep both the orchestrator and the
 founder honest between checkpoints, and it is deliberately dumb and mechanical so
 it cannot be talked out of a finding.
 
+**The watchdog cadence is a standing founder rule (2026-08-06): every 20
+minutes while work is in flight, on by default.** Not armed on request, armed
+because a session is working. The session-level watchdog (a cheap-model cron in
+the orchestrating session) covers today; the product-level half is BR-1009, the
+`sbe watchdog` command shipped ON BY DEFAULT: the deterministic question list as
+a command any scheduler or hook can run every 20 minutes on any machine, with
+opt-out recorded rather than assumed. A watchdog that must be remembered is a
+watchdog that is off exactly when it is needed.
+
 `[human]` for most of this, `[checked: the no-data sweep and the four hard gates]`
 for the evidence layer, `[checked: the watchdog's own question list]` for the
 audit, which enforces nothing but surfaces everything.

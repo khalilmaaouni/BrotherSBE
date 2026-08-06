@@ -1,14 +1,15 @@
 id: BR-1009
-title: "sbe watchdog: the drift audit as a shipped command"
+title: "sbe watchdog: the 20-minute drift audit, shipped and on by default"
 why: >
-  The founder asked on 2026-08-06 for a watchdog on progress and drift risk, kept
-  as a core attribute rather than a session habit. Phase 0 delivered the session
-  half (a cheap read only agent on a schedule, asking a fixed question list) and
-  the written half (docs/PRINCIPLES.md section 7). The durable half does not
-  exist: when the session ends, the schedule dies with it, and the question list
-  is prose rather than a command. This item makes the deterministic questions a
-  command, so the audit runs the same way for anyone, on any machine, and so a
-  model is asked to judge only what a command could not already answer.
+  Standing founder rule, stated twice on 2026-08-06 and ratified as law: the
+  watchdog checks the project every 20 minutes while work is in flight, and it
+  is a BrotherSBE feature that is ON BY DEFAULT, not a session habit someone
+  remembers to arm. Phase 0 delivered the session half (a cheap read only agent
+  on a 20 minute schedule) and the written half (docs/PRINCIPLES.md section 7).
+  The durable half does not exist: when the session ends, the schedule dies with
+  it, and the question list is prose rather than a command. This item makes the
+  deterministic questions a command, wires the default arming, and records
+  opt-out explicitly rather than assuming it.
 persona_need: "P3 agent orchestrator, and P1 founder who is told the truth between checkpoints"
 owner: fable-orchestrator
 reviewer: independent-refuter
@@ -25,6 +26,8 @@ acceptance:
   - "it reports any em dash or en dash in the changed set"
   - "it reports NO-DATA, never clean, when the fence registry or a worktree it names is missing"
   - "it writes nothing and fixes nothing, proven by a test asserting the tree is byte identical after a run"
+  - "the default cadence is 20 minutes, read from configuration with the founder rule as the shipped default, never hardcoded at call sites"
+  - "the audit is armed by default when a session or CI run starts work in a governed repository; disabling it is an explicit recorded opt-out, not an absence"
   - "python3 tools/test_sbe_watchdog.py prints OK"
 estimated_days: 1
 # cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
