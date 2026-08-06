@@ -55,6 +55,14 @@ governed change, from idea to reviewed and proven, on a throwaway repository
 it builds for you. Every output block in that guide is captured from live runs
 and held to it by tests.
 
+## The structured protocol
+
+[TEST-PROTOCOL.md](TEST-PROTOCOL.md) carries the numbered version of all of
+this: a 30 minute guided run with expected outcomes and time estimates, a red
+team track of ten attempts that should each be blocked, and the current
+assurance limits stated plainly. Use it if you like structure. The looser
+suggestions below work too.
+
 ## What to try (pick what matches how you work)
 
 - The guided path: `/brothersbe:start`, then keep following
@@ -81,6 +89,17 @@ that and nothing more.
 
 If something refuses to run at all, the output of `python3 bin/sbe doctor`
 pasted into the issue saves a whole round trip.
+
+## What is not finished yet
+
+Being honest about limits is the product's whole point, so here they are.
+Evidence produced in CI is labeled CI-CLAIMED, which means CI shaped metadata
+was recorded but no protected identity was verified; cryptographic
+attestation is the next fix. The repository has one human today, so
+CODEOWNERS is real but a genuine second-party approval is not yet possible.
+The end to end host check runs locally at release rather than on every merge.
+Windows has one known failing check. The marketplace install path has no
+rollback command yet. [TEST-PROTOCOL.md](TEST-PROTOCOL.md) explains each one.
 
 ## What happens with your feedback
 
