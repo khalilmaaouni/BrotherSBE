@@ -6,6 +6,35 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.18 (2026-08-06)
+
+Phase 0 of the approved master plan: program visibility and the dispatch gate,
+built under four hostile review rounds whose verdicts ship verbatim in
+design/phase-0/. (rc.17 was consumed by the held Windows branch; the Loop
+B-close seal that this number was once pencilled for moves to rc.19.)
+
+- New: `sbe program status` and `sbe program check`. Program wide truth
+  generated from the ledger (gantt, finished, in flight, blocked, risks with
+  their mitigations, docs index, budget against recorded spend), drift gated
+  by three new eval cases. Progress comes only from declared figures or
+  acceptance criteria actually met; a status word never becomes a percentage;
+  an absent or unreadable ledger source is NO-DATA, never a clean program.
+- New: `tools/sbe_dispatch.py`, the dispatch gate. Refuses agent briefs
+  missing a capability profile, budget, file list, done check or tier;
+  enforces the T1/T2/T3 scaling ceilings; refuses loop open when the owed
+  register names unfinished work, cannot be read, or records a budget that
+  cannot be measured. A file containing the JSON token null cannot forge the
+  parse failure sentinel; NaN, Infinity and arbitrarily large integers all
+  produce verdicts rather than passes or tracebacks. Every report line routes
+  through the say() choke point.
+- New: the program ledger carries the plan phases as work items BR-1000 to
+  BR-1010 with persona needs, budgets and risks with mitigations;
+  program/OWED.json is the owed register the gate reads; docs/PRINCIPLES.md
+  is the operating constitution, each principle naming what enforces it.
+- Doc truth per the counts law: eval counts repasted from live output (527 to
+  530) in six docs, the moved lint line repasted, 27 research citations added
+  to the inventory with honest limit lines.
+
 ## 1.0.0-rc.16 (2026-08-06)
 
 - Seal note, measured at integration: the sandbox guide's two `bound to head`
