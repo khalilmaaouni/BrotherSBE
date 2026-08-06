@@ -1,0 +1,173 @@
+{
+  "round": 2,
+  "date": "2026-08-06",
+  "note": "Hostile refuter verdicts, Phase 0 round 2, verbatim from the engine structured return. Round-1 findings were verified closed by reproducing the original probes; the findingsStillOpen entries are what cycle 3 had to fix.",
+  "lanes": [
+    {
+      "lane": "program (Lane A, src/brothersbe/program.py)",
+      "verdict": "REVISE",
+      "whatIExecuted": "1) Boundary: git status --short -> exactly \"?? src/brothersbe/program.py\" and \"?? tools/test_sbe_program.py\"; git diff --stat empty; git log --oneline -1 -> b54a543. Clean. 2) python3 tools/test_sbe_program.py -> \"Ran 53 tests in 0.078s / OK\". 3) python3 tools/test_sbe.py -> \"Ran 106 tests in 32.135s / OK\", exit 0. Confirmed the outcomes.jsonl stderr line is foreign: grep -c outcomes.jsonl over both fenced files -> 0,0. 4) Reproduced every round-1 probe from scratch via temp ledgers (scratchpad/probe.py, probe2.py): absent work-items dir -> parseErrors=[{path:'program/work-items', reason:'NO-DATA: ...'}], check_status_md=False after writing STATUS.md; present-but-empty dir -> parseErrors=[], check=True (no over-fire); one item / two ghost deps -> items=1, excluded_count=0, parseErrors=2; acceptance=[one,two] + acceptance_met=[bogus never listed, 99] -> item excluded, parse error names the entry; pipe mitigation -> '| A | r | high | do a \\| b |' (all four cells escaped); colon title -> 'Ship the thing, then verify  fast :active, A, 1d'; undeclared wave -> undeclaredWaves=[{wave:'guided-experience',itemIds:['A']}], parseErrors=0, headline line present. 5) Harder absent/empty: absent PROGRAM.yaml -> ProgramParseError, check_status_md=False; work-items path is a FILE -> NO-DATA, check=False; unreadable PROGRAM.yaml -> ProgramParseError; unreadable single work-item file -> isolated, excluded_count=1, siblings load; unreadable work-items DIRECTORY -> uncaught PermissionError (finding 1). 6) Three calibrations repeated from scratch on a backup: removed the NO_DATA_MARKER guard in check_status_md -> FAILED (failures=1); replaced mitigation_cell with \"MITIGATION INVENTED\" -> FAILED (failures=3); reverted excluded_count to len(all_parse_errors) -> FAILED (failures=3). Restored each time; final diff vs backup IDENTICAL and suite back to OK. 7) Over-fire hunt on inputs round 1 never named: valid acceptance_met [0,\"two\"] -> 100% derived, 0 errors; acceptance with no acceptance_met -> not measured, 0 errors; acceptance_met with no acceptance -> not measured, 0 errors; out-of-range and negative indices -> parse errors; item with no wave -> 'section unassigned', not an undeclared wave; colon title preserved verbatim outside the gantt ('- A: Ship: fast'); repeated write_status_md -> NOT byte-identical (finding 2). 8) Read-only against the real 17-item ledger at /Users/khalil.maaouni/Documents/BrotherSBE: undeclaredWaves=[], parseErrors=0, 12 non-empty declared sections rendered from plan_waves then delivery_groupings, empty declared waves omitted. Every shipped wave value is declared. 9) Hygiene: grep -cP over U+2010..U+2015 -> 0 and 0; no bare except, no \"except Exception\", no except-then-pass; imports os and re only in program.py, stdlib only in the test; python3 3.9.6 py_compile -> COMPILE_OK; no walrus, match, or PEP 604 unions; 145 assertions, the new risk tests call render_status_md and assert its output text, not module source.",
+      "round1FindingsVerifiedClosed": [
+        "Critical (line 690, absent work-items dir read as clean): CLOSED. Original probe re-run: absent dir now yields parseErrors with the NO-DATA marker, and check_status_md returns False after I wrote STATUS.md from that state (round 1 got parseErrors=[], check=True). Symmetric probe confirms a present-but-empty dir is still parseErrors=[] / check=True, so the fix did not over-fire onto a legitimately empty program.",
+        "Major (line 885, excluded_count inflated by dependency errors): CLOSED. Original probe, one valid item naming two ghost dependencies, now yields items=1, excluded_count=0, parseErrors=2 (round 1: excluded_count=2 with 0 items excluded). Both ghost deps still surface.",
+        "Major (test file line 199, rendered risk table unasserted): CLOSED. I repeated the round-1 refuter's exact break myself, hardcoding the mitigation cell to \"MITIGATION INVENTED\": the suite now reports FAILED (failures=3) where round 1 stayed fully green. Restored, back to OK.",
+        "Major (line 917, gantt sections not driven by PROGRAM.yaml): CLOSED. Sections now come from _declared_groupings reading waves, plan_waves and delivery_groupings. An undeclared wave is not a parse error, lands in the new undeclaredWaves field, gets its own trailing section, and prints a headline line. Verified read-only on the real 17-item ledger: undeclaredWaves=[], parseErrors=0, 12 sections named from the declared groupings.",
+        "Major (line 644, uninterpretable acceptance_met silently measured at 0%): CLOSED. Original probe acceptance=['one','two'] with acceptance_met=['bogus never listed', 99] now excludes the item with a parse error naming the offending entry (round 1: progress_percent=0, source 'derived from acceptance', parseErrors=[]). Neighbour probes confirm valid indices, valid exact strings, absent acceptance_met, and an empty acceptance_met all still behave.",
+        "Minor (line 1048, unescaped mitigation cell): CLOSED. Original probe mitigation 'do a | b' now renders '| A | r | high | do a \\| b |'. Item, severity and mitigation cells are all escaped, not just risk.",
+        "Minor (line 947, colon in gantt task name): CLOSED. Original title 'Ship the thing, then verify: fast' now emits 'Ship the thing, then verify  fast :active, A, 1d'. The untouched title is still shown verbatim in the STATUS.md item list, so the sanitization is scoped to the gantt only."
+      ],
+      "calibrationsIRepeated": [
+        "check_status_md NO-DATA refusal: I deleted the two-line NO_DATA_MARKER guard from check_status_md myself and re-ran the suite -> FAILED (failures=1), test_check_status_md_refuses_when_source_is_no_data_even_if_written. Restored, OK.",
+        "Risk table rendering: I replaced mitigation_cell = _md_table_cell(mitigation) with the constant \"MITIGATION INVENTED\" myself -> FAILED (failures=3), the two new render_status_md risk-table tests among them. This is the exact break that left round 1's 32-test suite green. Restored, OK.",
+        "excluded_count: I reverted \"excluded_count\": len(item_parse_errors) to len(all_parse_errors) myself -> FAILED (failures=3), including the one-item/two-ghost-deps probe. Restored, OK. Final diff against my backup is byte-identical and the suite is back to Ran 53 tests / OK."
+      ],
+      "newRegressionsFromTheFixes": [],
+      "findingsStillOpen": [
+        {
+          "severity": "Major",
+          "file": "src/brothersbe/program.py",
+          "line": 745,
+          "problem": "The unreadable-source state has no failure path. load_program guards the work-items directory with os.path.isdir, which is True for a directory the process cannot read, then calls os.listdir on it with no try/except. An unreadable program/work-items raises a raw PermissionError straight out of build_program_report and out of check_status_md, so `sbe program check` tracebacks instead of stating a reason. This is the same source class the new NO-DATA machinery was built for, reached by a different door: the fix covered absent but not unreadable. It does not read as clean, so it is not a BLOCK, but it is an uncaught boundary call on the founder-facing gate. Probe: chmod 000 on program/work-items, then check_status_md(root) -> PermissionError: [Errno 13] Permission denied. By contrast an unreadable single work-item file is handled correctly (isolated, excluded_count=1, siblings still load), which shows the omission is specific to the directory listing.",
+          "fix": "Wrap the os.listdir call in try/except OSError and, on failure, append a source_errors entry carrying NO_DATA_MARKER with the OS reason (mirroring the absent-directory branch just below it), so the state is reported rather than raised and check_status_md returns False through the existing NO-DATA guard. Add a calibrated test that chmods the directory unreadable and asserts a NO-DATA source error plus check_status_md False. While there, note that a work-items path that exists as a FILE currently reports the reason 'directory is absent', which is refused correctly but described inaccurately."
+        },
+        {
+          "severity": "Major",
+          "file": "src/brothersbe/program.py",
+          "line": 1287,
+          "problem": "write_status_md is not idempotent: STATUS.md grows by one trailing newline on every regeneration, without bound. apply_generated_block builds body as BEGIN + '\\n' + block + END + '\\n', so the first write leaves the file ending in END_MARKER + '\\n'. On the next write, after = existing[end_idx + len(END_MARKER):] captures that '\\n' and it is re-appended after a body that already supplies one. Probe: three consecutive write_status_md calls on an unchanged ledger give a != b and b != c, with the unified diff showing exactly one added blank line each time. This contradicts the spec's determinism requirement for identical input and makes every regeneration produce a spurious version-control diff even when nothing in the ledger changed. check_status_md still returns True because it compares only the text between the markers, so the growth is invisible to the gate. The two existing regeneration tests miss it: the prose test asserts startswith/endswith against prose that already exists, and the byte-identical test compares two render_status_md return values rather than two written files.",
+          "fix": "Normalize the seam in apply_generated_block: emit body without the trailing newline and re-attach exactly one, or strip a single leading '\\n' from `after` when body already ends in one, so before + body + after is a fixed point. Add a calibrated test that calls write_status_md twice on an unchanged ledger and asserts the two file contents are byte-identical, and break it by restoring the current seam to prove the test binds."
+        }
+      ],
+      "boundaryViolations": [],
+      "fixer": {
+        "lane": "program (Lane A, src/brothersbe/program.py)",
+        "findingsFixed": [
+          {
+            "severity": "Critical",
+            "oneLineWhatYouChanged": "An absent program/work-items directory is now recorded as a NO-DATA source_error (never silently read as zero items and clean); build_program_report surfaces it in parseErrors and the STATUS.md headline, and check_status_md now returns False whenever any parseErrors reason carries the NO-DATA marker, even when the written file byte-matches a fresh render.",
+            "testThatNowFailsWithoutIt": "TestNoDataSource.test_check_status_md_refuses_when_source_is_no_data_even_if_written (also test_absent_work_items_directory_is_recorded_as_no_data, test_absent_work_items_directory_surfaces_in_report_parse_errors, test_absent_work_items_directory_states_it_in_the_headline). Added the symmetric test_present_but_empty_work_items_directory_is_not_no_data to prove I did not over-fire onto a legitimate empty program.",
+            "calibrated": true
+          },
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "summary.excluded_count now counts only items that actually failed to load (data.parse_errors from load_program's per-item try/except), computed separately from unknown-depends_on errors and NO-DATA source errors, which still land in parseErrors but no longer inflate the exclusion count for items that loaded fine.",
+            "testThatNowFailsWithoutIt": "TestParseErrors.test_unknown_dependency_is_named_in_parse_errors (extended) and the new test_two_unknown_dependencies_on_one_valid_item_do_not_inflate_excluded_count (the exact one-item/two-ghost-deps probe from round 1).",
+            "calibrated": true
+          },
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "Test-only fix per the finding: added three tests that call render_status_md directly and assert the exact risk-table row text (plain-string risk with 'no mitigation recorded', mapping risk with its recorded mitigation), closing the gap where the renderer's actual markdown output was previously unasserted.",
+            "testThatNowFailsWithoutIt": "TestRisks.test_rendered_status_md_risk_table_shows_plain_string_risk_verbatim and test_rendered_status_md_risk_table_shows_mapping_mitigation_verbatim; calibrated by reproducing the round-1 refuter's exact break (hardcoding 'MITIGATION INVENTED' in the row), all three risk-table tests failed, then restored.",
+            "calibrated": true
+          },
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "Implemented the orchestrator's design decision verbatim: gantt/report sections now come from _declared_groupings(program), reading PROGRAM.yaml's waves, plan_waves and delivery_groupings lists in that order (dedup by id, first name wins); an item whose wave matches none of them is NOT a parse error, renders in its own section named by its wave value placed after every declared section, appears in the new report field undeclaredWaves (sorted {wave, itemIds}), and is stated as a visible headline line in STATUS.md.",
+            "testThatNowFailsWithoutIt": "TestGanttSections (5 tests: undeclared-not-a-parse-error, undeclared-in-undeclaredWaves, three-list declared ordering, headline visibility, duplicate-id-keeps-first-name) using a synthetic fixture as directed, since the live ledger in this worktree predates the merge. Verified read-only against the sibling worktree's already-merged 17-item ledger: undeclaredWaves == [] and parseErrors == [], confirming the design closes cleanly once integrated.",
+            "calibrated": true
+          },
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "Added _validate_acceptance_met, called from _normalize_work_item whenever acceptance is non-empty and acceptance_met is recorded (the exact condition under which _progress_for derives a percentage): any entry that is not an in-range int index or an exact acceptance string now raises ProgramParseError naming the file and the offending entry, so the item is excluded rather than measured at a fabricated 0%.",
+            "testThatNowFailsWithoutIt": "TestParseErrors.test_uninterpretable_acceptance_met_entry_is_a_parse_error (the exact acceptance=['one','two'], acceptance_met=['bogus never listed', 99] probe from round 1) plus test_valid_acceptance_met_indices_and_strings_still_pass as the neighbouring-behaviour guard.",
+            "calibrated": true
+          },
+          {
+            "severity": "Minor",
+            "oneLineWhatYouChanged": "Added _md_table_cell and applied it to all four risk-table cells (item, risk, severity, mitigation), not just risk, so a '|' or newline in any recorded field can no longer widen or break the STATUS.md table.",
+            "testThatNowFailsWithoutIt": "TestRisks.test_rendered_status_md_escapes_pipe_in_mitigation_severity_and_item, which reproduces the round-1 probe (mitigation 'do a | b').",
+            "calibrated": true
+          },
+          {
+            "severity": "Minor",
+            "oneLineWhatYouChanged": "Added _gantt_task_name to strip a work-item title's colon (replaced with a space) before it is emitted into a mermaid gantt task line, since mermaid splits that line on its first colon.",
+            "testThatNowFailsWithoutIt": "TestGanttTitleSanitization.test_colon_in_title_is_sanitized_so_mermaid_does_not_misparse_it, using the exact colon-bearing title from the round-1 finding.",
+            "calibrated": true
+          }
+        ],
+        "findingsDisputed": [],
+        "filesWritten": [
+          "/Users/khalil.maaouni/Documents/BrotherSBE-wP1/src/brothersbe/program.py",
+          "/Users/khalil.maaouni/Documents/BrotherSBE-wP1/tools/test_sbe_program.py"
+        ],
+        "doneCheckCommand": "python3 tools/test_sbe_program.py",
+        "doneCheckLastLines": "Ran 53 tests in 0.073s\n\nOK",
+        "fullSuiteResult": "python3 tools/test_sbe.py: exit 0, &quot;Ran 106 tests in 31.121s / OK&quot; (matches round-1's 106-test baseline). One unrelated stderr line appeared after OK: &quot;migrate: outcomes.jsonl SHRANK while this rewrite held the writer lock (69 bytes read, 19 on disk); a second writer is ignoring the lock, so nothing was replaced.&quot; This is a concurrent process in the shared multi-worktree environment writing to program/OWED-adjacent state outside my fence; program.py's own docstring states it reads only PROGRAM.yaml and work-items/*.yaml, never the evidence store or outcomes.jsonl, and neither of my two files reference that path. Not a regression from this change.",
+        "residualReds": []
+      }
+    },
+    {
+      "lane": "dispatch (tools/sbe_dispatch.py, tools/test_sbe_dispatch.py) - Phase 0 cycle 2 re-review",
+      "verdict": "BLOCK",
+      "whatIExecuted": "1) Boundary: git status --short -> ONLY the two fenced untracked files; git log --oneline -1 -> b54a543. Re-verified after my own break/restore edits: unchanged. No violation. 2) Suites: test_sbe_dispatch.py -> \"Ran 66 tests in 0.281s / OK\"; test_sbe.py -> \"Ran 106 tests in 32.774s / OK\" (migrate-lock stderr prints after OK, not a failure). 3) All round-1 probes re-run through the real CLI (see round1FindingsVerifiedClosed). 4) Two calibrations repeated from scratch by editing SOURCE, then restored (diff IDENTICAL, suite back to OK). 5) Lint sweep: grep -nP U+2010-U+2015/U+2212 rc=1; no bare except; no except-then-pass; no walrus/match/PEP585/PEP604; imports stdlib only plus local sbe_checks; py_compile COMPILE_OK; 108 asserts, zero source-text assertions (the only inspect.getsource hit is a docstring explaining why that approach was dropped). 6) Harder empty/absent attack: zero-byte state file, chmod 000 file, owed {} with no items key, boolean cap, cap=0, JSON-null files, NaN cap. The last two still pass clean.",
+      "round1FindingsVerifiedClosed": [
+        "Major sbe_dispatch.py:221 unmeasurable budget silently passed: CLOSED for round 1's three probes. state={} -> REFUSED naming the absent 'budget' object, exit 1; cap='100' -> REFUSED naming cap, exit 1; cap=null -> REFUSED naming cap, exit 1. Independently calibrated (stubbing _budget_problem to return None gave 9 failures).",
+        "Major sbe_dispatch.py:282 missing-state text disagreed with its exit code: CLOSED. Refusal now reads 'being unable to confirm a budget is not exhausted is not evidence that it is safe to open the loop, so loop-open is refused', exit 1, docstrings agree. PASS line now claims only that spend 'was measured against its recorded cap', not the old bare 'no exhausted budget was found'.",
+        "Minor sbe_dispatch.py:177 bad agent_count masked missing tier_reason: CLOSED. T3 brief with agent_count 'many' and no tier_reason -> REFUSED (3 problems) naming BOTH. Independently calibrated by re-chaining the check (2 failures, the named tests).",
+        "Minor test_sbe_dispatch.py:471 calibration was an inspect.getsource string grep: CLOSED. Replacement monkeypatches _t3_tier_reason_problem and observes the behaviour change; it failed when I broke the real branch."
+      ],
+      "findingsStillOpen": [
+        {
+          "severity": "Critical",
+          "file": "tools/sbe_dispatch.py",
+          "line": 317,
+          "problem": "The absent state STILL reads as clean, one input over from round 1. check_loop_open uses `owed = None` (line 314) and `state = None` (line 336) as the sentinel for 'parse failed, skip the checks'. A file whose whole content is the valid JSON token `null` parses successfully TO None, hits the same sentinel, and every downstream check is skipped with nothing appended to problems. Verified against the FIXED file via the real CLI: owed file containing `null` + good state -> exit 0, 'loop-open PASS: no unfinished, undeferred owed item was found, and the recorded budget spend was measured against its recorded cap and is not exhausted.'; state file `null` + good owed -> same PASS exit 0; BOTH `null` -> same PASS exit 0, neither file's contents ever examined. That single PASS sentence asserts an owed list never read and a budget never measured, breaking SPEC.md line 10 twice. No test writes a null file (grep for 'null'/json.dumps(None) in the test file: no hits).",
+          "fix": "Stop overloading None as the parse-failure sentinel: use a module-level _UNREAD = object() or an (ok, value) tuple, so a parsed JSON null falls through to the existing 'is a JSON NoneType, not an object' branch and refuses. Apply to BOTH blocks (lines 310-322 owed, 332-344 state). Add calibrated CLI tests asserting exit 1 for owed='null', state='null', and both."
+        },
+        {
+          "severity": "Major",
+          "file": "tools/sbe_dispatch.py",
+          "line": 279,
+          "problem": "_budget_problem accepts NaN and Infinity as measured numbers. json.load parses the bare tokens NaN/Infinity/-Infinity by default and isinstance(float('nan'), float) is True, so both guards pass; `spent >= cap` is False for any NaN operand, so the function returns None, its documented 'the one case this function actually measured and can call clear'. Verified: state {\"budget\":{\"cap\":NaN,\"spent\":999999}} with a clean owed file -> exit 0 and the PASS line asserting the budget was measured and is not exhausted. cap=Infinity is the same class. The unmeasured-claim defect survives in the numeric branch.",
+          "fix": "After the isinstance checks add `if not math.isfinite(cap)` / `if not math.isfinite(spent)` returning the same NO-DATA sentence naming key and value (math is stdlib, 3.9-safe), or pass parse_constant to json.load to reject the tokens at read time. Add calibrated tests for cap=NaN, spent=NaN, cap=Infinity."
+        }
+      ],
+      "newRegressionsFromTheFixes": [
+        "None. test_sbe.py stayed at 'Ran 106 tests / OK' and py_compile passes on both files. The two open holes (JSON null, NaN) failed before the fixes too, so they are surviving gaps, not fresh breakage. Neighbouring inputs the round-1 findings did not mention, checked and found CORRECT: zero-byte state file (refuses as broken JSON, correctly distinguished from absent), chmod 000 file (refuses, PermissionError named), owed {} with no items key (refuses, 'items is NoneType, not a list'), boolean cap (explicit isinstance(cap, bool) guard refuses), cap of exactly 0 (read as a real declared cap, not as unset)."
+      ],
+      "calibrationsIRepeated": [
+        "unmeasurable_budget: inserted `return None` as the first statement of _budget_problem in the SOURCE -> FAILED (failures=9), including test_calibration_unmeasurable_budget_refuses_never_a_silent_pass, test_empty_state_object_refuses_as_no_data_never_a_silent_pass, test_non_numeric_cap_refuses_as_no_data_naming_cap, test_non_numeric_spent_refuses_as_no_data_naming_spent, test_null_cap_refuses_as_no_data, test_state_with_no_budget_key_refuses_as_no_data, test_empty_state_file_exits_one_never_a_silent_pass_via_the_cli. Restored from scratchpad, diff IDENTICAL, suite OK.",
+        "t3_not_masked: reintroduced the masking as `t3_problem = None if count is None else _t3_tier_reason_problem(...)` in the SOURCE -> FAILED (failures=2): test_calibration_t3_guard_is_not_masked_by_a_bad_agent_count and test_t3_bad_agent_count_does_not_mask_missing_tier_reason. Confirms the new calibration observes behaviour, not source text. Restored, diff IDENTICAL, suite OK."
+      ],
+      "boundaryViolations": [],
+      "fixer": {
+        "lane": "dispatch (tools/sbe_dispatch.py, tools/test_sbe_dispatch.py) \u2014 Phase 0, cycle 2",
+        "findingsFixed": [
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "Per orchestrator decision: an unmeasurable budget (missing/empty state file, no budget block, non-numeric cap or spent) now returns a NO-DATA refusal naming the absent/non-numeric key from _budget_problem, exactly like a missing owed file; the old code returned None (silent clear) in all those cases, which an empty {} state file exploited to defeat the guard entirely.",
+            "testThatNowFailsWithoutIt": "test_empty_state_object_refuses_as_no_data_never_a_silent_pass, test_state_with_no_budget_key_refuses_as_no_data, test_non_numeric_cap_refuses_as_no_data_naming_cap, test_non_numeric_spent_refuses_as_no_data_naming_spent, test_null_cap_refuses_as_no_data, test_empty_state_file_exits_one_never_a_silent_pass_via_the_cli, test_calibration_unmeasurable_budget_refuses_never_a_silent_pass",
+            "calibrated": true
+          },
+          {
+            "severity": "Major",
+            "oneLineWhatYouChanged": "Reworded the missing-state-file refusal text (it already blocked, but called itself 'informational only') so text, exit code and docstrings all agree loop-open is refused when budget cannot be confirmed; also reworded the PASS line so it only asserts 'budget was measured against its cap and is not exhausted' (true only once _budget_problem actually cleared it), never a bare 'no exhausted budget was found' claim over data that may not have been checked.",
+            "testThatNowFailsWithoutIt": "test_missing_state_file_refuses_as_no_data, test_missing_state_file_exits_one_via_the_cli (both pre-existing behavior already passed the exit code; the text/docstring inconsistency itself has no separate boolean test, it is fixed by inspection per the orchestrator's wording requirement, and is exercised end to end by the same two tests plus the empty-state PASS-line tests above)",
+            "calibrated": true
+          },
+          {
+            "severity": "Minor",
+            "oneLineWhatYouChanged": "Split the T3 tier_reason check out of the agent_count elif chain into its own function _t3_tier_reason_problem, called with an independent `if` so an invalid agent_count no longer masks a missing tier_reason; both problems now report in one run.",
+            "testThatNowFailsWithoutIt": "test_t3_bad_agent_count_does_not_mask_missing_tier_reason, test_calibration_t3_guard_is_not_masked_by_a_bad_agent_count",
+            "calibrated": true
+          },
+          {
+            "severity": "Minor",
+            "oneLineWhatYouChanged": "Replaced test_calibration_t3_tier_reason_guard's inspect.getsource string grep with a real break-and-restore: it now monkeypatches the new dispatch._t3_tier_reason_problem helper to always return None, confirms T3-without-tier_reason stops being refused, restores, confirms refusal returns. Checked all 5 other calibration tests (missing_owed_no_data, model_version, absolute_path, t2_agent_ceiling, founder_deferral) and all 5 already patch a real function/constant and observe a behavior change; none of the others were source-text matches, so only this one needed changing.",
+            "testThatNowFailsWithoutIt": "test_calibration_t3_tier_reason_guard itself is the fix (old version passed on the pre-fix source; new version fails if _t3_tier_reason_problem's effect is stubbed out, which is exactly what happened when I proved it against the scratch pre-fix copy)",
+            "calibrated": true
+          }
+        ],
+        "findingsDisputed": [],
+        "filesWritten": [
+          "/Users/khalil.maaouni/Documents/BrotherSBE-wP2/tools/sbe_dispatch.py",
+          "/Users/khalil.maaouni/Documents/BrotherSBE-wP2/tools/test_sbe_dispatch.py"
+        ],
+        "doneCheckCommand": "python3 tools/test_sbe_dispatch.py",
+        "doneCheckLastLines": "Ran 66 tests in 0.274s\\n\\nOK",
+        "fullSuiteResult": "python3 tools/test_sbe.py -> Ran 106 tests in 32.266s, OK (one stray stderr line from an unrelated migrate-lock test printed after OK, not a failure, present on this suite regardless of my lane's changes since my lane does not touch anything test_sbe.py exercises)",
+        "residualReds": []
+      }
+    }
+  ]
+}
