@@ -121,6 +121,22 @@ class WhatTheActionWiresUp(unittest.TestCase):
                          "skips it, which is the defect this whole file was rewritten "
                          "to close")
 
+    def test_every_sbe_invocation_names_the_binary_not_the_path(self):
+        """sbe-path is a DIRECTORY. Invoking it as a command produces empty
+        output and an unparseable report, which the discovery script then
+        correctly reports as "did not parse" while the job fails for a reason
+        that looks like a policy problem and is not.
+
+        Caught in CI rather than here, which is why this assertion exists: the
+        first version of the minting step wrote `"$SBE_PATH" "$@"` while every
+        other step in the same file wrote `"$SBE_PATH/bin/sbe"`."""
+        block = self.action.split("id: mint", 1)[1].split("- name:", 1)[0]
+        bad = [line.strip() for line in block.split("\n")
+               if '"$SBE_PATH"' in line and "/bin/sbe" not in line]
+        self.assertEqual(bad, [],
+                         "the minting step invokes the sbe PATH as a command: %r. It is a "
+                         "directory; every invocation must name $SBE_PATH/bin/sbe" % bad)
+
     def test_a_supplied_receipts_dir_is_respected_rather_than_overridden(self):
         self.assertIn('if [ -n "$SBE_RECEIPTS_DIR" ]; then', self.action,
                       "the step no longer yields to a caller-supplied receipts directory")

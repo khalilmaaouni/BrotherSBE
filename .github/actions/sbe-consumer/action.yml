@@ -146,7 +146,7 @@ runs:
         set -- policy evaluate . --json
         if [ -n "$SBE_BASE" ]; then set -- "$@" --base "$SBE_BASE"; fi
         if [ -n "$SBE_POLICY" ]; then set -- "$@" --policy "$SBE_POLICY"; fi
-        "$SBE_PATH" "$@" > "$DISCOVERY" || true
+        "$SBE_PATH/bin/sbe" "$@" > "$DISCOVERY" || true
         REQUIRED=$(python3 "$GITHUB_ACTION_PATH/required_checks.py" < "$DISCOVERY")
         rm -f "$DISCOVERY"
         if [ -z "$REQUIRED" ]; then
@@ -154,7 +154,7 @@ runs:
         fi
         for CHECK in $REQUIRED; do
           echo "running registered check: $CHECK"
-          "$SBE_PATH" evidence run --check "$CHECK" --out "$MINTED/$CHECK.json" || \
+          "$SBE_PATH/bin/sbe" evidence run --check "$CHECK" --out "$MINTED/$CHECK.json" || \
             echo "check $CHECK produced no passing receipt; the evaluation below reports it."
         done
         echo "dir=$MINTED" >> "$GITHUB_OUTPUT"
