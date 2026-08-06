@@ -29,10 +29,24 @@ estimated_days: 1
 # hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
 # and raises a founder card; an overrun needs an explicit founder yes.
 token_budget: 1800000
-tokens_used: null
+tokens_used: 1339000
 started_at: 2026-08-06
 completed_at: null
-evidence: []
+acceptance_met:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+evidence:
+  - "orchestrator re-ran both done-checks on the MERGED tree: test_sbe_program.py OK (61 tests), test_sbe_dispatch.py OK (78 tests)"
+  - "sbe program status --write then sbe program check: exit 0 fresh, exit 1 when absent, verified live through bin/sbe"
+  - "four hostile-review rounds recorded verbatim in design/phase-0/verdicts-round1..4.json; rounds 1 to 3 found 1 Critical, 7 Major, 4 Minor total, every one closed and re-verified by reproducing its original probe; round 4: both lanes MERGE"
+  - "tokens_used is the MEASURED subagent spend of the four engine rounds (498k+526k+177k+138k); orchestrator-side tokens not included, so the true figure is higher"
+  - "acceptance index 6 recorded only AFTER the battery printed it: 530 evals: 530 passed, 0 regressions, exit 0 (2026-08-06)"
 risks:
   - risk: "Scope grew from the dispatch gate alone to four deliverables, so the declared 600k budget was raised to 1,800k before start."
     mitigation: "Re-scope declared in STATE.md and to the founder before any dispatch; the cap stops work rather than sliding."

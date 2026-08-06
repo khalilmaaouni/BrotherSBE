@@ -1431,6 +1431,55 @@ def _cmd_adopt(args):
     return EXIT_OK
 
 
+def _cmd_program(args):
+    """Program-wide truth from the ledger, the way `status` answers it for one
+    change: read from `program/PROGRAM.yaml` and `program/work-items/`, never
+    computed fresh over source code. See `brothersbe.program` for the kill
+    criterion and the honesty rule that a status word never becomes a
+    percentage. `status` renders (or with --write regenerates STATUS.md between
+    its markers); `check` exits 1 when the committed STATUS.md no longer
+    matches a fresh render, so drift fails a gate instead of aging quietly.
+    """
+    root = os.path.abspath(args.path)
+    if not os.path.isdir(root):
+        sys.stderr.write("sbe program: '%s' is not a directory. A mistyped path must not "
+                         "read as a clean scan.\n" % root)
+        return EXIT_USAGE
+    from . import program as program_mod
+
+    if args.action == "check":
+        try:
+            fresh = program_mod.check_status_md(root)
+        except program_mod.ProgramParseError as exc:
+            sys.stderr.write("sbe program check: %s\n" % exc)
+            return EXIT_CONTROL_FAILED
+        if fresh:
+            sys.stdout.write("program STATUS.md matches a fresh render\n")
+            return EXIT_OK
+        sys.stdout.write("program STATUS.md is stale or unwritable from its sources; "
+                         "regenerate with: sbe program status --write\n")
+        return EXIT_CONTROL_FAILED
+
+    try:
+        report = program_mod.build_program_report(root)
+    except program_mod.ProgramParseError as exc:
+        sys.stderr.write("sbe program: %s\n" % exc)
+        return EXIT_CONTROL_FAILED
+    if args.write:
+        try:
+            program_mod.write_status_md(root, report)
+        except program_mod.ProgramParseError as exc:
+            sys.stderr.write("sbe program: %s\n" % exc)
+            return EXIT_CONTROL_FAILED
+        sys.stdout.write("wrote %s\n" % os.path.join(root, program_mod.STATUS_MD_REL))
+        return EXIT_OK
+    if args.json:
+        sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(program_mod.render_status_md(report) + "\n")
+    return EXIT_OK
+
+
 def _cmd_map(args):
     """A deterministic, offline HTML status page, built from canonical state
     only. Not a delegation: like `evidence`, `task`, `work` and `handover`,
@@ -1653,6 +1702,9 @@ COMMANDS = [
     ("map", "a deterministic, offline HTML status page built from canonical state only: "
             "sbe map --out FILE",
      _cmd_map),
+    ("program", "program-wide status from the ledger: gantt, finished, in flight, blocked, "
+                "risks with mitigations, docs, budget; `check` fails when STATUS.md drifted",
+     _cmd_program),
 ]
 
 
@@ -1801,6 +1853,17 @@ def build_parser():
                                help="the repository holding both commits (default: the "
                                     "current one)")
             child.add_argument("--json", action="store_true", help="machine-readable output")
+        elif name == "program":
+            child.add_argument("action", choices=("status", "check"),
+                               help="status renders the program report; check exits 1 when "
+                                    "the committed STATUS.md drifted from a fresh render")
+            child.add_argument("path", nargs="?", default=".",
+                               help="the repository holding program/ (default: the current one)")
+            child.add_argument("--json", action="store_true",
+                               help="machine-readable report envelope (status only)")
+            child.add_argument("--write", action="store_true",
+                               help="regenerate program/STATUS.md between its markers "
+                                    "(status only); prose outside the markers survives")
         elif name == "status":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to summarize (default: the current one)")

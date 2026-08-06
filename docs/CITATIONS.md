@@ -599,3 +599,165 @@ captured.
 - population: docs/TEAM-PLAYBOOK.md and design/team-operating-model/07-verification.md, both citing it against relying on any single velocity number
 - date: opened by the research pass on 2026-08-01 (team-research/r5-enterprise-sdlc.md); note the underlying ACM Queue page returned HTTP 403 on fetch, so the Microsoft Research abstract page is the primary text actually read
 - limit: the five per-dimension SPACE definitions come from secondary summaries cross-referencing the paper, not the full paper text, per the research file's own note
+
+## https://www.anthropic.com/engineering/building-effective-agents
+- claim: the orchestrator-workers pattern is justified only when it demonstrably beats a simpler shape, and cost is a first-class design constraint of agentic systems
+- population: Anthropic engineering post on agent design patterns
+- date: post captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them
+- claim: multi-agent systems add roughly 3 to 10 times token overhead and pay off only for parallel independent work, context isolation, or specialization; verification must check environment state, not the agent's transcript claim
+- population: Anthropic blog post on when to use multi-agent systems
+- date: post captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://www.anthropic.com/engineering/built-multi-agent-research-system
+- claim: an Opus lead with Sonnet subagents beat single-agent Opus by 90.2 percent on their internal eval; early failures included spawning 50 subagents for simple queries, fixed by embedded scaling rules
+- population: Anthropic engineering post on their research system, including its internal evaluation
+- date: post captured 2026-08-06, spot-checked verbatim by the orchestrator the same day
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://code.claude.com/docs/en/agent-sdk/subagents
+- claim: only the prompt string crosses the parent-to-subagent boundary, and a dead or partial agent return is a distinguishable failure signal
+- population: Claude Agent SDK documentation, subagents page
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+- claim: subagents should return condensed structured summaries near 1,000 to 2,000 tokens while persistent files carry long-lived state
+- population: Anthropic engineering post on context engineering
+- date: post captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://code.claude.com/docs/en/best-practices
+- claim: a fresh-context reviewer judges the diff on its own terms and must be scoped to correctness or it manufactures findings
+- population: Claude Code best-practices documentation
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+- claim: judge each dimension with an isolated judge and require an explicit insufficient-information verdict
+- population: Anthropic engineering post on agent evals
+- date: post captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://code.claude.com/docs/en/agent-sdk/agent-loop
+- claim: the SDK ships hard-stop primitives (max_turns, max_budget_usd) so caps live in configuration, not judgment
+- population: Claude Agent SDK documentation, agent loop page
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://code.claude.com/docs/en/agent-sdk/cost-tracking
+- claim: SDK cost fields are client-side estimates, not billing truth
+- population: Claude Agent SDK documentation, cost tracking page
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://platform.claude.com/docs/en/build-with-claude/usage-cost-api
+- claim: the usage and cost admin API attributes real spend by key and workspace
+- population: Anthropic platform documentation, usage and cost API
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://reference.langchain.com/python/langgraph-sdk/schema/Config/recursion_limit
+- claim: LangGraph enforces a small hard recursion limit as an exception, not an alert
+- population: LangGraph SDK reference, recursion_limit
+- date: reference captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://developers.openai.com/api/docs/guides/spend-limits
+- claim: alerts notify while caps stop traffic; the two words name different controls
+- population: OpenAI platform documentation on spend limits
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://docs.datadoghq.com/llm_observability/monitoring/metrics/
+- claim: production LLM observability records tokens by type, cost, duration and errors per span at full sampling
+- population: Datadog LLM observability documentation
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://docs.langchain.com/langsmith/cost-tracking
+- claim: cost attribution collapses without a stable per-task identity carried on every run
+- population: LangSmith cost-tracking documentation
+- date: docs captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://opentelemetry.io/blog/2026/genai-observability/
+- claim: OpenTelemetry's GenAI semantic conventions standardize token and model field names
+- population: OpenTelemetry blog post on GenAI observability
+- date: post captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://tianpan.co/blog/2025-10-19-llm-routing-production
+- claim: never route work to a cheaper model without quality measurement in place first
+- population: practitioner blog post on LLM routing in production
+- date: post captured 2026-08-06; single practitioner source, the weakest tier in this batch
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://kanban.university/kanban-guide/
+- claim: limiting the work allowed to enter the system is the key lever against delay, and stop starting, start finishing is the cultural core of a pull system
+- population: the official Kanban guide
+- date: guide captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://waux.io/stop-starting-start-finishing/
+- claim: delivery moves at the speed of its bottleneck, so intake is sized to the constraint
+- population: practitioner essay applying theory of constraints to delivery
+- date: post captured 2026-08-06; single practitioner source
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://basecamp.com/shapeup/1.2-chapter-03
+- claim: estimates start with a design and end with a number; appetites start with a number and end with a design
+- population: Shape Up, chapter 3, the online book
+- date: captured 2026-08-06, spot-checked verbatim by the orchestrator the same day
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://basecamp.com/shapeup/3.5-chapter-14
+- claim: the circuit breaker cancels overrunning work by default instead of extending it
+- population: Shape Up, chapter 14, the online book
+- date: captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://itrevolution.com/articles/kata/
+- claim: the andon cord actually stops the line without asking permission
+- population: IT Revolution article on kata and the andon cord
+- date: article captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## http://leanmagazine.net/lean/cost-of-delay-don-reinertsen/
+- claim: sequence eligible work by cost of delay against effort, weighted shortest job first
+- population: interview with Don Reinertsen in Lean Magazine
+- date: interview captured 2026-08-06; secondary source for Reinertsen's own book
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://workingbackwards.com/resources/working-backwards-pr-faq/
+- claim: the PR-FAQ forces the customer and the press release before any code, killing ideas that serve no named customer
+- population: Working Backwards resource page on the PR-FAQ
+- date: page captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://pre-commit.com/
+- claim: a governance tool that states its scope in one narrow sentence beats a broad pitch
+- population: pre-commit's own homepage self-description
+- date: page captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://www.conftest.dev/
+- claim: conftest scopes its value proposition to one line about testing structured configuration
+- population: conftest's own homepage self-description
+- date: page captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://github.com/danger/danger/blob/master/README.md
+- claim: Danger frames its value as codifying team norms so humans think about harder problems
+- population: the Danger project README
+- date: README captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate
+
+## https://strategyn.com/jobs-to-be-done/
+- claim: jobs-to-be-done separates the stable job from the changing product
+- population: Strategyn's jobs-to-be-done overview page
+- date: page captured 2026-08-06
+- limit: read in full by a research agent on 2026-08-06 and hostile-checked by a second agent that re-opened the URL; guidance, not a measurement on this estate

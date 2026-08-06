@@ -7804,6 +7804,52 @@ def cb6(root):
         {"name": "reconcile", "exit_code": 0, "duration_ms": 812}]})
 
 
+# Program-status doc truth: program/STATUS.md is a generated artifact, and a
+# generated artifact without a drift gate rots exactly like the hand-written
+# one it replaced. Three cases: the real repository's committed STATUS.md must
+# match a fresh render of the live ledger; the detection mechanism itself is
+# calibrated on a temp ledger; and the round-1 Critical (an absent ledger
+# source reading as a clean program) is pinned here at the release gate, not
+# only in the module's own suite.
+_program_mod = SourceFileLoader(
+    "sbe_program_eval", os.path.join(HERE, "..", "src", "brothersbe", "program.py")).load_module()
+
+
+@case("program-status-md-matches-the-live-ledger", "docs", "fresh")
+def dc_prog_fresh(root):
+    try:
+        fresh = _program_mod.check_status_md(_REPO)
+    except _program_mod.ProgramParseError as exc:
+        return "the live ledger did not parse: %s" % exc
+    return "fresh" if fresh else (
+        "program/STATUS.md no longer matches a fresh render of the ledger; "
+        "regenerate with: sbe program status --write")
+
+
+@case("program-status-drift-is-detected", "docs", "drift-detected")
+def dc_prog_drift(root):
+    write(root, os.path.join("program", "PROGRAM.yaml"),
+          "program: t\nversion_target: 1.0.0\nstatus: x\nplan: MASTER-PLAN.md\n")
+    write(root, os.path.join("program", "work-items", "BR-A.yaml"),
+          "id: BR-A\ntitle: T\nstatus: done\n")
+    _program_mod.write_status_md(root)
+    if not _program_mod.check_status_md(root):
+        return "a freshly written STATUS.md read as stale, so the comparison is broken"
+    write(root, os.path.join("program", "work-items", "BR-B.yaml"),
+          "id: BR-B\ntitle: New\nstatus: not_started\n")
+    return "drift-detected" if not _program_mod.check_status_md(root) else (
+        "the ledger changed and STATUS.md still read as fresh: drift is invisible")
+
+
+@case("program-status-no-data-source-never-reads-clean", "docs", "refused")
+def dc_prog_nodata(root):
+    write(root, os.path.join("program", "PROGRAM.yaml"),
+          "program: t\nversion_target: 1.0.0\nstatus: x\nplan: MASTER-PLAN.md\n")
+    _program_mod.write_status_md(root)
+    return "refused" if not _program_mod.check_status_md(root) else (
+        "an absent work-items directory checked out clean: NO-DATA read as a pass")
+
+
 def main():
     passed = failed = 0
     for name, klass, expect, fn in CASES:
