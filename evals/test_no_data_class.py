@@ -496,6 +496,10 @@ NOT_A_VERDICT = {
     ("sbe_checks.py", "glob_with_denials"): "returns (glob hits, directories it could not enter), "
                                             "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
+    ("sbe_dispatch.py", "_blocking_owed_items"): "returns (blocking owed items, parse "
+                                                 "problems), not a verdict",
+    ("sbe_dispatch.py", "_read_json_arg"): "returns (parsed JSON value, read problem), "
+                                           "not a verdict",
     ("sbe_gate.py", "_items"): "returns (item list, why it is empty), not a verdict",
     ("sbe_gate.py", "find"): "returns (paths found, scope and pruning note), not a verdict",
     ("sbe_gate.py", "git_trailers"): "returns (commit body, signature state, identities, "

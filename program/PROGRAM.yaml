@@ -61,6 +61,22 @@ waves:
     work_items: BR-0601 to BR-0607
     token_budget: 1340000
 
+# The delivery groupings the shipped work items actually carry. These predate the
+# wave schedule above and were never declared here, which meant seven real items
+# named a wave no reader could resolve. Found on 2026-08-06 by the Phase 0
+# reporter's hostile refuter and fixed in the data rather than worked around in
+# the reader: an item may not name a grouping the program record does not know.
+delivery_groupings:
+  - id: guided-experience
+    name: The guided layer slice
+    work_items: BR-0000, BR-0201, BR-0310
+  - id: release-readiness
+    name: Release readiness
+    work_items: BR-0301
+  - id: team-control
+    name: Team control and ownership
+    work_items: BR-0520, BR-0521, BR-0522
+
 # Release gate categories, one per plan section 11.x. A stable release requires
 # every gate in every category to pass; a documented no-go is a valid outcome.
 release_gates:
@@ -72,3 +88,77 @@ release_gates:
   - cross-host-support
   - maintainability
   - public-readiness
+
+# ---------------------------------------------------------------------------
+# The 2026-08-06 master plan layer, added after the founder approved
+# program/MASTER-PLAN-2026-08-06.md. The seven waves above remain the record of
+# the 2026-07-31 release program; the plan reconciles the two as milestones and
+# names which meaning of 1.0.0 each one carries. Work items BR-1000 to BR-1008
+# carry this layer.
+# ---------------------------------------------------------------------------
+
+plan_2026_08_06: MASTER-PLAN-2026-08-06.md
+owed_register: OWED.json
+principles: ../docs/PRINCIPLES.md
+
+milestones:
+  - id: M1
+    name: The 1.0.0 tag
+    definition: >
+      Engineering complete, all six dimensions at mechanical nine and refuter
+      checked, the release packet assembled. The tag itself is cut by the
+      founder alone. Distribution is the public repository with install.sh and
+      the plugin manifest.
+    work_items: BR-1000 to BR-1007
+  - id: M2
+    name: Human validated stable
+    definition: >
+      The benchmark kit has run with real unfamiliar users, findings are
+      repaired, and only then does stable language apply. The founder schedules
+      these runs after the tag, by his own ratified score bar.
+    work_items: after BR-1006
+  - id: M3
+    name: Reach
+    definition: >
+      Cross host adapters, marketplace submission and IDE surfaces. Out of scope
+      until M2 closes. Loop G is the only M3 slice funded now and it never gates
+      the tag.
+    work_items: BR-1008
+
+plan_waves:
+  - id: phase-0
+    name: Controls before work
+    work_items: BR-1000
+    token_budget: 1800000
+  - id: loop-b
+    name: Contracts, the foundation everything consumes
+    work_items: BR-1001
+    token_budget: 2000000
+  - id: loop-c
+    name: Install to nine
+    work_items: BR-1002
+    token_budget: 2000000
+  - id: loop-d
+    name: Workspace foundation, loopback only
+    work_items: BR-1003
+    token_budget: 2000000
+  - id: loop-e
+    name: Guided operations and the human benchmark kit
+    work_items: BR-1004
+    token_budget: 2000000
+  - id: loop-f
+    name: Team and maintainability closed
+    work_items: BR-1005
+    token_budget: 2000000
+  - id: packet
+    name: The release packet
+    work_items: BR-1006
+    token_budget: 600000
+  - id: parallel
+    name: Windows, under an explicit founder exception
+    work_items: BR-1007
+    token_budget: 400000
+  - id: loop-g
+    name: Codex track, never gating the tag
+    work_items: BR-1008
+    token_budget: 1500000

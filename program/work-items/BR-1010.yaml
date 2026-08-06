@@ -1,0 +1,48 @@
+id: BR-1010
+title: "Unit testing protocol, end to end, for backend developers and QA"
+why: >
+  Founder priority, stated 2026-08-06: backend developers and QA need one
+  end to end unit testing protocol, not folklore. BrotherSBE already enforces
+  pieces of this on itself (calibrated tests that were watched failing, the
+  ran evidence gate, silent failure lints on test code, refuters that
+  re-execute) but nothing packages that discipline as a protocol a team can
+  adopt: how tests are written, calibrated, mapped to acceptance criteria,
+  run, evidenced, and reviewed, from a developer's first test to QA's
+  traceability check. This item designs and ships that protocol as a product
+  capability.
+persona_need: "P2 small engineering team: backend developers writing the tests and QA tracing them to acceptance criteria"
+owner: fable-orchestrator
+reviewer: qa-refuter
+status: not_started
+wave: phase-0
+milestone: M1
+depends_on:
+  - "BR-1009"
+spec: to be written first, design before build, per docs/PRINCIPLES.md section 1
+acceptance:
+  - "a design dossier (T2) exists and the founder approved it before any build: protocol scope, the three layer verification stance applied to unit tests, calibration as a first class requirement, acceptance to test traceability for QA"
+  - "the protocol ships as a product surface (skill or reference plus templates), not a chat habit"
+  - "sbe evidence receipts capture unit test runs with the command, exit code and duration, so a test claim is checkable"
+  - "traceability: a QA reader can map each acceptance criterion of a work item to the test that proves it, or see the gap named"
+  - "a worked example in the sandbox: one calibrated test written, watched failing, restored, its receipt recorded"
+  - "eval cases guard the protocol docs against drift, same treatment as every shipped doc"
+  - "python3 tools/test_sbe.py and the full eval battery stay green"
+estimated_days: 1
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 1500000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "A testing protocol that duplicates what the gates already enforce would create two sources of truth about what a passing test means."
+    mitigation: "The design phase maps every protocol rule to an existing gate or lint first; only genuinely new rules get new enforcement, per the reuse before build law."
+    severity: medium
+  - risk: "Admitted mid program by founder priority, ahead of the owed remeasure and Loop B close."
+    mitigation: "Recorded as a named founder deferral: the remeasure moves behind BR-1009 and BR-1010 by his explicit call of 2026-08-06, visible in the owed register rather than silently."
+    severity: medium
+blocked_by: []
+alerts:
+  - "Sequenced by founder instruction: starts once the current loop (Phase 0 merge plus BR-1009) finishes, before Loop B-close."

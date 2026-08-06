@@ -1,0 +1,36 @@
+id: BR-1002
+title: "Loop C: the install story to nine"
+why: >
+  Loop E sends real unfamiliar users through installation to measure the product.
+  That measurement is invalid if installation is not already at nine, which is why
+  install comes before the workspace loops rather than after them.
+persona_need: "P4 solo professional engineer, and every new user of any persona"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: loop-c
+milestone: M1
+depends_on:
+  - "BR-1001"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "packaging with a console entry point proven from a clean virtual environment"
+  - "self check, update with a dry run, and rollback on the recommended path"
+  - "the clean home matrix including paths with spaces"
+  - "the KNOWN-LIMITS tag contradiction fixed"
+  - "install dimension at mechanical nine, refuter checked"
+estimated_days: 1
+# cap basis: program/MASTER-PLAN-2026-08-06.md section 6, the founder-ratified
+# hard per-loop budget of 2,000k output tokens. Hitting the cap STOPS the loop
+# and raises a founder card; an overrun needs an explicit founder yes.
+token_budget: 2000000
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks:
+  - risk: "Packaging touches the plugin manifest and the install path, which are release surfaces."
+    mitigation: "No version bump outside a seal, and the release invariant runs against origin/main exactly as CI computes it."
+    severity: medium
+blocked_by: []
+alerts: []
