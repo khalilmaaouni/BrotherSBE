@@ -14,8 +14,8 @@
       "id": "OWED-2",
       "title": "Post rc.16 remeasure, owed since rc.16 merged",
       "state": "open",
-      "deferred_by_founder": false,
-      "deferral_reason": null,
+      "deferred_by_founder": true,
+      "deferral_reason": "Founder call 2026-08-06: BR-1009 (watchdog feature) and BR-1010 (unit testing protocol, founder priority) run before Loop B-close; the owed remeasure stays first act of Loop B-close when it opens.",
       "closes_in": "BR-1001, its first act"
     },
     {

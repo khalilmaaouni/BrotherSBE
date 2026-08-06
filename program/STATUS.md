@@ -4,7 +4,7 @@
 Program: brothersbe-public-release
 Version target: 1.0.0
 Overall position: 100% across measured items.
-1 of 17 items measured.
+1 of 18 items measured.
 
 ```mermaid
 gantt
@@ -14,6 +14,7 @@ gantt
     section Controls before work
     Phase 0  the dispatch gate, program visibility, watchdog and encoded principles :active, BR-1000, 1d
     sbe watchdog  the 20-minute drift audit, shipped and on by default :crit, BR-1009, after BR-1000, 1d
+    Unit testing protocol, end to end, for backend developers and QA :crit, BR-1010, after BR-1009, 1d
     section Contracts, the foundation everything consumes
     Loop B-close  the owed remeasure, six lanes re-verified and integrated, sealed as rc.18 :crit, BR-1001, after BR-1000, 2d
     section Install to nine
@@ -64,6 +65,7 @@ gantt
 - BR-1006: The 1.0.0 release packet (waits on: BR-1005)
 - BR-1008: Loop G: the Codex track (waits on: BR-1001)
 - BR-1009: sbe watchdog: the 20-minute drift audit, shipped and on by default (waits on: BR-1000)
+- BR-1010: Unit testing protocol, end to end, for backend developers and QA (waits on: BR-1009)
 
 ### Blocked
 - BR-0521 is blocked on BR-0520 (depends_on: not recorded as done)
@@ -77,6 +79,7 @@ gantt
 - BR-1008 is blocked on BR-1001 (depends_on: not recorded as done)
 - BR-1009 is blocked on BR-1000 (depends_on: not recorded as done)
 - BR-1009 is blocked on Phase 0 must land first: this reads the fence registry that Phase 0's dispatch gate defines. (blocked_by: free-text blocker)
+- BR-1010 is blocked on BR-1009 (depends_on: not recorded as done)
 
 ### Risks and mitigations
 | item | risk | severity | mitigation |
@@ -109,6 +112,8 @@ gantt
 | BR-1008 | A foreign runtime cannot enforce this repository's hooks, so parity claims could overstate what is actually controlled there. | medium | The capability matrix separates enforced from discipline and is refuted claim by claim; docs/RUNTIMES.md records what is verified where. |
 | BR-1009 | A watchdog that can write is a watchdog that can hide its own findings. | high | Read only by construction, with a test asserting the tree is byte identical after a run. |
 | BR-1009 | Admitted while Phase 0 was in flight, which is the scope creep the plan's own one-loop rule exists to prevent. | medium | Recorded as a work item with its persona need, done-check and budget rather than built inside Phase 0, and it opens only when the owed register allows it. |
+| BR-1010 | A testing protocol that duplicates what the gates already enforce would create two sources of truth about what a passing test means. | medium | The design phase maps every protocol rule to an existing gate or lint first; only genuinely new rules get new enforcement, per the reuse before build law. |
+| BR-1010 | Admitted mid program by founder priority, ahead of the owed remeasure and Loop B close. | medium | Recorded as a named founder deferral: the remeasure moves behind BR-1009 and BR-1010 by his explicit call of 2026-08-06, visible in the owed register rather than silently. |
 
 ### Documentation
 - program/MASTER-PLAN.md: exists
@@ -118,9 +123,10 @@ gantt
 - program/MASTER-PLAN-2026-08-06.md: exists
 - docs/adr/2026-08-05-gui-server-amendment.md: exists
 - docs/PRINCIPLES.md: exists
+- to be written first, design before build, per docs/PRINCIPLES.md section 1: MISSING
 
 ### Budget
 Declared total: 6200000
 Recorded usage: 1339000
-Items with no recorded usage: 16
+Items with no recorded usage: 17
 <!-- END GENERATED PROGRAM STATUS -->
