@@ -143,7 +143,8 @@ python3 "$ROOT/bin/sbe" evidence run --out /tmp/sbe-book-ch12-receipts/weekly-re
 ```
 rolled up 2 region(s) into weekly_totals
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/weekly-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/weekly-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 ```bash
@@ -331,7 +332,8 @@ read 3 orders from orders.csv
 aggregated 2 region(s) for 2026-07-01
 wrote 3 rows to daily_totals
 
-sbe evidence run: receipt written to .sbe/evidence/pipeline-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to .sbe/evidence/pipeline-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 Then, one more small edit landed after that receipt was written, and
@@ -516,7 +518,8 @@ python3 "$ROOT/bin/sbe" evidence run --out /tmp/sbe-book-ch12-receipts/rehearsal
 ```
 REHEARSAL: would add partner_id to 3 row(s), nothing written
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 Verify the rehearsal receipt before trusting the rehearsal itself
@@ -528,8 +531,8 @@ python3 "$ROOT/bin/sbe" evidence verify /tmp/sbe-book-ch12-receipts/rehearsal-re
 
 ```
 NO-DATA  /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json
-  inspected: receipt file /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json; schemaVersion; 18 required field(s); the declared check kind(s); the runId seal over 24 run fact(s); the current git HEAD in /private/tmp/sbe-book-ch12-migration; 1 covered file(s)
-  trust:     LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it)
+  inspected: receipt file /tmp/sbe-book-ch12-receipts/rehearsal-receipt.json; schemaVersion; 19 required field(s); the declared check kind(s); the registered check binding against /private/tmp/sbe-book-ch12-migration/.sbe/checks.yml; the runId seal over 29 run fact(s); the current git HEAD in /private/tmp/sbe-book-ch12-migration; 1 covered file(s)
+  trust:     LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it)
   the working tree was dirty or unreadable when this ran (3 uncommitted path(s)), so the receipt covers a state that was never committed and nobody else can reproduce. That is advisory, and advisory is NO-DATA here rather than a pass
 ```
 
@@ -547,7 +550,8 @@ head -1 orders.csv
 order_id,date,region,amount_eur
 migrated: added partner_id to 3 row(s)
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/applied-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to /tmp/sbe-book-ch12-receipts/applied-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 order_id,date,region,amount_eur,partner_id
 ```
 
@@ -556,7 +560,7 @@ the rehearsal, `partner_id` appended after the real run, and a receipt
 sealed over each state, not a comment claiming either one happened.
 
 *What the gates will refuse here:* neither receipt clears `LOCAL-ADVISORY`
-into `PROTECTED-CI`, and `evidence verify` will not read either one as a
+into `CI-CLAIMED`, and `evidence verify` will not read either one as a
 `PASS`, while the tree that produced it holds uncommitted paths. A
 migration receipt this book can paste from a live repository is honestly
 capped there, the same ceiling chapter eleven's agent receipt hit; only a
@@ -754,7 +758,8 @@ Ran 4 tests in <N.NNNs>
 
 FAILED (failures=1)
 
-sbe evidence run: receipt written to .sbe/evidence/agent-2-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 1 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to .sbe/evidence/agent-2-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 1 in <N.NNNs>, over 1 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 The wording change moved the exact string a test asserted on. Exit 1,

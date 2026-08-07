@@ -1,0 +1,10 @@
+{
+  "answers": {
+    "changes_contract": "yes",
+    "crosses_boundary": "yes",
+    "touches_sensitive": "yes",
+    "consumers": "many",
+    "reversible_under_hour": "no"
+  },
+  "notes": "The five release blockers plus Loop B-close. This change rewrites the control plane itself: the write boundary (a Bash guard and a Stop reconciler), the evidence trust vocabulary, the required-evidence policy engine, the registered check registry, and the ownership rules. It changes the CLI surface, which is this project's public contract; it is not reversible in an hour once adopters have run against it; it touches the paths that decide what other changes are allowed, which is the most sensitive state this repository has; and every adopter is a downstream consumer. T3 is the honest reading of those five answers, and the tier is declared here rather than left for the policy engine to infer, because a change that avoids the declaration avoids the gate."
+}

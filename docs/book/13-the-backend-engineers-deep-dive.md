@@ -585,7 +585,8 @@ rm -f /tmp/sbe-book-ch13/repo/daily_totals.json /tmp/sbe-book-ch13/repo/orders.c
 
 ```
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch13/repo/.sbe/evidence/export-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to /tmp/sbe-book-ch13/repo/.sbe/evidence/export-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 `sbe evidence show` prints the receipt back verbatim; the lines below are
@@ -596,11 +597,11 @@ the ones that matter, none of them wall-clock or hash noise:
 ```
 
 ```
-trust          LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it)
+trust          LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it)
 command        python3 test_estate.py
 argv redacted  no (0 secret-shaped token(s) matched; the command above is verbatim)
 base commit    5eb044aac3d05693f0d662caf42eeca95fb96e94
-head commit    9615e906d0b0c2bff5291974ca55f4eb9f868f25
+head commit    80460e92b661cfaaf65b99e783b93617bd108643
 covers         explicit --covers (2 file(s))
 ```
 

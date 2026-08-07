@@ -44,8 +44,8 @@ from sbe_checks import run_guarded  # noqa: E402
 
 from . import evidence as evidence_mod
 from . import tasks as tasks_mod
-from .tasks import (DiffUnavailable, RegistryUnusable, _git, load_registry,  # noqa: F401
-                    repo_root_of, save_registry)
+from .tasks import (AmbiguousTaskId, DiffUnavailable, RegistryUnusable, _git,  # noqa: F401
+                    _normalize_change, load_registry, repo_root_of, save_registry)
 
 
 def _load_plan_file(path):
@@ -97,9 +97,50 @@ def _find_task(plan, task_id):
     return None
 
 
-def _find_record(data, task_id):
+def _find_record(data, task_id, change=None):
     """The LAST registry record with this id, any status, or None. Last because
-    the registry appends; the newest record is the one a human is asking about."""
+    the registry appends; the newest record is the one a human is asking about,
+    exactly as before this pair existed.
+
+    Identity is the (change, taskId) pair. When `change` is given, only a
+    record whose own `change` equals it can match. When it is omitted and
+    records with this id span MORE THAN ONE distinct change, the bare id
+    cannot say which is meant, and this raises `AmbiguousTaskId` naming every
+    change that used it, rather than silently returning whichever sorts last
+    across every change, an id-only accident of write order that is exactly
+    the class of guess this pair exists to close.
+    """
+    matches = [t for t in data["tasks"] if t.get("id") == task_id]
+    if change is not None:
+        found = None
+        for record in matches:
+            if (record.get("change") or "") == change:
+                found = record
+        return found
+    changes = sorted(set((t.get("change") or "") for t in matches))
+    if len(changes) > 1:
+        raise AmbiguousTaskId(task_id, matches)
+    return matches[-1] if matches else None
+
+
+def _last_record_any_change(data, task_id):
+    """The LAST registry record with this id, any status, any change, or
+    None. Reproduces `_find_record`'s ORIGINAL, pre-`change` algorithm
+    exactly (last because the registry appends; the newest record is the one
+    a human is asking about) and, unlike `_find_record`, NEVER raises
+    `AmbiguousTaskId`.
+
+    Used only by `cmd_brief`'s already-claimed check (Rule 4), which has no
+    `--change` flag to disambiguate with: `_find_record(data, task_id)`
+    (no `change`) raises when the id spans more than one change, and
+    `cmd_brief` has no handler for that, so it used to fall through to
+    `main()`'s generic `RegistryUnusable` catch, which told the operator to
+    pass `--change` -- a flag that does not exist on `brief`, an impossible
+    remedy. This is the one lookup in this module that stays deliberately
+    blind to `change`, matching `_dependency_problem`'s own unscoped default
+    (see its docstring) and the shape `tools/test_sbe_work_brief.py`, a
+    separate suite outside this change's fence, already pins.
+    """
     found = None
     for record in data["tasks"]:
         if record.get("id") == task_id:
@@ -107,13 +148,28 @@ def _find_record(data, task_id):
     return found
 
 
-def _dependency_problem(data, dep_id):
+def _dependency_problem(data, dep_id, change=None):
     """The refusal sentence for one dependsOn id, or None when a record with
     that id is closed clean. A dependency closed FORCED does not count as
-    clean: the force recorded a disposition, never a completion."""
+    clean: the force recorded a disposition, never a completion.
+
+    `change`, when given, scopes the search to that change: a `dependsOn`
+    edge inside a plan points at a SIBLING task id within the SAME dossier,
+    never a same-named task some other change happens to have derived (every
+    derived plan starts fresh at "T01"), and `cmd_start` passes its own
+    `change_id` for exactly that reason. `change=None` (the default, and what
+    `cmd_brief` still passes) searches every change, the ORIGINAL, unscoped
+    behavior, kept there on purpose: `tools/test_sbe_work_brief.py` (a
+    separate suite, outside this change's fence) pins that unscoped shape
+    with fixtures that predate the `change` field, so `cmd_brief`'s own
+    dependency check is not moved to scoped in this change; see
+    docs/KNOWN-LIMITS.md.
+    """
     closed = None
     for record in data["tasks"]:
         if record.get("id") != dep_id:
+            continue
+        if change is not None and (record.get("change") or "") != change:
             continue
         if record.get("status") == "open":
             return ("dependency %s is still open in the registry; it must be closed "
@@ -138,6 +194,15 @@ def _first_command(task):
         if isinstance(cmd, str) and cmd.strip():
             return cmd
     return None
+
+
+def _worktree_path(directory, root, task_id):
+    """The worktree path `cmd_start` documents it creates, joined the one
+    way it is ever joined: `<directory>/<repo-name>-sbe-<task-id>`. Pulled
+    out to a function so the default-directory fallback (see `cmd_start`,
+    Rule 4) can compute the SAME join for two candidate directories without
+    repeating it."""
+    return os.path.join(directory, "%s-sbe-%s" % (os.path.basename(root), task_id))
 
 
 def _evidence_dir(root):
@@ -191,8 +256,12 @@ def _matching_receipt(root, verify_command, head):
 
 def _close_namespace(args, force, evidence_id):
     """The argparse namespace `tasks.cmd_close` reads, built here so the close
-    path is the registry's own machinery and never a re-implementation."""
-    return argparse.Namespace(id=args.task_id, force=force,
+    path is the registry's own machinery and never a re-implementation.
+    `change` carries through whatever `cmd_finish` was given (or None): the
+    same bare-id-resolves-unambiguously-or-not rule applies to the close
+    underneath a finish as it does to the finish itself."""
+    return argparse.Namespace(id=args.task_id, change=getattr(args, "change", None),
+                              force=force,
                               who=getattr(args, "who", None),
                               why=getattr(args, "why", None),
                               evidence_id=evidence_id,
@@ -207,6 +276,13 @@ def _close_namespace(args, force, evidence_id):
 def cmd_start(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
     plan_path = os.path.abspath(args.plan)
+    # Computed early, before any registry read: a task's identity is the
+    # (change, taskId) pair, and both the dependency check (Rule 3) and the
+    # OPEN-collision check (Rule 4) need `change_id` to scope their lookups to
+    # THIS dossier, never any other one that happens to have derived a
+    # same-named task (every derived plan starts fresh at "T01").
+    dossier = os.path.dirname(plan_path)
+    change_id = os.path.basename(dossier)
     loaded = _load_plan_file(plan_path)
     if loaded["problem"]:
         sys.stderr.write("sbe work start: %s\n" % loaded["problem"])
@@ -249,15 +325,16 @@ def cmd_start(args, exit_ok, exit_failed, exit_usage):
     data = load_registry(root)
 
     # Rule 3: every dependency must be closed clean, and FORCED is not clean.
+    # Scoped to change_id: a dependsOn edge points at a SIBLING task inside
+    # THIS dossier's own plan, never a same-named task some other dossier
+    # happens to have derived.
     for dep in task.get("dependsOn") or []:
-        problem = _dependency_problem(data, dep)
+        problem = _dependency_problem(data, dep, change_id)
         if problem:
             sys.stdout.write("sbe work start: refused. %s\n" % problem)
             return exit_failed
 
     # Rule 4: collisions, each refused by name.
-    dossier = os.path.dirname(plan_path)
-    change_id = os.path.basename(dossier)
     branch = "sbe/%s/%s" % (change_id, args.task_id)
     code, _out, _err = _git(["rev-parse", "--verify", "--quiet",
                              "refs/heads/%s" % branch], root)
@@ -265,18 +342,58 @@ def cmd_start(args, exit_ok, exit_failed, exit_usage):
         sys.stdout.write("sbe work start: refused. Branch %s already exists; one task, one "
                          "branch, and this one is taken.\n" % branch)
         return exit_failed
-    worktree_dir = (os.path.abspath(args.worktree_dir) if args.worktree_dir
-                    else os.path.dirname(root))
-    worktree = os.path.join(worktree_dir, "%s-sbe-%s" % (os.path.basename(root),
-                                                         args.task_id))
+    # The DEFAULT worktree directory (no `--worktree-dir` given) is still,
+    # primarily, the repository's parent directory, exactly as documented
+    # (docs/specs/2026-07-30-sbe-work-lifecycle.md): a single dossier's
+    # `sbe work start` lands at the SAME path it always did, byte for byte,
+    # so a chapter like docs/book/13's, which never collides, is untouched.
+    # Only when that plain default path is ALREADY TAKEN does this fall
+    # back, automatically, to a subdirectory of the same parent named for
+    # THIS dossier's own change id (the same string the branch name above
+    # and the registry record below already carry): two dossiers routinely
+    # derive the same task id (every derived plan starts fresh at "T01"),
+    # and before this, the SECOND dossier's `sbe work start` refused right
+    # here, unconditionally, on this exact collision, before its own
+    # (already change-scoped) registry check below ever got a chance to
+    # run: the registry-identity fix never reached a real two-dossier run
+    # under its own documented default flags. An EXPLICIT `--worktree-dir`
+    # NEVER falls back: an operator who names a directory by hand and finds
+    # it occupied is refused exactly as before (see
+    # TestStartTwoDossiersUnderDefaultFlags::
+    # test_an_explicit_shared_worktree_dir_across_dossiers_still_collides).
+    # The fallback is stated out loud on stdout, never silent, the same
+    # honesty rule 5 below already follows for an unresolved baseCommit.
+    if args.worktree_dir:
+        worktree_dir = os.path.abspath(args.worktree_dir)
+        worktree = _worktree_path(worktree_dir, root, args.task_id)
+    else:
+        worktree_dir = os.path.dirname(root)
+        worktree = _worktree_path(worktree_dir, root, args.task_id)
+        if os.path.lexists(worktree):
+            # Fall back unconditionally once the plain default is taken,
+            # even if the SCOPED path turns out to be taken too (a retry of
+            # THIS dossier's own already-started task, most likely): the
+            # generic collision refusal just below then names the scoped
+            # path, the one actually relevant to this dossier, rather than
+            # silently reverting to the stale plain-default message, which
+            # would point the operator at a DIFFERENT dossier's directory.
+            scoped_dir = os.path.join(worktree_dir, change_id)
+            sys.stdout.write(
+                "sbe work start: the default worktree directory %s is already taken "
+                "(most likely by another dossier's own task with this id); falling "
+                "back to %s, named for this dossier's own change id\n"
+                % (worktree, scoped_dir))
+            worktree_dir = scoped_dir
+            worktree = _worktree_path(worktree_dir, root, args.task_id)
     if os.path.lexists(worktree):
         sys.stdout.write("sbe work start: refused. The worktree directory %s already "
                          "exists; one task, one worktree, and this path is taken.\n"
                          % worktree)
         return exit_failed
-    if tasks_mod._find_open(data, args.task_id):
-        sys.stdout.write("sbe work start: refused. Task id %s already has an OPEN registry "
-                         "record; close it before starting it again.\n" % args.task_id)
+    if tasks_mod._find_open(data, args.task_id, change=change_id):
+        sys.stdout.write(
+            "sbe work start: refused. Task (change=%s, id=%s) already has an OPEN registry "
+            "record; close it before starting it again.\n" % (change_id, args.task_id))
         return exit_failed
 
     # Rule 5: branch at the plan baseCommit when set and resolvable, else at
@@ -318,9 +435,11 @@ def cmd_start(args, exit_ok, exit_failed, exit_usage):
         return exit_failed
 
     # Rule 6: open the registry record through the existing tasks machinery,
-    # with fields read mechanically from the plan.
+    # with fields read mechanically from the plan. `change=change_id` stamps
+    # this dossier's identity onto the record, the other half of the
+    # (change, taskId) pair the id-only collision check above already used.
     open_ns = argparse.Namespace(
-        id=args.task_id, agent=args.agent, role=role, base=sha,
+        id=args.task_id, change=change_id, agent=args.agent, role=role, base=sha,
         verify=_first_command(task), owns=list(owns),
         read_only=[p for p in (task.get("readOnly") or [])
                    if isinstance(p, str) and p.strip()],
@@ -363,10 +482,17 @@ def cmd_start(args, exit_ok, exit_failed, exit_usage):
 def cmd_check(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
     data = load_registry(root)
-    record = _find_record(data, args.task_id)
+    change = _normalize_change(getattr(args, "change", None))
+    try:
+        record = _find_record(data, args.task_id, change=change)
+    except AmbiguousTaskId as exc:
+        sys.stderr.write("sbe work check: %s\n" % exc)
+        return exit_usage
     if record is None:
-        sys.stderr.write("sbe work check: no registry record with id %r in %s\n"
-                         % (args.task_id, tasks_mod.registry_path(root)))
+        sys.stderr.write(
+            "sbe work check: no registry record with id %r%s in %s\n"
+            % (args.task_id, (" in change %r" % change) if change else "",
+               tasks_mod.registry_path(root)))
         return exit_usage
 
     reasons = []
@@ -470,10 +596,17 @@ def cmd_check(args, exit_ok, exit_failed, exit_usage):
 def cmd_finish(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
     data = load_registry(root)
-    task = tasks_mod._find_open(data, args.task_id)
+    change = _normalize_change(getattr(args, "change", None))
+    try:
+        task = tasks_mod._find_open(data, args.task_id, change=change)
+    except AmbiguousTaskId as exc:
+        sys.stderr.write("sbe work finish: %s\n" % exc)
+        return exit_usage
     if task is None:
-        sys.stderr.write("sbe work finish: no OPEN task with id %r in %s\n"
-                         % (args.task_id, tasks_mod.registry_path(root)))
+        sys.stderr.write(
+            "sbe work finish: no OPEN task with id %r%s in %s\n"
+            % (args.task_id, (" in change %r" % change) if change else "",
+               tasks_mod.registry_path(root)))
         return exit_usage
 
     evidence_id = None
@@ -556,10 +689,17 @@ def cmd_finish(args, exit_ok, exit_failed, exit_usage):
 def cmd_remove(args, exit_ok, exit_failed, exit_usage):
     root = repo_root_of(os.path.abspath(args.cwd))
     data = load_registry(root)
-    record = _find_record(data, args.task_id)
+    change = _normalize_change(getattr(args, "change", None))
+    try:
+        record = _find_record(data, args.task_id, change=change)
+    except AmbiguousTaskId as exc:
+        sys.stderr.write("sbe work remove: %s\n" % exc)
+        return exit_usage
     if record is None:
-        sys.stderr.write("sbe work remove: no registry record with id %r in %s\n"
-                         % (args.task_id, tasks_mod.registry_path(root)))
+        sys.stderr.write(
+            "sbe work remove: no registry record with id %r%s in %s\n"
+            % (args.task_id, (" in change %r" % change) if change else "",
+               tasks_mod.registry_path(root)))
         return exit_usage
     if record.get("status") == "open":
         sys.stdout.write("sbe work remove: refused. Task %s is still OPEN, and an open "
@@ -776,6 +916,9 @@ def cmd_brief(args, exit_ok, exit_failed, exit_usage):
     data = load_registry(root)
 
     # Rule 3: every dependency must be closed clean, and FORCED is not clean.
+    # NOT scoped to a change here (see `_dependency_problem`'s docstring):
+    # this stays the original, unscoped check `tools/test_sbe_work_brief.py`
+    # already pins.
     for dep in task.get("dependsOn") or []:
         problem = _dependency_problem(data, dep)
         if problem:
@@ -783,11 +926,22 @@ def cmd_brief(args, exit_ok, exit_failed, exit_usage):
             return exit_failed
 
     # Rule 4: refuse when an OPEN registry record already owns this task id.
-    claimed = _find_record(data, args.task_id)
+    # NOT scoped to a change, for the same reason Rule 3 is not (see above):
+    # this stays a global, by-id check. `claimed.get("change")` is still
+    # named in the refusal when the record carries one, so a claim that
+    # turns out to belong to a DIFFERENT dossier is not misread as this
+    # one's own. Looked up with `_last_record_any_change`, NOT `_find_record`:
+    # `brief` has no `--change` flag, and `_find_record`'s unscoped lookup
+    # now raises `AmbiguousTaskId` when the id spans more than one change, a
+    # refusal `brief` cannot recover from (round 1 shipped exactly that
+    # crash; see `TestBriefUnscopedLookupNeverRaises`).
+    claimed = _last_record_any_change(data, args.task_id)
     if claimed is not None and claimed.get("status") == "open":
-        sys.stdout.write("sbe work brief: refused. Task %s already has an OPEN registry "
-                         "record (agent %s); a brief is never built for a task somebody "
-                         "already owns.\n" % (args.task_id, claimed.get("agent", "(unnamed)")))
+        sys.stdout.write(
+            "sbe work brief: refused. Task %s already has an OPEN registry record "
+            "(change %s, agent %s); a brief is never built for a task somebody already "
+            "owns.\n" % (args.task_id, claimed.get("change") or "(none)",
+                        claimed.get("agent", "(unnamed)")))
         return exit_failed
 
     # Rule 5: resolve HEAD once, the same lookup cmd_start falls back to, and
@@ -859,18 +1013,28 @@ def _parser():
     st.add_argument("--plan", required=True, help="path to the dossier's 08-plan.json")
     st.add_argument("--worktree-dir", default=None, dest="worktree_dir",
                     help="where the worktree directory is created (default: the "
-                         "repository's parent directory)")
+                         "repository's parent directory; if that default path is "
+                         "already taken, falls back to a subdirectory of it named "
+                         "for this dossier's own change id, and says so on stdout, "
+                         "so sibling dossiers deriving the same task id can both "
+                         "start under this default)")
     st.add_argument("--agent", default="unnamed", help="who is doing the work")
     st.add_argument("--cwd", default=".")
 
     ck = sub.add_parser("check", help="report scope, evidence and closability; never "
                                       "mutates")
     ck.add_argument("task_id")
+    ck.add_argument("--change", default=None,
+                    help="disambiguate when this task id has a record in more than one "
+                         "change; required only when it does")
     ck.add_argument("--cwd", default=".")
 
     fi = sub.add_parser("finish", help="close the task on the postcondition AND a bound "
                                        "receipt")
     fi.add_argument("task_id")
+    fi.add_argument("--change", default=None,
+                    help="disambiguate when this task id is OPEN in more than one change; "
+                         "required only when it is")
     fi.add_argument("--force", action="store_true",
                     help="close anyway; the record is marked FORCED, never clean, and a "
                          "forced close never satisfies a dependency")
@@ -880,6 +1044,9 @@ def _parser():
 
     rm = sub.add_parser("remove", help="delete the worktree of a CLOSED task")
     rm.add_argument("task_id")
+    rm.add_argument("--change", default=None,
+                    help="disambiguate when this task id has a record in more than one "
+                         "change; required only when it does")
     rm.add_argument("--override-dirty", default=None, dest="override_dirty",
                     help="remove a dirty worktree anyway; the reason is recorded on the "
                          "registry record as permanent visible history")

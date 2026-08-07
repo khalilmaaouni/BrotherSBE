@@ -110,6 +110,39 @@ ADR_PATHS = ("src/widgets/cache.py", "config/cache.yaml")
 PHYSICAL_PATH = "migrations/0001_widget_cache.sql"
 CHANGE_DIR = "design/widget-cache"
 
+# A SECOND dossier's content, path-disjoint from the one above on purpose:
+# `_second_dossier` derives a real plan from this, and a scenario exercising
+# TWO dossiers that both start "T01" must not ALSO collide on owned paths
+# (the owned-path overlap check stays unscoped by change, by design: "one
+# writer per file" regardless of which dossier asked for it), which would
+# prove the wrong thing about a worktree-directory or registry-identity fix.
+ADR_BODY_B = (
+    "# 03. Architecture decision record\n\n"
+    "## Context\n"
+    "Greeting lookups are slow under normal load.\n\n"
+    "## Decision\n"
+    "We cache greeting lookups in `src/greetings/cache.py`, backed by "
+    "`config/greetings.yaml`.\n\n"
+    "## Consequences\n"
+    "This adds one dependency to operate.\n\n"
+    "## What would flip this\n"
+    "If the cache hit rate falls under the agreed target.\n"
+)
+
+DATA_MODEL_BODY_B = (
+    "# 05. Data model\n\n"
+    "## Physical\n"
+    "The migration adds `migrations/0001_greeting_cache.sql` for the cache table.\n"
+)
+
+ROW_PLAIN_B = ("The cache responds within budget",
+              "Run `pytest tests/test_greeting_cache_perf.py`", "Continuous")
+ROW_REVERSE_B = ("The migration rollback restores prior state",
+                 "Run `python3 migrations/0001_greeting_cache.sql --reverse`", "On demand")
+ROW_RECONCILE_B = ("Reconciliation confirms row counts match",
+                   "Run `python3 tools/reconcile_greeting_cache.py`", "Daily")
+DEFAULT_ROWS_B = [ROW_PLAIN_B, ROW_REVERSE_B, ROW_RECONCILE_B]
+
 
 def render_verification(rows):
     lines = ["# 07. Verification plan", "",
@@ -193,6 +226,41 @@ class WorkFixture(unittest.TestCase):
         with io.open(plan_path, "w", encoding="utf-8") as fh:
             json.dump(plan, fh)
 
+    def _second_dossier(self, change_dir):
+        """A second, real dossier at `change_dir`, deriving its own T01
+        (every derived plan starts fresh there, regardless of dossier path,
+        so this collides on task id with `self.dossier`'s own T01 exactly
+        the way two sibling dossiers do in practice) that OWNS DIFFERENT
+        PATHS from `self.dossier` (the `_B` constants, path-disjoint from
+        the module-level ones `_write_dossier` uses): the owned-path overlap
+        check stays unscoped by change on purpose ("one writer per file"
+        regardless of dossier), so two dossiers used together in one
+        scenario must not ALSO collide there, which would prove the wrong
+        thing about whichever fix is under test. Used only by scenarios
+        that need TWO real, independently-derived plans rather than one
+        seeded registry record standing in for the second."""
+        answers = {"changes_contract": "n", "crosses_boundary": "n",
+                   "reversible_under_hour": "y", "touches_sensitive": "n",
+                   "consumers": "none"}
+        intake = {"answers": answers, "binding": {"head": self.base}}
+        write(self.repo, os.path.join(change_dir, "00-intake.json"), json.dumps(intake))
+        write(self.repo, os.path.join(change_dir, "03-adr.md"), ADR_BODY_B)
+        write(self.repo, os.path.join(change_dir, "05-data-model.md"), DATA_MODEL_BODY_B)
+        write(self.repo, os.path.join(change_dir, "07-verification.md"),
+              render_verification(DEFAULT_ROWS_B))
+        return os.path.join(self.repo, change_dir)
+
+    def _plan_for(self, dossier):
+        """Same as `_plan`, for an arbitrary dossier path rather than
+        `self.dossier`."""
+        plan_path = os.path.join(dossier, "08-plan.json")
+        code, out, _err = self.sbe("plan", dossier, "--write", "--cwd", self.repo)
+        self.assertEqual(code, 0, "fixture setup could not derive a plan for %s through "
+                                  "the landed `sbe plan --write`: %s" % (dossier, out))
+        with io.open(plan_path, encoding="utf-8") as fh:
+            plan = json.load(fh)
+        return plan, plan_path, out
+
     def _find_task(self, plan, task_id):
         for t in plan["tasks"]:
             if t.get("id") == task_id:
@@ -259,6 +327,12 @@ class WorkFixture(unittest.TestCase):
                 return t
         return None
 
+    def _record_for_change(self, task_id, change):
+        for t in self._registry()["tasks"]:
+            if t.get("id") == task_id and t.get("change") == change:
+                return t
+        return None
+
     def _seed(self, record):
         path = self._registry_path()
         if os.path.exists(path):
@@ -270,9 +344,15 @@ class WorkFixture(unittest.TestCase):
         write(self.repo, os.path.join(".sbe", "tasks.json"), json.dumps(data))
 
     def _base_record(self, task_id, **overrides):
+        # `change` defaults to THIS fixture's own dossier (self.change_id):
+        # every scenario that seeds a record without overriding it is
+        # implicitly "this dossier's own task", so `cmd_start`'s and
+        # `cmd_brief`'s change-scoped dependency and OPEN-collision checks
+        # still find it, exactly as they did before those checks existed.
+        # Pass `change=...` explicitly to seed a DIFFERENT dossier's record.
         record = {
-            "id": task_id, "agent": "alpha", "role": "writer", "worktree": None,
-            "ownedPaths": [], "readOnlyPaths": [], "baseCommit": self.base,
+            "id": task_id, "change": self.change_id, "agent": "alpha", "role": "writer",
+            "worktree": None, "ownedPaths": [], "readOnlyPaths": [], "baseCommit": self.base,
             "expiry": None, "status": "open", "verifyCommand": "true",
             "evidenceId": None, "openedAt": "2026-07-30T00:00:00Z", "closedAt": None,
         }
@@ -396,6 +476,267 @@ class TestStartRefusals(WorkFixture):
         self.assertIn(t01["id"], text)
 
 
+class TestChangeScopedStart(WorkFixture):
+    """Card 1: a task's identity is the pair (change, taskId), not taskId
+    alone. Every derived plan starts fresh at "T01" (docs/KNOWN-LIMITS.md),
+    so sibling dossiers routinely produce a task called "T01"; before this
+    fix, `cmd_start`'s Rule 4 OPEN-collision check compared bare ids only,
+    and T01 open in one dossier refused starting T01 in an unrelated one.
+
+    The OTHER dossier's own open T01 is SEEDED directly (never through a real
+    `sbe work start`), so it creates no branch and no worktree: this isolates
+    the registry-identity fix under test from the SEPARATE, still-open
+    worktree-directory-by-task-id-only limit `docs/KNOWN-LIMITS.md` now
+    names (a worktree PATH collision, not a registry IDENTITY collision:
+    `sbe work start`'s worktree naming is unchanged by this fix)."""
+
+    def test_start_is_not_blocked_by_an_open_same_id_task_in_a_different_dossier(self):
+        plan, plan_path, _out = self._plan()
+        t01 = self._find_task(plan, "T01")
+        other_change = "design/some-other-dossier"
+        self._seed(self._base_record(t01["id"], change=other_change, status="open",
+                                     ownedPaths=["src/unrelated.py"]))
+
+        code, text, _ = self.work("start", t01["id"], "--plan", plan_path,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "alpha")
+        self.assertEqual(code, 0,
+                         "T01 open in a DIFFERENT dossier must not block starting THIS "
+                         "dossier's own T01: identity is (change, taskId), not id alone: "
+                         "%s" % text)
+
+        records = [t for t in self._registry()["tasks"] if t["id"] == t01["id"]]
+        self.assertEqual(len(records), 2, records)
+        by_change = {r["change"]: r for r in records}
+        self.assertEqual(by_change[other_change]["status"], "open", records)
+        self.assertEqual(by_change[self.change_id]["status"], "open", records)
+        self.assertEqual(by_change[self.change_id]["worktree"],
+                         self.worktree_path_for(t01["id"]), records)
+
+    def test_start_still_refuses_reopening_this_dossiers_own_open_task(self):
+        """Calibration precondition for the test above, stated as its own
+        assertion: the fix must not weaken the SAME-dossier collision it
+        always refused, only the cross-dossier one it should never have
+        refused."""
+        plan, plan_path, _out = self._plan()
+        t01 = self._find_task(plan, "T01")
+        code, text, _ = self.work("start", t01["id"], "--plan", plan_path,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "alpha")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.work("start", t01["id"], "--plan", plan_path,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "beta")
+        self.assertNotEqual(code, 0, text)
+        self.assertIn(t01["id"], text)
+        self.assertIn(self.change_id, text)
+
+    def test_start_dependency_check_ignores_a_same_id_closed_record_in_a_different_dossier(self):
+        """The dependency-scoping half of card 1's fix. A dependsOn edge
+        points at a SIBLING task inside THIS dossier's own plan; a closed
+        record sharing that id in a DIFFERENT dossier (every derived plan
+        starts fresh at "T01", so this happens routinely) must never
+        silently satisfy it, the same collision class the OPEN-collision
+        check above closes."""
+        plan, plan_path, _out = self._plan()
+        forward, reverse, _recon = self._find_migration_triplet(plan)
+        other_change = "design/some-other-dossier"
+        self._seed(self._base_record(forward["id"], change=other_change, status="closed",
+                                     ownedPaths=["src/unrelated.py"]))
+        code, text, _ = self.work("start", reverse["id"], "--plan", plan_path,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "alpha")
+        self.assertNotEqual(code, 0,
+                            "a closed record in a DIFFERENT dossier must not satisfy this "
+                            "dossier's own unmet dependency: %s" % text)
+        self.assertIn(forward["id"], text)
+
+
+class TestStartTwoDossiersUnderDefaultFlags(WorkFixture):
+    """The headline journey this whole card exists for: two SIBLING
+    dossiers, each deriving their own plan (every derived plan starts fresh
+    at "T01"), both `sbe work start T01` -- under the DOCUMENTED DEFAULT
+    flags, no `--worktree-dir` at all. `TestChangeScopedStart` above proves
+    the REGISTRY identity half of this (Rule 4's OPEN-collision check,
+    scoped to (change, id)) with a SEEDED second record, deliberately never
+    exercising a second real `sbe work start`; this class is the other half,
+    a REAL second start, because round 1's registry fix never actually
+    reached a second dossier under default flags: the WORKTREE-exists check
+    ran first, against one fixed default directory keyed by task id alone
+    (`os.path.dirname(root)`, `<repo>-sbe-<taskId>`), and refused the second
+    dossier before its now-scoped registry check ever ran. Round 2 scopes
+    the DEFAULT worktree directory to the dossier's own change id (the same
+    string the branch name and the registry record already carry), so two
+    dossiers' identical task id now lands in two different default
+    directories. An EXPLICIT `--worktree-dir` is untouched: an operator who
+    points two dossiers at the SAME directory by hand is still making that
+    collision happen themselves, not hitting a default trap."""
+
+    def test_two_dossiers_start_the_same_task_id_under_true_default_flags(self):
+        plan_a, plan_path_a, _out = self._plan()
+        t01_a = self._find_task(plan_a, "T01")
+        second_dossier = self._second_dossier("design/dossier-beta")
+        plan_b, plan_path_b, _out = self._plan_for(second_dossier)
+        t01_b = self._find_task(plan_b, "T01")
+        change_b = os.path.basename(second_dossier)
+        self.assertNotEqual(self.change_id, change_b, "fixture precondition: two "
+                            "genuinely different dossiers")
+        self.assertEqual(t01_a["id"], "T01", t01_a)
+        self.assertEqual(t01_b["id"], "T01", t01_b)
+
+        code, text, _ = self.work("start", t01_a["id"], "--plan", plan_path_a,
+                                  "--agent", "alpha")
+        self.assertEqual(code, 0,
+                         "the FIRST dossier's T01 must start under true default flags "
+                         "(no --worktree-dir at all): %s" % text)
+        code, text, _ = self.work("start", t01_b["id"], "--plan", plan_path_b,
+                                  "--agent", "beta")
+        self.assertEqual(code, 0,
+                         "the headline journey this card exists for: a SECOND "
+                         "dossier's own T01 must also start under true default flags, "
+                         "not just when an operator manually supplies two different "
+                         "--worktree-dir values: %s" % text)
+
+        record_a = self._record_for_change(t01_a["id"], self.change_id)
+        record_b = self._record_for_change(t01_b["id"], change_b)
+        self.assertIsNotNone(record_a)
+        self.assertIsNotNone(record_b)
+        self.assertNotEqual(record_a["worktree"], record_b["worktree"],
+                            "two dossiers' identical task id must land in DIFFERENT "
+                            "default worktree directories: %r" % (record_a["worktree"],))
+        self.assertTrue(os.path.isdir(record_a["worktree"]), record_a)
+        self.assertTrue(os.path.isdir(record_b["worktree"]), record_b)
+        # The repo law this suite is bound by: a worktree dir lives inside
+        # the tempdir, never in the real repo tree. The documented default
+        # (the repository's parent directory) resolves to `self.tmp` here
+        # (self.repo = self.tmp/repo), so a change-scoped SUBDIRECTORY of it
+        # still satisfies that law without a dedicated --worktree-dir.
+        real_tmp = os.path.realpath(self.tmp)
+        self.assertTrue(os.path.realpath(record_a["worktree"]).startswith(real_tmp),
+                        record_a)
+        self.assertTrue(os.path.realpath(record_b["worktree"]).startswith(real_tmp),
+                        record_b)
+
+    def test_an_explicit_shared_worktree_dir_across_dossiers_still_collides(self):
+        """Calibration precondition, stated as its own assertion: the fix
+        above must not silently protect an operator who explicitly points
+        two dossiers at the SAME --worktree-dir by hand. That remains that
+        operator's own choice, refused exactly as `TestStartRefusals`
+        already proves for the single-dossier case."""
+        plan_a, plan_path_a, _out = self._plan()
+        t01_a = self._find_task(plan_a, "T01")
+        second_dossier = self._second_dossier("design/dossier-beta")
+        plan_b, plan_path_b, _out = self._plan_for(second_dossier)
+        t01_b = self._find_task(plan_b, "T01")
+
+        code, text, _ = self.work("start", t01_a["id"], "--plan", plan_path_a,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "alpha")
+        self.assertEqual(code, 0, text)
+        code, text, _ = self.work("start", t01_b["id"], "--plan", plan_path_b,
+                                  "--worktree-dir", self.worktree_dir, "--agent", "beta")
+        self.assertNotEqual(code, 0,
+                            "an EXPLICIT, operator-chosen shared --worktree-dir across "
+                            "two dossiers must still collide: %s" % text)
+        self.assertIn(self.worktree_path_for(t01_a["id"]), text)
+
+    def test_a_second_collision_under_default_flags_names_the_scoped_path_not_the_stale_one(self):
+        """When BOTH the plain default path AND this dossier's own scoped
+        fallback path are already taken, the refusal must name the SCOPED
+        path (the one this attempt actually landed on), not silently revert
+        to naming the OTHER dossier's stale default path: a message-
+        accuracy edge case in the fallback itself, found in self-review, not
+        in the original hostile round. The scoped path is seeded directly
+        (`os.makedirs`, the same technique `TestStartRefusals` uses for a
+        plain collision), never through a second real `sbe work start`,
+        because starting the SAME dossier's SAME task twice would refuse
+        earlier still, on the BRANCH collision, before ever reaching the
+        worktree-directory logic under test here."""
+        plan_a, plan_path_a, _out = self._plan()
+        t01_a = self._find_task(plan_a, "T01")
+        second_dossier = self._second_dossier("design/dossier-beta")
+        plan_b, plan_path_b, _out = self._plan_for(second_dossier)
+        t01_b = self._find_task(plan_b, "T01")
+        change_b = os.path.basename(second_dossier)
+
+        # alpha takes the plain default path for real.
+        code, text, _ = self.work("start", t01_a["id"], "--plan", plan_path_a,
+                                  "--agent", "alpha")
+        self.assertEqual(code, 0, text)
+        record_a = self._record_for_change(t01_a["id"], self.change_id)
+        self.assertIsNotNone(record_a)
+        default_dir = os.path.dirname(record_a["worktree"])
+        scoped_worktree = os.path.join(default_dir, change_b,
+                                       "%s-sbe-%s" % (os.path.basename(self.repo),
+                                                      t01_b["id"]))
+        os.makedirs(scoped_worktree)
+
+        # beta's FIRST attempt: the plain default (alpha's) is taken, AND
+        # beta's own scoped fallback path is ALSO already taken (seeded
+        # above). The refusal must name the scoped path, not alpha's.
+        code, text, _ = self.work("start", t01_b["id"], "--plan", plan_path_b,
+                                  "--agent", "beta")
+        self.assertNotEqual(code, 0, text)
+        refusal_line = [ln for ln in text.splitlines() if ln.startswith("sbe work start: "
+                        "refused.")]
+        self.assertEqual(len(refusal_line), 1,
+                         "expected exactly one 'refused.' line: %s" % text)
+        self.assertIn(scoped_worktree, refusal_line[0],
+                      "the refusal must name THIS dossier's own colliding scoped "
+                      "path: %s" % refusal_line[0])
+        self.assertNotIn(record_a["worktree"], refusal_line[0],
+                         "the refusal itself must not name a DIFFERENT dossier's "
+                         "stale default path (the earlier, informational fallback "
+                         "note above it may still mention it): %s" % refusal_line[0])
+
+
+class TestBriefUnscopedLookupNeverRaises(WorkFixture):
+    """Round 2 fix: `sbe work brief` has no `--change` flag (its already-
+    claimed check stays unscoped by id alone, on purpose; see
+    `_dependency_problem`'s docstring). `cmd_brief`'s Rule 4 used to call
+    `_find_record(data, task_id)` with no `change`, and that function now
+    RAISES `AmbiguousTaskId` whenever the id spans more than one change.
+    `cmd_brief` had no handler for it, so it fell through to `main()`'s
+    generic `RegistryUnusable` catch, which told the operator to pass
+    `--change` (exit usage) -- a flag `brief` does not have, an impossible
+    remedy. `cmd_brief` now looks the id up with `_last_record_any_change`,
+    which reproduces the ORIGINAL (pre-`change`) lookup exactly: the last
+    registry record with this id, any change, never ambiguous, because a
+    read-only briefing has no `--change` to disambiguate with in the first
+    place."""
+
+    def test_brief_is_not_blocked_by_a_same_id_record_in_a_different_change(self):
+        plan, plan_path, _out = self._plan()
+        t01 = self._find_task(plan, "T01")
+        other_change = "design/some-other-dossier"
+        # Append order matters for `_last_record_any_change` (last wins, the
+        # same rule the original pre-`change` `_find_record` used): seed the
+        # OTHER change's CLOSED record first, THIS dossier's own CLOSED
+        # record second, so a correct fix reads THIS one last and still
+        # finds it not-open, exactly mirroring the hostile round-1 repro
+        # (two CLOSED T01 records in two changes).
+        self._seed(self._base_record(t01["id"], change=other_change, status="closed",
+                                     ownedPaths=["src/unrelated.py"]))
+        self._seed(self._base_record(t01["id"], change=self.change_id, status="closed",
+                                     ownedPaths=t01["owns"]))
+        code, text, _ = self.work("brief", "--plan", plan_path, "--task", t01["id"],
+                                  "--json")
+        self.assertEqual(code, 0,
+                         "a task id with CLOSED records in two different changes must "
+                         "not crash `sbe work brief`, which has no --change flag to "
+                         "recover with: %s" % text)
+        brief = json.loads(text)
+        self.assertEqual(brief["taskId"], t01["id"], brief)
+
+    def test_brief_still_refuses_a_same_id_task_open_in_any_change(self):
+        """Calibration precondition: the fix above must not weaken the
+        already-claimed refusal itself, only the crash on the unscoped
+        lookup that used to precede it."""
+        plan, plan_path, _out = self._plan()
+        t01 = self._find_task(plan, "T01")
+        self._seed(self._base_record(t01["id"], change=self.change_id, status="open",
+                                     ownedPaths=t01["owns"]))
+        code, text, _ = self.work("brief", "--plan", plan_path, "--task", t01["id"])
+        self.assertNotEqual(code, 0, text)
+        self.assertIn(t01["id"], text)
+        self.assertIn("OPEN", text)
+
+
 class TestReviewerCannotOwn(WorkFixture):
     def test_start_refuses_a_reviewer_task_that_owns_paths(self):
         plan, _plan_path, _out = self._plan()
@@ -427,6 +768,24 @@ class TestCheck(WorkFixture):
         self.assertIn(owned_rel, text)
         self.assertIn("docs/sneaky.md", text)
         self.assertIn("NOT CLOSABLE", text)
+
+    def test_check_strips_change_the_same_way_open_stores_it(self):
+        """Round 2 fix: `cmd_check` used to read `--change` RAW
+        (`getattr(args, "change", None)`, no `.strip()`), the same asymmetry
+        `tasks.py`'s `cmd_close` had against `cmd_open`'s stored, stripped
+        value. A record seeded with change="pad" (what `sbe task open
+        --change "  pad  "` actually stores) must still be found by giving
+        the identical PADDED string back; before this fix, `code` here was
+        2 (usage: 'no registry record'), not 1 (found, but closed)."""
+        plan, _plan_path, _out = self._plan()
+        t01 = self._find_task(plan, "T01")
+        self._seed(self._base_record(t01["id"], change="pad", status="closed",
+                                     ownedPaths=t01["owns"]))
+        code, text, _ = self.work("check", t01["id"], "--change", "  pad  ")
+        self.assertEqual(code, 1,
+                         "a padded --change must still find the record `open` stored "
+                         "stripped, not read as 'no registry record': %s" % text)
+        self.assertNotIn("no registry record", text.lower())
 
 
 class TestFinishRefusals(WorkFixture):

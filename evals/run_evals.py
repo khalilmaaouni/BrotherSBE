@@ -1909,13 +1909,75 @@ def gd_dedup(root):
     return "refused"
 
 
+@case("a-crlf-manifest-verifies-instead-of-reporting-every-file-missing", "guard", "read as paths")
+def gd_vinstall_crlf(root):
+    # The Windows condition, mounted on POSIX so it is measured on every leg.
+    # `read -r` keeps the carriage return of a CRLF manifest INSIDE the line,
+    # so verify-install.sh extracted the path "hello.txt<CR>", which exists on
+    # no filesystem: every file the manifest named reported MISSING and every
+    # file on disk reported EXTRA, firing this script's loudest alarm ("exactly
+    # the shape of a planted backdoor") over an installation where nothing was
+    # wrong. Nothing exotic produces that manifest: a text-mode write on
+    # Windows does, which is how the eval fixtures beside this one hit it on
+    # the windows-latest leg (run 31040612827, "an unnamed EXTRA file" in a
+    # control tree), and so does any transport that normalises line endings.
+    # Calibration, run against a scratch copy of the script with the `case
+    # "$line" in *"$CR")` strip deleted: this case returns "the CRLF manifest
+    # was read as 0 path(s): 2 missing, 2 extra ...". With the strip in place
+    # it returns "read as paths". Both halves assert: the CRLF manifest must
+    # verify clean AND the removal must be disclosed, because a silent
+    # normalisation is a behaviour nobody can see.
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, "inst/hello.txt", "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    # newline="\r\n" EXPLICITLY, on every platform: the defect is the bytes of
+    # the manifest, so this fixture writes those bytes rather than relying on
+    # the host's text-mode translation to supply them.
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w", newline="\r\n") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "rb") as f:
+        if b"\r\n" not in f.read():
+            return "the fixture did not write a CRLF manifest, so it proves nothing"
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        m = _re_missing_extra(out.stdout)
+        return ("the CRLF manifest was read as 0 path(s): %s (exit %d)"
+                % (m, out.returncode))
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return "the CRLF manifest verified without matching both files: %s" % out.stdout[-200:]
+    if "manifest line(s) ended in a carriage return" not in out.stdout:
+        return "the carriage returns were removed in silence, which is a behaviour nobody can see"
+    return "read as paths"
+
+
+def _re_missing_extra(stdout):
+    """The MISSING/EXTRA counts out of a verify-install summary line, for the
+    failure sentence above. Returns a plain description rather than raising, so
+    a summary line this reader does not recognise is named instead of crashing
+    the case that called it."""
+    m = re.search(r"(\d+) missing, (\d+) extra", stdout)
+    if not m:
+        return "no summary line this reader recognises"
+    return "%s missing, %s extra" % (m.group(1), m.group(2))
+
+
 @case("verify-install-fails-over-source-in-an-excluded-path", "guard", "named and failed")
 def gd_vinstall(root):
-    if os.name != "posix":
-        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
-                "sh gap beside the two excluded test scripts; its control tree "
-                "misbehaves under the Windows shell (run 31040612827, an "
-                "unnamed EXTRA file), so this leg does not measure it")
+    # This case used to declare a PLATFORM-GAP off POSIX, blaming "the Windows
+    # shell" for a control tree that failed with an EXTRA file nobody planted.
+    # That was a misdiagnosis of this fixture's OWN manifest: it is written
+    # through Python text mode, which on Windows is CRLF, and a CRLF manifest
+    # made verify-install.sh report every file MISSING and every file EXTRA.
+    # Root closed in scripts/verify-install.sh and pinned by the case above, so
+    # the gap declaration is gone and this runs on every leg again.
     # The completeness sentence claimed "no file exists on disk that the
     # manifest does not name" over paths the enumeration excluded by name.
     # The exclusions are now enumerated and counted on every run, and source
@@ -2032,10 +2094,21 @@ def gd_vinstall_excluded_symlink(root):
 @case("a-symlinked-planted-module-fails-the-install-check", "guard", "named and failed")
 def gd_vinstall_symlink(root):
     if os.name != "posix":
-        return ("PLATFORM-GAP: scripts/verify-install.sh is POSIX sh, a named "
-                "sh gap beside the two excluded test scripts; its control tree "
-                "misbehaves under the Windows shell (run 31040612827, an "
-                "unnamed EXTRA file), so this leg does not measure it")
+        # NARROWED, 2026-08-07. The reason this used to give ("its control tree
+        # misbehaves under the Windows shell") was wrong and is now closed at
+        # its root: that control tree failed because the fixture's manifest was
+        # written through Python text mode, which is CRLF on Windows, and
+        # verify-install.sh read the carriage return as part of every path. Its
+        # sibling gd_vinstall runs on every leg again as a result. What is left
+        # here is the half that was never diagnosed and is not reproducible from
+        # a POSIX machine: whether a symlink created by os.symlink on Windows is
+        # seen as non-regular by the Git-for-Windows shell's own file tests, so
+        # the NON-REGULAR path this case asserts is reachable there at all. That
+        # is one observation a Windows run can make and this host cannot.
+        return ("PLATFORM-GAP: os.symlink writes an NTFS reparse point and "
+                "nothing here establishes that the Git-for-Windows shell's "
+                "file tests read it as non-regular, so the NON-REGULAR refusal "
+                "this case asserts is measured on the POSIX legs only")
     # `find -type f` never returns a symlink, so a planted tools/backdoor.py
     # pointing at code OUTSIDE the tree was reported as nothing at all by
     # verify-install and imported-and-executed by the honesty suite. The check
@@ -2158,6 +2231,47 @@ def gd_manifest_fresh(root):
     # working-tree=b'\r' at that same offset, working-tree length one longer
     # per converted line break. Anything else it prints is equally
     # informative and just as actionable.
+    # BEFORE reporting staleness, ask whether the mismatch survives a second
+    # read. Found by finally reading the Windows CI log this eval has been red
+    # in since OWED-4 opened: it named four early-alphabet files, and its own
+    # byte-level detail said "identical bytes on this read" for every one of
+    # them. The check disproved its own finding and reported it as a regression
+    # anyway, which is a FALSE BLOCK: the strongest evidence available (a
+    # byte-for-byte comparison of the committed blob against the working tree)
+    # says the manifest matches, and the weaker evidence (a hash taken moments
+    # earlier) says it does not. On Windows a file read immediately after
+    # checkout can differ from the same file read a moment later; that is a
+    # filesystem visibility race, not a stale manifest, and a gate that cannot
+    # tell those apart teaches people to ignore it.
+    #
+    # Every drifted path is re-read here, not just the four that get printed,
+    # because a verdict cannot rest on a sample of the evidence.
+    persistent, transient = [], []
+    for p in drift:
+        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
+        if blob.returncode != 0:
+            persistent.append(p)
+            continue
+        try:
+            with open(os.path.join(_REPO, p), "rb") as f:
+                if _first_diff_offset(blob.stdout, f.read()) is None:
+                    transient.append(p)
+                else:
+                    persistent.append(p)
+        except OSError:
+            persistent.append(p)
+    if transient and not persistent:
+        # Disclosed loudly, never silently: a reader has to be able to see that
+        # this happened, and a run where it happens every time is a real signal
+        # about the host even though it is not a stale manifest.
+        sys.stderr.write(
+            "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
+            "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
+            "the first hash was taken before this host had settled. Reported rather "
+            "than hidden.\n" % (len(transient), ", ".join(transient[:6])))
+        return "matches"
+    drift = persistent
+
     detail = []
     for p in drift[:4]:
         blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)

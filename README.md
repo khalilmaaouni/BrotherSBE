@@ -4,16 +4,25 @@ BrotherSBE is an engineering colleague for Claude Code that designs backend and 
 
 Why it is worth your time: install once, describe the outcome you want, then follow one recommended action at a time. You never memorize a command list, and nothing is claimed as done until a check has shown it.
 
-Install it in two commands: add this repository as a marketplace source, then install the plugin from it.
+Install:
 
 ```bash
 claude plugin marketplace add khalilmaaouni/BrotherSBE
 claude plugin install brothersbe@brothersbe
 ```
 
-That is the persistent install: it stays across sessions, and the pair was executed end to end against this public repository on 2026-08-01. Update it with `claude plugin update brothersbe` (restart to apply) and remove it with `claude plugin uninstall brothersbe`. Once installed, every session start checks your copy against the version it already has on disk and tells you plainly when something changed, with no network call made to do it.
+Then, in Claude Code:
 
-Prefer to inspect the package before you trust it? Clone and validate first, then load it for one session only:
+```
+/brothersbe:start
+```
+
+That is the whole install. Everything below is optional reading.
+
+<details>
+<summary>Other ways in, and what each one costs you</summary>
+
+**Inspect before you trust.** Clone, validate, and load for one session only:
 
 ```bash
 git clone https://github.com/khalilmaaouni/BrotherSBE ~/.claude/skills/brothersbe
@@ -21,11 +30,15 @@ claude plugin validate ~/.claude/skills/brothersbe
 claude --plugin-dir ~/.claude/skills/brothersbe
 ```
 
-The validate step must pass before you load anything, and `--plugin-dir` loads the plugin for that session only, not persistently the way the marketplace install does; [docs/MIGRATION.md](docs/MIGRATION.md) covers both paths. Either way, once the plugin is loaded, make the one first move:
+`--plugin-dir` lasts for that session; the marketplace install above persists.
+[docs/MIGRATION.md](docs/MIGRATION.md) covers both.
 
-```
-/brothersbe:start
-```
+**Update and remove.** `claude plugin update brothersbe` (restart to apply),
+`claude plugin uninstall brothersbe`. Every session start compares your copy
+against the version already on disk and says plainly when something changed,
+with no network call to do it.
+
+</details>
 
 That command looks at where you are and takes it from there: a new project or one already in progress, it finds the right next step. Along the way, three guided companions in [`skills/`](skills/) keep you oriented: `/brothersbe:next` recommends exactly one next action, `/brothersbe:status` explains where you are in plain language, and `/brothersbe:help` lays out the whole map when you ask for it. New to any of this? [The beginner explainer](docs/explainer/index.html) covers the same ground in plain language.
 
@@ -292,6 +305,8 @@ This is what turns the gates from advisory into blocking, whichever path above y
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
+      - name: Consumer minting fixtures (the job produces the evidence it demands)
+        run: python3 tools/test_sbe_consumer_mint.py
       - name: Converge fixtures (sbe converge)
         run: python3 tools/test_sbe_converge.py
       - name: Decision contract fixtures (every key decision surface names its falsification tier)
@@ -312,6 +327,8 @@ This is what turns the gates from advisory into blocking, whichever path above y
         run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
+      - name: Public install path (the two commands the front page promises)
+        run: python3 tools/test_sbe_public_install.py
       - name: Map fixtures (sbe map, a deterministic status map, never a filled template)
         run: python3 tools/test_sbe_map.py
       - name: Plan fixtures (sbe plan)
@@ -412,7 +429,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-530 evals: 530 passed, 0 regressions.
+531 evals: 531 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -431,7 +448,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 49 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 60 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

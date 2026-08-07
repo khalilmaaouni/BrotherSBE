@@ -347,6 +347,61 @@ hidden:
   catching that drift, rather than the literal number staying 43 forever,
   is the actual guarantee here.
 
+One of those gaps closed on 2026-08-07 and is recorded here as closed rather
+than deleted, because the reason it was declared was wrong and that matters
+more than the entry: two eval cases had been marked PLATFORM-GAP with the
+reason "its control tree misbehaves under the Windows shell (run 31040612827,
+an unnamed EXTRA file)". The Windows shell was not the cause. The fixtures
+write their `CHECKSUMS.sha256` through Python text mode, which on Windows
+emits CRLF, and `scripts/verify-install.sh` read the carriage return as part
+of every path, so every file the manifest named reported MISSING and every
+file on disk reported EXTRA. That was reproduced on POSIX by writing the same
+manifest with `newline="\r\n"`, fixed at the root in
+`scripts/verify-install.sh` (the trailing return is stripped and the count of
+lines it was stripped from is printed, never removed in silence), and pinned
+by the eval `a-crlf-manifest-verifies-instead-of-reporting-every-file-missing`,
+which runs on every leg and goes red against a copy of the script with the
+strip deleted. `verify-install-fails-over-source-in-an-excluded-path` declares
+no platform gap any more. This also means an adopter verifying an installation
+against a manifest that ever passed through a text-mode write or a
+line-ending-normalising transport was told their install looked like a planted
+backdoor, on any platform.
+
+## One Windows eval failure is open and unidentified (OWED-4)
+
+The `gates-windows` job was still red at the 1.0.0-rc.19 fold: run
+31043311726 showed it as the only failing leg, with one eval failure, while
+the four POSIX gates legs and the consumer checks were green. Which eval is
+not recorded anywhere in this repository, and it cannot be derived from a
+POSIX machine.
+
+The single fact a Windows run has to establish is the `got=` line: the one
+line of `python3 evals/run_evals.py` on `windows-latest` that ends
+`REGRESSION`, quoted verbatim with its case name and its verdict string. That
+line already exists in run 31043311726's log for the "Regression evals" step;
+nobody has read it back into this repository. Until somebody does, no fix for
+it can be honest, because every candidate below is a theory:
+
+- `a-symlink-inside-an-excluded-path-fails-the-install-check` asserts that
+  `verify-install.sh` prints `EXCLUDED-NON-REGULAR` for a symlink created by
+  `os.symlink`. On Windows that is an NTFS reparse point, and nothing here
+  establishes that the Git-for-Windows shell's file tests read it as
+  non-regular. Its sibling `a-symlinked-planted-module-fails-the-install-check`
+  declares exactly this as its PLATFORM-GAP; this one declares nothing and is
+  free to fail.
+- `a-symlinked-source-directory-is-disclosed-not-silent` calls `os.symlink`
+  on a DIRECTORY without `target_is_directory=True`, which is ignored on POSIX
+  and load-bearing on Windows.
+- `the-tracked-manifest-matches-the-tree-it-ships-with` was the previous
+  round's suspect and should have been closed by turning line-ending
+  conversion off before checkout, but that has never been confirmed against a
+  Windows run's own byte-level output either.
+
+Every axis a POSIX host CAN force was forced before this entry was written:
+the whole suite was re-run with text-mode writes translating to CRLF in this
+interpreter and in every child interpreter it spawns, which reproduced exactly
+the two verify-install failures fixed above and no others.
+
 ## Every threshold was measured on one estate
 
 `tables/`, the RUBRIC baselines, and the lint's own numbers were measured
@@ -392,7 +447,7 @@ moved. What that does NOT establish, stated where the behavior is:
   there is no key. A locally generated receipt is therefore never more than
   LOCAL-ADVISORY, and `show` says so on every receipt rather than leaving it to
   the reader to remember.
-- `PROTECTED-CI` is only as trustworthy as the environment that set
+- `CI-CLAIMED` is only as trustworthy as the environment that set
   `SBE_CI_RUN_ID`. Nothing here can tell a run id minted by a CI system from one
   an agent exported into its own shell. The label states where the value came
   from; it does not authenticate it. What makes it worth having is that a
@@ -737,12 +792,18 @@ from what is absent:
   claimed nowhere beyond here.
 
 The upgrade-rollback script carries one limit of its own, stated where the
-behavior is rather than only here: as of this wave, this repository has cut
-no tag (`docs/RELEASE.md`), so `scripts/test-upgrade-rollback.sh` finds no
-previous release to upgrade FROM and reports NO-DATA rather than PASSED,
-every time it runs, until the first tag exists. A NO-DATA verdict here is not
-a weaker pass; it is the honest absence of the one fixture the script needs,
-named as exactly that.
+behavior is rather than only here. This paragraph used to say the repository
+had cut no tag, so the script could only ever report NO-DATA. That stopped
+being true and the text did not follow: `git tag -l` lists v1.0.0-rc.1 and
+v1.0.0-rc.2, and `sh scripts/test-upgrade-rollback.sh` therefore takes its
+REAL path, upgrading from the previous tag to HEAD and back. Two things
+follow. First, the script's verdict is now a genuine PASS or FAIL about this
+repository, not an absence. Second, it fails honestly when the working tree
+disagrees with `CHECKSUMS.sha256`, which is what a stale manifest looks like
+from the rollback side, so run `scripts/checksums.sh CHECKSUMS.sha256` last
+in any change that moves shipped bytes. A NO-DATA verdict remains possible in
+a clone with no tags at all, and there it still means the honest absence of
+the one fixture the script needs, never a weaker pass.
 
 Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
 `scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
@@ -1353,3 +1414,175 @@ command that exits nonzero is not itself logged anywhere just because it
 failed.
 
 Full text: `src/brothersbe/tasks.py` (`cmd_open`, `claims_overlap`).
+
+
+## Task identity becomes (change, taskId); the headline collision it closes, and what remains (card 1)
+
+This AMENDS "status --team reads the estate, it does not phone anyone",
+above: that entry's "structural fact this view had to design around rather
+than fix" (plan task ids are per-change, every derived plan starts at T01,
+while the task registry was one global table keyed by id alone) is now
+partly closed at its root, in the registry itself, rather than only worked
+around downstream. `src/brothersbe/tasks.py`'s record schema gains a
+`change` field (schemaVersion 1.0 to 1.1); a task's identity is the pair
+(`change`, `id`), not `id` alone. `sbe work start` stamps `change` from the
+dossier basename (the same string its branch name already carried,
+`sbe/<change>/<taskId>`), so T01 derived from one dossier no longer refuses
+to open because an unrelated dossier's own T01 is open. `sbe task open`
+gains `--change` directly for the same reason; omitted, a task's change is
+the empty, unscoped string, colliding by id alone exactly as every task did
+before this pair existed. A bare id given to `sbe task close` / `sbe work
+check|finish|remove` still resolves unambiguously in the overwhelming common
+case of one match; when it resolves to open (or recorded) tasks in more than
+one change, `AmbiguousTaskId` refuses and names every colliding
+(change, id) pair rather than guessing, and `--change` disambiguates (the
+value given is STRIPPED before comparison, the same way `sbe task open
+--change` strips it before storing, so a padded value that opened cleanly
+stays addressable by the identical padded string on `close`/`check`/
+`finish`/`remove`; a mismatch here was fixed in the same round this file's
+own "does not close" list below was corrected). `sbe work start`'s
+WORKTREE directory (not just the registry record) also closes the headline
+collision under its own documented DEFAULT flags: see the second bullet
+below.
+
+What this does NOT close, stated here because a fix that oversells itself is
+worse than none:
+
+- **`sbe work brief`'s own dependency and already-claimed checks stay
+  unscoped, by id alone**, the SAME collision class `sbe work start` closes.
+  `tools/test_sbe_work_brief.py`, a separate suite outside this change's
+  fence, pins that unscoped behavior with fixtures written before the
+  `change` field existed; moving `cmd_brief` to scoped checks the way
+  `cmd_start` moved is left for a follow-up that also extends that suite.
+  `_dependency_problem` (`src/brothersbe/work.py`) takes an optional
+  `change`; `cmd_brief` passes none, `cmd_start` passes its own `change_id`.
+  Because it is unscoped, `brief`'s already-claimed lookup never resolves to
+  more than a single, last-appended record by design; it uses
+  `_last_record_any_change`, a dedicated lookup that NEVER raises
+  `AmbiguousTaskId`, precisely because `brief` carries no `--change` flag to
+  recover with if it did (an earlier build of this pair called the shared,
+  change-aware `_find_record` here instead, which raised on an id spanning
+  more than one change and told the operator to pass a flag `brief` does not
+  have; fixed, `tools/test_sbe_work.py::TestBriefUnscopedLookupNeverRaises`).
+- **`sbe work start`'s WORKTREE directory now closes the headline
+  collision under its own documented DEFAULT flags.** The branch name
+  already carried `change` before this fix (`sbe/<change>/<taskId>`) and
+  never collided; the worktree path defaults to
+  `<repository's parent>/<repo>-sbe-<taskId>`, unchanged from before, for a
+  SINGLE dossier (the common case, and the only case every example in
+  `docs/guides/00-sandbox.md` and `docs/book/` exercises). When that plain
+  default path is ALREADY TAKEN (routinely true after upgrading, since
+  every derived plan starts fresh at "T01" and a sibling dossier's own T01
+  is often already running), `sbe work start` now falls back automatically,
+  and says so out loud on stdout, to a subdirectory of the same parent named
+  for THIS dossier's own change id, so a SECOND dossier's identical task id
+  starts cleanly with no extra flag. What remains, by design, not by gap: an
+  operator who passes an EXPLICIT `--worktree-dir` and points two dossiers
+  at the identical directory by hand still collides there; that is the
+  operator's own choice, never a default trap, and `--worktree-dir` never
+  falls back. Proven by
+  `tools/test_sbe_work.py::TestStartTwoDossiersUnderDefaultFlags` (a REAL
+  second `sbe work start`, two real derived plans, both under true default
+  flags with no `--worktree-dir` at all, alongside a companion test proving
+  the explicit-shared-directory case still refuses).
+- **A pre-migration (schema 1.0) record has no recoverable dossier.**
+  Nothing it carries says which change produced it, so `migrate_registry`
+  does not guess one: every migrated record adopts the empty, unscoped
+  change, stated as a fact about old data, not a promise that migrated
+  records are disambiguated from each other. Migration is explicit,
+  versioned, and runs ONLY on the first WRITE after this build lands
+  (`cmd_open`, `cmd_close`); `sbe task list|fence|check` read a 1.0 registry
+  as-is and never persist a migrated copy themselves. A 1.0 record already
+  carrying a non-string `change` (a hand-edit) refuses the whole migration
+  by name; nothing is silently coerced or rewritten. **The flip side of the
+  same fact, not stated by the round this migration landed in:** identity is
+  now the `(change, id)` pair, so a migrated OPEN record's empty change also
+  no longer collides with a DIFFERENT, non-empty change stamped onto a fresh
+  `sbe task open` / `sbe work start` for the SAME id. An operator's first
+  change-scoped start after upgrading, for an id that already carries a
+  legacy OPEN record, SUCCEEDS rather than refusing (before this pair
+  existed, one global OPEN-by-id-alone check would have refused it
+  outright), leaving TWO OPEN records for one id; a bare
+  `close`/`check`/`finish`/`remove` on that id becomes ambiguous, and
+  `--change ''` is the working escape hatch that still addresses the legacy
+  record on its own. Proven by
+  `tools/test_sbe_tasks.py::TestSchemaMigration::
+  test_a_migrated_open_legacy_record_no_longer_blocks_a_change_scoped_reopen`.
+- **`status --team` and `sbe handover`, both outside this change's fence,
+  are unchanged.** The registry now CARRIES the data that would let
+  `status.py`'s "attributed to changes best-effort by id" and
+  `handover.py`'s own per-id registry scan read the pair instead of
+  guessing by id; neither reads it yet. The "structural fact" sentence in
+  the entry above still describes their behavior accurately today, only no
+  longer the registry's own.
+
+Full text: `src/brothersbe/tasks.py` (`RECORD_FIELDS`, `migrate_registry`,
+`_find_open`, `AmbiguousTaskId`, `_normalize_change`), `src/brothersbe/work.py`
+(`_find_record`, `_last_record_any_change`, `_dependency_problem`, `cmd_start`,
+`cmd_brief`, `_worktree_path`), `docs/CLI.md` (`sbe task`, `sbe work`),
+`tools/test_sbe_tasks.py` (`TestChangeScopedIdentity`, `TestSchemaMigration`),
+`tools/test_sbe_work.py` (`TestChangeScopedStart`,
+`TestStartTwoDossiersUnderDefaultFlags`, `TestBriefUnscopedLookupNeverRaises`).
+## A registered check binds a command, and cannot say the command is a good check (BR-1012)
+
+`.sbe/checks.yml` and `src/brothersbe/checks.py` close a real hole: `sbe
+evidence run --check <id>` resolves the executable, the argument vector, the
+working directory, the covered globs and the runner files out of the registry,
+takes no substitution from the caller, and seals `checkId`, `checkKind`,
+`checkSpecSha256` and the whole binding into the receipt, so `sbe evidence
+verify` can prove afterwards that the REGISTERED command ran, with the
+registered arguments, over the files that check covers, against runner bytes
+that still hash the same. A redefined check, a renamed or edited runner, a
+changed argument vector, or a receipt whose coverage sits outside the check's
+own globs, each invalidate the old receipt by name.
+
+What none of that proves is that the registered command performs a real check.
+A registry entry pointing `migration-rehearsal` at a script that prints nothing
+and exits zero would produce receipts that verify perfectly, and this module
+cannot read the script's intent any more than the wrapper under it can read a
+free-form command's. The only defence is that `.sbe/checks.yml` sits in the
+control-plane rule of `.sbe/policy.yml`, so changing it owes control-plane
+evidence and a protected approval from somebody who is not the agent proposing
+the change. That is a review control, not a computed one, and it is stated here
+rather than implied by the strength of the hashes around it.
+
+Two narrower residuals, named rather than folded into the sentence above. An
+executable resolved from PATH (`python3`) is NOT hashed, because a digest of one
+machine's interpreter is not reproducible on another, so the binding covers the
+runner FILES and not the interpreter that reads them. And a check this
+repository owes but has not built (`migration-rehearsal`,
+`migration-reconciliation`, `claude-plugin-e2e`, `numerical-reconciliation`,
+`security-policy`) is listed under `unregistered:` with its reason instead of
+being registered against a script that does not exist: the policy engine reports
+MISSING for those, which blocks, and that is the honest state and not a gap the
+registry papers over.
+
+Full text: `src/brothersbe/checks.py`, `.sbe/checks.yml`,
+`src/brothersbe/evidence.py` (`trust_level`, `_check_registered`).
+
+## There is no protected evidence level in this release
+
+`PROTECTED-CI` used to be minted whenever `SBE_CI_RUN_ID` was set. Any local
+process can export that variable, and the receipt seal is a checksum over the
+receipt's own fields, so it proves the receipt was not edited afterwards and
+proves nothing at all about who produced it. A label must never be stronger
+than its evidence, so the label was removed rather than explained away.
+
+Two consequences, both stated where they bite rather than only here:
+
+1. The strongest level this release mints is `CI-CLAIMED`, whose own sentence
+   is the whole claim: CI shaped metadata was recorded but no protected
+   identity was verified.
+2. `.sbe/policy.yml` ships with `protectedEvidenceRequired: false`. The
+   mechanism is intact and still refuses both `LOCAL-ADVISORY` and
+   `CI-CLAIMED` when a policy turns it on, which
+   `tools/test_sbe_check_registry.py` asserts directly. It is off here because
+   turning it on while no protected level exists would not make this
+   repository strict, it would make it stuck: every governed change would
+   report UNPROTECTED forever, demanding a proof nothing can currently issue.
+
+Both flip in the same change that lands cryptographic attestation binding a
+receipt to its repository, workflow, commit and run. Until then, any document
+claiming this project can prove where a receipt came from is wrong, and this
+entry is the correction.
+

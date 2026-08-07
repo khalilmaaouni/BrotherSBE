@@ -767,6 +767,8 @@ step that surfaces any design waiver as something a human is shown:
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
+      - name: Consumer minting fixtures (the job produces the evidence it demands)
+        run: python3 tools/test_sbe_consumer_mint.py
       - name: Converge fixtures (sbe converge)
         run: python3 tools/test_sbe_converge.py
       - name: Decision contract fixtures (every key decision surface names its falsification tier)
@@ -787,6 +789,8 @@ step that surfaces any design waiver as something a human is shown:
         run: python3 tools/test_sbe_interop.py
       - name: Install script fixtures (dry-run, missing prerequisites)
         run: python3 tools/test_sbe_install.py
+      - name: Public install path (the two commands the front page promises)
+        run: python3 tools/test_sbe_public_install.py
       - name: Map fixtures (sbe map, a deterministic status map, never a filled template)
         run: python3 tools/test_sbe_map.py
       - name: Plan fixtures (sbe plan)

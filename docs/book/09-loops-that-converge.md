@@ -252,7 +252,8 @@ python3 "$ROOT/bin/sbe" evidence run --out /tmp/sbe-book-ch09-receipts/fix-recei
 
 ```
 
-sbe evidence run: receipt written to /tmp/sbe-book-ch09-receipts/fix-receipt.json. Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so nothing outside the machine that wrote it attests to it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
+sbe evidence run: FREE FORM run: no registered check, so this receipt is advisory and satisfies no required policy check
+sbe evidence run: receipt written to /tmp/sbe-book-ch09-receipts/fix-receipt.json. Trust LOCAL-ADVISORY (this receipt was minted for a free-form command rather than a check registered in .sbe/checks.yml, so nothing outside the caller says which check it is. Free-form evidence is advisory whatever else is true of it). Command exited 0 in <N.NNNs>, over 2 covered file(s) from explicit --covers. Declared check kind(s): none, so this receipt clears no design, gate or score obligation. stdout and stderr are recorded as digests only. argv held 0 secret-shaped token(s) and was recorded verbatim.
 ```
 
 ## Land: close the fence, commit the fix

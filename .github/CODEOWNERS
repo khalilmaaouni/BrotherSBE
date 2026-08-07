@@ -1,0 +1,48 @@
+# BrotherSBE control plane ownership.
+#
+# READ THE LIMIT BEFORE TRUSTING THE FILE.
+#
+# This repository has exactly ONE human today: @khalilmaaouni. He owns every
+# path below and he is also the author of nearly every change to them. A
+# CODEOWNERS entry is a second-party control only when the owner is somebody
+# other than the pull request author, so as written this file CANNOT stop the
+# author from approving his own control plane change. The release blockers
+# file (item 5.1) asks for an owner "that is not the pull request author".
+# That requirement is NOT met today. This comment exists so that nobody reads
+# the file and concludes otherwise, and so that no report anywhere cites it as
+# evidence of independent review.
+#
+# What this file does do today:
+#   1. It routes the review request, so a control plane change is visible as a
+#      control plane change rather than as an ordinary diff.
+#   2. It is the switch that becomes a real independent gate on the day a
+#      second human joins: add that person to the lines below and the branch
+#      ruleset's "require review from Code Owners" rule starts binding somebody
+#      who is not the author.
+#   3. `sbe protections verify` reads it locally, with no network, and FAILS
+#      when any control plane path listed below has no owner line at all.
+#
+# What it must never be used for: claiming that BrotherSBE's control plane is
+# independently reviewed. One operator cannot review himself, and a rule that
+# routes a request to the person who wrote the change is not review. No review
+# theater: when the second human joins, this comment gets rewritten with their
+# name, and not before.
+#
+# Paths below are the control plane surface named in the release blockers file,
+# item 5.1. Some of them (/.sbe/policy.yml, /.sbe/checks.yml,
+# /src/brothersbe/policy.py) are delivered by other release blockers and do not
+# exist yet; GitHub accepts an owner line for a path that does not exist, and
+# listing them now means the day they land they are already owned.
+
+/.github/workflows/                    @khalilmaaouni
+/.github/actions/sbe-consumer/         @khalilmaaouni
+/.github/CODEOWNERS                    @khalilmaaouni
+/hooks/                                @khalilmaaouni
+/.claude-plugin/                       @khalilmaaouni
+/.sbe/policy.yml                       @khalilmaaouni
+/.sbe/checks.yml                       @khalilmaaouni
+/src/brothersbe/evidence.py            @khalilmaaouni
+/src/brothersbe/policy.py              @khalilmaaouni
+/tools/sbe_*hook*.py                   @khalilmaaouni
+/tools/sbe_*guard*.py                  @khalilmaaouni
+/tools/sbe_gate.py                     @khalilmaaouni

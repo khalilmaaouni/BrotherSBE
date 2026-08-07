@@ -1,78 +1,106 @@
 {
-  "schemaVersion": 1,
-  "note": "The owed items register. No new loop fence opens while any item here is open and not deferred by the founder, per the master plan approved 2026-08-06. Read by tools/sbe_dispatch.py loop-open.",
-  "items": [
-    {
-      "id": "OWED-1",
-      "title": "Phase 0 dispatch gate, program visibility, watchdog, principles",
-      "state": "open",
-      "deferred_by_founder": false,
-      "deferral_reason": null,
-      "closes_in": "BR-1000"
-    },
-    {
-      "id": "OWED-2",
-      "title": "Post rc.16 remeasure, owed since rc.16 merged",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Founder call 2026-08-06: BR-1009 (watchdog feature) and BR-1010 (unit testing protocol, founder priority) run before Loop B-close; the owed remeasure stays first act of Loop B-close when it opens.",
-      "closes_in": "BR-1001, its first act"
-    },
-    {
-      "id": "OWED-3",
-      "title": "Loop B integration and the rc.18 seal, six lanes preserved as patches",
-      "state": "open",
-      "deferred_by_founder": false,
-      "deferral_reason": null,
-      "closes_in": "BR-1001"
-    },
-    {
-      "id": "OWED-4",
-      "title": "Windows one eval diagnosis, funded 2026-08-06",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Founder granted an explicit parallel exception on 2026-08-06: it runs on its own branch with its own budget and gates nothing.",
-      "closes_in": "BR-1007"
-    },
-    {
-      "id": "OWED-5",
-      "title": "Telemetry double writer fix in the BrotherModeUp estate",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Outside this repository. Waits on one founder line in that session's own channel; a relayed approval is second hand under its rules.",
-      "closes_in": "outside this repository"
-    },
-    {
-      "id": "OWED-6",
-      "title": "KNOWN-LIMITS tag contradiction, doc says no tag exists while two tags exist",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Scheduled into Loop C by the approved plan rather than pulled forward.",
-      "closes_in": "BR-1002"
-    },
-    {
-      "id": "OWED-7",
-      "title": "CHECKSUMS drift eval truncates long lists undisclosed",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Scheduled into Loop F by the approved plan.",
-      "closes_in": "BR-1005"
-    },
-    {
-      "id": "OWED-8",
-      "title": "Instruction surface has no parser for workflow YAML, lands as honest NO-DATA",
-      "state": "open",
-      "deferred_by_founder": true,
-      "deferral_reason": "Accepted and declared gap; Loop F may close it or it stays declared.",
-      "closes_in": "BR-1005 or stays declared"
-    },
-    {
-      "id": "OWED-9",
-      "title": "Worktree and registry hygiene",
-      "state": "closed",
-      "deferred_by_founder": false,
-      "deferral_reason": null,
-      "closes_in": "closed 2026-08-06: archive at Documents/BrotherSBE-worktree-archive-2026-08-06, bm_store verify healthy 0 problems"
-    }
-  ]
+ "schemaVersion": 1,
+ "note": "The owed items register. No new loop fence opens while any item here is open and not deferred by the founder, per the master plan approved 2026-08-06. Read by tools/sbe_dispatch.py loop-open.",
+ "items": [
+  {
+   "id": "OWED-1",
+   "title": "Phase 0 dispatch gate, program visibility, watchdog, principles",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "BR-1000"
+  },
+  {
+   "id": "OWED-2",
+   "title": "Post rc.16 remeasure, owed since rc.16 merged",
+   "state": "closed",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "BR-1001, its first act",
+   "closed_at": "2026-08-06",
+   "closure_evidence": "Clean detached-worktree battery at 25723a6: 530 evals 530 passed 0 regressions, 12 checks 9 PASS 0 FAIL 3 NO-DATA; three journeys re-run and hostilely refuted; record: program/remeasure-post-rc16-2026-08-06.md"
+  },
+  {
+   "id": "OWED-3",
+   "title": "Loop B integration and the rc.18 seal, six lanes preserved as patches",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "BR-1001"
+  },
+  {
+   "id": "OWED-4",
+   "title": "Windows one eval diagnosis, funded 2026-08-06",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Founder granted an explicit parallel exception on 2026-08-06: it runs on its own branch with its own budget and gates nothing.",
+   "closes_in": "BR-1007"
+  },
+  {
+   "id": "OWED-5",
+   "title": "Telemetry double writer fix in the BrotherModeUp estate",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Outside this repository. Waits on one founder line in that session's own channel; a relayed approval is second hand under its rules.",
+   "closes_in": "outside this repository"
+  },
+  {
+   "id": "OWED-6",
+   "title": "KNOWN-LIMITS tag contradiction, doc says no tag exists while two tags exist",
+   "state": "closed",
+   "deferred_by_founder": true,
+   "deferral_reason": "Scheduled into Loop C by the approved plan rather than pulled forward.",
+   "closes_in": "BR-1002",
+   "closed_at": "2026-08-06",
+   "closure_evidence": "docs/KNOWN-LIMITS.md no longer claims the repository cut no tag. Live evidence quoted in the new text: git tag -l lists v1.0.0-rc.1 and v1.0.0-rc.2, and sh scripts/test-upgrade-rollback.sh takes its real upgrade path. The stale-manifest failure mode is named with its fix (checksums last)."
+  },
+  {
+   "id": "OWED-7",
+   "title": "CHECKSUMS drift eval truncates long lists undisclosed",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Scheduled into Loop F by the approved plan.",
+   "closes_in": "BR-1005"
+  },
+  {
+   "id": "OWED-8",
+   "title": "Instruction surface has no parser for workflow YAML, lands as honest NO-DATA",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Accepted and declared gap; Loop F may close it or it stays declared.",
+   "closes_in": "BR-1005 or stays declared"
+  },
+  {
+   "id": "OWED-9",
+   "title": "Worktree and registry hygiene",
+   "state": "closed",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "closed 2026-08-06: archive at Documents/BrotherSBE-worktree-archive-2026-08-06, bm_store verify healthy 0 problems"
+  },
+  {
+   "id": "OWED-10",
+   "title": "The Claude Code end to end job in CI (item 5.4), needs an API key secret",
+   "state": "open",
+   "deferred_by_founder": true,
+   "deferral_reason": "Founder decision 2026-08-06: local end to end evidence at release, CI wiring as a fast-follow behind a repository secret he adds.",
+   "closes_in": "a follow-up once the secret exists"
+  },
+  {
+   "id": "OWED-11",
+   "title": "Loop B lanes wB0 and wB1, held out at REVISE",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "a follow-up loop; work preserved in git stash and delivery/blocker-patches/wB0-wB1-partial-repairs-2026-08-06.patch"
+  },
+  {
+   "id": "OWED-12",
+   "title": "Cryptographic attestation for CI evidence, and the protected level it restores",
+   "state": "open",
+   "deferred_by_founder": false,
+   "deferral_reason": null,
+   "closes_in": "the change that lands GitHub OIDC attestation; that same change flips .sbe/policy.yml protectedEvidenceRequired back to true"
+  }
+ ]
 }

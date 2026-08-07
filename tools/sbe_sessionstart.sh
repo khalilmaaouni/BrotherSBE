@@ -16,6 +16,15 @@ CAP=10000
 # Capture the hook JSON from stdin ONCE so we can both replay it to the
 # compaction hint and ignore it for the digest/nags.
 PAYLOAD="$(cat 2>/dev/null)"
+# The session baseline (release blocker 1 item 1.2): what the working tree held
+# BEFORE this session touched it, so the Stop reconciler can tell a change this
+# session made from dirt that was already there. Written under the repository's
+# git directory, never into the working tree, because a control that dirties the
+# tree it measures reports itself. Its stdout is /dev/null and its stderr is
+# kept: SessionStart's stdout is injected into the session context, and a
+# baseline path is not context. It always exits 0 and is guarded with `|| true`
+# anyway, because SessionStart must never fail a session.
+printf '%s' "$PAYLOAD" | python3 "$DIR/tools/sbe_session_baseline.py" write >/dev/null || true
 # The two halves are measured SEPARATELY, because the marker used to assert
 # which half was cut and nothing bounded the first one: a large resume brief
 # (its size is data-driven, written from a transcript) pushed the hint itself

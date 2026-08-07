@@ -67,8 +67,49 @@ the brief atomically (temp file, then rename); a dirty repository is named under
 `knownConstraints` rather than refused. `agents/implementation-worker.md` is the paired agent
 that reads a brief and does the work.
 
+**Identity**: a task's identity is the pair (`change`, `id`), not `id` alone (`sbe task`, above).
+`start` stamps `change` on the registry record it opens from the dossier's own basename (the same
+string its branch name, `sbe/<change>/<taskId>`, already carried), so its dependency check and its
+already-OPEN check are both scoped to THIS dossier: a same-named task open in a different one no
+longer blocks starting this one, and a same-named task's closed record in a different one no
+longer silently satisfies this one's own unmet dependency. `check`, `finish` and `remove` each
+take an optional `--change`, needed only when a bare task id resolves to more than one record
+across different changes; when it does, the ambiguity is refused, every colliding `(change, id)`
+pair named, rather than a guess at which one was meant, and the value given IS STRIPPED before
+comparison, the same way `sbe task open --change` strips it before storing, so a padded value that
+opened cleanly stays addressable by the identical padded string. `brief`'s own dependency and
+already-claimed checks are the one exception, left unscoped (global, by `id` alone, the same
+collision class `start` closes) and never raise ambiguity: `brief` has no `--change` flag to
+recover with, so its already-claimed lookup always resolves to the LAST matching record
+(append order), the exact pre-`change` behavior, rather than refusing over a flag that does not
+exist on this subcommand. `tools/test_sbe_work_brief.py` pins that unscoped shape with fixtures
+that predate `change`. Full limits: `docs/KNOWN-LIMITS.md` ("Task identity becomes (change,
+taskId)").
+
+**Worktree directory**: `start`'s default worktree directory is still, primarily, the
+repository's parent directory, exactly as before this pair existed, so a single dossier lands at
+the same path it always did. Only when that plain default path is ALREADY TAKEN (the common case
+after upgrading: a sibling dossier's own task with the same id, since every derived plan starts
+fresh at "T01") does it fall back, automatically and out loud on stdout, to a subdirectory of the
+same parent named for THIS dossier's own change id, so the headline journey (two dossiers running
+the same task id, one after another, no `--worktree-dir` given by either) now succeeds under
+these documented default flags. An EXPLICIT `--worktree-dir` never falls back: two dossiers an
+operator points at the identical directory by hand still collide there, exactly as before, because
+that is the operator's own choice, not a default trap.
+
 Two more are **present and refuse**: `policy` and `exceptions`.
 Each names what is missing and which wave builds it, and exits 3.
+
+`policy evaluate` reads `.sbe/policy.yml`, applies every matching rule to the diff, and reports one
+state per requirement: `SATISFIED`, `MISSING`, `INVALID`, `STALE`, `UNPROTECTED` or `NOT-REQUIRED`.
+Required and absent is `MISSING` and exits 1. Not required is `NOT-REQUIRED` and exits 0 without
+manufacturing a pass. Neither is `NO-DATA`, and that separation is the point: one word carrying both
+meanings is how a missing receipt kept reading as a clean bill of health. The minimum detected tier
+is a floor, so a declared tier below it is `INVALID` unless a decision record with a protected
+approval says otherwise, and an accepted exception renders `WAIVED`, never `PASS`.
+
+One more is **present and refuses**: `exceptions`.
+It names what is missing and which wave builds it, and exits 3.
 They are listed rather than hidden so nobody has to guess whether they exist, and they refuse
 rather than printing an empty result, because a command that succeeds at nothing is the exact
 failure this project exists to stop.
@@ -116,6 +157,44 @@ so a consumer can tell which contract it is reading:
 JSON output on the other commands arrives with the evidence work, not before: emitting a JSON
 envelope around a verdict whose provenance is not yet bound to a commit would dress an
 advisory result as a machine-readable authoritative one.
+
+## `brothersbe.contracts`, one schema registry for every JSON surface
+
+Five things this tool writes each carry a `schemaVersion` and a promised set of fields: the
+task registry (`.sbe/tasks.json`), `sbe status --json`, `sbe status --team --json`, the work
+brief (`sbe work brief --json`), and the handover record (`12-handover.json`). Before LP-0201
+each of those five producers checked its own version and its own fields, independently, with
+no single place naming what any of the five actually promise. `brothersbe.contracts` is that
+place: a small, versioned Python module (no `jsonschema` dependency, standard library only)
+that a consumer imports and calls directly, not a new `sbe` subcommand.
+
+```python
+from brothersbe import contracts
+
+verdict, evidence, problems = contracts.validate_task_registry(registry_dict)
+# verdict:  "PASS" | "FAIL" | "NO-DATA"
+# evidence: one human-readable summary line
+# problems: a tuple of the individual named failures, empty on PASS
+```
+
+Every `validate_*` function (`validate_task_registry`, `validate_status`,
+`validate_status_team`, `validate_work_brief`, `validate_handover`) takes an already-parsed
+Python object, the same object `json.load`/`json.loads` would hand back, and returns that same
+three-value shape. `NO-DATA` means no document was given at all (`data is None`); a document
+that exists but is the wrong JSON shape, is missing a required field, or names a
+`schemaVersion` this build does not know is `FAIL`, never `NO-DATA`: absence and a broken
+claim are different findings. Unknown fields are always ALLOWED (a document from a newer build
+is forward compatible, not broken); an unknown `schemaVersion` is always refused, by name.
+`contracts.validate(surface, data)` dispatches by surface name (one of `contracts.SURFACES`)
+for a caller that wants to look one up instead of importing five function names by hand.
+
+One surface is a deliberate, named exception: `sbe status --team --json` carries no
+`schemaVersion` field in the running tool (`status.build_team_report` writes none as of
+1.0.0-rc.16), so `validate_status_team` accepts its absence rather than manufacturing a
+requirement the real command does not meet, and starts checking it strictly the day that
+producer starts writing one. `contracts.CONTRACTS_SCHEMA_VERSION`, an integer, is this
+registry's OWN version (starting at 1, the same major generation every one of the five
+producers is already on), separate from any one surface's `schemaVersion` string.
 
 ## `sbe doctor`, and what WARNING means
 
@@ -201,6 +280,7 @@ it.
 ## `sbe evidence`, and the rule that makes a receipt mean something
 
 ```bash
+bin/sbe evidence run --check control-plane-tests --out evidence/control-plane.json
 bin/sbe evidence run --out evidence/tests.json -- pytest -q
 bin/sbe evidence verify evidence/tests.json
 bin/sbe evidence show evidence/tests.json
@@ -231,6 +311,25 @@ records `argvRedactions`, the count, so a reader can tell at a glance whether ar
 masked. This narrows the old limit, it does not close it: the pattern list is finite, so a
 secret in a shape none of these patterns know still reaches the receipt whole. Full statement:
 `docs/KNOWN-LIMITS.md`.
+
+**`--check <id>` runs the check REGISTERED in `.sbe/checks.yml`, and nothing on the command
+line can substitute any part of it.** The executable, the exact argument vector, the working
+directory, the covered paths and the environment all come from the registry; `--`, `--covers`
+and `--kind` beside it are refused rather than quietly overridden. The receipt records
+`checkId`, `checkKind`, `checkSpecSha256` (the digest of that check's specification), the
+executable and its hash when it is a repository file, every `runnerFiles` hash, the argument
+vector, the working directory, and the covered paths with their hashes, all sealed. `verify`
+recomputes every one of them against the registry as it stands now, so editing the check,
+renaming or modifying a runner, or changing an argument invalidates every receipt minted
+before the edit: those receipts describe a check that no longer exists. Only the allowlisted
+environment (`brothersbe.checks.ENV_ALLOWLIST`) reaches the process, and the receipt records
+how many variables were dropped.
+
+Why it exists: `run` proved a command ran, and `-- true` therefore minted a clean, sealed,
+commit-bound receipt whose only claimed identity was the `--kind` word typed beside it. A
+run WITHOUT `--check` is free form and stays available for local experimentation, and it is
+always `LOCAL-ADVISORY` however clean the tree and whatever CI run id is set, and it satisfies
+no check `.sbe/policy.yml` requires.
 
 **`--kind {design,gate,score}` records WHICH obligation this run is evidence for.** Repeatable,
 and written into the receipt as `checkKinds`, sealed with everything else. Without it the
@@ -286,7 +385,7 @@ encouraged to share.
 `--strict` makes NO-DATA block too. Every verdict line names what it inspected, because a
 verdict that does not say what it read is not trustworthy output.
 
-`show` prints the receipt and names its **trust level** every time: `PROTECTED-CI` when
+`show` prints the receipt and names its **trust level** every time: `CI-CLAIMED` when
 `SBE_CI_RUN_ID` was set by the environment AND the tree was clean, `LOCAL-ADVISORY` otherwise.
 A CI job over uncommitted edits is a local run wearing a badge, and it is labelled as one.
 
@@ -320,13 +419,19 @@ The shell is never parsed; the diff is simply read.
 - A base commit that no longer resolves is **NO-DATA with the reason, never a pass**.
 - `close --force` requires `--who` and `--why`, records that disposition in the record, and
   marks the close **FORCED**, never silently clean.
-- `open` refuses (exit 2, reason on stderr, colliding task named) when the id is already open,
-  or when any owned path overlaps an owned path of another open task. Overlap is the fence
-  hook's own `paths_overlap`, imported rather than re-typed, including its confirmed
-  case-folding on case-insensitive filesystems; a test fails if that import is ever replaced
-  by a local copy.
+- **A task's identity is the pair (`change`, `id`), not `id` alone.** Every derived plan starts
+  fresh at "T01" (`sbe plan`), so two dossiers routinely produce a task called "T01"; `--change`
+  (default the empty, unscoped string) records which change a task belongs to, and `sbe work
+  start` stamps it automatically from the dossier basename. `open` refuses (exit 2, reason on
+  stderr, the colliding `(change, id)` pair named) when the SAME `(change, id)` pair is already
+  open, or when any owned path overlaps an owned path of another open task regardless of either
+  task's change (a file collides with itself no matter which dossier asked for it). `close` takes
+  an optional `--change` to say which one: a bare id that resolves to exactly one open task (the
+  overwhelming common case) needs no `--change` at all; a bare id open in MORE than one change is
+  refused as ambiguous, every colliding `(change, id)` pair named, never guessed at.
 - `check` re-runs the overlap scan across all open tasks, so a collision injected into the
-  JSON by hand is caught the same way `open` would have caught it.
+  JSON by hand is caught the same way `open` would have caught it. The overlap scan itself stays
+  by path, not by `(change, id)`: two writers over one file collide regardless of change.
 - `fence` renders the markdown fence view from the registry, one direction only, JSON to
   markdown, printed for a human to paste into a STATE.md style registry. Nothing reads
   markdown fences back into the registry, and the hand-written fence flow keeps working
@@ -342,6 +447,21 @@ close clean, which is this control's own kill criterion. `expiry` is information
 deletes a task on a clock. Concurrent writers of the registry file are out of scope (atomic
 rename, last write wins, no lock). Limits in full: `docs/KNOWN-LIMITS.md`. Maturity:
 **INTERNAL-EVAL**, exercised on this repository's fixtures and on no other estate.
+
+**Schema**: `schemaVersion` moved from `1.0` (identity: `id` alone) to `1.1` (identity: the
+`(change, id)` pair) when this pair landed. A `1.0` registry is still READ as-is by `list`,
+`fence` and `check`; the shape change to `1.1` (every record gains `change`, defaulting to the
+empty, unscoped string, since a pre-migration record carries nothing that says which dossier
+produced it) happens on the FIRST `open` or `close` after upgrading, never merely by being read.
+A registry `migrate_registry` cannot interpret (an unknown predecessor version, or a `change`
+field of a type it was never told to expect) is refused by name and left byte-for-byte on disk,
+never silently rewritten. The flip side of the empty, unscoped change a migrated record adopts:
+identity is now the `(change, id)` pair, so that migrated record's `""` no longer collides with a
+DIFFERENT, non-empty change stamped onto a fresh `open`/`start` for the SAME id. An operator's
+first change-scoped start after upgrading, for an id that already has a legacy OPEN record, SUCCEEDS
+rather than refusing, leaving TWO OPEN records for one id; a bare `close`/`check`/`finish`/`remove`
+on that id becomes ambiguous, and `--change ''` is the working escape hatch that still addresses
+the legacy record on its own. Full limits: `docs/KNOWN-LIMITS.md`.
 
 ## `tools/sbe_authority_hook.py`, the guard beside `sbe task`
 
@@ -566,6 +686,48 @@ critical finding blocks only with `confidence: "high"` or a non-empty `verificat
 standing in for LT-202's "mechanical proof". A critical finding that clears neither bar stays
 recorded, just not blocking.
 
+### The stored `result` is DERIVED, never the reviewer's claim taken on faith
+
+The moment `--findings-json` is also given, the `result` a record stores is computed FROM
+`structuredFindings`, not copied verbatim from `--result`: a review record used to be able to
+assert `approved` while its own findings recorded an open, blocking problem, and every reader of
+`result` (`sbe status --team`'s pass/fail judgement, `sbe status`'s plain review-ladder check) took
+that claim at face value. The rule is the one bar this schema already computes, never a second,
+competing one: any finding still `status: "open"` AND already marked `blocking` forces the stored
+`result` to `"changes-required"`, regardless of what `--result` said. A finding left `"arbitration"`
+by a status disagreement never forces one either, because `blocking` is already `false` for it (see
+above); an unresolved contradiction between reviewers stays its own NO-DATA, read at `sbe status
+--team` time, not silently turned into a verdict here.
+
+The derivation only ever moves a result DOWN, from `"approved"` toward `"changes-required"`; it
+never moves one up. An absence of open blocking findings is not proof the other way, that a
+reviewer's own `"unverifiable"` or a hand-entered `"changes-required"` for a reason this schema
+cannot see should be overridden to `"approved"` because nothing here happened to block. With no
+open blocking finding, `result` is exactly what `--result` said.
+
+The reviewer's own claim is never discarded: it is kept verbatim in a new `rawClaim` field, and a
+new `resultDisagreement` boolean states outright whether `result` and `rawClaim` differ, so a
+reader never has to notice a self-contradicting record by diffing two fields on their own. A write
+that lands a disagreement also says so on stdout, immediately, in the same sentence that already
+names where the record was written. Both new fields are written ONLY alongside `structuredFindings`
+(the identical `--findings-json` gate `findingsSchemaVersion` already uses): with no structured
+findings there is nothing to derive a result FROM, so a plain `--write` with no `--findings-json`
+still writes exactly what it always wrote, `result` included, byte-for-byte.
+
+Because `result` itself carries the derived value, and every existing reader already reads that one
+key, `sbe status --team`'s severity-11 finding and `sbe status`'s own review-ladder check both see
+the derived result automatically, with no change needed on the read side: THE RECORD NEVER JUDGES
+ITSELF remains true (`_record_review`'s own module law) because the judging is still `_derive_
+review_result`, a pure function of the findings already on the record, computed once at write time,
+not a verdict `sbe status` invents at read time either.
+
+```bash
+bin/sbe review design/chg-a --write --reviewer "Independent Reviewer" --reviewer-type human \
+  --result approved --findings-json review-findings.json
+# if review-findings.json carries an open, blocking finding, 11-review.json stores:
+#   "result": "changes-required", "rawClaim": "approved", "resultDisagreement": true
+```
+
 `sbe status --team` reads `structuredFindings` back, inside the existing severity-11 "review
 record" section, as one further finding beside the record's own pass/fail judgement: absent
 `structuredFindings` (every record CR-09 wrote before LT-202, and any LT-202-era record written
@@ -638,7 +800,7 @@ Six sections, blocker-first, and **every positive or empty line names what it in
    finding, so a reader is never told an obligation is unmet without being told that
    evidence exists which says nothing about which check it was.
 5. **COMPLETED EVIDENCE**: receipts that verify clean with a zero exit code, printed with
-   their trust label (`LOCAL-ADVISORY` or `PROTECTED-CI`) every time.
+   their trust label (`LOCAL-ADVISORY` or `CI-CLAIMED`) every time.
 6. **NEXT ACTION**: one line, derived mechanically from the first nonempty section above,
    plus the scope sentence naming exactly which stores this run read.
 
@@ -810,4 +972,5 @@ them refuses with usage and a nonzero exit instead of running past it, because a
 command that reads or deletes the vault must not run as if nothing were wrong. Numbers are parsed
 or absent; the tool never invents one.
 
-Two commands remain **present and refuse**: `policy` and `exceptions`.
+One command remains **present and refuses**: `exceptions`. `policy` shipped and now evaluates
+`.sbe/policy.yml` against a diff (see `sbe policy evaluate` above).

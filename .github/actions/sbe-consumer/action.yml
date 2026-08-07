@@ -21,10 +21,13 @@
 # action.
 name: 'BrotherSBE consumer checks'
 description: >-
-  Runs sbe impact, sbe evidence verify (when receipts exist), sbe status
-  (once wave 8 ships it), and the design checks in strict mode (when a
-  dossier is declared), against the calling repository's own diff and
-  dossier. Never runs BrotherSBE's own test files.
+  Runs sbe policy evaluate (always, with no input able to skip it), sbe
+  impact, sbe evidence verify, sbe status, and the design checks in strict
+  mode, against the calling repository's own diff and dossier. Never runs
+  BrotherSBE's own test files. No step in this file carries an `if:` that
+  an empty input can switch off: that pattern let a caller who supplied
+  nothing get a green job that verified nothing, and closing it is the
+  whole point of the policy step.
 inputs:
   sbe-path:
     description: >-
@@ -44,15 +47,57 @@ inputs:
     default: ''
   receipts-dir:
     description: >-
-      A directory of evidence receipts (*.json) to check with sbe evidence
-      verify, if this repository writes them. Empty skips this step
-      entirely rather than failing on a directory nobody declared.
+      A directory of evidence receipts (*.json). Empty NO LONGER skips
+      anything: policy evaluation runs regardless and every check the policy
+      requires then reports MISSING and fails the job. An unsupplied input
+      is not an exemption, which is what it used to be here.
     required: false
     default: ''
   dossier:
-    description: 'Path to a design dossier to run the strict design checks against. Empty skips this step.'
+    description: >-
+      Path to a design dossier. Empty NO LONGER skips policy evaluation;
+      it only skips the design checks, which have nothing to read without
+      one. Approvals are read from the dossier's 12-approvals.json unless
+      approvals names another file.
     required: false
     default: ''
+  policy:
+    description: >-
+      Path to the policy file. Empty uses .sbe/policy.yml under sbe-path.
+      A policy this action cannot read BLOCKS the job; it never reads as a
+      repository that requires nothing.
+    required: false
+    default: ''
+  approvals:
+    description: >-
+      A JSON list of approval records (role, approver, headCommit,
+      protected). Empty means no approval is credited, which fails any rule
+      that requires one.
+    required: false
+    default: ''
+  waivers:
+    description: >-
+      A JSON list of exceptions. Every entry needs a reason, an owner, an
+      expiry and a protected approval, or it is REFUSED and the requirement
+      keeps its failing state. An accepted exception renders WAIVED, never
+      PASS.
+    required: false
+    default: ''
+  decision:
+    description: >-
+      A decision record justifying a declared tier BELOW the minimum
+      detected tier. Without one, a lowering is INVALID and blocks. The
+      policy engine may raise a tier and never silently lowers one.
+    required: false
+    default: ''
+  strict-waivers:
+    description: >-
+      'true' makes an accepted waiver block on EVERY rule. The control
+      plane, production infrastructure, migration, money, personal data and
+      partner data rules block on a waiver whether or not this is set,
+      because those rules declare strictWaivers in the policy file itself.
+    required: false
+    default: 'true'
   strict:
     description: >-
       'true' passes --strict to sbe impact and sbe evidence verify. For
@@ -66,6 +111,118 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Evidence is produced by the run that does the work. This step asks the
+    # policy which registered checks THIS diff requires, runs each one for
+    # real, and writes the receipts into the runner's own temporary directory.
+    #
+    # It is deliberately NOT a fallback to receipts committed into the
+    # repository. A receipt checked in by an author and merely read by a later
+    # job is the thing this project refuses: the job that reads it proves
+    # nothing about the run that made it. Minting here, in the job, is the
+    # honest version of the same convenience.
+    #
+    # A caller who passes receipts-dir keeps full control and this step mints
+    # nothing. A check the registry does not define is skipped here and still
+    # reported MISSING below, which is the correct outcome for an obligation
+    # nobody has built a runner for yet.
+    - name: sbe evidence run (mint the registered checks this diff requires)
+      id: mint
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_BASE: ${{ inputs.base }}
+        SBE_POLICY: ${{ inputs.policy }}
+        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+      run: |
+        set -u
+        if [ -n "$SBE_RECEIPTS_DIR" ]; then
+          echo "receipts-dir was supplied, so this step minted nothing."
+          echo "dir=$SBE_RECEIPTS_DIR" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        MINTED="${RUNNER_TEMP:-/tmp}/sbe-minted"
+        mkdir -p "$MINTED"
+        DISCOVERY="$MINTED/.discovery.json"
+        set -- policy evaluate . --json
+        if [ -n "$SBE_BASE" ]; then set -- "$@" --base "$SBE_BASE"; fi
+        if [ -n "$SBE_POLICY" ]; then set -- "$@" --policy "$SBE_POLICY"; fi
+        "$SBE_PATH/bin/sbe" "$@" > "$DISCOVERY" || true
+        REQUIRED=$(python3 "$GITHUB_ACTION_PATH/required_checks.py" < "$DISCOVERY")
+        rm -f "$DISCOVERY"
+        if [ -z "$REQUIRED" ]; then
+          echo "this diff requires no registered check; nothing to mint."
+        fi
+        for CHECK in $REQUIRED; do
+          echo "running registered check: $CHECK"
+          "$SBE_PATH/bin/sbe" evidence run --check "$CHECK" --out "$MINTED/$CHECK.json" || \
+            echo "check $CHECK produced no passing receipt; the evaluation below reports it."
+        done
+        echo "dir=$MINTED" >> "$GITHUB_OUTPUT"
+    # ALWAYS RUNS, AND HAS NO `if:`. That absence is the control. Every other
+    # step in this file used to carry `if: inputs.X != ''`, so a caller who
+    # passed nothing got a green job that had verified nothing, and the way
+    # past a gate was to omit the input that turned it on. Policy evaluation
+    # reads the DIFF, which an author cannot omit, decides what evidence is
+    # owed, and reports MISSING (nonzero) for anything owed and absent.
+    # NOT-REQUIRED is the other absence and exits 0 without manufacturing a
+    # PASS. Neither is NO-DATA.
+    - name: sbe policy evaluate (what this diff is REQUIRED to carry, and whether it does)
+      shell: bash
+      env:
+        SBE_PATH: ${{ inputs.sbe-path }}
+        SBE_BASE: ${{ inputs.base }}
+        SBE_POLICY: ${{ inputs.policy }}
+        SBE_RECEIPTS_DIR: ${{ steps.mint.outputs.dir }}
+        SBE_DOSSIER: ${{ inputs.dossier }}
+        SBE_INTAKE: ${{ inputs.intake }}
+        SBE_APPROVALS: ${{ inputs.approvals }}
+        SBE_WAIVERS: ${{ inputs.waivers }}
+        SBE_DECISION: ${{ inputs.decision }}
+        SBE_STRICT_WAIVERS: ${{ inputs.strict-waivers }}
+      run: |
+        set -eu
+        args=(policy evaluate . --json)
+        if [ -n "$SBE_BASE" ]; then args+=(--base "$SBE_BASE"); fi
+        if [ -n "$SBE_POLICY" ]; then args+=(--policy "$SBE_POLICY"); fi
+        # Passed even when empty is impossible in bash argument terms, so the
+        # empty case is handled by NOT passing the flag and letting the
+        # evaluator report every required check MISSING. What must never come
+        # back is a SKIPPED STEP: the step itself runs either way.
+        if [ -n "$SBE_RECEIPTS_DIR" ]; then args+=(--receipts-dir "$SBE_RECEIPTS_DIR"); fi
+        if [ -n "$SBE_DOSSIER" ]; then args+=(--dossier "$SBE_DOSSIER"); fi
+        if [ -n "$SBE_INTAKE" ]; then args+=(--intake "$SBE_INTAKE"); fi
+        if [ -n "$SBE_APPROVALS" ]; then args+=(--approvals "$SBE_APPROVALS"); fi
+        if [ -n "$SBE_WAIVERS" ]; then args+=(--waivers "$SBE_WAIVERS"); fi
+        if [ -n "$SBE_DECISION" ]; then args+=(--decision "$SBE_DECISION"); fi
+        if [ "$SBE_STRICT_WAIVERS" = "true" ]; then args+=(--strict-waivers); fi
+        set +e
+        out=$("$SBE_PATH/bin/sbe" "${args[@]}")
+        code=$?
+        set -e
+        printf '%s\n' "$out"
+        # The required receipts and dossier paths this run DISCOVERED from the
+        # policy, printed so the next step and the reader see what was owed
+        # rather than only what was supplied. A requirement in any state other
+        # than SATISFIED or NOT-REQUIRED is named here with that state, and
+        # WAIVED is printed as WAIVED: it is never rendered as a pass.
+        # Every line below sits at the block scalar's own indentation, so bash
+        # and python both receive it at column zero. A line at column zero HERE
+        # would end the YAML block instead, which is how this step first shipped
+        # unparseable.
+        printf '%s\n' "$out" | python3 -c "
+        import json, sys
+        report = json.load(sys.stdin)
+        for r in report['requirements']:
+            if r['state'] in ('SATISFIED', 'NOT-REQUIRED'):
+                continue
+            print('%-12s %-30s %s' % (r['state'], r['requirement'], r['ruleId']))
+            if r['waiverRefused']:
+                print('%-12s %-30s %s' % ('REFUSED', r['requirement'], r['waiverRefused']))
+        print('minimum detected tier: ' + report['minimumDetectedTier'])
+        print('verdict: ' + report['verdict'])
+        "
+        exit "$code"
+
     - name: sbe impact (the diff versus the declared intake, if any)
       shell: bash
       env:
@@ -81,16 +238,26 @@ runs:
         if [ "$SBE_STRICT" = "true" ]; then args+=(--strict); fi
         "$SBE_PATH/bin/sbe" "${args[@]}"
 
-    - name: sbe evidence verify (every receipt under receipts-dir, if any were declared)
-      if: ${{ inputs.receipts-dir != '' }}
+    # No `if:` here either. An empty receipts-dir used to skip this step, so
+    # supplying nothing verified nothing and the job went green. The step now
+    # runs always: with no directory, or an empty one, it says so and the
+    # policy step above has already failed the job for every receipt the diff
+    # required. What it must never do is disappear.
+    - name: sbe evidence verify (every receipt under receipts-dir; an empty one is not an exemption)
       shell: bash
       env:
         SBE_PATH: ${{ inputs.sbe-path }}
-        SBE_RECEIPTS_DIR: ${{ inputs.receipts-dir }}
+        SBE_RECEIPTS_DIR: ${{ steps.mint.outputs.dir }}
         SBE_STRICT: ${{ inputs.strict }}
       run: |
         set -eu
         shopt -s nullglob
+        if [ -z "$SBE_RECEIPTS_DIR" ]; then
+          echo "no receipts-dir was supplied, so this step verified NO receipt. That is not"
+          echo "an exemption: the policy step above decided what this diff was required to"
+          echo "carry and reported MISSING for anything owed and absent."
+          exit 0
+        fi
         found=0
         for receipt in "$SBE_RECEIPTS_DIR"/*.json; do
           found=1
@@ -99,7 +266,8 @@ runs:
           "$SBE_PATH/bin/sbe" "${args[@]}"
         done
         if [ "$found" = "0" ]; then
-          echo "no receipts found under $SBE_RECEIPTS_DIR; nothing to verify"
+          echo "no receipts found under $SBE_RECEIPTS_DIR; nothing to verify here, and the"
+          echo "policy step above is what decides whether nothing was the right amount."
         fi
 
     - name: sbe status --json (a produced report is the pass, open findings are not a broken tool)
@@ -135,12 +303,22 @@ runs:
           echo "sbe status is not built in this BrotherSBE installation (wave 8 has not landed here); step skipped, not failed"
         fi
 
-    - name: sbe design --strict (only when a dossier is declared)
-      if: ${{ inputs.dossier != '' }}
+    # No `if:` here either, for the same reason. The design checks genuinely
+    # have nothing to read without a dossier, and that is now SAID rather than
+    # arranged by making the step vanish. A skipped step and a step that ran
+    # and found nothing look identical on the job summary, and only one of
+    # them is a repository that owed nothing.
+    - name: sbe design --strict (an undeclared dossier is reported, never silently skipped)
       shell: bash
       env:
         SBE_PATH: ${{ inputs.sbe-path }}
         SBE_DOSSIER: ${{ inputs.dossier }}
       run: |
         set -eu
+        if [ -z "$SBE_DOSSIER" ]; then
+          echo "no dossier was supplied, so the design checks read NOTHING. That is not an"
+          echo "exemption: the policy step above evaluated this diff against .sbe/policy.yml"
+          echo "and failed the job for every requirement it found MISSING."
+          exit 0
+        fi
         "$SBE_PATH/bin/sbe" design --strict "$SBE_DOSSIER"

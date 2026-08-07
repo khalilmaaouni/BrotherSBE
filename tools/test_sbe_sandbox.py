@@ -330,11 +330,23 @@ class TestSandboxJourneyMatchesGuide(unittest.TestCase):
     def test_step6_evidence_run_and_finish_close_clean(self):
         self.assertEqual(self.out["evidence_code"], 0, self.out["evidence"])
         self.assertGuideAndLiveBothSay("GREETING-OK", self.out["evidence"])
+        # The advisory REASON changed when the check registry landed: a
+        # free-form command is now advisory because nothing outside the caller
+        # says which check it is, which is a stronger statement than the older
+        # "no CI run id" one and is printed whether or not a run id exists. The
+        # guide was repasted from live output and this expectation follows it,
+        # because a doc-truth suite that keeps the old sentence would fail the
+        # page for telling the truth.
+        self.assertGuideAndLiveBothSay(
+            "sbe evidence run: FREE FORM run: no registered check, so this receipt "
+            "is advisory and satisfies no required policy check", self.out["evidence"])
         self.assertGuideAndLiveBothMatch(
             "sbe evidence run: receipt written to ",
-            ". Trust LOCAL-ADVISORY (no SBE_CI_RUN_ID was set when this ran, so "
-            "nothing outside the machine that wrote it attests to it). Command "
-            "exited 0 in ", self.out["evidence"])
+            ". Trust LOCAL-ADVISORY (this receipt was minted for a free-form "
+            "command rather than a check registered in .sbe/checks.yml, so nothing "
+            "outside the caller says which check it is. Free-form evidence is "
+            "advisory whatever else is true of it). Command exited 0 in ",
+            self.out["evidence"])
         self.assertGuideAndLiveBothSay(
             "s, over 2 covered file(s) from the diff 7dc817fd5a6d..HEAD. Declared "
             "check kind(s): gate. stdout and stderr are recorded as digests only. "

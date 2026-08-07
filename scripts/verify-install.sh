@@ -62,13 +62,39 @@ trap 'rm -rf "$WORKDIR"' EXIT INT TERM
 OK=0
 MISMATCHED=0
 MISSING=0
+CRLF_LINES=0
+CR=$(printf '\r')
 : > "$WORKDIR/manifest_paths"
 
 # Manifest lines are "<64 hex chars><two spaces><path>", the format both
 # sha256sum and shasum -a 256 produce. Splitting by fixed column position
 # (not by whitespace) is deliberate: a path may itself contain spaces, and
 # field-splitting would cut it apart.
+#
+# A trailing carriage return is removed before the split, and COUNTED so the
+# removal is never silent. Why this is a correctness fix and not a courtesy:
+# `read -r` keeps the CR of a CRLF manifest inside the line, so the path this
+# loop extracted was "tools/sbe_gate.py<CR>", which exists on no filesystem.
+# Every named file then reported MISSING and every real file reported EXTRA,
+# which is this script's loudest alarm ("exactly the shape of a planted
+# backdoor") fired over an installation where nothing at all was wrong. A
+# manifest reaches a CRLF state without anybody doing anything unusual: it is
+# written by a tool running in text mode on Windows, or carried through an
+# editor or an artifact upload that normalises line endings. Reproduced on
+# POSIX and pinned by the eval
+# `a-crlf-manifest-verifies-instead-of-reporting-every-file-missing`.
+# Narrowing, stated rather than implied: a path whose last byte is genuinely a
+# carriage return is indistinguishable from this and is read one byte short.
+# That name is legal on POSIX and illegal on Windows, and the trade is
+# deliberate: the CRLF manifest happens, and the CR-terminated filename does
+# not.
 while IFS= read -r line; do
+    case "$line" in
+        *"$CR")
+            line=${line%"$CR"}
+            CRLF_LINES=$((CRLF_LINES + 1))
+            ;;
+    esac
     [ -z "$line" ] && continue
     expected=$(printf '%s' "$line" | cut -c1-64)
     path=$(printf '%s' "$line" | cut -c67-)
@@ -236,6 +262,9 @@ echo "verify-install: checked against $MANIFEST"
 echo "verify-install: $OK file(s) match, $MISMATCHED mismatched, $MISSING missing, $EXTRA extra (present on disk, absent from the manifest), $NONREGULAR non-regular (a symlink or pipe the manifest cannot hash)"
 if [ "$DENIED" -gt 0 ]; then
     echo "verify-install: $DENIED location(s) could not be enumerated (named UNWALKABLE above), so no sentence here covers what is inside them."
+fi
+if [ "$CRLF_LINES" -gt 0 ]; then
+    echo "verify-install: $CRLF_LINES manifest line(s) ended in a carriage return (a CRLF manifest, which a text-mode write on Windows or a line-ending-normalising transport produces); the return was removed from each path before it was looked up, and is reported here rather than removed in silence."
 fi
 echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
 
