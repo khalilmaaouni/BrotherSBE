@@ -77,3 +77,25 @@ a session in that runtime demonstrably read the instructions this project
 wrote. It becomes ENFORCED only when an attempted protected write is REFUSED,
 and the refusal is quoted here with the command that produced it. Until then
 the honest word is the one in the table.
+
+## Cursor: one unknown found while porting, recorded rather than assumed
+
+A real installed Cursor skill (`~/.cursor/skills-cursor/automate/SKILL.md`)
+carries a third frontmatter key this project does not emit:
+
+```
+environments:
+  - local
+```
+
+Our generated files carry `name` and `description` only, which is the shape
+Codex uses and the shape Cursor's own file also has for those two keys.
+Whether Cursor REQUIRES `environments`, defaults it, or ignores its absence is
+NOT MEASURED. Nobody has loaded a generated tree in Cursor yet, and comparing
+the two files by eye is not the same as loading one.
+
+Two outcomes, and `tools/sbe_port.py` is written so either is cheap: if Cursor
+needs the key, the generator grows one runtime-specific line and the drift test
+keeps both hosts correct. If it does not, nothing changes. What must not happen
+is this page claiming Cursor works because the frontmatter looked similar,
+which is exactly the inference that was wrong about Copilot on the same day.
