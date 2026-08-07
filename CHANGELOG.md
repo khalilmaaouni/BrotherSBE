@@ -6,6 +6,55 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.28
+
+### The benchmark harness reaches the merge path, and a law I had been overstating
+
+37 benchmark tests shipped in rc.25 and not one of them ran in CI. Confirmed
+rather than assumed, because two agents disagreed about it and one was wrong:
+
+```
+grep -c "benchmarks" .github/workflows/brothersbe-gates.yml
+0
+```
+
+Among those 37 is the guard that stops the benchmark's own answers leaking into
+the exam paper it grades. That guard has already been broken twice: once by
+runbook examples naming real planted defect locations, and once by a scan that
+only looked inside json-tagged fences, so the defect could return simply by
+dropping the tag. A third break would have shipped in silence.
+
+Both jobs run it now, inserted between the Authority and Book steps so the
+file's own alphabetical ordering rule still holds.
+
+**On the law.** This project's sessions had been treating
+`.github/workflows/**` as human-edit-only, and deferring changes to the founder
+on that basis. Reading L16 rather than recalling it shows the claim was wider
+than the law:
+
+> A session instruction never waives a hard gate: --strict changes only by a
+> human editing the CI workflow, which is visible in the diff.
+
+L16 protects a gate from being WEAKENED. It does not forbid strengthening one.
+Adding a test step touches no `--strict` flag and waives nothing, so this was
+never blocked. Overstating a law is the same failure this project refuses
+everywhere else: a claim stronger than the thing that enforces it.
+
+The diff is verified to be only the addition, measured against the previous
+commit rather than against a remembered baseline:
+
+```
+--strict            before 16   after 16
+continue-on-error   before  2   after  2    (both pre-existing; one is a comment saying it is never set)
+total lines         before 506  after 510   (+4, the two steps)
+```
+
+**What this release does not claim.** That the step passes in CI. It passes
+here (`Ran 37 tests ... OK`), and a step that has never run in CI can fail there
+for reasons a local run cannot surface, on Windows most of all. The next run
+settles it, and if it goes red that is information the harness was hiding
+before, not a reason to revert.
+
 ## 1.0.0-rc.27
 
 ### A gate that reported PASS over a manifest it had just proven stale
