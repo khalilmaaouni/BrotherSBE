@@ -6,6 +6,71 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.25
+
+### Comparative outcome benchmarks, with the ground truth kept out of the room
+
+Point 4 of the external assessment asked for the same tasks given to
+BrotherSBE, to unassisted work, and to a peer, measured on defects, time,
+tokens, corrections, false blocks and reviewer findings. `benchmarks/` is that
+harness: four scenarios (a migration, an API contract, a data pipeline, an
+incident), a fixture repository carrying nine planted defects, a scorer, and a
+report renderer.
+
+The interesting part is what it took to make the one measure with real ground
+truth trustworthy. This lane was refused twice.
+
+**The first refusal: the answers were printed in the exam paper.** Every
+scenario runbook's `findings.json` EXAMPLE named a real planted defect at its
+real declared line. Since scoring matches on file plus line window and
+deliberately never reads wording, an estate that pasted its own runbook's
+example scored those defects FOUND. Four of nine planted defects were
+unmissable by anyone who read their own instructions, which inflated
+`defects_missed` for every row in the results table.
+
+**The second refusal: the guard against that had a hole the exact size of the
+defect.** The rewritten leak test only scanned fences tagged ```json, so the
+same leak could be reintroduced simply by dropping the tag, with the test still
+reporting clean. That was demonstrated rather than argued: the previous guard's
+own bytes, run over a leak in an untagged fence, report `ok`.
+
+The scan now reads each document WHOLE and depends on no code fence at all.
+Three forms count as naming a location: a `file` key within 200 brace-free
+characters of a `line` key in either order, the `path:line` form, and a path
+within 60 characters of the words `line N` on one line in either order. The
+planted set is read out of `defects.json` and expanded over each defect's
+declared window, never hardcoded, so the guard cannot drift away from what it
+guards. Twelve evasion shapes were probed and caught; four clean shapes stayed
+clean.
+
+Three NO-DATA guards sit under it, each with its own sentence: zero planted
+locations, zero documents scanned, or zero pairs extracted all report that the
+scan vouched for nothing rather than reading clean.
+
+Calibrated, and independently repeated before this was merged: injecting the
+original leak into an UNTAGGED fence turns the suite red naming the document,
+the location, the defect id and the form it was carried in, while the count of
+```json fences stays unchanged so the tag is never the tell. Restoring returns
+a byte-identical fixture and green.
+
+`benchmarks/README.md` previously claimed the scan covered prose, which was
+broader than the code. It now states the three actual forms with their actual
+bounds, and says plainly that the JSON-example parse check does still read
+```json fences, rather than papering over the one place a fence still matters.
+A README that overstates a guard is the same failure class the lane was refused
+for, one level up.
+
+### Known limit, stated rather than implied
+
+The guard is a text scan. It is proof against the spellings above, not against
+every conceivable one: a path broken across two lines, a line number written as
+a word, or an encoded pair would pass it. Closing that needs the fixture line
+CONTENTS rather than their coordinates, which is a larger change than this lane
+authorised.
+
+`benchmarks/test_sbe_bench.py` is reached through the existing gates, so this
+change is covered by the shipped suite.
+
 ## 1.0.0-rc.24
 
 ### The fourth defect, and the claim that nearly shipped instead of a fix

@@ -1,0 +1,65 @@
+{
+  "schema": "sbe-bench-scenarios/1",
+  "why_this_file_exists": "The machine-readable half of benchmarks/scenarios/. The markdown runbooks are what an operator reads; this file is what score_run.py and report.py read, so a scenario cannot be scored against a defect set nobody declared for it.",
+  "estates": [
+    {
+      "id": "vanilla-claude-code",
+      "label": "Vanilla Claude Code",
+      "setup": "A Claude Code session with no plugins, no skills and no project CLAUDE.md loaded."
+    },
+    {
+      "id": "feature-dev",
+      "label": "feature-dev",
+      "setup": "A Claude Code session where the feature-dev skill is the only workflow skill available, invoked at the start of the run."
+    },
+    {
+      "id": "superpowers",
+      "label": "Superpowers",
+      "setup": "A Claude Code session with the superpowers plugin installed and its workflow skills available."
+    },
+    {
+      "id": "brothersbe",
+      "label": "BrotherSBE",
+      "setup": "A Claude Code session with the BrotherSBE plugin installed and its gates wired, per docs/SETUP.md in this repository."
+    }
+  ],
+  "measures": [
+    {"id": "defects_found", "label": "Defects found", "direction": "higher-is-better"},
+    {"id": "defects_missed", "label": "Defects missed", "direction": "lower-is-better"},
+    {"id": "wall_clock_seconds", "label": "Wall clock (s)", "direction": "lower-is-better"},
+    {"id": "tokens_total", "label": "Tokens", "direction": "lower-is-better"},
+    {"id": "corrections", "label": "Operator corrections", "direction": "lower-is-better"},
+    {"id": "false_blocks", "label": "False blocks", "direction": "lower-is-better"},
+    {"id": "reviewer_findings", "label": "Reviewer findings", "direction": "lower-is-better"}
+  ],
+  "scenarios": [
+    {
+      "id": "S1-migration",
+      "label": "Migration",
+      "runbook": "scenarios/S1-migration.md",
+      "defect_ids": ["D1", "D2"],
+      "task_prompt": "This repository has a pending migration in db/migrations/ that splits customers.customer_name into given_name and family_name. Review the change and tell me whether it is safe to run against a production database that already holds customer rows. If it is not safe, say exactly which file and which line is the problem."
+    },
+    {
+      "id": "S2-api-contract",
+      "label": "API contract change",
+      "runbook": "scenarios/S2-api-contract.md",
+      "defect_ids": ["D3", "D4"],
+      "task_prompt": "The Customer API in this repository changed. Check whether api/openapi.yaml and api/handlers/customer.py still agree with each other, and whether an existing client would break. Name every file and line that is wrong."
+    },
+    {
+      "id": "S3-data-pipeline",
+      "label": "Data pipeline change",
+      "runbook": "scenarios/S3-data-pipeline.md",
+      "defect_ids": ["D5", "D6"],
+      "task_prompt": "The daily order load in pipeline/ writes orders_curated from orders_raw. Tell me whether every order that exists in the source can be trusted to land in the target, and whether the run would tell anybody if it did not. Name every file and line that is wrong."
+    },
+    {
+      "id": "S4-incident",
+      "label": "Incident",
+      "runbook": "scenarios/S4-incident.md",
+      "defect_ids": ["D7", "D8", "D9"],
+      "task_prompt": "Checkout is timing out in production and nobody was paged. Using runbooks/incident-payment-timeout.md, ops/alerts.yaml and ops/payment-gateway.yaml, tell me why nobody was paged and whether following the runbook would make the incident worse. Name every file and line that is wrong."
+    }
+  ]
+}
