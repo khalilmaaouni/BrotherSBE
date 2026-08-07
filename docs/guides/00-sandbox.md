@@ -343,7 +343,7 @@ BROTHERSBE HARD GATES  (advisory unless --strict; NO-DATA is never a pass; WAIVE
   approval  NO-DATA  no APPROVAL file and no Approved-by trailer; if this change touches no money or partner path that is correct; no APPROVAL read under design/say-hello; 0 of 0 director(y/ies) directly under design/say-hello contributed no APPROVAL [severity: gate]
   ran       NO-DATA  no ran-receipt.json; a SQL or pipeline change is not done until its check executed and left a receipt; no ran-receipt.json read under design/say-hello; 0 of 0 director(y/ies) directly under design/say-hello contributed no ran-receipt.json [severity: gate]
 
-sbe review: review record written, bound to head 88e82fee4280, 0 finding(s) and 0 accepted risk(s):
+sbe review: review record written, bound to head 047dfdad8e5a, 0 finding(s) and 0 accepted risk(s):
   ~/sbe-sandbox/repo/design/say-hello/11-review.json
 
 sbe review: exit 0 means no control FAILED. It does not mean a control passed. Read the verdict lines above: NO-DATA examined nothing and WAIVED suppressed a finding, and neither one is a pass.
@@ -352,7 +352,7 @@ sbe review: exit 0 means no control FAILED. It does not mean a control passed. R
 Nothing here presents a decision figure, a migration, a money path, or SQL that
 needed to run standalone (the greeting service's own check already ran in step 6),
 so four honest NO-DATA lines, zero findings, and a written record. The head hash
-(`88e82fee4280` above) is your own commit from step 4; yours will differ, and that
+(`047dfdad8e5a` above) is your own commit from step 4; yours will differ, and that
 is expected: the sandbox builder pins your git IDENTITY into this repository's own
 config, but not the commit DATE, which is pinned only inside the builder's own
 subprocess calls, so your step 4 commit carries whatever moment you actually typed
@@ -371,7 +371,7 @@ python3 "$SBE/bin/sbe" handover prepare design/say-hello --outgoing you@example.
 ```
 
 ```
-sbe handover prepare: written, bound to head 88e82fee4280: 1 done, 0 in flight, 0 not started, 5 evidence item(s). From you@example.invalid to teammate@example.invalid. Ownership remains with you@example.invalid until teammate@example.invalid acknowledges.
+sbe handover prepare: written, bound to head 047dfdad8e5a: 1 done, 0 in flight, 0 not started, 5 evidence item(s). From you@example.invalid to teammate@example.invalid. Ownership remains with you@example.invalid until teammate@example.invalid acknowledges.
   ~/sbe-sandbox/repo/design/say-hello/12-handover.json
 ```
 

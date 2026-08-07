@@ -109,6 +109,33 @@ never need anything beyond the tree itself:
   because `v1.0.0-rc.1` misses the guided skills. `tools/test_sbe.py` does not assert this behavior (that assertion
   lives in the two scripts' own calibration, run directly).
 
+Those two scripts REHEARSE the path; neither one performs it on your machine.
+The command that does, for the recommended plugin install, is:
+
+```bash
+scripts/rollback-install.sh              # preview: the install it found, the
+                                         # version now, the version it would
+                                         # return to, every command
+scripts/rollback-install.sh --apply      # performs it, then verifies
+```
+
+It does not assume where your installation is. It reads Claude Code's own
+records (`~/.claude/plugins/installed_plugins.json` for the installed plugin's
+location and version, `~/.claude/plugins/known_marketplaces.json` for the
+repository that carries the release tags), moves that repository to the newest
+earlier `v<number>` release tag that is an ancestor of the installed commit
+(`--to <tag>` to name one yourself, still checked the same way), re-runs the
+same `claude plugin marketplace add` plus `claude plugin install` pair
+`install.sh` uses, then re-reads the first record and runs
+`scripts/verify-install.sh` against the bytes that are now installed, not
+against the source they came from. `--install-dir` and `--source-dir` name
+either directory by hand. **It refuses rather than guesses**: an installation
+with no earlier release in its history, no reachable source, or uncommitted
+changes in that source is refused with the reason named and nothing written,
+because a rollback with no previous version to name is a guess dressed as an
+undo. What it does not claim is in `docs/KNOWN-LIMITS.md` ("The recommended
+install path has an undo now, and here is exactly how much of one").
+
 For an adopting organization, the delta over the canonical clone is two
 flags: pin a tag, and go shallow. Naming a specific version here would go
 stale the moment the next one is cut (and, as of this writing, would go

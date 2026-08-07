@@ -6,6 +6,26 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.21 (2026-08-07)
+
+- New: `scripts/rollback-install.sh`, the undo the recommended install never
+  had. A first attempt was HELD rather than shipped because its default target
+  was the clone directory while the recommended install lives elsewhere; both
+  exist on a real machine, so that undo would have run, reported success, and
+  left the installation the user actually has untouched. A rollback that
+  silently does nothing is worse than none, because it turns "I have no undo"
+  into "I ran the undo and I am fine".
+  This one names no default path at all. It reads Claude Code's own records to
+  find where the plugin is installed and where its source lives, re-reads them
+  after applying, and refuses to print ROLLED BACK if the reported version did
+  not move. Ten refusals, all evaluated before the first write, and the count
+  is machine-checked rather than asserted: the header word must equal the
+  number of refusal markers, they must be contiguous, and the reachable
+  message count must match.
+  Ten new tests. Six defects were re-injected one at a time and each turned the
+  suite red before restoring it green, including the fatal one: pointing the
+  resolver at the clone path fails five tests.
+
 ## 1.0.0-rc.20 (2026-08-07)
 
 Loop B-close, four lanes, plus all five release blockers named

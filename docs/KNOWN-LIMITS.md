@@ -809,6 +809,88 @@ Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
 `scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
 (`TestMarketplaceManifest`).
 
+## The recommended install path has an undo now, and here is exactly how much of one
+
+NARROWED, not removed, and the narrowing is quoted rather than asserted.
+
+What stood here before was an asymmetry between the two install paths. The
+clone path could always go back (check out the older tag, re-run
+`scripts/verify-install.sh`, which is what `scripts/test-upgrade-rollback.sh`
+rehearses). The recommended plugin pair could only go forward: `claude plugin
+update brothersbe` moves an installation to the newest version and `claude
+plugin uninstall brothersbe` removes it, and neither one puts a machine back
+on the version it was running an hour ago.
+
+What is now true. `scripts/rollback-install.sh` gives the plugin path the
+same move over the same tags, checked by the same verifier, and it finds the
+installation by ASKING rather than by assuming a path. Both of these exist at
+once on a real machine, which is the whole difficulty:
+`~/.claude/plugins/cache/brothersbe/brothersbe/<version>` (the marketplace
+install, the bytes Claude Code loads, carrying no `.git`) and
+`~/.claude/skills/brothersbe` (the clone `install.sh`'s fallback branch
+makes). A first draft of this script defaulted to the second, which would
+have run to completion and reported success over an untouched installation, a
+worse outcome than shipping no undo at all: it converts "I have no undo" into
+"I ran the undo and I am fine." So the script reads Claude Code's own two
+records, `installed_plugins.json` for the install path and
+`known_marketplaces.json` for the repository that carries the release tags,
+the same way `scripts/verify-install.sh` and
+`src/brothersbe/__init__.py:repo_root()` compute their own root from their
+own file location rather than from a path typed into a document. After
+re-installing it RE-READS the first record, refuses to say the word if the
+version the harness reports did not move, and verifies the bytes that are now
+installed rather than the source they came from.
+
+It previews by default (the install it found and how it found it, the source,
+the version now, the version it would move to, and all four steps) and writes
+nothing without `--apply`, matching `sbe adopt` and `sbe init` rather than
+`install.sh`'s apply-by-default shape, because this command's default outcome
+moves an installation BACKWARD. It carries ten refusals, every one evaluated
+before the first write; the count in its header is checked against the code by
+`tools/test_sbe_install.py`, so a refusal added or removed without updating
+the header fails a test rather than leaving a number in a comment nobody
+reads.
+
+What it still does NOT do, stated here rather than left to be discovered:
+
+- It cannot pin a version inside Claude Code's own plugin store directly, and
+  it invents no way to. It moves the marketplace SOURCE to the earlier release
+  tag and re-runs the same `claude plugin marketplace add` plus `claude plugin
+  install` pair `install.sh` already uses. Whether the harness then loads the
+  rolled-back copy after a restart is the same platform behavior already
+  labeled DOCUMENTED CONTRACT on this page, not something a fixture here can
+  watch; what a fixture CAN watch, and does, is that the harness's own record
+  names the earlier version afterwards.
+- An installation with no reachable release history (a marketplace whose
+  source is gone, an extracted archive, a copied directory) is refused, not
+  served: no history means no earlier version, and the refusal names the
+  remedy (`--source-dir`).
+- On this repository as published, the honest outcome on most machines today
+  is a REFUSAL, not a rollback: "Only one tag is published on origin" above
+  still holds, and an installation built from the only published tag has no
+  earlier release to return to. The script says so in those words and changes
+  nothing. That is the same NO-DATA-is-not-a-pass rule this project applies
+  everywhere else, spelled as a refusal because a rollback with no previous
+  version to name is a guess, not an absence.
+- It never edits `~/.claude/settings.json` and removes nothing: coming forward
+  again is the `git checkout` its own closing line prints.
+- Maturity: INTERNAL-EVAL, the same word used everywhere else on this page.
+  `tools/test_sbe_install.py::TestRollbackInstallScript` builds a disposable
+  HOME laid out like a real one (marketplace install, both harness records,
+  release source, AND the decoy clone at `~/.claude/skills/brothersbe`) with a
+  stubbed `claude` and no network, and proves four things: the target
+  resolution finds the marketplace install and never mentions the clone, a
+  rollback to a previous release verifies clean through this repository's real
+  `scripts/verify-install.sh` (`verify-install: PASSED` in the run's own
+  output, not asserted by the test), an installation with no previous release
+  refuses and names why, and a refused run leaves the install, the source and
+  the clone byte for byte as they were. Each of those was calibrated by
+  re-injecting the defect it exists to catch and watching it go red. No
+  second, independent estate has run it.
+
+Full text: `scripts/rollback-install.sh`, `docs/ROLLOUT.md` (Upgrade and
+rollback), `tools/test_sbe_install.py` (`TestRollbackInstallScript`).
+
 ## A gate exemption cannot tell a real reason from a well-formed fake one
 
 `tools/sbe_gate.py` now reads `.sbe-exempt` too, close to how `tools/sbe_design.py`
