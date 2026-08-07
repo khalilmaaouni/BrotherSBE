@@ -367,40 +367,67 @@ against a manifest that ever passed through a text-mode write or a
 line-ending-normalising transport was told their install looked like a planted
 backdoor, on any platform.
 
-## One Windows eval failure is open and unidentified (OWED-4)
+## The two Windows eval failures, identified (OWED-4)
 
-The `gates-windows` job was still red at the 1.0.0-rc.19 fold: run
-31043311726 showed it as the only failing leg, with one eval failure, while
-the four POSIX gates legs and the consumer checks were green. Which eval is
-not recorded anywhere in this repository, and it cannot be derived from a
-POSIX machine.
+Corrected on 2026-08-07. This entry previously said one eval failed and that
+nobody had read the Windows log back into the repository. Both halves were
+wrong to leave standing: the run reports TWO regressions, and the log was
+readable the whole time. It has now been read, and every theory this entry
+used to list was wrong.
 
-The single fact a Windows run has to establish is the `got=` line: the one
-line of `python3 evals/run_evals.py` on `windows-latest` that ends
-`REGRESSION`, quoted verbatim with its case name and its verdict string. That
-line already exists in run 31043311726's log for the "Regression evals" step;
-nobody has read it back into this repository. Until somebody does, no fix for
-it can be honest, because every candidate below is a theory:
+The verdict line, quoted from run 31133985463 on main:
 
-- `a-symlink-inside-an-excluded-path-fails-the-install-check` asserts that
-  `verify-install.sh` prints `EXCLUDED-NON-REGULAR` for a symlink created by
-  `os.symlink`. On Windows that is an NTFS reparse point, and nothing here
-  establishes that the Git-for-Windows shell's file tests read it as
-  non-regular. Its sibling `a-symlinked-planted-module-fails-the-install-check`
-  declares exactly this as its PLATFORM-GAP; this one declares nothing and is
-  free to fail.
-- `a-symlinked-source-directory-is-disclosed-not-silent` calls `os.symlink`
-  on a DIRECTORY without `target_is_directory=True`, which is ignored on POSIX
-  and load-bearing on Windows.
-- `the-tracked-manifest-matches-the-tree-it-ships-with` was the previous
-  round's suspect and should have been closed by turning line-ending
-  conversion off before checkout, but that has never been confirmed against a
-  Windows run's own byte-level output either.
+```
+531 evals: 525 passed, 2 regressions, 4 platform gap(s), each named above, never a pass.
+```
 
-Every axis a POSIX host CAN force was forced before this entry was written:
-the whole suite was re-run with text-mode writes translating to CRLF in this
-interpreter and in every child interpreter it spawns, which reproduced exactly
-the two verify-install failures fixed above and no others.
+The two:
+
+```
+a-crlf-manifest-verifies-instead-of-reporting-every-file-missing want=read as paths got=the CRLF manifest was read as 0 path(s): 0 missing, 3 extra (exit 1)
+verify-install-fails-over-source-in-an-excluded-path want=named and failed got=the control tree failed:  EXTRA file is exactly the shape of a planted backdoor
+```
+
+The first line's "0 path(s)" is a hardcoded phrase in the failure message, not
+a measurement, which is its own small defect in the reporting: the real data in
+it is `0 missing, 3 extra`. Nothing was missing, so the carriage-return fix
+this case is named for was working. What failed was the OTHER direction.
+
+**One root cause, and it is not about Windows.** `verify-install.sh` stripped
+the install root off each walked path with `sed "s|^$TARGET/||"`, which splices
+the install path into a REGULAR EXPRESSION. Every metacharacter in that path
+changes what the pattern means. Windows supplies backslashes in every path, so
+the strip silently failed there: each walked file kept its full absolute path,
+matched no manifest entry, and the script told the reader their clean
+installation held files "exactly the shape of a planted backdoor". Three files
+existed in that fixture and all three were accused. The second failure is the
+same sentence over a control tree that was also clean.
+
+This is the same false accusation the CRLF fix removed, reached by a different
+route, and it is the second time this script has told a correct installation it
+looked compromised. That pattern is the finding, not the backslash: both bugs
+were a path being read as syntax rather than as data.
+
+**Reproduced on POSIX, so every leg measures it from now on.** A backslash is
+legal in a POSIX directory name. Before the fix, a target of `a\runner\inst`
+produced `2 extra` and FAILED, and the mangled prefix is visible in the
+script's own output, which printed the path back as `aunner\inst`. The fix
+replaces all three sed sites with `${var#"$TARGET/"}`, POSIX parameter
+expansion with a quoted (therefore literal) pattern, so no character in a path
+can be read as syntax. Pinned by the eval
+`a-backslash-in-the-install-path-does-not-accuse-a-clean-tree`, calibrated by
+putting the sed form back at all three sites and watching exactly that one case
+go red with `a clean tree was accused: 0 missing, 2 extra (exit 1)`.
+
+**What is proven and what is predicted.** The mechanism is proven: reproduced,
+fixed, and calibrated on POSIX. That the fix closes BOTH Windows regressions is
+a PREDICTION until a `windows-latest` run reports green, because a POSIX host
+cannot execute the Windows leg. The prediction is falsifiable and cheap to
+check: the next gates-windows run either goes green or names what is left.
+
+`gates-windows` remains a non-required check until it has been green at least
+once, so this fix does not silently become a merge gate on the strength of a
+prediction.
 
 ## Every threshold was measured on one estate
 

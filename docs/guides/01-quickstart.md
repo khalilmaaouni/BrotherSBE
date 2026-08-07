@@ -82,7 +82,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-531 evals: 531 passed, 0 regressions.
+532 evals: 532 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,

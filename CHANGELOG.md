@@ -6,6 +6,66 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.22
+
+### The install checker stops accusing clean installations, for the second time
+
+The `gates-windows` leg has been red since rc.19 with what this repository
+recorded as "one Windows eval failure, unidentified". Both halves of that
+sentence were wrong. The run reports TWO regressions, and the log naming them
+was readable the whole time; nobody had read it back. It has now been read, and
+every theory the KNOWN-LIMITS entry used to list was wrong.
+
+One cause explains both, and it is not really about Windows. `verify-install.sh`
+removed the install root from each walked path with `sed "s|^$TARGET/||"`,
+which splices the install path into a REGULAR EXPRESSION. Every metacharacter
+in that path changes what the pattern means. Windows supplies backslashes in
+every path, so the strip silently failed there: each walked file kept its
+absolute path, matched no entry in the manifest, and the script told the reader
+their clean installation contained files "exactly the shape of a planted
+backdoor". Three files existed in that fixture and all three were accused.
+
+That is the same false accusation the carriage-return fix removed in rc.20,
+reached by a different route. The repeat is the finding, not the backslash:
+both bugs were a path being read as syntax rather than as data, and this
+script's loudest sentence fired twice over installations where nothing at all
+was wrong.
+
+A backslash is legal in a POSIX directory name, so the defect was reproduced
+here rather than reasoned about: a target of `a\runner\inst` produced `2 extra`
+and FAILED, with the mangled prefix visible in the script's own output, which
+printed the path back as `aunner\inst`. All three sed sites now use
+`${var#"$TARGET/"}`, POSIX parameter expansion with a quoted and therefore
+literal pattern, so no character in a path can be read as syntax. After the fix
+the same tree reports `2 file(s) match, 0 mismatched, 0 missing, 0 extra` and
+PASSED.
+
+The new eval `a-backslash-in-the-install-path-does-not-accuse-a-clean-tree`
+runs on every leg. It was calibrated by putting the sed form back at all three
+sites, which turns exactly that one case red with `a clean tree was accused: 0
+missing, 2 extra (exit 1)`, and green again on restore.
+
+**Stated plainly: the fix is proven, its effect on Windows is predicted.** A
+POSIX host cannot execute the windows-latest leg, so that both Windows
+regressions close is a falsifiable prediction the next Windows run settles.
+`gates-windows` stays a non-required check until it has been green at least
+once, so a prediction never becomes a merge gate.
+
+### A seal that was broken by the next commit
+
+rc.21's ubuntu legs failed on `program/MASTER-PLAN-2026-08-06.md` MISMATCH. Not
+a code defect: the checksum manifest is regenerated last at seal, and then a
+documentation commit landed on top of it, which is enough to make an
+installation fail its own integrity check. The law is that checksums come last;
+what this run showed is that "last" has to mean last in the branch, not last in
+the seal.
+
+Evidence, all run after the final edit and quoted from this machine:
+
+```
+532 evals: 532 passed, 0 regressions.
+```
+
 ## 1.0.0-rc.21 (2026-08-07)
 
 - New: `scripts/rollback-install.sh`, the undo the recommended install never

@@ -131,8 +131,21 @@ done < "$MANIFEST"
 # itself contains a character `find -path` treats as glob syntax
 # (*, ?, [ ]), the exclusions below can under- or over-match; named here
 # rather than silently assumed correct.
+# Prefix removal is done with parameter expansion, NOT with sed. The previous
+# form, sed "s|^$TARGET/||", spliced the install path into a REGULAR
+# EXPRESSION, so every metacharacter in the path changed what the pattern
+# meant. A path holding a backslash was the case that shipped: the strip
+# silently failed, every walked file kept its absolute path, none of them
+# matched a manifest entry, and this script told the reader their clean
+# installation held files "exactly the shape of a planted backdoor". That is
+# the same false accusation the CRLF fix removed, reached by a different route.
+# Windows supplies backslashes in every path, which is why the windows-latest
+# leg failed on it; a POSIX path containing a backslash, a `.`, a `*` or the
+# `|` delimiter itself hits it too, which is how the eval below reproduces it
+# on every leg. `${var#"$prefix"}` is POSIX, and the quotes make the pattern
+# literal, so no character in the path can be read as syntax.
 MANIFEST_ABS=$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")
-MANIFEST_REL=$(printf '%s\n' "$MANIFEST_ABS" | sed "s|^$TARGET/||")
+MANIFEST_REL=${MANIFEST_ABS#"$TARGET/"}
 
 # Every directory entry, whatever its TYPE, not just `-type f`. A manifest is
 # a set of hashes of regular files, and `find -type f` never returns a
@@ -182,7 +195,7 @@ EXTRA=0
 NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
-    rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
+    rel=${full#"$TARGET/"}
     [ "$rel" = "$MANIFEST_REL" ] && continue
     # A non-regular entry is a failure in its own right: a manifest is hashes
     # of regular files, and it cannot vouch for what a symlink points at or
@@ -242,7 +255,7 @@ EXCLUDED_SOURCE=0
 EXCLUDED_NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
-    rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
+    rel=${full#"$TARGET/"}
     EXCLUDED=$((EXCLUDED + 1))
     if [ ! -f "$full" ] || [ -L "$full" ]; then
         echo "EXCLUDED-NON-REGULAR: $rel (a symlink, pipe, or other non-regular entry inside an excluded path; the manifest cannot hash what it resolves to, the exclusions are for machine state and this is not machine state, and something on this host may execute what it points at)"

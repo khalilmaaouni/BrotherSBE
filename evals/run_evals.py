@@ -1958,6 +1958,53 @@ def gd_vinstall_crlf(root):
     return "read as paths"
 
 
+@case("a-backslash-in-the-install-path-does-not-accuse-a-clean-tree", "guard",
+      "clean tree reads clean")
+def gd_vinstall_metachar_path(root):
+    # The second Windows condition, mounted on POSIX the same way the CRLF one
+    # above is. verify-install.sh stripped the install root off each walked
+    # path with sed "s|^$TARGET/||", which splices the path into a REGULAR
+    # EXPRESSION. Windows supplies backslashes in every path, so the strip
+    # silently failed there: each walked file kept its absolute path, matched
+    # no manifest entry, and a clean installation was told it held files
+    # "exactly the shape of a planted backdoor". That is the loudest sentence
+    # this script can print, fired over a tree where nothing was wrong, which
+    # is the same harm the CRLF fix removed by a different route.
+    #
+    # A backslash is legal in a POSIX directory name, so the defect is
+    # reproducible on every leg rather than only on windows-latest, and the
+    # regression that reached users is measured everywhere from now on.
+    # Calibration, run against a scratch copy with ${full#"$TARGET/"} put back
+    # to the sed form: this case returns "a clean tree was accused: 0 missing,
+    # 2 extra (exit 1)". With the parameter expansion it returns "clean tree
+    # reads clean".
+    import hashlib, shutil
+    inst = os.path.join(root, "a\\runner\\inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("a\\runner\\inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        return ("a clean tree was accused: %s (exit %d)"
+                % (_re_missing_extra(out.stdout), out.returncode))
+    # Both halves assert. A nonzero exit is the loud failure, but a run that
+    # exits clean while having compared nothing would be the quiet one, so the
+    # match count is checked too: this tree holds exactly the files the
+    # manifest names, and all of them must have been verified.
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the tree exited clean without verifying both files, so nothing "
+                "here establishes the paths were compared: %s" % out.stdout[-200:])
+    return "clean tree reads clean"
+
+
 def _re_missing_extra(stdout):
     """The MISSING/EXTRA counts out of a verify-install summary line, for the
     failure sentence above. Returns a plain description rather than raising, so
