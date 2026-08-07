@@ -367,150 +367,74 @@ against a manifest that ever passed through a text-mode write or a
 line-ending-normalising transport was told their install looked like a planted
 backdoor, on any platform.
 
-## The two Windows eval failures, identified (OWED-4)
+## Windows: the install-checker family is CLOSED and proven; one new cause is open (OWED-4)
 
-Corrected on 2026-08-07. This entry previously said one eval failed and that
-nobody had read the Windows log back into the repository. Both halves were
-wrong to leave standing: the run reports TWO regressions, and the log was
-readable the whole time. It has now been read, and every theory this entry
-used to list was wrong.
+Rewritten 2026-08-08 with evidence from the windows-latest run itself, which is
+what this entry spent three revisions lacking.
 
-The verdict line, quoted from run 31133985463 on main:
-
-```
-531 evals: 525 passed, 2 regressions, 4 platform gap(s), each named above, never a pass.
-```
-
-The two:
+**All four install-checker defects are fixed AND GREEN ON WINDOWS.** Not
+predicted, read. From run 31186212064, job 92891284093, head 4d780e86 (rc.24),
+each eliminated by its own log line:
 
 ```
-a-crlf-manifest-verifies-instead-of-reporting-every-file-missing want=read as paths got=the CRLF manifest was read as 0 path(s): 0 missing, 3 extra (exit 1)
-verify-install-fails-over-source-in-an-excluded-path want=named and failed got=the control tree failed:  EXTRA file is exactly the shape of a planted backdoor
+a-crlf-manifest-verifies-instead-of-reporting-every-file-missing  got=read as paths ok
+a-backslash-in-the-install-path-does-not-accuse-a-clean-tree      got=clean tree reads clean ok
+no-checksum-tool-is-handed-a-filename-it-would-escape             got=both scripts hash from stdin ok
+two-spellings-of-one-root-do-not-make-the-manifest-an-intruder    got=one spelling throughout ok
 ```
 
-The first line's "0 path(s)" is a hardcoded phrase in the failure message, not
-a measurement, which is its own small defect in the reporting: the real data in
-it is `0 missing, 3 extra`. Nothing was missing, so the carriage-return fix
-this case is named for was working. What failed was the OTHER direction.
+The four were: a CRLF manifest line; the install root spliced into a sed regular
+expression; GNU coreutils escaping a backslash-bearing filename so `cut -c1-64`
+returned a 63-character hash; and two spellings of one root so the manifest
+failed to recognise itself. Every one was a path read as syntax rather than as
+data, and every one made the tool tell a clean installation it looked
+compromised.
 
-**One root cause, and it is not about Windows.** `verify-install.sh` stripped
-the install root off each walked path with `sed "s|^$TARGET/||"`, which splices
-the install path into a REGULAR EXPRESSION. Every metacharacter in that path
-changes what the pattern means. Windows supplies backslashes in every path, so
-the strip silently failed there: each walked file kept its full absolute path,
-matched no manifest entry, and the script told the reader their clean
-installation held files "exactly the shape of a planted backdoor". Three files
-existed in that fixture and all three were accused. The second failure is the
-same sentence over a control tree that was also clean.
+**A note on how this entry got it wrong before.** rc.22 predicted the sed fix
+would close both Windows regressions; the rc.23 run falsified that, and this
+file recorded the falsification. What it then failed to do was re-read the log
+after rc.24, which added the fourth fix. The family closed at rc.24 and nobody
+looked. A prediction is worth writing down only if somebody goes back to check
+it, and the checking is the part that was missing.
 
-This is the same false accusation the CRLF fix removed, reached by a different
-route, and it is the second time this script has told a correct installation it
-looked compromised. That pattern is the finding, not the backslash: both bugs
-were a path being read as syntax rather than as data.
-
-**Reproduced on POSIX, so every leg measures it from now on.** A backslash is
-legal in a POSIX directory name. Before the fix, a target of `a\runner\inst`
-produced `2 extra` and FAILED, and the mangled prefix is visible in the
-script's own output, which printed the path back as `aunner\inst`. The fix
-replaces all three sed sites with `${var#"$TARGET/"}`, POSIX parameter
-expansion with a quoted (therefore literal) pattern, so no character in a path
-can be read as syntax. Pinned by the eval
-`a-backslash-in-the-install-path-does-not-accuse-a-clean-tree`, calibrated by
-putting the sed form back at all three sites and watching exactly that one case
-go red with `a clean tree was accused: 0 missing, 2 extra (exit 1)`.
-
-**The prediction was made, and Windows falsified half of it.** rc.22 shipped
-the fix with the prediction written down that it would close both Windows
-regressions. Run 31182895590 settled it: it did not. The Windows leg still
-reports both, and my new eval reports there too. The numbers moved in the right
-direction and stopped short:
-
-- `a-backslash-in-the-install-path-does-not-accuse-a-clean-tree` reports
-  `0 missing, 1 extra` on Windows, where the same fixture accuses 3 files
-  without the fix. So the walked files now strip their prefix correctly and
-  ONE entry still does not: the manifest itself.
-- That one is a path-FORM mismatch, which literal prefix removal cannot fix.
-  `MANIFEST_ABS` is built with `cd "$(dirname "$MANIFEST")" && pwd`, and in the
-  Git-for-Windows shell `pwd` answers in MSYS form (`/d/a/BrotherSBE/...`) while
-  `$TARGET` arrives from the caller in Windows-native form (`D:\a\BrotherSBE\...`).
-  Two spellings of one directory never compare equal, whatever the stripping
-  method, so the manifest is walked, fails to be recognised as itself, and is
-  counted as an added file.
-
-**A separate, genuinely different cause was found underneath, and it is fixed.**
-The Linux leg failed on the same new eval with `0 mismatched` reported as
-`0 missing, 0 extra`, which named nothing. The real signature was two MISMATCHED
-files. GNU coreutils escapes a filename containing a backslash or a newline: it
-doubles the backslashes and prefixes the output line with one, which shifts the
-hash a column right, so `cut -c1-64` returned a backslash glued to 63 hex
-digits. Apple's and BSD's tools do not escape, which is precisely why every
-macOS leg was green while both Linux legs were red. Both scripts now feed the
-file on STDIN so the name never enters the tool's output.
-
-That mechanism was PROVEN on macOS rather than assumed, using a stub on PATH
-that reproduces GNU's escaping: under it the argument form reports
-`0 file(s) match, 2 mismatched` and FAILED, and the stdin form reports
-`2 file(s) match, 0 mismatched, 0 missing, 0 extra` and PASSED.
-
-**Three defects, one shape.** A CRLF manifest line, a path spliced into a sed
-regular expression, and now a filename escaped by the hashing tool. Every one of
-them was a path being read as syntax rather than as data, and every one made
-this script tell a correct installation that it looked compromised. The shape is
-the finding; the individual bugs are instances.
-
-**The fourth defect, and a claim that should never have been written.** An
-earlier draft of this entry said the remaining Windows cause was "not attempted,
-because a POSIX host cannot test it". That sentence was wrong twice: it asserted
-a cause it had not reproduced, and it declared untestable something that had
-just been tested by simulation an hour earlier in this same file's history. It
-was caught by an instruction-drift check, not by its author.
-
-It is testable, and it is now fixed. The bug was two DERIVATIONS of one value
-rather than a bad comparison. A walked file got its relative path by stripping
-`$TARGET` exactly as the caller spelled it, because that is what `find` echoes
-back. The manifest got its relative path through `cd ... && pwd`, which answers
-in the shell's own spelling. Where the two disagree the manifest fails to
-recognise itself, is walked, is not matched, and is reported as an added file.
-
-Reproduced on POSIX by handing the script a root containing a `.` segment, which
-`find` echoes verbatim while `pwd` normalises away:
+**The lane is still red, one step further down, on a different defect.** Job
+`gates-windows`, step 12, "Honesty meta-test (no check may PASS over evidence it
+never examined)", running `python3 evals/test_no_data_class.py`:
 
 ```
-EXTRA:     CHECKSUMS.sha256
-verify-install: 2 file(s) match, 0 mismatched, 0 missing, 1 extra
-verify-install: FAILED.
+32 checks discovered from 6 registries in 60 module(s), 3588 scenarios run, 2 waived by declared exemption, 2 failure(s).
+  FAIL sbe_plan.py freshness [full] want PASS got FAIL
+  FAIL sbe_plan.py freshness: the declared full_fixture did not produce PASS, so nothing here proves the check body ran or that its worked example is a real one
 ```
 
-`0 missing, 1 extra` is exactly what the windows-latest leg reported, which is
-the strongest evidence available from here that this is the same defect. On
-Windows the disagreement is guaranteed rather than incidental, because the Git
-for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root passed as
-`D:\a\BrotherSBE`.
+That is the FIRST error in the job; steps 1 through 11 all succeed. The two
+lines are one defect counted twice, the scenario plus the meta-assertion that a
+declared worked example must be a real one.
 
-The fix canonicalises `TARGET` once, before anything derives a path from it, so
-walked paths and the manifest path can no longer drift apart. It fixes Windows
-by construction rather than by guessing at MSYS specifics. Pinned by
-`two-spellings-of-one-root-do-not-make-the-manifest-an-intruder`, calibrated by
-deleting the normalisation, which returns `a clean tree read 1 extra, naming
-CHECKSUMS.sha256`.
+**Mechanism, reproduced rather than reasoned about.** `evals/test_no_data_class.py`
+writes every fixture with `open(path, "w")`. Text mode on Windows translates
+each newline into a carriage return plus newline, so the fixture's BYTES differ
+from what the registry declared, its hash moves, and the freshness check in
+`tools/sbe_plan.py` that pins that hash fails. The harness's contract is "place
+exactly this content", and text mode silently breaks that contract on exactly
+one platform. It was reproduced on POSIX by patching the writer to emulate the
+translation, which turns the same two lines red here.
 
-Canonicalising means the script now depends on being able to ENTER the root, so
-a second eval, `a-root-that-cannot-be-entered-is-refused-not-passed`, holds the
-new failure path: an unreachable root exits 2 saying nothing was checked, and
-never prints PASSED over a tree it could not open.
+The fix is at the writer, not the fixture: write bytes. Recomputing the fixture
+hash after writing was considered and rejected, because it needs new registry
+machinery (a fixture that names "the hash of the file you just wrote"), which is
+adding rather than constraining, and it would leave every other fixture still
+going through a translating writer.
 
-**Four defects, one shape.** A CRLF manifest line, a path spliced into a sed
-regular expression, a filename escaped by the hashing tool, and two spellings of
-one root. Every one was a path read as syntax rather than as data, and every one
-made this script tell a correct installation it looked compromised.
+**What closure requires, stated so it cannot be fudged.** A green POSIX run is a
+PREDICTION. Closure is a real windows-latest run at or above the fix commit,
+read STEP BY STEP rather than by job conclusion: step 12 must read `success` AND
+its own output must contain `0 failure(s)`. Reading the job conclusion alone is
+not enough, because at rc.23 and rc.24 the conclusion was `failure` both times
+while the underlying cause was entirely different.
 
-**Still genuinely unproven:** that the Windows leg now goes green. The mechanism
-matches the reported signature and is fixed, but only a `windows-latest` run can
-settle it. `gates-windows` stays a non-required check until it has been green at
-least once.
-
-`gates-windows` remains a non-required check until it has been green at least
-once, so this fix does not silently become a merge gate on the strength of a
+`gates-windows` stays a non-required check until it has been green at least
+once, so none of this can quietly become a merge gate on the strength of a
 prediction.
 
 ## Every threshold was measured on one estate

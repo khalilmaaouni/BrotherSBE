@@ -6,6 +6,69 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.27
+
+### A gate that reported PASS over a manifest it had just proven stale
+
+Found by a hostile refuter reading PR 29's CI run, where this gate PRINTED the
+three offending paths by name and then passed, in the same run where a different
+gate failed on those same three files.
+
+`the-tracked-manifest-matches-the-tree-it-ships-with` re-reads every drifted
+path's committed blob against the working tree and forgives any that come back
+byte-identical. That filter is correct, and it closes a documented Windows false
+block: on that host a file read immediately after checkout can differ from the
+same file read a moment later, which is a visibility race rather than a stale
+manifest.
+
+The defect was its SCOPE. The drift list was the union of both key sets, so it
+conflated two unrelated failures. A path on both sides with different hashes is
+a CONTENT change, where a race is genuinely possible. A path on only one side is
+an ADDITION or a REMOVAL, where no amount of re-reading can ever exonerate the
+manifest, because the bytes were never the question: the question was whether
+the manifest names the same set of files the tree tracks. Those paths re-read as
+identical every single time, so they were classed transient and forgiven.
+
+The fix splits them. Only same-path hash mismatches are eligible for the
+re-read; the set difference is seeded straight into persistent and can never be
+forgiven. The race filter is kept, not deleted, so it still closes the Windows
+false block, but it now only ever sees the failure it was written for.
+
+**Proven by isolation, in a detached worktree whose only drift was two files
+untracked while the manifest still named them, both measured from a baseline
+that read `matches`:**
+
+```
+old code:    VERDICT: matches                                    <- passed over a stale manifest
+fixed code:  VERDICT: the tracked manifest is stale for: STATE.md.bak-..., STATE.md.bak-...
+```
+
+The byte-level detail on those paths reads `identical bytes on this read`, which
+is precisely the evidence that used to buy them a pass.
+
+### A pin that could not fail, removed rather than shipped
+
+A shape test was written to pin the fix cheaply on every leg. Its calibration
+did not go red when the defect was re-injected, because the test's own source
+contained the literals it searched for, so it was matching itself rather than
+the function it audited. A test that cannot fail is the same defect class this
+release fixes, one level up. It was deleted rather than repaired under time
+pressure, and the behavioural proof above stands on its own.
+
+### Also in this release
+
+- `.gitignore` now covers `STATE.md.bak-*`. Two backups totalling 477 KB were
+  tracked and shipped in the release manifest, and their own first line reads
+  "gitignored, not shipped". They are untracked here, not deleted from disk.
+- `docs/KNOWN-LIMITS.md` OWED-4 rewritten with evidence read from the Windows
+  job rather than predicted: all four install-checker defects are green on
+  `windows-latest` at rc.24, each eliminated by its own quoted log line, and the
+  one remaining cause is named with its mechanism and its minimal fix.
+- `program/MASTER-PLAN-2026-08-06.md` retracts a claim that the ten hostile
+  scenarios were a hard release gate. No such gate was ever built; they are a
+  manual tester checklist. The retraction deliberately does NOT replace it with
+  a claim about eval coverage that has never been enumerated.
+
 ## 1.0.0-rc.26
 
 ### The benchmark lane blocked its own merge, and the policy engine was right

@@ -2455,7 +2455,31 @@ def gd_manifest_fresh(root):
         return "matches"
     wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}
     hl = {l.split("  ", 1)[1]: l[:64] for l in have.splitlines() if "  " in l}
-    drift = [p for p in sorted(set(wl) | set(hl)) if wl.get(p) != hl.get(p)]
+    # TWO DIFFERENT FAILURES, and conflating them is how this gate came to
+    # report PASS over a manifest it had just proven stale.
+    #
+    # A path present on BOTH sides with different hashes is a CONTENT change,
+    # and there a filesystem visibility race is genuinely possible, which is
+    # what the re-read below exists to catch.
+    #
+    # A path present on only ONE side is an ADDITION or a REMOVAL: the tree
+    # gained a tracked file the manifest never named, or the manifest still
+    # names a file the tree no longer tracks. NO amount of re-reading can
+    # exonerate that, and the re-read actively LIES about it: `git show HEAD:p`
+    # still resolves and the working-tree file still reads back byte-identical,
+    # so the path was classified "transient" and forgiven. Reproduced in this
+    # repository: two STATE.md.bak files were untracked while the committed
+    # manifest still named them, and the gate stayed silent about both.
+    #
+    # So the set difference is ALWAYS persistent and never eligible for the
+    # race filter. The filter is kept, not deleted, because it closes a
+    # documented Windows false block, but it now only ever sees the failure it
+    # was written for.
+    same_path_mismatch = [p for p in sorted(set(wl) & set(hl)) if wl[p] != hl[p]]
+    only_generated = sorted(set(wl) - set(hl))   # tracked, absent from the manifest
+    only_committed = sorted(set(hl) - set(wl))   # named by the manifest, no longer tracked
+    set_difference = only_generated + only_committed
+    drift = sorted(same_path_mismatch + set_difference)
     # Reproduction harness (windows-porting-lane finding 3): a Windows leg
     # read several of these as stale with no local way to reproduce why, so
     # rather than guess at a fix this states the evidence a Windows run would
@@ -2488,8 +2512,9 @@ def gd_manifest_fresh(root):
     #
     # Every drifted path is re-read here, not just the four that get printed,
     # because a verdict cannot rest on a sample of the evidence.
-    persistent, transient = [], []
-    for p in drift:
+    # Seeded with the set difference, which is never eligible for the re-read.
+    persistent, transient = list(set_difference), []
+    for p in same_path_mismatch:
         blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
         if blob.returncode != 0:
             persistent.append(p)
@@ -2510,7 +2535,9 @@ def gd_manifest_fresh(root):
             "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
             "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
             "the first hash was taken before this host had settled. Reported rather "
-            "than hidden.\n" % (len(transient), ", ".join(transient[:6])))
+            "than hidden. This branch is reachable ONLY for same-path hash mismatches: "
+            "a path added to or removed from the tracked set is never re-read and never "
+            "forgiven.\n" % (len(transient), ", ".join(transient[:6])))
         return "matches"
     drift = persistent
 
