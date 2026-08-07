@@ -2066,6 +2066,89 @@ def gd_hash_from_stdin(root):
     return "both scripts hash from stdin"
 
 
+@case("two-spellings-of-one-root-do-not-make-the-manifest-an-intruder", "guard",
+      "one spelling throughout")
+def gd_vinstall_path_form(root):
+    # The fourth defect of the same shape, and the one that was nearly shipped
+    # as "a POSIX host cannot test this". It could be tested, and this is how.
+    #
+    # The bug was two DERIVATIONS of one value rather than a bad comparison. A
+    # walked file got its relative path by stripping $TARGET exactly as the
+    # caller spelled it, because that is what `find` echoes back. The manifest
+    # got its relative path through `cd ... && pwd`, which answers in the
+    # shell's own spelling. Where those disagree, the manifest fails to
+    # recognise itself, is walked, is not matched, and is reported as an added
+    # file, so a clean installation reads `1 extra` and FAILED.
+    #
+    # On Windows the disagreement is guaranteed: the Git for Windows shell
+    # answers `pwd` as `/d/a/BrotherSBE` for a root passed as `D:\a\BrotherSBE`.
+    # That exact signature (`0 missing, 1 extra`) is what the windows-latest leg
+    # reported. A `.` segment reproduces the same irreconcilable pair here: find
+    # echoes `/tmp/x/./inst/...` while pwd answers `/tmp/x/inst`.
+    #
+    # Calibration: delete the `TARGET=$TARGET_CANONICAL` normalisation from a
+    # scratch copy and this case returns "a clean tree read 1 extra", naming
+    # CHECKSUMS.sha256 as the intruder.
+    import hashlib, shutil
+    inst = os.path.join(root, "x", "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("x", "inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    # The second spelling. `find` echoes this back verbatim; `pwd` normalises it
+    # away. Neither is wrong, and that is the point: the script must not depend
+    # on which one it happens to be handed.
+    dotted = os.path.join(root, "x", ".", "inst")
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(dotted, "CHECKSUMS.sha256"), dotted],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        extra = re.search(r"(\d+) extra", out.stdout)
+        named = [ln.split(":", 1)[1].strip() for ln in out.stdout.splitlines()
+                 if ln.startswith("EXTRA:")]
+        return ("a clean tree read %s extra%s (exit %d)"
+                % (extra.group(1) if extra else "an unreported number of",
+                   (", naming " + ", ".join(named)) if named else "",
+                   out.returncode))
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the run exited clean without verifying both files, so nothing "
+                "here establishes the spellings were reconciled: %s" % out.stdout[-200:])
+    return "one spelling throughout"
+
+
+@case("a-root-that-cannot-be-entered-is-refused-not-passed", "guard", "refused")
+def gd_vinstall_unenterable_root(root):
+    # The failure path of the normalisation above. Canonicalising a root means
+    # the script now depends on being able to ENTER it, and a check that cannot
+    # reach what it is checking must refuse loudly rather than verify an empty
+    # set and report PASSED. NO-DATA is never a pass.
+    import shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        f.write("")
+    missing = os.path.join(root, "there-is-no-such-directory")
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), missing],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode == 0:
+        return ("an unreachable root exited 0, which reads as a pass over a tree "
+                "this check never opened: %s" % (out.stdout + out.stderr)[-200:])
+    if "PASSED" in out.stdout:
+        return "an unreachable root printed PASSED"
+    if "nothing here was checked" not in (out.stdout + out.stderr):
+        return ("it refused but did not say that nothing was checked, so a reader "
+                "cannot tell a refusal from a failure: %s" % (out.stdout + out.stderr)[-200:])
+    return "refused"
+
+
 def _re_missing_extra(stdout):
     """The MISSING/EXTRA counts out of a verify-install summary line, for the
     failure sentence above. Returns a plain description rather than raising, so

@@ -6,6 +6,70 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.24
+
+### The fourth defect, and the claim that nearly shipped instead of a fix
+
+rc.23 shipped a sentence saying the remaining Windows cause was "not attempted,
+because a POSIX host cannot test it". That sentence was wrong twice. It asserted
+a cause that had never been reproduced, and it declared untestable something
+that had been tested by simulation an hour earlier, in this same file, when a
+Linux-only escaping bug was proven on macOS with a stub on PATH. It was caught
+by an instruction-drift check rather than by its author, which is worth
+recording: the failure was not a missing capability, it was stopping in front of
+one that had already been demonstrated.
+
+It was testable. It is now fixed.
+
+**The bug was two DERIVATIONS of one value, not a bad comparison.** A walked
+file got its relative path by stripping the install root exactly as the caller
+spelled it, because that is what `find` echoes back. The manifest got its
+relative path through `cd ... && pwd`, which answers in the shell's own
+spelling. Where those two disagree, the manifest fails to recognise itself, is
+walked, is not matched, and is reported as an added file. A clean installation
+reads `1 extra` and FAILED.
+
+Reproduced on POSIX by handing the script a root containing a `.` segment, which
+`find` echoes verbatim while `pwd` normalises away:
+
+```
+EXTRA:     CHECKSUMS.sha256
+verify-install: 2 file(s) match, 0 mismatched, 0 missing, 1 extra
+verify-install: FAILED.
+```
+
+`0 missing, 1 extra` is exactly the signature the windows-latest leg reported.
+On Windows the disagreement is guaranteed rather than incidental, because the
+Git for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root passed as
+`D:\a\BrotherSBE`, and two spellings of one directory never compare equal.
+
+The fix canonicalises the install root ONCE, before anything derives a path from
+it, so walked paths and the manifest path can no longer drift apart. That fixes
+Windows by construction rather than by guessing at MSYS specifics, and it also
+fixes every POSIX caller who passes a root with a `.` segment, a trailing slash,
+or a symlinked parent.
+
+Canonicalising means the script now depends on being able to ENTER the root, so
+that failure path got its own guard and its own eval: an unreachable root exits
+2 saying nothing was checked, and never prints PASSED over a tree it could not
+open. NO-DATA is never a pass, including in a path this release introduced.
+
+### Four defects, one shape
+
+A CRLF manifest line, a path spliced into a sed regular expression, a filename
+escaped by the hashing tool, and two spellings of one root. Every one was a path
+being read as syntax rather than as data. Every one made the tool whose entire
+job is detecting tampering tell a correct installation that it looked
+compromised. The shape was the finding, and looking for the shape is what turned
+up the third and the fourth.
+
+### What the legs say
+
+rc.23 closed the Linux failure: both ubuntu legs pass, confirming the coreutils
+escaping diagnosis. macOS passes. Windows remains red and remains a non-required
+check, and whether this release closes it is the one thing here that only a
+`windows-latest` run can settle.
+
 ## 1.0.0-rc.23
 
 ### The prediction rc.22 wrote down, and what Windows did to it
@@ -132,7 +196,7 @@ the seal.
 Evidence, all run after the final edit and quoted from this machine:
 
 ```
-533 evals: 533 passed, 0 regressions.
+535 evals: 535 passed, 0 regressions.
 ```
 
 ## 1.0.0-rc.21 (2026-08-07)

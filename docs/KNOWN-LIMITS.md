@@ -458,9 +458,56 @@ them was a path being read as syntax rather than as data, and every one made
 this script tell a correct installation that it looked compromised. The shape is
 the finding; the individual bugs are instances.
 
-**Still open on Windows:** the MSYS-versus-native path form. Not attempted here,
-because a POSIX host cannot test it and a blind fix to a security check is worse
-than a named gap.
+**The fourth defect, and a claim that should never have been written.** An
+earlier draft of this entry said the remaining Windows cause was "not attempted,
+because a POSIX host cannot test it". That sentence was wrong twice: it asserted
+a cause it had not reproduced, and it declared untestable something that had
+just been tested by simulation an hour earlier in this same file's history. It
+was caught by an instruction-drift check, not by its author.
+
+It is testable, and it is now fixed. The bug was two DERIVATIONS of one value
+rather than a bad comparison. A walked file got its relative path by stripping
+`$TARGET` exactly as the caller spelled it, because that is what `find` echoes
+back. The manifest got its relative path through `cd ... && pwd`, which answers
+in the shell's own spelling. Where the two disagree the manifest fails to
+recognise itself, is walked, is not matched, and is reported as an added file.
+
+Reproduced on POSIX by handing the script a root containing a `.` segment, which
+`find` echoes verbatim while `pwd` normalises away:
+
+```
+EXTRA:     CHECKSUMS.sha256
+verify-install: 2 file(s) match, 0 mismatched, 0 missing, 1 extra
+verify-install: FAILED.
+```
+
+`0 missing, 1 extra` is exactly what the windows-latest leg reported, which is
+the strongest evidence available from here that this is the same defect. On
+Windows the disagreement is guaranteed rather than incidental, because the Git
+for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root passed as
+`D:\a\BrotherSBE`.
+
+The fix canonicalises `TARGET` once, before anything derives a path from it, so
+walked paths and the manifest path can no longer drift apart. It fixes Windows
+by construction rather than by guessing at MSYS specifics. Pinned by
+`two-spellings-of-one-root-do-not-make-the-manifest-an-intruder`, calibrated by
+deleting the normalisation, which returns `a clean tree read 1 extra, naming
+CHECKSUMS.sha256`.
+
+Canonicalising means the script now depends on being able to ENTER the root, so
+a second eval, `a-root-that-cannot-be-entered-is-refused-not-passed`, holds the
+new failure path: an unreachable root exits 2 saying nothing was checked, and
+never prints PASSED over a tree it could not open.
+
+**Four defects, one shape.** A CRLF manifest line, a path spliced into a sed
+regular expression, a filename escaped by the hashing tool, and two spellings of
+one root. Every one was a path read as syntax rather than as data, and every one
+made this script tell a correct installation it looked compromised.
+
+**Still genuinely unproven:** that the Windows leg now goes green. The mechanism
+matches the reported signature and is fixed, but only a `windows-latest` run can
+settle it. `gates-windows` stays a non-required check until it has been green at
+least once.
 
 `gates-windows` remains a non-required check until it has been green at least
 once, so this fix does not silently become a merge gate on the strength of a

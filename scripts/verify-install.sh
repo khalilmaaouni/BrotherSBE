@@ -36,6 +36,36 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 DEFAULT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 TARGET="${2:-$DEFAULT_ROOT}"
+
+# TARGET is canonicalised ONCE, here, before anything derives a path from it.
+# The defect this removes is not a comparison bug, it is two DERIVATIONS of one
+# value: the walked files got their relative path by stripping `$TARGET` exactly
+# as the caller spelled it (that is what `find` echoes back), while the manifest
+# got its relative path through `cd ... && pwd`, which answers in the shell's own
+# spelling. Any input where those two disagree makes the manifest fail to
+# recognise itself, so it is walked, not matched, and reported as an added file:
+# `1 extra`, on an installation where nothing is wrong.
+#
+# On Windows that disagreement is guaranteed rather than incidental, because the
+# Git for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root the caller
+# passed as `D:\a\BrotherSBE`, and no amount of careful stripping reconciles two
+# spellings. It is reproducible on POSIX too, which is how it was fixed here
+# rather than guessed at: passing a root containing a `.` segment
+# (`/tmp/x/./inst`) makes `find` echo the dotted form while `pwd` answers the
+# normalised one, and the run reports `EXTRA: CHECKSUMS.sha256` and FAILED.
+#
+# Canonicalising once means every later path, walked or manifest, is derived the
+# same way from the same string, so the two can no longer drift apart. The
+# failure to enter the directory is surfaced rather than swallowed: a check that
+# cannot reach what it is checking must say so, not verify nothing and pass.
+if ! TARGET_CANONICAL=$(cd "$TARGET" 2>/dev/null && pwd); then
+    echo "verify-install: cannot enter $TARGET, so nothing here was checked" >&2
+    echo "verify-install: this is NOT a pass; the directory is missing, unreadable," \
+         "or not a directory." >&2
+    exit 2
+fi
+TARGET="$TARGET_CANONICAL"
+
 MANIFEST="${1:-$TARGET/CHECKSUMS.sha256}"
 
 if [ ! -f "$MANIFEST" ]; then
