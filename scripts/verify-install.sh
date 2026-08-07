@@ -46,10 +46,23 @@ if [ ! -f "$MANIFEST" ]; then
     exit 2
 fi
 
+# The file is fed on STDIN, never named as an argument. GNU coreutils escapes
+# a filename containing a backslash or a newline: it doubles the backslashes
+# and prefixes the whole output line with one, which shifts the hash a column
+# to the right, so `cut -c1-64` returned a backslash glued to 63 hex digits and
+# every such file reported MISMATCH. Apple's and BSD's tools do not escape,
+# which is exactly why this only ever failed on the Linux leg while passing on
+# macOS. Reading from stdin keeps the name out of the output entirely, so no
+# escaping rule can apply on any platform.
+#
+# This is the THIRD defect in this one script of a single shape: a path being
+# read as syntax rather than as data (the first was a CRLF manifest line, the
+# second a path spliced into a sed regular expression). Recorded here because
+# the shape is the lesson, not the individual bug.
 if command -v sha256sum >/dev/null 2>&1; then
-    hash_file() { sha256sum "$1" | cut -c1-64; }
+    hash_file() { sha256sum < "$1" | cut -c1-64; }
 elif command -v shasum >/dev/null 2>&1; then
-    hash_file() { shasum -a 256 "$1" | cut -c1-64; }
+    hash_file() { shasum -a 256 < "$1" | cut -c1-64; }
 else
     echo "verify-install: neither sha256sum nor shasum is on PATH; cannot check anything" >&2
     exit 1

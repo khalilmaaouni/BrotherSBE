@@ -419,11 +419,48 @@ can be read as syntax. Pinned by the eval
 putting the sed form back at all three sites and watching exactly that one case
 go red with `a clean tree was accused: 0 missing, 2 extra (exit 1)`.
 
-**What is proven and what is predicted.** The mechanism is proven: reproduced,
-fixed, and calibrated on POSIX. That the fix closes BOTH Windows regressions is
-a PREDICTION until a `windows-latest` run reports green, because a POSIX host
-cannot execute the Windows leg. The prediction is falsifiable and cheap to
-check: the next gates-windows run either goes green or names what is left.
+**The prediction was made, and Windows falsified half of it.** rc.22 shipped
+the fix with the prediction written down that it would close both Windows
+regressions. Run 31182895590 settled it: it did not. The Windows leg still
+reports both, and my new eval reports there too. The numbers moved in the right
+direction and stopped short:
+
+- `a-backslash-in-the-install-path-does-not-accuse-a-clean-tree` reports
+  `0 missing, 1 extra` on Windows, where the same fixture accuses 3 files
+  without the fix. So the walked files now strip their prefix correctly and
+  ONE entry still does not: the manifest itself.
+- That one is a path-FORM mismatch, which literal prefix removal cannot fix.
+  `MANIFEST_ABS` is built with `cd "$(dirname "$MANIFEST")" && pwd`, and in the
+  Git-for-Windows shell `pwd` answers in MSYS form (`/d/a/BrotherSBE/...`) while
+  `$TARGET` arrives from the caller in Windows-native form (`D:\a\BrotherSBE\...`).
+  Two spellings of one directory never compare equal, whatever the stripping
+  method, so the manifest is walked, fails to be recognised as itself, and is
+  counted as an added file.
+
+**A separate, genuinely different cause was found underneath, and it is fixed.**
+The Linux leg failed on the same new eval with `0 mismatched` reported as
+`0 missing, 0 extra`, which named nothing. The real signature was two MISMATCHED
+files. GNU coreutils escapes a filename containing a backslash or a newline: it
+doubles the backslashes and prefixes the output line with one, which shifts the
+hash a column right, so `cut -c1-64` returned a backslash glued to 63 hex
+digits. Apple's and BSD's tools do not escape, which is precisely why every
+macOS leg was green while both Linux legs were red. Both scripts now feed the
+file on STDIN so the name never enters the tool's output.
+
+That mechanism was PROVEN on macOS rather than assumed, using a stub on PATH
+that reproduces GNU's escaping: under it the argument form reports
+`0 file(s) match, 2 mismatched` and FAILED, and the stdin form reports
+`2 file(s) match, 0 mismatched, 0 missing, 0 extra` and PASSED.
+
+**Three defects, one shape.** A CRLF manifest line, a path spliced into a sed
+regular expression, and now a filename escaped by the hashing tool. Every one of
+them was a path being read as syntax rather than as data, and every one made
+this script tell a correct installation that it looked compromised. The shape is
+the finding; the individual bugs are instances.
+
+**Still open on Windows:** the MSYS-versus-native path form. Not attempted here,
+because a POSIX host cannot test it and a blind fix to a security check is worse
+than a named gap.
 
 `gates-windows` remains a non-required check until it has been green at least
 once, so this fix does not silently become a merge gate on the strength of a

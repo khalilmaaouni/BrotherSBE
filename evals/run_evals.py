@@ -1993,8 +1993,16 @@ def gd_vinstall_metachar_path(root):
                           os.path.join(inst, "CHECKSUMS.sha256"), inst],
                          capture_output=True, text=True, timeout=120)
     if out.returncode != 0:
-        return ("a clean tree was accused: %s (exit %d)"
-                % (_re_missing_extra(out.stdout), out.returncode))
+        # MISMATCHED is reported alongside missing and extra, and this is not
+        # cosmetic. The first version of this message printed only missing and
+        # extra, so the Linux failure it caught read "0 missing, 0 extra (exit
+        # 1)": a failure that named nothing, over a run whose real signature was
+        # two MISMATCHED files from GNU's filename escaping. A failure message
+        # that omits the field the failure lives in costs an investigation.
+        mismatched = re.search(r"(\d+) mismatched", out.stdout)
+        return ("a clean tree was accused: %s mismatched, %s (exit %d)"
+                % (mismatched.group(1) if mismatched else "an unreported number of",
+                   _re_missing_extra(out.stdout), out.returncode))
     # Both halves assert. A nonzero exit is the loud failure, but a run that
     # exits clean while having compared nothing would be the quiet one, so the
     # match count is checked too: this tree holds exactly the files the
@@ -2003,6 +2011,59 @@ def gd_vinstall_metachar_path(root):
         return ("the tree exited clean without verifying both files, so nothing "
                 "here establishes the paths were compared: %s" % out.stdout[-200:])
     return "clean tree reads clean"
+
+
+@case("no-checksum-tool-is-handed-a-filename-it-would-escape", "guard",
+      "both scripts hash from stdin")
+def gd_hash_from_stdin(root):
+    # The third defect of one shape in this pair of scripts, and the only one a
+    # macOS host cannot reproduce by running anything, which is why it is
+    # asserted on the SHAPE of the code instead of on its output.
+    #
+    # GNU coreutils escapes a filename containing a backslash or a newline: it
+    # doubles the backslashes and prefixes the whole output line with one. That
+    # shifts the hash a column right, so `cut -c1-64` returned a backslash glued
+    # to 63 hex digits and every such file reported MISMATCH. Apple's and BSD's
+    # tools do not escape, so the bug was invisible on macOS and red on Linux,
+    # which is exactly how it reached CI unnoticed.
+    #
+    # Feeding the file on stdin keeps the name out of the tool's output, so no
+    # escaping rule can apply. Both scripts must do it: a generator that escapes
+    # and a checker that does not would write manifests that disagree by
+    # platform, which is worse than either bug alone.
+    #
+    # Calibration: restoring `sha256sum "$1"` in either script turns this red
+    # naming that script and that line.
+    import re as _re
+    problems = []
+    for rel in ("scripts/verify-install.sh", "scripts/checksums.sh"):
+        path = os.path.join(_REPO, rel)
+        try:
+            with open(path) as handle:
+                text = handle.read()
+        except (IOError, OSError) as exc:
+            return "could not read %s, so this check established nothing: %s" % (rel, exc)
+        for num, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for tool in ("sha256sum", "shasum -a 256"):
+                # The tool invoked with the file as an ARGUMENT is the defect;
+                # invoked with `< "$1"` it is the fix. Matching the argument
+                # form directly, rather than the absence of the stdin form, so
+                # a line doing neither cannot read as safe.
+                if _re.search(r"%s\s+\"\$1\"" % _re.escape(tool), line):
+                    problems.append("%s:%d hands the filename to %s as an argument"
+                                    % (rel, num, tool))
+    if problems:
+        return "; ".join(problems)
+    # NO-DATA guard: a rename or a rewrite that removed the hashing entirely
+    # would leave `problems` empty and read as a pass over nothing.
+    found = sum(1 for rel in ("scripts/verify-install.sh", "scripts/checksums.sh")
+                if "| cut -c1-64" in open(os.path.join(_REPO, rel)).read())
+    if found != 2:
+        return ("only %d of the 2 scripts still hash at all, so this check found "
+                "nothing to vouch for" % found)
+    return "both scripts hash from stdin"
 
 
 def _re_missing_extra(stdout):

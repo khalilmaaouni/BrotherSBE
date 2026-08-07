@@ -6,6 +6,75 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.23
+
+### The prediction rc.22 wrote down, and what Windows did to it
+
+rc.22 fixed one cause and predicted, in writing, that it would close both
+Windows regressions. Run 31182895590 falsified that. Recording it here rather
+than quietly restating the claim, because a prediction that only gets mentioned
+again when it was right is not a prediction.
+
+What actually happened, per leg:
+
+- **macOS, both Python versions: green.** First time in this series.
+- **Linux, both Python versions: one regression**, and it was the new eval rc.22
+  added. A genuinely different cause, described below, now fixed.
+- **Windows: still red**, and the fix moved the numbers without closing them.
+  The new eval reports `0 missing, 1 extra` there against 3 accused files
+  without the fix, so the walked files strip correctly now and exactly one entry
+  does not: the manifest itself. That last one is a path-FORM mismatch. The Git
+  for Windows shell answers `pwd` in MSYS form while the caller supplies the
+  install root in Windows-native form, and two spellings of one directory never
+  compare equal however carefully you strip a prefix.
+
+### The third instance of one shape
+
+GNU coreutils escapes a filename containing a backslash or a newline: it doubles
+the backslashes and prefixes the whole output line with one. That shifts the
+hash a column right, so `cut -c1-64` returned a backslash glued to 63 hex digits
+and every such file reported MISMATCH. Apple's and BSD's tools do not escape,
+which is exactly why every macOS leg was green while both Linux legs were red,
+and why this could not be found by running anything on the machine it was
+written on.
+
+`verify-install.sh` and `checksums.sh` now both feed the file on STDIN, so the
+name never enters the tool's output and no escaping rule can apply. Both were
+changed together deliberately: a generator that escapes and a checker that does
+not would produce manifests that disagree by platform, which is worse than
+either bug alone. The regenerated manifest is byte-identical for this tree
+except for the two scripts that were edited, so the change is behaviour
+preserving here and load bearing elsewhere.
+
+The mechanism was proven on macOS rather than assumed, with a stub on PATH that
+reproduces GNU's escaping. Under it the old argument form reports `0 file(s)
+match, 2 mismatched` and FAILED; the stdin form reports `2 file(s) match, 0
+mismatched, 0 missing, 0 extra` and PASSED.
+
+A CRLF manifest line, a path spliced into a sed regular expression, and a
+filename escaped by the hashing tool. Three defects, one shape: a path read as
+syntax rather than as data, each one making this script tell a correct
+installation that it looked compromised. The shape is the finding.
+
+### A failure message that named nothing
+
+The Linux failure read `a clean tree was accused: 0 missing, 0 extra (exit 1)`.
+Nothing missing, nothing extra, and a failure: the message omitted the one field
+the failure lived in, because it reported only missing and extra while the real
+signature was two MISMATCHED files. It now reports mismatched as well. This is
+the same flaw this release criticises in the older message whose "0 path(s)" is
+a hardcoded phrase rather than a measurement, and it cost an investigation
+before it was noticed.
+
+### Guarded so it cannot return
+
+`no-checksum-tool-is-handed-a-filename-it-would-escape` asserts the shape of
+both scripts rather than their output, because the defect is invisible to any
+macOS run. It carries its own NO-DATA guard: if a rewrite removed the hashing
+entirely, the check says it found nothing to vouch for instead of passing over
+an empty set. Calibrated by restoring `sha256sum "$1"` in either script, which
+turns it red naming that script and that line.
+
 ## 1.0.0-rc.22
 
 ### The install checker stops accusing clean installations, for the second time
@@ -63,7 +132,7 @@ the seal.
 Evidence, all run after the final edit and quoted from this machine:
 
 ```
-532 evals: 532 passed, 0 regressions.
+533 evals: 533 passed, 0 regressions.
 ```
 
 ## 1.0.0-rc.21 (2026-08-07)
