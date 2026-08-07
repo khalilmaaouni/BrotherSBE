@@ -6,6 +6,44 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.26
+
+### The benchmark lane blocked its own merge, and the policy engine was right
+
+rc.25's consumer-checks leg went red with `verdict: BLOCKED` and two MISSING
+requirements, `check:migration-rehearsal` and `check:migration-reconciliation`,
+demanded of a change that touches no database at all.
+
+The engine was not wrong. `benchmarks/defects.json` is the ground-truth file
+that ENUMERATES the defects the harness scores against, so it necessarily
+carries the DDL of the migration defect it plants. The `sql-ddl` content signal
+read those added lines and concluded a schema change was being shipped.
+
+This is the same shape `EXAMPLE_SURFACES` already existed to handle, and its own
+comment says so: the tests that PROVE a migration is caught contain the
+migration text, and the guides that TEACH the migration gate quote the DDL they
+teach. The benchmark harness is a third instance of exactly that, and it was
+simply missing from the list.
+
+**What was deliberately NOT done.** No requirement was waived, no gate was
+softened, no receipt was fabricated to satisfy a check that had no business
+firing. `benchmarks/` was added to the surfaces where a content signal is held
+back, which is a narrower change than any of those.
+
+**The half that keeps this from being a bypass.** `EXAMPLE_SURFACES` holds back
+only the INFERENCE FROM CONTENT that a file describes a change to production
+state. It does not touch path globs. So a real `.sql` file parked under
+`benchmarks/` is still caught by the rule's `**/*.sql` path match, and the new
+eval asserts that directly rather than trusting the mechanism's docstring. An
+exemption that quietly widened from holding back inference into disabling a rule
+would be worse than the bug it closes.
+
+Calibrated by removing the two benchmarks entries, which returns
+`benchmarks/defects.json is not held back from content signals`, the exact red
+the merge hit. The eval carries its own NO-DATA guard: if a refactor emptied the
+surface list, every assertion above would be vacuously true, so the check
+verifies the list actually contains what it claims to.
+
 ## 1.0.0-rc.25
 
 ### Comparative outcome benchmarks, with the ground truth kept out of the room
@@ -261,7 +299,7 @@ the seal.
 Evidence, all run after the final edit and quoted from this machine:
 
 ```
-535 evals: 535 passed, 0 regressions.
+536 evals: 536 passed, 0 regressions.
 ```
 
 ## 1.0.0-rc.21 (2026-08-07)

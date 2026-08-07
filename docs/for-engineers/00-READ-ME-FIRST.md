@@ -79,7 +79,7 @@ Every check is run against the defect it exists to catch. Real output from this
 machine, last line:
 
 ```
-535 evals: 535 passed, 0 regressions.
+536 evals: 536 passed, 0 regressions.
 ```
 
 Exit code 0. It exits nonzero if any check stops catching its defect. The case

@@ -2149,6 +2149,57 @@ def gd_vinstall_unenterable_root(root):
     return "refused"
 
 
+@case("the-benchmark-ground-truth-does-not-demand-a-migration-rehearsal", "guard",
+      "content held back, path glob intact")
+def gd_policy_benchmark_surface(root):
+    # Found when the benchmark lane BLOCKED its own merge. benchmarks/defects.json
+    # enumerates the planted defects the harness scores against, so it
+    # necessarily carries the DDL of the migration defect it plants. The sql-ddl
+    # content signal fired on it and the consumer-checks leg went red demanding
+    # check:migration-rehearsal for a change that touches no database.
+    #
+    # BOTH halves are asserted, and the second is the one that matters. Adding a
+    # surface to EXAMPLE_SURFACES must hold back only the INFERENCE FROM CONTENT
+    # that a file describes a change to production state. It must never disable
+    # the path globs, or the exemption becomes a hole: anyone could park a real
+    # migration under benchmarks/ and walk past the gate. A fix that quietly
+    # widens into a bypass is worse than the bug it closes.
+    #
+    # Calibration: removing the two benchmarks entries from EXAMPLE_SURFACES
+    # returns "benchmarks/defects.json is not held back from content signals",
+    # which is the red the merge actually hit.
+    import sys as _sys
+    src = os.path.join(_REPO, "src")
+    if src not in _sys.path:
+        _sys.path.insert(0, src)
+    try:
+        from brothersbe.policy import _is_example_surface, path_matches
+    except ImportError as exc:
+        return "could not import the policy engine, so this check established nothing: %s" % exc
+
+    if not _is_example_surface("benchmarks/defects.json"):
+        return ("benchmarks/defects.json is not held back from content signals, so the "
+                "ground-truth file's own DDL demands a migration rehearsal receipt")
+    if not _is_example_surface("benchmarks/scenarios/S1-migration.md"):
+        return "a nested benchmark document is not held back, so only the top level is covered"
+
+    # The half that keeps this from being a bypass.
+    if not path_matches("**/*.sql", "benchmarks/real_migration.sql"):
+        return ("the **/*.sql PATH glob no longer matches under benchmarks/, so a real "
+                "migration parked there would walk past the gate: this exemption has "
+                "widened from holding back content inference into disabling the rule")
+    if not path_matches("**/*.sql", "db/migrations/0002_x.up.sql"):
+        return "the **/*.sql path glob stopped matching an ordinary migration path"
+
+    # NO-DATA guard: an EXAMPLE_SURFACES emptied by a refactor would make every
+    # check above vacuously true, which must not read as a pass.
+    from brothersbe.policy import EXAMPLE_SURFACES
+    if not any(s.startswith("benchmarks") for s in EXAMPLE_SURFACES):
+        return ("no benchmarks entry is present in EXAMPLE_SURFACES, so the checks above "
+                "passed over a list that does not contain what they claim to verify")
+    return "content held back, path glob intact"
+
+
 def _re_missing_extra(stdout):
     """The MISSING/EXTRA counts out of a verify-install summary line, for the
     failure sentence above. Returns a plain description rather than raising, so

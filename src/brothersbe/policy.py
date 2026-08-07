@@ -344,6 +344,15 @@ EXAMPLE_SURFACES = (
     "tools/test_*.py", "tests/*", "tests/**/*", "*_test.py", "test_*.py",
     "*/fixtures/*", "*/fixtures/**/*", "evals/*", "evals/**/*",
     "docs/*", "docs/**/*",
+    # The benchmark harness, added after it blocked its own merge. Its
+    # ground-truth file benchmarks/defects.json ENUMERATES planted defects, so
+    # it necessarily contains the DDL of the migration defect it plants, and
+    # the sql-ddl content signal fired on it and demanded a migration rehearsal
+    # receipt for a change that touches no database. That is the same shape as
+    # the tests and guides above: a file whose JOB is to carry the text of the
+    # thing being detected. benchmarks/ ships no deployable code and its
+    # fixture repository is generated at run time, never committed.
+    "benchmarks/*", "benchmarks/**/*",
 )
 
 
