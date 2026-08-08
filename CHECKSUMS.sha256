@@ -131,8 +131,8 @@ a07409950248dd3ad02bbc954856949b6931d183af819d4ffda5f213fe95d95f  docs/book/17-t
 b2602ebf209287f0f1d6a794ecbb5495c302285fa620b84da578583b34520b34  docs/book/estate/pipeline.py
 e0c5ce90fb2fa67cc4969556d5ea5ee558ea3b6249f468aa2fb244a0d5393d65  docs/book/estate/test_estate.py
 5a0590bc72e1f9af788aaabfe197cc247d2f639413c5c27a8688b704749a8d4f  docs/explainer/index.html
-14d7b7f82b3276602ae62aa8b3778e747c91b9558263af61f51d8dfe226a28b9  docs/for-engineers/00-READ-ME-FIRST.md
-2e378fcae272d7c72cfb7966e7786b03c1480b6abbce4879f7f4ccca670d960d  docs/for-engineers/01-install-and-first-run.md
+4a0b9a37c5c6a3d2a72a11723a73ef92e73830d4e39d8cc49b4800848e9d1789  docs/for-engineers/00-READ-ME-FIRST.md
+aa36bcf52d09a9f2c74cc19442bf61081610fb2907c80360893df9aaf1030b5e  docs/for-engineers/01-install-and-first-run.md
 5f7937030f6275845ff3886e299f4b3088f39a4d273e4bd9e83d73f546809386  docs/for-engineers/10-backend-engineer.md
 bed1669046fda730f950f6f1d93d72686cd5ae05adf5284a8799d0e04c7c7300  docs/for-engineers/11-data-engineer.md
 266568cafcab3c6a6c3ad7ad733e7c7781b9d088a549095485b6bb50febf9182  docs/for-engineers/12-infrastructure-architect.md
