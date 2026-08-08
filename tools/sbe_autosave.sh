@@ -611,8 +611,19 @@ case "$1" in
     fi
     # Report the mode the platform actually gave, not the one we asked for.
     perms="$(ls -ld "$tmpdir" 2>/dev/null | awk '{print $1}')"
+    # Under Git-for-Windows sh, mktemp -d returns an MSYS spelling (like
+    # /tmp/tmp.XXXXXXXXXX) that native CPython resolves against the current
+    # drive instead of finding, so a user (or a tool) told to open that path
+    # cannot get there. cygpath -w prints the native spelling on the one line
+    # meant to be read back by something other than this same shell; it ships
+    # with Git for Windows and is a no-op fallback everywhere else.
+    tmpdir_native="$(cygpath -w "$tmpdir" 2>/dev/null || printf '%s' "$tmpdir")"
     echo "sbe_autosave: recovered snapshot $sha into a NEW worktree at:"
-    echo "  $tmpdir"
+    # printf, not echo: a native Windows spelling is full of backslashes
+    # (...\Temp\tmp.XXXXXXXXXX), and an XSI-conformant `echo` interprets
+    # \t, \n and friends inside its argument, silently eating characters
+    # this line exists to print correctly.
+    printf '  %s\n' "$tmpdir_native"
     echo "  permissions: $perms (owner-only intended; this line reports what the platform gave, it does not promise enforcement on platforms that ignore POSIX modes)"
     echo "  Your live working tree at $repo was never touched. Inspect the folder"
     echo "  above, copy back what you need, then remove it with:"

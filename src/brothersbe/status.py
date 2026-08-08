@@ -1097,7 +1097,7 @@ def build_report(path, base=None, now=None):
 
     intake_path = os.path.join(root, INTAKE_REL)
     disposition_path = os.path.join(root, DISPOSITION_REL)
-    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(root)
     reg_path = tasks_mod.registry_path(root)
 
     # ---- CR-06: dossier discovery, only when the flat layout is absent.
@@ -1861,7 +1861,7 @@ def build_team_report(path):
     except tasks_mod.RegistryUnusable as exc:
         registry_problem = str(exc)
 
-    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(root)
     ev = _scan_evidence(root, evidence_dir)
 
     open_by_change = {}

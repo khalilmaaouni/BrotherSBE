@@ -952,7 +952,7 @@ def _mint_evidence(target, delegates):
             "and this command's exit code is unchanged.\n" % exc)
         return
     abs_target = os.path.abspath(target)
-    evidence_dir = os.path.join(abs_target, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(abs_target)
     pairs = [(kind, [sys.executable, _tool(tool)] + list(flags) + [abs_target])
             for tool, flags, kind in delegates]
     try:

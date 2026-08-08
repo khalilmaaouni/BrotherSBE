@@ -205,7 +205,7 @@ def _evidence_store(cwd):
     if not cwd:
         return None
     from . import tasks as tasks_mod
-    store = os.path.join(cwd, *tasks_mod.DEFAULT_EVIDENCE_DIR.split("/"))
+    store = tasks_mod.evidence_dir(cwd)
     return store if os.path.isdir(store) else None
 
 

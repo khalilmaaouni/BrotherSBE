@@ -8,8 +8,26 @@ makes about itself: secrets are redacted, sensitive files are owner-only, projec
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
 import ast, glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _posix_modes_enforced():
+    """True when this filesystem actually restricts a newly created file to
+    the exact mode bits requested, asked of the filesystem itself rather
+    than of sys.platform -- the same idiom TestCaseVariantPaths._folds_case
+    in test_sbe_bash_guard.py uses for case-folding, applied to permission
+    bits. False on a platform that ignores the requested mode (Windows:
+    os.open(path, ..., 0o600) silently yields 0o666 there). The two
+    owner-only tests below branch on this rather than on sys.platform, so a
+    POSIX host that happens to run on a mode-ignoring filesystem (a FAT/exFAT
+    mount, for one) gets the honest branch too."""
+    with tempfile.TemporaryDirectory() as d:
+        probe = os.path.join(d, "probe")
+        fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+        return stat.S_IMODE(os.stat(probe).st_mode) == 0o600
 
 # The digest injected unconditionally at every session start used to spend
 # roughly 9KB, almost all of the 10KB hook cap, on 24 law lines: a release
@@ -120,8 +138,18 @@ class TestResumeBrief(unittest.TestCase):
             payload = json.dumps({"transcript_path": tp, "cwd": repo})
             old = sys.stdin
             sys.stdin = io.StringIO(payload)
+            # Spy on the mode every os.open call actually requests, so the
+            # Windows branch below can assert the reachable guarantee (the
+            # writer asked for owner-only) even where the platform will not
+            # honor it.
+            requested = []
+            real_open = os.open
+            def spy_open(path, flags, mode=0o777, *a, **kw):
+                requested.append((path, mode))
+                return real_open(path, flags, mode, *a, **kw)
             try:
-                bm.cmd_precompact_brief()
+                with mock.patch("os.open", side_effect=spy_open):
+                    bm.cmd_precompact_brief()
             finally:
                 sys.stdin = old
                 os.environ.pop("BROTHERSBE_TELEMETRY_TRANSCRIPT", None)
@@ -134,7 +162,20 @@ class TestResumeBrief(unittest.TestCase):
                 self.assertNotIn(secret, body, "resume brief leaked: %s" % secret)
             self.assertIn("[REDACTED]", body)
             mode = stat.S_IMODE(os.stat(path).st_mode)
-            self.assertEqual(mode, 0o600, "resume brief must be owner-only, got %o" % mode)
+            if _posix_modes_enforced():
+                self.assertEqual(mode, 0o600, "resume brief must be owner-only, got %o" % mode)
+            else:
+                # The platform ignores the requested mode (Windows: mode
+                # lands at 0o666 no matter what was asked for). The
+                # reachable guarantee is that the writer itself requested
+                # owner-only -- _write_brief's os.open call -- not that the
+                # platform delivered it.
+                asked = [m for p, m in requested if p == path]
+                self.assertTrue(asked, "resume brief was not written through os.open: %r"
+                                % requested)
+                self.assertEqual(asked[-1], 0o600,
+                                 "resume brief writer did not request owner-only, got %o"
+                                 % asked[-1])
 
 
 class TestProjectIdentity(unittest.TestCase):
@@ -2769,8 +2810,26 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         by_path = {f["path"]: f for f in bundle["files"]}
         self.assertIn("staging bucket", by_path[corrections]["content"],
                       "the export does not carry what is stored")
-        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o600,
-                         "the export is not owner-only")
+        out_mode = stat.S_IMODE(os.stat(out).st_mode)
+        if _posix_modes_enforced():
+            self.assertEqual(out_mode, 0o600, "the export is not owner-only")
+        else:
+            # The platform ignores the requested mode (Windows: mode lands
+            # at 0o666 no matter what data-export asked for). The reachable
+            # guarantees here: the writer requested owner-only regardless
+            # (data_export's os.open call is unconditional, not
+            # platform-branched -- read at tools/sbe_telemetry.py), and the
+            # printed report names the mode it actually got rather than
+            # claiming enforcement it cannot deliver (Fix 1).
+            self.assertIn("owner-only intended", exported.stdout,
+                         "data-export no longer names owner-only as the intent: %s"
+                         % exported.stdout)
+            self.assertIn("does not promise enforcement", exported.stdout,
+                         "data-export's report no longer disclaims enforcement: %s"
+                         % exported.stdout)
+            self.assertIn("mode %03o" % out_mode, exported.stdout,
+                         "data-export's reported mode does not match the file on disk: %s"
+                         % exported.stdout)
 
         dry = subprocess.run([sys.executable, self.TEL, "data-purge"],
                              capture_output=True, text=True, env=self._env(vault))

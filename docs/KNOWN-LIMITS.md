@@ -367,6 +367,55 @@ against a manifest that ever passed through a text-mode write or a
 line-ending-normalising transport was told their install looked like a planted
 backdoor, on any platform.
 
+## The owner-only telemetry writes are advisory only on Windows
+
+`tools/sbe_telemetry.py` writes several files it calls "owner-only" through
+`os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)` (or the append
+equivalent), at lines 548, 1519, 1569 and 1957. On POSIX the requested mode
+bits are what the file gets. On Windows, the mode argument to `os.open` sets
+only `FILE_ATTRIBUTE_READONLY`; no ACL is written, so the file inherits
+whatever permissions its containing directory already grants. A file that this
+project's own printed messages once called owner-only landed world-readable
+there, which is the exact defect class this project refuses to ship: a
+sentence claiming enforcement that does not exist.
+
+What that means in practice:
+
+- The resume brief (`_write_brief`, line 1569) and the correction candidates
+  (`atomic_append`, line 548, and `atomic_append_text`, line 1519) can hold
+  redacted but still sensitive recent session context: your own recent
+  messages, tool commands, and file paths. On Windows, anyone with read
+  access to the directory holding them can read them, not only the account
+  that wrote them.
+- The `data-export` bundle (line 1957) is a copy of everything stored,
+  written to the same advisory-only mode. It carries the same exposure and is
+  meant to leave the vault, which is the whole point of the command, so treat
+  the exported file as sensitive on Windows regardless of what its listed
+  mode says.
+- A user who points `BROTHERSBE_VAULT` outside their own profile directory
+  (a shared drive, a synced folder with broader ACLs than `%USERPROFILE%`)
+  gets no additional protection from this tool. Nothing here enforces where
+  the vault lives.
+- The printed messages that used to claim `(owner-only)` as an accomplished
+  fact now report the mode the platform actually gave and say plainly that
+  this does not promise enforcement on platforms that ignore POSIX modes,
+  mirroring the wording `tools/sbe_autosave.sh` already used for its recovery
+  worktree's permissions. A true sentence on every platform was chosen over a
+  sentence that was only ever true on POSIX.
+
+**Rejected alternative:** setting a real Windows ACL (a DACL restricting the
+file to the owning account) so `0o600` means the same thing on every
+platform. That needs `pywin32` or shelling out to `icacls`, either of which
+adds a new dependency with its own install and failure modes to a tool whose
+zero-dependency, no-subprocess design is a stated property elsewhere in this
+file and in `tools/sbe_telemetry.py`'s own module docstring. Documenting the
+gap honestly was chosen over building around it.
+Full text: `tools/sbe_telemetry.py` (`_write_brief`, `atomic_append`,
+`atomic_append_text`, `cmd_data_export`), `tools/sbe_autosave.sh` (the
+`recover` permissions line), `tools/test_sbe.py`
+(`TestResumeBrief.test_opt_in_writes_the_brief_and_still_redacts`,
+`TestCaptureDefaultsAndAutosaveContentScan.test_show_export_and_purge_do_what_they_claim`).
+
 ## Windows: the install-checker family is CLOSED and proven; one new cause is open (OWED-4)
 
 Rewritten 2026-08-08 with evidence from the windows-latest run itself, which is
