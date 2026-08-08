@@ -31,6 +31,16 @@ BrotherSBE inspects the repository, understands whether you are starting or resu
 
 **[See the complete workflow ->](docs/workflow-map.md)**
 
+## Find your situation
+
+| You are | Start here |
+| --- | --- |
+| New to BrotherSBE | [Getting Started](docs/getting-started.md), one real change from install to verification |
+| Adding it to an existing repository | Run `/brothersbe:adopt`, which is a dry run by default, then [Adoption](docs/ADOPTION.md) |
+| Upgrading an existing install | `claude plugin update brothersbe`, restart to apply, then [CHANGELOG.md](CHANGELOG.md) and [Migration](docs/MIGRATION.md) |
+| Wiring it into CI | [CI/CD](docs/ci-cd.md), then [CI-ORDER.md](docs/CI-ORDER.md) for the exact step order |
+| Just looking around first | [A worked engagement](docs/guides/05-a-worked-engagement.md), one system designed end to end with real output |
+
 ## The engineering loop
 
 ```text
@@ -112,6 +122,8 @@ Your branch protection, repository permissions, and CI/CD remain the enforcement
 - **[Snowflake and ELT](docs/snowflake-elt.md)**: practical data engineering workflow and validation examples.
 - **[Technical QA](docs/technical-qa.md)**: requirement-to-evidence workflow for QA and validation.
 - **[CI/CD](docs/ci-cd.md)**: advisory rollout, evidence, and strict enforcement. The exact CI step order is in [docs/CI-ORDER.md](docs/CI-ORDER.md).
+- **[A worked engagement](docs/guides/05-a-worked-engagement.md)**: one system designed end to end, with the real commands and the real output.
+- **[The sandbox](docs/guides/00-sandbox.md)**: rehearse the loop on a disposable dossier before touching real work.
 - **[The booklet](docs/fieldbook/BrotherSBE-Booklet.html)**: the full story for a team deciding whether to adopt: outcomes, personas, the team operating model, and the trust mechanics.
 - **[The engineering reference](docs/ENGINEERING-REFERENCE.md)**: the complete documentation of the method, the gates, the laws, and every install path. Nothing was cut when this README was shortened; it all lives there.
 

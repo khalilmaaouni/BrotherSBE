@@ -13,7 +13,7 @@ runs. A claim with no check is listed as such rather than omitted.
 | Drift in a bound source is detected | `test_check_fails_when_a_bound_source_moves` mutates a copied source in a temporary tree and asserts a FAIL naming that path | Every suite run, CI | n/a, the test constructs the evidence |
 | A stale prose stamp is reported and does not block | `test_stale_stamp_is_no_data_and_exit_zero_under_strict` | Every suite run, CI | n/a |
 | Regeneration is deterministic | `test_two_runs_produce_byte_identical_output` renders twice into two temporary trees and compares bytes | Every suite run, CI | n/a |
-| The HTML is self-contained and offline | `test_html_requests_no_external_host` asserts no `http://`, `https://` or protocol-relative `src`/`href` on an asset attribute in the emitted HTML | Every suite run, CI | n/a |
+| The HTML is self-contained and offline | `test_html_requests_no_external_host` asserts that no `src` or `href` asset attribute in the emitted HTML begins with either URL scheme or with a protocol-relative prefix | Every suite run, CI | n/a |
 | The book carries no em or en dash | `test_no_em_or_en_dash_in_chapters` sweeps every chapter file | Every suite run, CI | n/a |
 | Nothing outside the generated markers is rewritten | `test_author_prose_survives_a_regenerate` writes a sentinel outside the markers, regenerates, and asserts the sentinel is byte-identical | Every suite run, CI | n/a |
 | The published artifact matches the committed HTML | Nothing. Publication is a manual step and no check compares the published copy to the repository copy | Never | **UNVERIFIED**, and stated as such in the book itself |
