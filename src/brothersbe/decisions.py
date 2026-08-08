@@ -1961,7 +1961,7 @@ def _lineage_receipts(top, artifact):
     again over the same commit."""
     from . import evidence as evidence_mod
     from . import tasks as tasks_mod
-    store = os.path.join(top, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    store = tasks_mod.evidence_dir(top)
     rel_store = os.path.relpath(store, top)
     if not os.path.isdir(store):
         return {"present": False, "hops": [_hop(

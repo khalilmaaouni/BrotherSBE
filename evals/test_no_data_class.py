@@ -495,6 +495,14 @@ NOT_A_VERDICT = {
                                         "not a verdict",
     ("sbe_checks.py", "glob_with_denials"): "returns (glob hits, directories it could not enter), "
                                             "not a verdict",
+    ("sbe_profile.py", "read_text"): "returns (file text, read problem), not a verdict",
+    ("sbe_profile.py", "_pick"): "returns (table header, rows) for the first table whose header "
+                                 "matches, not a verdict",
+    ("sbe_profile.py", "core_rows"): "returns (routing-table rows, read problem), not a verdict",
+    ("sbe_profile.py", "module_rows"): "returns (module-table rows, read problem), not a verdict",
+    ("sbe_profile.py", "module_ids"): "returns (module ids, read problem), not a verdict",
+    ("sbe_profile.py", "load_when"): "returns (the LOAD WHEN trigger line, read problem), "
+                                     "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_dispatch.py", "_blocking_owed_items"): "returns (blocking owed items, parse "
                                                  "problems), not a verdict",
@@ -1021,8 +1029,75 @@ def write_file(path, content):
         body = "".join(json.dumps(row) + "\n" for row in content)
     else:
         body = content
-    with open(path, "w") as f:
-        f.write(body)
+    # Binary mode, not "w": text mode on Windows rewrites every \n to \r\n on
+    # the way to disk, so a fixture whose bytes a check hashes (sbe_plan.py's
+    # freshness gate pins _FX_ADR_SHA against the in-memory string) lands on
+    # disk with different bytes than the hash was computed against, and the
+    # gate FAILs on a fixture the harness itself produced honestly. Binary
+    # mode cannot translate a newline on any platform; see
+    # _check_write_file_no_translation below, which pins this two ways so an
+    # edit back to text mode goes red everywhere, not only on Windows.
+    with open(path, "wb") as f:
+        f.write(body.encode("utf-8"))
+
+
+def _check_write_file_no_translation():
+    """Pin the Windows fixture-corruption defect two ways, like every other
+    structural check in this file that a scenario cannot reach (see
+    PRUNED_WITH_SOURCE, PLANTED_SOURCE, NONREGULAR_SOURCE below): a behavior
+    half and a mechanism half, so a regression is caught on every platform,
+    not only the one that exposed it.
+
+    Half one is behavioral: it calls the real harness writer with "a\\nb\\n"
+    and asserts the bytes landing on disk are exactly b"a\\nb\\n". On Linux
+    and macOS this passes whether write_file uses "w" or "wb", because
+    neither platform's text mode rewrites \\n; it is here so the assertion
+    that on-disk bytes must equal the given bytes exists at all, and it is
+    what actually goes red in CI on Windows if the translating mode returns.
+
+    Half two is mechanism, not behavior: it reads this file's own source,
+    finds the write_file function, and asserts the open() call inside it
+    uses the literal mode "wb". A bug that reintroduces text mode ("w") is
+    invisible to half one on Linux and macOS (no translation happens there
+    either way), so half two is what turns that same edit red on every
+    platform the suite runs on, not only Windows.
+    """
+    failures = []
+    with tempfile.TemporaryDirectory() as d:
+        target = os.path.join(d, "probe.txt")
+        write_file(target, "a\nb\n")
+        with open(target, "rb") as f:
+            got = f.read()
+        if got != b"a\nb\n":
+            failures.append("write_file: wrote %r for input \"a\\nb\\n\", want b'a\\nb\\n'. A "
+                            "fixture write that does not round-trip its own newlines byte-for-byte "
+                            "is the exact defect that moved sbe_plan.py's pinned freshness hash "
+                            "out from under it on Windows" % (got,))
+
+    tree = ast.parse(open(__file__, "rb").read(), filename=__file__)
+    write_file_def = next((n for n in ast.walk(tree)
+                           if isinstance(n, ast.FunctionDef) and n.name == "write_file"), None)
+    if write_file_def is None:
+        failures.append("write_file: could not find the write_file function definition in %s to "
+                        "confirm its open() mode; the mechanism half of this pin has nothing to "
+                        "check" % __file__)
+    else:
+        opens = [n for n in ast.walk(write_file_def)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "open"]
+        modes = []
+        for call in opens:
+            mode_arg = call.args[1] if len(call.args) > 1 else next(
+                (kw.value for kw in call.keywords if kw.arg == "mode"), None)
+            modes.append(_folded_str(mode_arg) if mode_arg is not None else None)
+        if not opens:
+            failures.append("write_file: found no open() call inside the function body, so the "
+                            "mechanism half of this pin cannot confirm binary mode at all")
+        elif "wb" not in modes:
+            failures.append("write_file: open() mode is %r, want \"wb\". Text mode (\"w\") lets "
+                            "the interpreter rewrite \\n to \\r\\n on Windows, moving the bytes on "
+                            "disk away from the bytes a pinned hash (sbe_plan.py's freshness gate) "
+                            "was computed against; this must stay binary on every platform" % modes)
+    return failures
 
 
 # ---------------------------------------------------------------------------
@@ -1525,6 +1600,10 @@ def main():
                             % (key, len(hits), ", ".join(str(l) for l in hits)))
         else:
             lint_exemptions.append("%s:%s (line %d): %s" % (key[0], key[1], hits[0], why))
+    # The harness writer itself, not a discovered tool check: pinned here,
+    # two ways, so a Windows-only fixture-corruption regression is caught on
+    # every platform this suite runs on. See _check_write_file_no_translation.
+    failures.extend(_check_write_file_no_translation())
     for path in sorted(set(PRUNED_WITH_SOURCE)):
         failures.append("%s was pruned from the walk and holds Python source, so any registry or "
                         "verdict-producing function in it is outside this test's coverage while "

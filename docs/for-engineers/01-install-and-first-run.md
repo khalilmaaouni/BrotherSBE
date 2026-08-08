@@ -100,7 +100,7 @@ Real tail:
   the-approval-verdict-names-which-approval-file-it-read want=named    got=named    ok
   an-empty-directory-cannot-print-the-report-of-a-dossier-somewhere-else want=disclosed got=disclosed ok
 
-536 evals: 536 passed, 0 regressions.
+539 evals: 539 passed, 0 regressions.
 ```
 
 Exit code 0. Each case is a real defect turned into a fixture, plus an assertion
@@ -137,7 +137,7 @@ $ python3 evals/test_no_data_class.py
 Real last line:
 
 ```
-32 checks discovered from 6 registries in 60 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 62 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 Exit code 0. The two waivers are printed above that line with their stated

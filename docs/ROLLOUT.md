@@ -128,10 +128,17 @@ earlier `v<number>` release tag that is an ancestor of the installed commit
 same `claude plugin marketplace add` plus `claude plugin install` pair
 `install.sh` uses, then re-reads the first record and runs
 `scripts/verify-install.sh` against the bytes that are now installed, not
-against the source they came from. `--install-dir` and `--source-dir` name
-either directory by hand. **It refuses rather than guesses**: an installation
-with no earlier release in its history, no reachable source, or uncommitted
-changes in that source is refused with the reason named and nothing written,
+against the source they came from. `--source-dir` names that source directory
+by hand. `--install-dir` SELECTS, by path, which recorded installation to roll
+back, and a path matching no recorded installation is refused rather than
+adopted: it used to replace the directory while keeping the version, commit and
+marketplace of whichever installation the record happened to name first, which
+meant pointing it at an unrecorded directory rewrote that directory using a
+different installation's identity and reported success. **It refuses rather
+than guesses**: an installation with no earlier release in its history, no
+reachable source, uncommitted changes in that source, or an `--install-dir`
+this machine has no record of, is refused with the reason named and nothing
+written,
 because a rollback with no previous version to name is a guess dressed as an
 undo. What it does not claim is in `docs/KNOWN-LIMITS.md` ("The recommended
 install path has an undo now, and here is exactly how much of one").

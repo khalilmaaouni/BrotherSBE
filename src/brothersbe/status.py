@@ -299,7 +299,18 @@ def _scan_evidence(root, evidence_dir):
                 paths.append(os.path.join(dirpath, name))
     paths.sort()
     for full in paths:
-        rel = os.path.relpath(full, root)
+        # SERIALIZED RELATIVE PATHS ARE POSIX-SPELLED, ON EVERY PLATFORM.
+        # `os.path.relpath` answers in the host's spelling, so on Windows this
+        # read `.sbe\evidence\design.json` and the same receipt therefore had two
+        # different names depending on which machine printed the JSON. A relative
+        # path inside a machine-readable contract is an identifier, not a
+        # filesystem instruction: consumers compare it, store it, and send it
+        # between machines, so it has to mean one thing everywhere. This project
+        # already spells its own canonical relative constants that way
+        # (`tasks.DEFAULT_EVIDENCE_DIR` is ".sbe/evidence"). Absolute paths in
+        # this same envelope stay host-spelled on purpose, because those ARE
+        # filesystem instructions for the machine reading them.
+        rel = os.path.relpath(full, root).replace(os.sep, "/")
         try:
             receipt_run_id = evidence_mod.load(full).get("runId")
         except evidence_mod.ReceiptUnreadable:
@@ -1097,7 +1108,7 @@ def build_report(path, base=None, now=None):
 
     intake_path = os.path.join(root, INTAKE_REL)
     disposition_path = os.path.join(root, DISPOSITION_REL)
-    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(root)
     reg_path = tasks_mod.registry_path(root)
 
     # ---- CR-06: dossier discovery, only when the flat layout is absent.
@@ -1861,7 +1872,7 @@ def build_team_report(path):
     except tasks_mod.RegistryUnusable as exc:
         registry_problem = str(exc)
 
-    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(root)
     ev = _scan_evidence(root, evidence_dir)
 
     open_by_change = {}
@@ -2021,29 +2032,21 @@ def build_team_report(path):
                         "evidence and convergence", "observed",
                         "convergence recorded %s" % final))
 
-            approval = _read_json_or_none(os.path.join(doss, "10-approval.json"))
-            if approval is None:
-                findings.append(_finding(
-                    name, 5, "NO-DATA", os.path.join(doss, "10-approval.json"), head,
-                    None,
-                    "run sbe pr verify and save its --json output as 10-approval.json",
-                    "observed",
-                    "no approval report is saved for this change; absence is a fact, "
-                    "not an accusation"))
-            else:
-                bound = approval.get("headSha")
-                if head and bound and bound != head:
-                    findings.append(_finding(
-                        name, 4, "FAIL", "10-approval.json", bound, None,
-                        "re-run sbe pr verify against the current head", "derived",
-                        "the approval report binds to %s but the repository head is %s: "
-                        "stale approval" % (bound[:12], head[:12])))
-                elif approval.get("final") != "PASS":
-                    findings.append(_finding(
-                        name, 5, str(approval.get("final")), "10-approval.json", bound,
-                        None, "resolve the failing controls on the pull request",
-                        "observed",
-                        "the saved approval report's FINAL is %s" % approval.get("final")))
+            # A2 ROUND 2 / TARGET 3: reuse `_approval_ladder_candidate`'s own
+            # approval judgement instead of re-deriving it here. The two used
+            # to disagree (this site's remedy text dropped the "(MISSING
+            # APPROVAL)" suffix, and its stale/FAIL branches recorded the
+            # bare filename "10-approval.json" instead of the full dossier
+            # path), which is exactly the kind of drift a second copy of the
+            # same judgement invites. `_approval_ladder_candidate` returns
+            # `_finding`-shaped entries with `change` set to `None` (see its
+            # own docstring); `change` is filled in here from this loop's own
+            # `name`, the same way every other finding in this loop already
+            # is.
+            for cand in _approval_ladder_candidate(doss, head, ""):
+                entry = {k: v for k, v in cand.items() if k not in ("rung", "reason")}
+                entry["change"] = name
+                findings.append(entry)
 
             # A review record, `11-review.json`, written by `sbe review
             # --write` (see cli.py). Held to a stricter three-state law than

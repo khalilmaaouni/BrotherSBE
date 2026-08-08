@@ -1,0 +1,42 @@
+id: LOOP-4
+title: "PR 29 reconciled"
+why: >
+  PR 29 carried real fixes that were never folded back cleanly: a rebase
+  against a moving main, Scorecard publishing that needed to be off, two
+  tester forms that needed to become one, drifted labels, and checksums
+  regenerated last rather than mid-stream. This loop closes those out.
+persona_need: "P3 agent orchestrator reconciling a stale branch"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: done
+wave: loop-4
+milestone: M1
+depends_on:
+  - "LOOP-1"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "rebase against current main"
+  - "Scorecard publishing off"
+  - "one tester form"
+  - "labels reconciled"
+  - "checksums regenerated last"
+acceptance_met:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "PR 29 MERGED into main 2026-08-08T03:11:39Z, verified by gh pr view 29 --json state"
+  - "all five required checks green at merge: both ubuntu legs, both macos legs, consumer-checks"
+  - "branch gtm/launch-ready deleted local and remote, verified by git ls-remote returning nothing"
+  - "manifest regenerated last in the branch: 438 entries"
+  - "suite on the branch at merge: 536 evals: 536 passed, 0 regressions"
+risks: []
+blocked_by: []
+alerts: []

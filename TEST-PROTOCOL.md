@@ -89,8 +89,8 @@ Testing honestly means knowing what is unfinished. As of this release:
   the release notes.
 - **Windows is experimental**, with one known failing check. macOS and Linux
   run the full battery on every merge.
-- **No rollback command on the plugin install path.** The clone-based path has
-  one. This is queued as the next install fix.
+- **The plugin install path has a rollback command**, `scripts/rollback-install.sh`,
+  same as the clone-based path.
 
 If you find something outside this list that the tool claims but cannot back,
 that is the single most valuable issue you can file.

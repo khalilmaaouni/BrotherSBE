@@ -1,0 +1,36 @@
+id: LOOP-5
+title: "Quarantined patches adjudicated"
+why: >
+  Three patches sat quarantined pending a verdict: fold, split, or discard.
+  Leaving a verdict unfolded is a decision half-taken, which this project's
+  own rule treats as a correction-class failure if it is discovered later
+  rather than recorded now.
+persona_need: "P3 agent orchestrator, independent-refuter"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: partially_done
+wave: loop-5
+milestone: M1
+depends_on:
+  - "LOOP-0"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "docs patch verdict recorded: FOLD"
+  - "profile patch verdict recorded: SPLIT"
+  - "benchmark patch verdict recorded: DISCARD"
+  - "folding applied"
+acceptance_met:
+  - 0
+  - 1
+  - 2
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "verdicts in: docs FOLD, profile SPLIT, benchmark DISCARD"
+  - "folding pending"
+risks: []
+blocked_by: []
+alerts: []

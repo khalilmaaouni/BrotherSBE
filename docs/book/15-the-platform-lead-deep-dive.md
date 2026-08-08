@@ -166,7 +166,7 @@ python3 -m json.tool /tmp/sbe-book-ch15-repo/.brothersbe/install-receipt.json | 
     "installedInto": "/tmp/sbe-book-ch15-repo",
     "schemaVersion": "1.0",
     "tool": "sbe init",
-    "toolVersion": "1.0.0-rc.28",
+    "toolVersion": "1.0.0-rc.29",
     "uninstallInstructions": [
         "rm -f .brothersbe/config.json",
         "rm -f design/.gitkeep",
@@ -218,7 +218,7 @@ chmod +x /tmp/sbe-book-ch15-release/scripts/*.sh
 
 verify-install: checked against /tmp/sbe-book-ch15-release/CHECKSUMS.sha256
 verify-install: 4 file(s) match, 0 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
-verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code, 0 of them configuration this script cannot read the contents of, and 0 of them non-regular (a symlink or pipe this check cannot hash).
 verify-install: PASSED. Every file the manifest names matches on disk,
 verify-install: and no file exists on disk that the manifest does not name,
 verify-install: outside the excluded paths enumerated above (their current
@@ -244,7 +244,7 @@ MISMATCH:  pipeline.py
 
 verify-install: checked against /tmp/sbe-book-ch15-release/CHECKSUMS.sha256
 verify-install: 3 file(s) match, 1 mismatched, 0 missing, 0 extra (present on disk, absent from the manifest), 0 non-regular (a symlink or pipe the manifest cannot hash)
-verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code and 0 of them non-regular (a symlink or pipe this check cannot hash).
+verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~$*, *.docx; .git/ not enumerated) currently hold 0 entr(y/ies) of any type, 0 of them source code, 0 of them configuration this script cannot read the contents of, and 0 of them non-regular (a symlink or pipe this check cannot hash).
 verify-install: FAILED. Do not trust this installed copy until you understand why the files above differ from the published manifest.
 ```
 
@@ -263,15 +263,15 @@ ROOT="$(pwd)"
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.28, VERSION 1.0.0-rc.28
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/.claude/worktrees/integrate-loops12/tools
+plugin-manifest  PASS     manifest 1.0.0-rc.29, VERSION 1.0.0-rc.29
 git              PASS     working directory is inside a git tree
 project-init     PASS     .brothersbe/config.json is present; this repository carries BrotherSBE's local footprint
 identity         PASS     git config reports name "Estate Seed" and email "estate@example.invalid"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.28, evidence schema 1.0. 8 check(s): 6 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.29, evidence schema 1.0. 8 check(s): 6 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
 `vault` and `private-names` read `NO-DATA`, not `FAIL`. Neither is broken;

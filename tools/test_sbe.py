@@ -8,8 +8,26 @@ makes about itself: secrets are redacted, sensitive files are owner-only, projec
 identity does not collide, and the autosave captures untracked work non-invasively.
 """
 import ast, glob, hashlib, io, os, json, re, shutil, stat, sys, tempfile, subprocess, importlib.util
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _posix_modes_enforced():
+    """True when this filesystem actually restricts a newly created file to
+    the exact mode bits requested, asked of the filesystem itself rather
+    than of sys.platform -- the same idiom TestCaseVariantPaths._folds_case
+    in test_sbe_bash_guard.py uses for case-folding, applied to permission
+    bits. False on a platform that ignores the requested mode (Windows:
+    os.open(path, ..., 0o600) silently yields 0o666 there). The two
+    owner-only tests below branch on this rather than on sys.platform, so a
+    POSIX host that happens to run on a mode-ignoring filesystem (a FAT/exFAT
+    mount, for one) gets the honest branch too."""
+    with tempfile.TemporaryDirectory() as d:
+        probe = os.path.join(d, "probe")
+        fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+        return stat.S_IMODE(os.stat(probe).st_mode) == 0o600
 
 # The digest injected unconditionally at every session start used to spend
 # roughly 9KB, almost all of the 10KB hook cap, on 24 law lines: a release
@@ -120,8 +138,18 @@ class TestResumeBrief(unittest.TestCase):
             payload = json.dumps({"transcript_path": tp, "cwd": repo})
             old = sys.stdin
             sys.stdin = io.StringIO(payload)
+            # Spy on the mode every os.open call actually requests, so the
+            # Windows branch below can assert the reachable guarantee (the
+            # writer asked for owner-only) even where the platform will not
+            # honor it.
+            requested = []
+            real_open = os.open
+            def spy_open(path, flags, mode=0o777, *a, **kw):
+                requested.append((path, mode))
+                return real_open(path, flags, mode, *a, **kw)
             try:
-                bm.cmd_precompact_brief()
+                with mock.patch("os.open", side_effect=spy_open):
+                    bm.cmd_precompact_brief()
             finally:
                 sys.stdin = old
                 os.environ.pop("BROTHERSBE_TELEMETRY_TRANSCRIPT", None)
@@ -134,7 +162,20 @@ class TestResumeBrief(unittest.TestCase):
                 self.assertNotIn(secret, body, "resume brief leaked: %s" % secret)
             self.assertIn("[REDACTED]", body)
             mode = stat.S_IMODE(os.stat(path).st_mode)
-            self.assertEqual(mode, 0o600, "resume brief must be owner-only, got %o" % mode)
+            if _posix_modes_enforced():
+                self.assertEqual(mode, 0o600, "resume brief must be owner-only, got %o" % mode)
+            else:
+                # The platform ignores the requested mode (Windows: mode
+                # lands at 0o666 no matter what was asked for). The
+                # reachable guarantee is that the writer itself requested
+                # owner-only -- _write_brief's os.open call -- not that the
+                # platform delivered it.
+                asked = [m for p, m in requested if p == path]
+                self.assertTrue(asked, "resume brief was not written through os.open: %r"
+                                % requested)
+                self.assertEqual(asked[-1], 0o600,
+                                 "resume brief writer did not request owner-only, got %o"
+                                 % asked[-1])
 
 
 class TestProjectIdentity(unittest.TestCase):
@@ -1762,8 +1803,19 @@ class TestVerifyMintsEvidence(unittest.TestCase):
                          "a dirty-tree receipt must never be counted as sound evidence")
         self.assertEqual(data["brokenClaims"], [],
                          "a dirty-tree receipt is NO-DATA, not a broken claim")
-        self.assertIn(".sbe/evidence", status.stdout,
-                      "status must still show the evidence store was inspected")
+        # READ THE FIELD, DO NOT GREP THE SERIALIZED TEXT. This assertion has
+        # now been wrong twice for the same underlying reason, so it is worth
+        # stating. First it searched the raw stdout for ".sbe/evidence", which
+        # passed on POSIX and failed on Windows where the absolute path is
+        # spelled with backslashes. Then it searched for the platform spelling,
+        # which ALSO failed on Windows, because stdout here is JSON and JSON
+        # escapes every backslash: the text really contains ".sbe\\evidence".
+        # Both failures were about the encoding of the haystack rather than the
+        # behaviour under test. The behaviour under test is that status reports
+        # which evidence store it inspected, and that is a named field.
+        self.assertEqual(data["scope"]["storesInspected"]["evidenceDir"],
+                         self._evidence_dir(),
+                         "status must still show the evidence store was inspected")
 
         # Re-run over the SAME dirty tree; exit code must not depend on
         # whether evidence could be minted or on the tree's cleanliness.
@@ -2346,14 +2398,30 @@ class TestPluginSurface(unittest.TestCase):
 
     def test_every_agent_declares_itself_and_stays_read_only(self):
         """The reviewer agents claim to be read-only in their own prose. A claim
-        in prose is not a restriction, but the tools list IS one, so the two are
-        pinned together here: an agent that grows a write tool has to change this
-        test, which is the moment somebody notices. The evidence auditor matters
-        most, because an auditor that can write the evidence it approves is not
-        an auditor. A writer agent is legal ONLY when named in WRITER_AGENTS
-        above, and it must say what it is in its first two words: a worker that
-        could be mistaken for a reviewer is exactly the confusion the lean plan
-        forbids."""
+        in prose is not a restriction, but banning Write, Edit, MultiEdit and
+        NotebookEdit from the tools list IS one: an agent that grows any of
+        those four has to change this test, which is the moment somebody
+        notices. [checked: tool] for those four, and only those four.
+
+        Bash is not banned here, and six of the seven reviewers keep it: their
+        own instructions call for git history, timestamps, row counts, test
+        runs or dependency checks that Read, Grep and Glob cannot do alone.
+        Bash can also write a file (`>`, `rm`, `sed -i`), and nothing in this
+        test or in `tools` stops that. Read-only for a Bash-bearing reviewer
+        is [human]: a stated discipline in the agent's own prose, not a
+        mechanical control. principal-architect is the one reviewer with no
+        command, timestamp, or test-run need in its instructions, so it
+        carries no Bash at all, closing that gap for itself specifically
+        rather than leaving an unused write vector on the claim that the
+        agent merely does not choose to use it.
+
+        The evidence auditor matters most among the Bash-bearing six, because
+        an auditor that can write the evidence it approves is not an auditor,
+        and its read-only claim rests on the same [human] footing as the
+        other five. A writer agent is legal ONLY when named in WRITER_AGENTS
+        above, and it must say what it is in its first two words: a worker
+        that could be mistaken for a reviewer is exactly the confusion the
+        lean plan forbids."""
         write_tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
         agents = sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))
         reviewers = [p for p in agents
@@ -2753,8 +2821,26 @@ class TestCaptureDefaultsAndAutosaveContentScan(unittest.TestCase):
         by_path = {f["path"]: f for f in bundle["files"]}
         self.assertIn("staging bucket", by_path[corrections]["content"],
                       "the export does not carry what is stored")
-        self.assertEqual(stat.S_IMODE(os.stat(out).st_mode), 0o600,
-                         "the export is not owner-only")
+        out_mode = stat.S_IMODE(os.stat(out).st_mode)
+        if _posix_modes_enforced():
+            self.assertEqual(out_mode, 0o600, "the export is not owner-only")
+        else:
+            # The platform ignores the requested mode (Windows: mode lands
+            # at 0o666 no matter what data-export asked for). The reachable
+            # guarantees here: the writer requested owner-only regardless
+            # (data_export's os.open call is unconditional, not
+            # platform-branched -- read at tools/sbe_telemetry.py), and the
+            # printed report names the mode it actually got rather than
+            # claiming enforcement it cannot deliver (Fix 1).
+            self.assertIn("owner-only intended", exported.stdout,
+                         "data-export no longer names owner-only as the intent: %s"
+                         % exported.stdout)
+            self.assertIn("does not promise enforcement", exported.stdout,
+                         "data-export's report no longer disclaims enforcement: %s"
+                         % exported.stdout)
+            self.assertIn("mode %03o" % out_mode, exported.stdout,
+                         "data-export's reported mode does not match the file on disk: %s"
+                         % exported.stdout)
 
         dry = subprocess.run([sys.executable, self.TEL, "data-purge"],
                              capture_output=True, text=True, env=self._env(vault))
@@ -3538,6 +3624,142 @@ class TestHelpMapTemplate(unittest.TestCase):
         en_dash_count = html.count(chr(0x2013))
         self.assertEqual(em_dash_count, 0, "an em dash (U+2014) slipped into the map template")
         self.assertEqual(en_dash_count, 0, "an en dash (U+2013) slipped into the map template")
+
+
+class TestProfileInvariantsOnTheMergePath(unittest.TestCase):
+    """The profile's four invariants, run from a suite CI already runs.
+
+    The full battery (defect re-injected, verdict watched go red, file restored,
+    verdict watched go green again) is tools/test_sbe_profile.py, which the shipped
+    workflow does not yet call. This class is the one assertion that rides an
+    existing step: the shipped tree's own profile must be clean under --strict, so a
+    module leaking into the default profile, or a law falling out of the routing
+    table, stops a merge today rather than on the day a workflow step is added.
+
+    Every check name below is written out BY HAND rather than derived from
+    sbe_profile.CHECKS, and the count is asserted from the report's own summary
+    line. A hostile refuter deleted `check_module_enforcement` from that tuple and
+    this class stayed green, because it named only three of the four checks: a check
+    that can be removed with no test noticing is not on the merge path, whatever the
+    report prints. Deriving the expected names from the tuple would recreate exactly
+    that hole, since the deletion would also shrink the expectation. Adding a fifth
+    check therefore means editing this list, on purpose, which is the point.
+    """
+
+    def test_the_shipped_tree_passes_its_own_profile_checks_under_strict(self):
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_profile.py"),
+                            "check", "--root", root, "--strict"],
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(0, r.returncode,
+                         "tools/sbe_profile.py check --strict blocks on this tree:\n%s%s"
+                         % (r.stdout, r.stderr))
+        for name in ("profile-declaration", "profile-law-routing", "profile-module-isolation",
+                     "profile-module-enforcement"):
+            self.assertIn(name, r.stdout, "the profile report lost the %s check" % name)
+        self.assertIn("4 check(s)", r.stdout,
+                      "the profile report no longer runs the four checks this class pins; "
+                      "a check was added or removed without this list being updated:\n%s"
+                      % r.stdout)
+        red = [ln for ln in r.stdout.splitlines()
+               if len(ln.split(None, 2)) == 3 and ln.split(None, 2)[1] == "FAIL"]
+        self.assertEqual([], red, "a profile check is red: %s" % red)
+        self.assertIn("19 law(s) and 6 phase(s)", r.stdout,
+                      "every law and phase must still resolve from the routing table")
+
+
+class TestTheUpdateNoticeIsUnconditional(unittest.TestCase):
+    """The notice that the skill itself changed prints at EVERY profile.
+
+    The regression this blocks, in one sentence: a size optimisation put the
+    session-start update check behind the release module, and the observable effect
+    was that an already-installed copy, upgraded, silently stopped printing
+
+        BROTHERSBE: the skill changed since your last session (<old> -> <new>).
+        Read the diff before relying on it:
+          git -C <install> log --oneline <old>..<new>
+
+    A user who is not told the governance engine changed will trust an install they
+    have not read, so this is a trust regression rather than a size win, and it was
+    refused. The decision and the 236 bytes it costs are written down in
+    references/modules.md and references/module-release.md.
+
+    This class lives in tools/test_sbe.py, which CI runs, rather than in
+    tools/test_sbe_profile.py, which it does not: a control for a safety-adjacent
+    notice belongs on the merge path. Both halves matter. The behavioural half runs
+    the real hook and reads what it actually printed. The source half pins the
+    absence of a guard, so re-introducing one is red even on a machine where the
+    behavioural half could not reach a git checkout.
+    """
+
+    NOTICE = "BROTHERSBE: the skill changed since your last session"
+
+    def test_the_default_profile_still_prints_the_skill_changed_notice(self):
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        work = tempfile.mkdtemp()
+        try:
+            # A FRESH vault whose marker holds a different sha: check-update writes
+            # that marker itself, so a vault it has already seen prints nothing and
+            # the assertion below would pass over silence.
+            vault = os.path.join(work, "vault")
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            with io.open(os.path.join(tel, "installed-skill-version-brothersbe"),
+                         "w", encoding="utf-8") as fh:
+                fh.write("0" * 40 + "\n")
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            env.pop("SBE_PROFILE", None)          # the DEFAULT profile, which is the case
+            env.pop("SBE_PROFILE_MODULES", None)  # the gated draft got wrong
+            r = subprocess.run(["sh", os.path.join(root, "tools", "sbe_sessionstart.sh")],
+                               input="{}", capture_output=True, text=True, env=env,
+                               timeout=180)
+            self.assertEqual(0, r.returncode, "SessionStart must always exit 0")
+            if "the update check is skipped" in r.stdout:
+                self.skipTest("not a git checkout the update check can read, so the "
+                              "notice could not fire here; the source half below still runs")
+            self.assertIn(self.NOTICE, r.stdout,
+                          "the default profile lost the notice that the skill changed "
+                          "under the user:\n%s" % r.stdout)
+            self.assertTrue(any(" log --oneline " in ln for ln in r.stdout.splitlines()),
+                            "the notice printed without the git command that reads the "
+                            "diff, which is the half a user acts on:\n%s" % r.stdout)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    def test_no_profile_guard_stands_between_the_hook_and_the_update_check(self):
+        """The source half: check-update must not sit inside an OPEN `enabled <id>`
+        block. Depth is tracked rather than a fixed window of lines above, because
+        the telemetry guard closes with its own `fi` two lines before check-update
+        and a window would read that closed guard as if it applied."""
+        with io.open(os.path.join(HERE, "sbe_sessionstart.sh"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        depth, opened_by, offenders, found = 0, [], [], False
+        for i, raw in enumerate(lines):
+            line = raw.strip()
+            if line.startswith("#"):
+                continue
+            if line.startswith("if ") and "enabled " in line:
+                depth += 1
+                opened_by.append((i + 1, line))
+            elif line == "fi" and depth:
+                depth -= 1
+                opened_by.pop()
+            if "check-update" in line:
+                found = True
+                if depth:
+                    offenders.append((i + 1, list(opened_by)))
+        self.assertTrue(found, "the hook no longer runs check-update at all")
+        self.assertEqual([], offenders,
+                         "check-update is gated again: %s. The skill-changed notice must "
+                         "print at every profile, including the default one." % offenders)
+        spec_p = importlib.util.spec_from_file_location(
+            "sbe_profile_pin", os.path.join(HERE, "sbe_profile.py"))
+        prof = importlib.util.module_from_spec(spec_p)
+        spec_p.loader.exec_module(prof)
+        self.assertNotIn("check-update", prof.STARTUP_EMITTERS,
+                         "sbe_profile.py claims a module owns check-update, which would "
+                         "make an ungated hook FAIL module-isolation and push the notice "
+                         "back behind a profile: %s" % (prof.STARTUP_EMITTERS,))
 
 
 if __name__ == "__main__":

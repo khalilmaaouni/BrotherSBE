@@ -37,11 +37,14 @@ That prefixing is the platform's job, not this repository's code, which is
 exactly why the second half of this guarantee exists: every skill's own
 `description` frontmatter states its fully namespaced form in plain text
 ("Invoke as /brothersbe:review."), so a person reading the skill, not only the
-harness's own UI, sees the correct spelling. `agents/*.md` (the eight
-read-only reviewer subagents BrotherSBE's own skills dispatch, never invoked
-directly by a user) are namespaced the same way by the same harness mechanism
-and are not separately tested here, because nothing in this repository claims
-a bare agent name as a user-facing command.
+harness's own UI, sees the correct spelling. `agents/*.md` (seven read-only
+reviewer subagents, tools `Read`, `Grep`, `Glob`, `Bash` only, plus one
+`implementation-worker` agent that additionally carries `Edit` and `Write`
+and writes to a user's files inside its declared scope; BrotherSBE's own
+skills dispatch all eight, none is invoked directly by a user) are namespaced
+the same way by the same harness mechanism and are not separately tested
+here, because nothing in this repository claims a bare agent name as a
+user-facing command.
 
 Status: PROVEN BY TEST, `TestSkillsNamespaced::test_every_skill_declares_its_namespaced_invocation`.
 The harness's own prefixing behavior (that `brothersbe:review` and not `review`

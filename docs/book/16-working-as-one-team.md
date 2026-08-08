@@ -194,12 +194,12 @@ agents/data-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 agents/evidence-auditor.md:4:tools: [Read, Grep, Glob, Bash]
 agents/implementation-worker.md:4:tools: [Read, Grep, Glob, Edit, Write, Bash]
 agents/migration-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
-agents/principal-architect.md:4:tools: [Read, Grep, Glob, Bash]
+agents/principal-architect.md:4:tools: [Read, Grep, Glob]
 agents/qa-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 agents/security-reviewer.md:4:tools: [Read, Grep, Glob, Bash]
 ```
 
-`Read, Grep, Glob, Bash`, on all seven, nowhere a `Write` or an `Edit`:
+No reviewer lists a `Write` or an `Edit`:
 
 ```bash
 ( cd "$ROOT" && grep -l "Write\|Edit" agents/*.md )
@@ -211,10 +211,17 @@ agents/implementation-worker.md
 no reviewer agent lists Write or Edit as a tool
 ```
 
-That is not a convention seven authors happened to agree on; it is the
-same tool list checked seven times, which is what makes "reviewers never
-write" a structural fact rather than a promise someone could quietly
-break. What each one hunts:
+Be careful how much that proves. It is checked rather than agreed, which
+is worth something: a reviewer that added `Write` to its own file would
+fail the test that reads these lines. What it does not give you is a
+guarantee that a reviewer cannot write, because six of the seven still
+hold `Bash`, and `Bash` writes files perfectly well through a redirect or
+an `rm`. The list bans the four structured write tools and nothing else.
+So "reviewers never write" is enforced against one route and left to
+discipline on another, and the honest way to hold it is as a strong
+convention with a mechanical floor, not as a structural impossibility.
+`principal-architect` is the one that no longer needs `Bash` at all, and
+it no longer has it. What each one hunts:
 
 `backend-reviewer` reads contract compatibility, idempotency, concurrency,
 transaction boundaries and swallowed errors in a service or endpoint

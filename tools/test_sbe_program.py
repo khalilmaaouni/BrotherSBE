@@ -15,6 +15,7 @@ Two fixture families:
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import shutil
@@ -111,12 +112,10 @@ class TestRealLedger(unittest.TestCase):
         # proved against a synthetic fixture per the round-2 brief).
         self.assertIsInstance(report["undeclaredWaves"], list)
 
-    def test_all_sixteen_shipped_items_load_when_present(self):
+    def test_all_shipped_items_load_when_present(self):
         # Confirms the loader has no hardcoded item count of its own: it
         # loads however many *.yaml files exist under program/work-items,
-        # whether that is today's seven or the sixteen the round-2 brief
-        # describes (seven original plus BR-1000..BR-1009) once that
-        # migration lands in this worktree. The assertion is against the
+        # whichever plan they carry today. The assertion is against the
         # directory listing itself, never a magic number, so it is already
         # true for any item count.
         data = program_mod.load_program(ROOT)
@@ -125,27 +124,59 @@ class TestRealLedger(unittest.TestCase):
         self.assertEqual(len(data.items), len(item_files))
         self.assertEqual(data.parse_errors, [])
 
-    def test_br_0201_multiline_plain_scalar_risk_parses_real_shape(self):
-        # BR-0201.yaml's risks[] entry is a plain (unquoted) scalar that
-        # wraps across three lines inside a list item, the exact shape the
-        # round-2 brief named by file. It must fold to one sentence with no
-        # embedded newline and no parse error.
-        data = program_mod.load_program(ROOT)
-        item = next(i for i in data.items if i["id"] == "BR-0201")
+    def test_multiline_plain_scalar_risk_parses(self):
+        # A plain (unquoted) scalar risks[] entry that wraps across three
+        # lines inside a list item, the exact shape a real shipped item once
+        # carried (BR-0201, retired with the seven-wave November plan). Kept
+        # as a synthetic fixture so the parser edge case stays pinned after
+        # the ledger it was first found in was replaced. It must fold to one
+        # sentence with no embedded newline and no parse error.
+        tmp = tempfile.mkdtemp(prefix="sbe-program-risk-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        items = {
+            "LOOP-X.yaml": (
+                "id: LOOP-X\n"
+                "title: T\n"
+                "status: not_started\n"
+                "risks:\n"
+                "  - The shipped slice is prompt-guided (skills instructing the model), not\n"
+                "    engine-backed. It depends on the model following the skill's wording\n"
+                "    each run, not on a deterministic program.\n"
+            ),
+        }
+        root = _make_root(tmp, items=items)
+        data = program_mod.load_program(root)
+        self.assertEqual(data.parse_errors, [])
+        item = data.items[0]
         self.assertEqual(len(item["risks"]), 1)
         risk_text = item["risks"][0]["risk"]
         self.assertNotIn("\n", risk_text)
         self.assertIn("prompt-guided", risk_text)
         self.assertIn("engine-backed", risk_text)
 
-    def test_br_0301_unknown_key_acceptance_notes_does_not_raise(self):
-        # BR-0301.yaml carries `acceptance_notes`, a key this module's
-        # schema never lists. Reading it must never raise: an unknown key
-        # is simply not surfaced in the normalized item, per the schema
-        # documented in SPEC.md (only the named fields are extracted).
-        data = program_mod.load_program(ROOT)
+    def test_unknown_key_does_not_raise(self):
+        # An unknown key (a real shipped item, BR-0301, retired with the
+        # seven-wave November plan, once carried `acceptance_notes`) this
+        # module's schema never lists. Reading it must never raise: an
+        # unknown key is simply not surfaced in the normalized item, per the
+        # schema documented in SPEC.md (only the named fields are
+        # extracted). Kept as a synthetic fixture so this edge case stays
+        # pinned after the ledger it was first found in was replaced.
+        tmp = tempfile.mkdtemp(prefix="sbe-program-unknownkey-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        items = {
+            "LOOP-X.yaml": (
+                "id: LOOP-X\n"
+                "title: T\n"
+                "status: partially_done\n"
+                "acceptance_notes: >\n"
+                "  Acceptance criteria for this item are being finalized.\n"
+            ),
+        }
+        root = _make_root(tmp, items=items)
+        data = program_mod.load_program(root)
         self.assertEqual(data.parse_errors, [])
-        item = next(i for i in data.items if i["id"] == "BR-0301")
+        item = data.items[0]
         self.assertEqual(item["status"], "partially_done")
         self.assertNotIn("acceptance_notes", item)
 
@@ -1016,6 +1047,175 @@ class TestStatusMdWriteIsAFixedPoint(unittest.TestCase):
         # preserved, so the fix normalizes the seam without eating the
         # author's spacing.
         self.assertTrue(first.endswith(prose_after))
+
+
+class TestBoardHtml(unittest.TestCase):
+    """`render_board_html` / `write_program_board`: the board renders ONLY
+    the existing program report, refuses to overwrite a file it did not
+    itself write, and never carries a network reference."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sbe-program-board-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_an_existing_file_that_cannot_be_read_is_refused_not_crashed_over(self):
+        # Both of these used to escape as a raw traceback, which exits 1, the
+        # same code this CLI uses for a control that refused. A crash was
+        # therefore indistinguishable from a principled refusal to anything
+        # reading the exit status. The refusal is correct in both cases: the
+        # guard cannot confirm the file is one of ours, so it must not write.
+        root = _make_root(self.tmp, items={"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"})
+        not_utf8 = os.path.join(self.tmp, "notutf8.html")
+        with open(not_utf8, "wb") as fh:
+            fh.write(b"\xff\xfe\x00\x01binary")
+        with self.assertRaises(program_mod.ProgramParseError) as caught:
+            program_mod.write_program_board(root, not_utf8)
+        self.assertIn("could not be read", str(caught.exception))
+        with open(not_utf8, "rb") as fh:
+            self.assertEqual(fh.read(), b"\xff\xfe\x00\x01binary",
+                             "a refused write must leave the file byte-identical")
+
+    def test_an_unreadable_work_items_source_is_named_not_rendered_as_empty(self):
+        # Found by an independent clean-room review, which BLOCKED the release
+        # over it. The board filtered parse errors to `kind == "item"` and threw
+        # the other two kinds away, so a work-items directory that cannot be
+        # read (a `source` error) rendered as a program with nothing in it: `0
+        # of 0 items measured`, exit 0, no trace of why. An unreadable program
+        # presented as an empty one, on the surface that exists to stop exactly
+        # that, while `sbe program status` reported the same fact correctly.
+        root = _make_root(self.tmp, items={"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"})
+        os.chmod(os.path.join(root, "program", "work-items"), 0o000)
+        self.addCleanup(os.chmod, os.path.join(root, "program", "work-items"), 0o755)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn(program_mod.NO_DATA_MARKER, html)
+        self.assertIn("work-items", html,
+                      "the board must NAME the source it could not read, never "
+                      "render its absence as an empty program")
+
+    def test_a_dependency_parse_error_is_named_on_the_board(self):
+        # The second kind the filter discarded. A work item depending on an id
+        # that does not exist is a `dependency` error: status names it, and the
+        # board used to say nothing at all.
+        items = {
+            "LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
+                           "depends_on:\n  - GHOST-99\n",
+        }
+        root = _make_root(self.tmp, items=items)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn("GHOST-99", html,
+                      "the board must name a dependency it cannot resolve")
+
+    def test_missing_field_renders_no_data_not_blank(self):
+        # An item with no acceptance criteria and no evidence recorded must
+        # render the literal word NO-DATA in both spots, never a blank
+        # (which would read as zero without saying so) and never a guess.
+        items = {"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: not_started\n"}
+        root = _make_root(self.tmp, items=items)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn(program_mod.NO_DATA_MARKER, html)
+        # Specifically: no blank <ul> standing in for the missing data.
+        self.assertNotIn('<ul class="board-subitems"></ul>', html)
+        self.assertNotIn('<ul class="board-evidence"></ul>', html)
+
+    def test_acceptance_met_absent_is_no_data_not_zero_met(self):
+        # acceptance recorded, but acceptance_met never recorded: this must
+        # read as "cannot say", not as "recorded and none are met" (which
+        # would render every box unticked, a different and false claim).
+        items = {
+            "LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
+                           "acceptance:\n  - one\n  - two\n",
+        }
+        root = _make_root(self.tmp, items=items)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn(program_mod.NO_DATA_MARKER, html)
+        # The CSS class is always defined in the stylesheet; what must be
+        # absent is an actual unticked BOX rendered for a criterion, which
+        # would claim "recorded as not met" rather than "not recorded".
+        self.assertNotIn('class="board-untick"', html)
+
+    def test_refuses_to_overwrite_a_file_it_did_not_write(self):
+        items = {"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"}
+        root = _make_root(self.tmp, items=items)
+        out_path = os.path.join(self.tmp, "foreign.html")
+        _write(out_path, "<html>a file this tool never wrote</html>")
+        with self.assertRaises(program_mod.ProgramParseError) as ctx:
+            program_mod.write_program_board(root, out_path)
+        self.assertIn(program_mod.BOARD_MARKER, str(ctx.exception))
+        with io.open(out_path, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), "<html>a file this tool never wrote</html>")
+
+    def test_a_previously_written_board_is_regenerated_not_refused(self):
+        items = {"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"}
+        root = _make_root(self.tmp, items=items)
+        out_path = os.path.join(self.tmp, "board.html")
+        program_mod.write_program_board(root, out_path)
+        # A second call at the same path, generated by this same tool,
+        # regenerates rather than refusing.
+        html = program_mod.write_program_board(root, out_path)
+        self.assertIn(program_mod.BOARD_MARKER, html)
+
+    def test_written_board_carries_no_network_reference(self):
+        items = {"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
+                                "evidence:\n  - some recorded evidence\n"}
+        root = _make_root(self.tmp, items=items)
+        out_path = os.path.join(self.tmp, "board.html")
+        program_mod.write_program_board(root, out_path)
+        with io.open(out_path, encoding="utf-8") as fh:
+            html = fh.read()
+        self.assertNotIn("http://", html)
+        self.assertNotIn("https://", html)
+
+    def test_tick_marks_a_completed_sub_item(self):
+        # A false pin lived here before: asserting only that the strings
+        # "board-tick" and "board-untick" appear anywhere in the file never
+        # checks what mark is actually inside either span. Swapping the
+        # tick glyph for the empty-box glyph across the whole render (so a
+        # met criterion and an unmet one look identical) left both class
+        # names present and the assertions green. The fix compares the two
+        # criteria's own rendered fragments against each other: a met
+        # criterion and an unmet one must render as different marks, and
+        # this test must go red if a change makes them the same.
+        items = {
+            "LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
+                           "acceptance:\n  - one\n  - two\n"
+                           "acceptance_met:\n  - 0\n",
+        }
+        root = _make_root(self.tmp, items=items)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn("board-tick", html)
+        self.assertIn("board-untick", html)
+
+        met_li = re.search(r"<li>.*?\bone\b.*?</li>", html)
+        unmet_li = re.search(r"<li>.*?\btwo\b.*?</li>", html)
+        self.assertIsNotNone(met_li, "no <li> found for the met criterion 'one'")
+        self.assertIsNotNone(unmet_li, "no <li> found for the unmet criterion 'two'")
+
+        met_mark = re.search(r'<span class="board-tick"[^>]*>(.*?)</span>', met_li.group(0))
+        unmet_mark = re.search(r'<span class="board-untick"[^>]*>(.*?)</span>', unmet_li.group(0))
+        self.assertIsNotNone(met_mark, "met criterion is not wrapped in board-tick")
+        self.assertIsNotNone(unmet_mark, "unmet criterion is not wrapped in board-untick")
+
+        # The load-bearing assertion: the glyph inside a met mark and the
+        # glyph inside an unmet mark must differ. If both were replaced
+        # with the same glyph (the exact regression under test), this
+        # fails even though "board-tick" and "board-untick" both still
+        # appear in the file.
+        self.assertNotEqual(
+            met_mark.group(1), unmet_mark.group(1),
+            "a met and an unmet criterion render the identical mark %r; a completed "
+            "acceptance criterion must be visually distinguishable from one that is "
+            "not" % (met_mark.group(1),))
+
+    def test_defines_dark_mode_colors(self):
+        report = program_mod.build_program_report(_make_root(self.tmp))
+        html = program_mod.render_board_html(report)
+        self.assertIn("prefers-color-scheme: dark", html)
+        self.assertIn(":root", html)
 
 
 if __name__ == "__main__":

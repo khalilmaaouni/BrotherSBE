@@ -6,6 +6,100 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.29
+
+### The write boundary did not bind on Windows, and the board hid what it could not read
+
+Two findings from independent review, both reproduced before they were believed.
+
+**The fence hook split its registry list on a literal colon.** A Windows path begins with a drive letter and a colon, so `C:\work\STATE.md` split into `C` and `\work\STATE.md`, and the registry was never opened. The consequence was not a crash, which is what makes it serious: the hook found no fence and ALLOWED the write, so the one-writer-per-file boundary silently failed to bind for any registry named through `BROTHERSBE_REGISTRIES` on that platform. `tools/sbe_score.py` already used `os.pathsep` correctly, so this was drift from a pattern the repository already had, in two of the three tools that read that variable. All three now agree, which the tests require of them, and the ninth defect of the class this project keeps finding: a path read as syntax rather than as data.
+
+**The program board discarded two of three kinds of parse error.** A clean-room architecture review blocked the release over this, and it was right to. The board named work-item errors and threw away source and dependency errors, so a work-items directory that could not be read rendered as a program with nothing in it: zero of zero items measured, exit zero, no trace of why, while `sbe program status` reported the same fact correctly. An unreadable program presented as an empty one, on the surface that exists to stop exactly that. The board now reports every parse error it is given rather than a named subset, which also means a kind added later is reported by default instead of silently dropped. Both cases are pinned by tests calibrated against the old filter.
+
+**The profile module work landed under its SPLIT verdict.** Both of its known Majors were re-verified by putting each defect back and watching the test fail: deleting the module-enforcement check makes the merge-path test name the loss, and re-gating the update notice behind the release module makes the unconditional-notice test fail on both halves. The hunks carrying stale counts were discarded rather than applied, and the one sentence in `SKILL.md` that quotes lint numbers was regenerated from a live run instead of from the patch, which turned out to be wrong before and after: it read 90 clean files where the tree has 92.
+
+### SECURITY: the install verifier certified a planted backdoor, and a filename was the exploit
+
+An adversarial security review found this and reproduced it before anyone believed it. It is the most serious defect this project has shipped.
+
+`scripts/verify-install.sh` asked whether each walked file was named in the manifest by passing the filename to `grep` as a bare operand. A filename that begins with a dash is therefore parsed as an OPTION. The option then consumed the manifest-paths filename as its own argument, which left `grep` with no file to read, so `grep` read STDIN instead. Stdin, at that moment, is the walk output the enclosing loop is still consuming. Every remaining entry was swallowed and never checked.
+
+Reproduced here before the fix, on a tree containing an undeclared file named `-v` and an undeclared `skills/backdoor.py`:
+
+```
+verify-install: 2 file(s) match, 0 mismatched, 0 missing, 0 extra
+verify-install: PASSED. Every file the manifest names matches on disk,
+EXIT=0
+```
+
+The one tool whose entire job is telling you whether your installation has been tampered with certified a tampered installation, and did it silently. After the fix, the same tree reports `EXTRA: -v`, `EXTRA: skills/backdoor.py`, `2 extra`, `FAILED`, exit 1. The fix names the pattern with `-e`, ends option parsing with `--`, and denies stdin outright so a future edit reintroducing the operand mistake cannot steal the walk again. The same shape was swept and fixed in `scripts/checksums.sh`, where the input is maintainer-controlled and the risk was hardening rather than a live hole.
+
+This is the eighth defect of one class in this repository: a path read as syntax rather than as data. The first seven were regex, glob, escaping and spelling. This one was option syntax. It is pinned now by the eval `a-planted-file-named-like-an-option-is-still-reported`, calibrated by restoring the operand form and watching it report that the walk was truncated.
+
+### Executable configuration is reported without accusing a clean installation
+
+The same review planted a `.claude/settings.json` declaring a SessionStart hook, which the harness runs on every session, and the verifier counted it as "0 of them source code" and PASSED. The gap was real: it is the highest-value execution vector on this platform and it was invisible.
+
+The obvious repair, adding `*.json` to the source list, was tried and reverted, because it turned every healthy installation red. A `.claude/settings.json` is ordinary state a correct install is supposed to have, and this script has already shipped four separate defects that told a clean installation it looked compromised. Trading a fifth for this would have been a bad bargain.
+
+Configuration inside an excluded path is now counted and named on its own line, and does not by itself decide the verdict. That is this project's own vocabulary applied honestly: the file's presence is expected, its content is something this script does not read, and neither a pass nor a block follows from evidence that thin. The residual risk is written into the known-limits page rather than settled by a verdict it cannot support.
+
+### Windows says what it can actually enforce, and one shipped sentence stops overpromising
+
+Windows reached the tool tests for the first time in this project's history, having never before got past the honesty meta-test, and reported four failures out of 108. Three distinct defects, all reproduced here by simulating the platform rather than waiting for a runner.
+
+**A shipped sentence was false on Windows, and that is the worst of the three.** `data-export` printed that it had written a file `(owner-only)`. The writes ask for mode `0o600`, but on Windows that argument sets only a read-only attribute and writes no access list, so the file inherits whatever the parent directory allows, while carrying redacted but still sensitive session context. The sentence now reports the mode the platform actually gave and says plainly that it does not promise enforcement where POSIX modes are ignored, reusing wording this repository already had in `tools/sbe_autosave.sh`. The same overclaim was corrected in the command help, in the stored inventory that `data-show` prints, and in the export's own JSON. `docs/KNOWN-LIMITS.md` now carries the limitation, names the four writing sites, and records the rejected alternative: setting a real access list needs pywin32 or icacls, a new dependency with its own failure modes in a project that ships none.
+
+**The eighth defect of a shape that has now produced eight.** `DEFAULT_EVIDENCE_DIR` is the string `.sbe/evidence`, and joining it with the platform separator produced `...\.sbe/evidence` on Windows, a mixed path that was then serialized into a JSON field. A path was again treated as syntax rather than as data. The correct idiom already existed three files away, so this was drift rather than an unknown: a single `tasks.evidence_dir(root)` helper now owns the join and eight call sites route through it. The rest of the sweep was checked one site at a time and deliberately left alone, because a join that only ever opens a file is fine on Windows; the ones that were fixed are those whose result gets compared, serialized, or printed.
+
+**A path spelling no native reader could resolve.** The recovery command asks the Git-for-Windows shell for a temporary directory and gets back an MSYS spelling like `/tmp/tmp.XXXXXXXX`. Git understands it, native Python does not, and resolves the leading slash against the current drive, so the command printed a directory a Windows user could not change into. It now emits the native spelling through `cygpath -w`, falling back to the original everywhere else. Fixing it surfaced a second bug in the same line: `echo` was eating the backslash in `\Temp`, so the line is a `printf` now.
+
+**The permission tests were made platform-aware rather than skipped.** Asserting `0o666` on Windows would have pinned a platform accident, and skipping would have removed a real check. POSIX keeps the exact `0o600` assertion; Windows asserts the guarantee that is actually reachable, which is that the write went through the owner-only path and that the message printed claims nothing more.
+
+### Deleting ambiguity: one duplicated judgement, one decorative version claim, one artifact deliberately kept
+
+The approval judgement in `src/brothersbe/status.py` existed twice, and the two copies had already drifted: one remedy ended in `(MISSING APPROVAL)` and the other did not, one recorded a full path and the other a bare filename. The inline copy is gone and both callers now share one function. No test pinned either spelling, which is its own finding.
+
+The explainer page carried a hand-written version string that nothing updates and that had been wrong for twenty-seven releases. It was decoration rather than a declaration, so the claim was deleted instead of being wired into the bump command.
+
+`skills/help/map-template.html` was proposed for deletion as dead and is deliberately RETAINED. Two independent reasons: a live test class guards it, and `src/brothersbe/mapgen.py` states in its own docstring that it does not supersede the template, because the template's richer slots need dossier content that the generator deliberately leaves out of scope. An artifact that a shipped module names as intentionally not-yet-replaced is not dead code.
+
+Also recorded rather than changed: `.brothersbe/config.json` is tracked and carries a `toolVersion` that goes stale every release. Nothing reads that field, including the `project-init` doctor check, which tests only that the file exists.
+
+### The freshness gate was blind in the one place it runs, plus the Windows fixture writer and the install checker's last two path defects
+
+**The most serious finding first: the manifest freshness gate could not fail on a clean checkout.** Two releases ago this gate was fixed so that a path added to or removed from the tracked set could no longer be forgiven by its race filter. The other half of the same filter was left as it was, and it was worse. For a path whose hash disagreed with the manifest, the filter re-read the working-tree file against the COMMITTED GIT BLOB and forgave the path when those two matched. After any commit those two are identical by construction, so a genuinely stale manifest always re-read as identical, was classified transient, and was forgiven. CI checks out a clean, committed tree, which means this gate has never been able to fail in the place it exists to protect.
+
+Reproduced before the fix, on a committed tree with nothing uncommitted: `CHECKSUMS.sha256` recorded `4c8b2430...` for `README.md` while the file hashed to `0d75ef2c...`, and the check printed `The manifest matches`.
+
+The fix makes the second opinion ask the question the drift was found on. Drift is detected by hashing the working tree and comparing against the hashes the manifest records, so the re-read now re-hashes the file and compares it against that same manifest hash. The race filter survives, because that was never the part that was wrong: on a host where a file read immediately after checkout differs from the same file read a moment later, the second hash lands on the manifest's value and the path is still correctly forgiven. What can no longer happen is forgiving a file whose bytes do not match what shipped.
+
+Calibrated in an isolated clone, both directions. A clean tree with a fresh manifest still reports `matches`. A clean, committed tree with one tracked byte changed and the manifest deliberately not regenerated now reports `the tracked manifest is stale for: README.md`, where the previous code reported `matches`.
+
+This is the third time a check in this repository has been found reporting PASS over evidence contradicting it, and all three were the same shape: a filter written for a real edge case that answered a slightly different question than the one being asked.
+
+### The Windows fixture writer, the install checker's last two path defects, and two lanes that graded themselves too kindly
+
+**The Windows cause, fixed at the writer rather than the fixture.** `evals/test_no_data_class.py` wrote every fixture through `open(path, "w")`. Text mode on Windows turns each newline into two bytes, so the fixture on disk stopped matching the hash the registry pinned, and the freshness check in `tools/sbe_plan.py` failed. The writer now opens in binary and encodes to UTF-8, which cannot translate a newline on any platform. Calibrated by emulating the Windows translation and watching `FAIL sbe_plan.py freshness [full] want PASS got FAIL` appear, then restoring.
+
+A pin in two halves came with it, in the shape this file already uses elsewhere. One half asserts the bytes on disk are exactly what was handed in. The other asserts the writer itself is still non-translating, so an edit back to text mode goes red on Linux and macOS too, instead of waiting for a Windows run to notice. The second half was calibrated separately: reverting to text mode leaves the freshness check green on macOS and still turns the pin red.
+
+**The fifth and sixth install-checker defects, both of the same shape as the four before them.** `scripts/verify-install.sh` spliced the install root into `find -path` glob patterns, so a root containing `[` and `]` turned every exclusion into a character class and a documented exclusion came back as an added file. Both walks now run from inside the install root, which makes every pattern a literal string. Reproduced before and after on a root at `x[1]/inst`: one extra file and FAILED, then zero extra and PASSED.
+
+The second: `find` emits its starting point as its own entry when that starting point is a symlink, and the relative-path strip never fired on an exact match, so the script flagged the install root as a planted non-regular entry. Its own comment scopes that rule to entries inside the tree, and `install.sh` says a symlinked clone is supported, so two shipped surfaces contradicted each other. Changing into the root before walking resolves it. A symlink planted inside the tree is still caught.
+
+**The undo stops guessing which installation it is undoing.** `scripts/rollback-install.sh` let `--install-dir` replace the directory while version, commit and marketplace kept coming from whichever entry the harness record already held. Pointed at a directory the record did not name, it ran to completion and attached one installation's identity to another installation's bytes. It now refuses, naming both paths. A directory that does match a record adopts that record's own identity. The rejected alternative, reporting the identity as unknown and rolling back anyway, is recorded in the script's header: it removes the false claim but not the wrong-state action underneath it.
+
+**`install.sh` was telling the truth.** Its claim that both sides of the self-install comparison resolve through `cd ... && pwd` was checked against lines 48 and 99 and found correct, so nothing changed. A claim that survives an audit is worth recording as clearly as one that does not.
+
+**Two lanes graded themselves too kindly, and hostile review caught both.** The Windows lane reported `536 evals: 536 passed, 0 regressions`. An independent refuter re-ran it and got `535 passed, 1 regressions`, then found why: the lane had committed its own checkpoint scratch files, which the manifest did not name. A path present on one side only is exactly the drift this project fixed the freshness gate to stop forgiving two releases ago, so the gate was right and the lane's summary was wrong. The checkpoint files are untracked now and ignored.
+
+The install lane's fixes all reproduced, but its new refusal removed a capability that nothing disclosed. That removal is now a decision in the script's header rather than a surprise, with two behavioral tests that were watched failing, printing the borrowed identity, before they were watched passing.
+
+Neither correction came from the author of the work. That is the whole argument this project makes, applied to itself.
+
+**Counts moved, so the documents that quote them moved in the same change.** Two new eval cases took the suite from 536 to 538, and six shipped documents quoting the old line were swept with it.
+
 ## 1.0.0-rc.28
 
 ### The benchmark harness reaches the merge path, and a law I had been overstating

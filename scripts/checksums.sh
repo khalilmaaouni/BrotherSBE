@@ -98,7 +98,12 @@ fi
 # committed does not fold that file's own bytes into the new one.
 if [ -n "$OUT_FILE" ]; then
     OUT_FILE_NORMALIZED=$(printf '%s' "$OUT_FILE" | sed 's|^\./||')
-    grep -v -x -F "$OUT_FILE_NORMALIZED" "$WORKDIR/filelist" > "$WORKDIR/filelist.filtered" || true
+    # Same shape as the verify-install defect: a filename handed to grep as a
+    # bare operand is option syntax the moment it starts with a dash. The input
+    # here is maintainer-controlled rather than attacker-controlled, so this is
+    # hardening rather than a live hole, and it is fixed anyway because the
+    # lesson of this defect class is that the SHAPE is the defect.
+    grep -v -x -F -e "$OUT_FILE_NORMALIZED" -- "$WORKDIR/filelist" > "$WORKDIR/filelist.filtered" </dev/null || true
     mv "$WORKDIR/filelist.filtered" "$WORKDIR/filelist"
 fi
 

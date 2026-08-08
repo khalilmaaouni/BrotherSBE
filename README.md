@@ -167,7 +167,7 @@ Validating plugin manifest: /path/to/BrotherSBE/.claude-plugin/plugin.json
 ✔ Validation passed
 ```
 
-Once it validates, run the marketplace pair at the top of this page, the persistent install, executed and verified on 2026-08-01. That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents, and the four hooks resolving their own paths. The hooks block that [docs/SETUP.md](docs/SETUP.md) documents for the manual path is then unnecessary: no hook goes into your `settings.json`, because the plugin package wires its own. The vault export in that same page is still worth doing by hand; the plugin does not set `BROTHERSBE_VAULT` for you. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). The public repository itself is the marketplace source today, verified working; a signed, directory-listed distribution is still ahead, see [docs/ROLLOUT.md](docs/ROLLOUT.md).
+Once it validates, run the marketplace pair at the top of this page, the persistent install, executed and verified on 2026-08-01. That gives you ten namespaced skills (the guided four: `/brothersbe:start`, `:next`, `:status`, `:help`, and the specialist six: `/brothersbe:kickoff`, `:design`, `:verify`, `:review`, `:learn`, `:adopt`), seven read-only reviewer agents plus one `implementation-worker` agent that is granted `Edit` and `Write` on a user's files inside its declared scope, and the four hooks resolving their own paths. The hooks block that [docs/SETUP.md](docs/SETUP.md) documents for the manual path is then unnecessary: no hook goes into your `settings.json`, because the plugin package wires its own. The vault export in that same page is still worth doing by hand; the plugin does not set `BROTHERSBE_VAULT` for you. Moving from an older clone-style install is one page: [docs/MIGRATION.md](docs/MIGRATION.md). The public repository itself is the marketplace source today, verified working; a signed, directory-listed distribution is still ahead, see [docs/ROLLOUT.md](docs/ROLLOUT.md).
 
 Either way you install it, there is one command line over the nine script paths:
 
@@ -178,15 +178,17 @@ bin/sbe doctor
 ```
 python           PASS     3.9.6 (floor is 3.9)
 tools            PASS     all present in /path/to/BrotherSBE/tools
-plugin-manifest  PASS     manifest 1.0.0-rc.2, VERSION 1.0.0-rc.2
+plugin-manifest  PASS     manifest 1.0.0-rc.28, VERSION 1.0.0-rc.28
 git              PASS     working directory is inside a git tree
+project-init     PASS     .brothersbe/config.json is present; this repository carries BrotherSBE's local footprint
+identity         PASS     git config reports name "Khalil Maaouni" and email "khalilmaaouni@users.noreply.github.com"
 vault            NO-DATA  BROTHERSBE_VAULT is unset, so telemetry, session logs and resume briefs have nowhere durable to go
 private-names    NO-DATA  no private-name list, so the publish leak check scans nothing
 
-sbe 1.0.0-rc.2, evidence schema 1.0. 6 check(s): 4 PASS, 0 FAIL, 2 NO-DATA.
+sbe 1.0.0-rc.28, evidence schema 1.0. 8 check(s): 6 PASS, 0 FAIL, 2 NO-DATA.
 ```
 
-That block is a real run on a fresh install (no vault exported, no private-name list configured), with only the absolute installation path replaced by `/path/to/BrotherSBE`. The two NO-DATA lines are the point: an unanswered environment question is reported as unanswered, never folded into the passes.
+That block is a real run against 1.0.0-rc.28 on a fresh clone (no vault exported, no private-name list configured), with only the absolute installation path replaced by `/path/to/BrotherSBE`. `doctor` has gained checks since earlier releases (`project-init`, `identity`); the two NO-DATA lines are still the point: an unanswered environment question is reported as unanswered, never folded into the passes.
 
 `sbe` is a facade, not a rewrite: every built subcommand delegates to the tool in `tools/` that already carries the behavior and the tests, and the old invocations shown throughout this README still work and are not deprecated. Commands, exit codes, and the six subcommands that are present and deliberately refuse: [docs/CLI.md](docs/CLI.md).
 
@@ -431,7 +433,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-536 evals: 536 passed, 0 regressions.
+539 evals: 539 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.
@@ -450,7 +452,7 @@ python3 evals/test_no_data_class.py
 Its last line, verbatim:
 
 ```
-32 checks discovered from 6 registries in 60 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
+32 checks discovered from 6 registries in 62 module(s), 3780 scenarios run, 2 waived by declared exemption, 0 failure(s).
 ```
 
 To watch one check on a real change:

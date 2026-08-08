@@ -2013,6 +2013,101 @@ def gd_vinstall_metachar_path(root):
     return "clean tree reads clean"
 
 
+@case("a-planted-file-named-like-an-option-is-still-reported",
+      "guard", "the planted file is named")
+def gd_vinstall_dash_filename(root):
+    # SECURITY CRITICAL, found by an adversarial review and reproduced before it
+    # was believed. The eighth defect of the path-as-syntax shape, and the first
+    # where the syntax was OPTION syntax: the membership test passed `$rel` to
+    # grep as a bare operand, so an installed file whose name begins with a dash
+    # was parsed as a flag. The flag then consumed the manifest-paths filename as
+    # its own argument, leaving grep no FILE operand, so grep read STDIN, and
+    # stdin at that point is the walk output the enclosing loop is still reading.
+    # Every remaining walked entry was swallowed unchecked.
+    #
+    # What that cost, reproduced exactly: a tree holding an undeclared `-v` AND
+    # an undeclared `skills/backdoor.py` reported `0 extra`, `PASSED`, exit 0.
+    # The one tool whose entire job is telling you whether your installation has
+    # been tampered with certified a tampered installation.
+    #
+    # Calibration, against a scratch copy with the operand form restored: this
+    # case returns the planted file was not named. With `-e`, `--` and a denied
+    # stdin it returns "the planted file is named".
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    os.makedirs(os.path.join(inst, "skills"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("inst", "hello.txt"), "hi\n")
+    # The dash-named file sorts before skills/, so under the defect it is the
+    # entry that steals stdin and hides everything after it.
+    write(root, os.path.join("inst", "-v"), "")
+    write(root, os.path.join("inst", "skills", "backdoor.py"), "print('planted')\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if "skills/backdoor.py" not in out.stdout:
+        return ("a planted file was NOT named, so the walk was truncated: exit %d, %s"
+                % (out.returncode, _re_missing_extra(out.stdout)))
+    if out.returncode == 0:
+        return ("the planted file was named but the run still exited 0, so the "
+                "verdict does not follow its own evidence")
+    return "the planted file is named"
+
+
+@case("a-glob-metacharacter-in-the-install-root-does-not-accuse-a-clean-tree",
+      "guard", "clean tree reads clean")
+def gd_vinstall_glob_root(root):
+    # The fourth defect of the same path-as-syntax shape in this script's
+    # history (CRLF manifest, sed regex splice, GNU coreutils escaping): both
+    # `find` walks built every exclusion as `-path "$TARGET/.claude/*"`,
+    # splicing the install root into a GLOB PATTERN. A root such as
+    # /tmp/sbe-glob/x[1]/inst turns the `[1]` directory-name fragment into a
+    # character-class test, so the intended `.claude/*` exclusion stops
+    # matching the real .claude directory: .claude/settings.json, a
+    # documented exclusion (the harness-written local config), walks through
+    # unexcluded and reports EXTRA over an installation where nothing is
+    # wrong. Fixed the same way the sed-regex splice above it was: TARGET is
+    # never fed to a pattern-matching construct again. Both walks now `cd
+    # "$TARGET"` and enumerate the relative path `.`, so every `-path`
+    # exclusion is a literal, TARGET-independent string no character in the
+    # install root can reinterpret.
+    #
+    # Calibration, run against a scratch copy with the walks reverted to
+    # `find "$TARGET" ... -path "$TARGET/.claude/*"`: this case returns "a
+    # clean tree was accused: ... 1 extra (exit 1)". With the cd-relative
+    # walk it returns "clean tree reads clean".
+    import hashlib, shutil
+    inst = os.path.join(root, "x[1]", "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("x[1]", "inst", "hello.txt"), "hi\n")
+    write(root, os.path.join("x[1]", "inst", ".claude", "settings.json"),
+          '{"documented":"exclusion"}')
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        return ("a clean tree was accused: %s (exit %d)"
+                % (_re_missing_extra(out.stdout), out.returncode))
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the tree exited clean without verifying both files, so nothing "
+                "here establishes the paths were compared: %s" % out.stdout[-200:])
+    return "clean tree reads clean"
+
+
 @case("no-checksum-tool-is-handed-a-filename-it-would-escape", "guard",
       "both scripts hash from stdin")
 def gd_hash_from_stdin(root):
@@ -2385,6 +2480,81 @@ def gd_vinstall_symlink(root):
     return "named and failed"
 
 
+@case("a-symlinked-install-root-does-not-accuse-itself", "guard", "root clean, plant caught")
+def gd_vinstall_symlinked_root(root):
+    # Defect 6, the REAL version (a prior audit misdescribed it; fixing that
+    # misdescribed version would have been scope creep, not this fix).
+    # `find "$TARGET" ...` given a symlink as its OWN starting argument, with
+    # neither -H nor -L, does not follow it: it reports the argument itself
+    # as a single `-type l` entry and does not descend into what it points at
+    # at all (confirmed directly on this project's own dev host: `find
+    # /a/symlink` prints exactly that one line, nothing beneath it). The
+    # relative-path stripping, `rel=${full#"$TARGET/"}`, could not strip that
+    # entry either, because `full` equalled `$TARGET` exactly with no
+    # trailing slash to match against, so [ -L "$full" ] fired on the ROOT
+    # and the whole installation was reported NON-REGULAR and FAILED on that
+    # one entry, every real file inside left unchecked. The comment beside
+    # the walk scopes the non-regular rule to entries INSIDE the tree, and
+    # install.sh (lines 36 and 88) says a symlinked clone is supported, so a
+    # supported installation could never pass its own verifier.
+    #
+    # `cd "$TARGET"` dereferences the symlink as part of changing into it
+    # (the kernel resolves it), so `find .` then walks the REAL directory's
+    # actual contents, and `-mindepth 1` never emits an entry for the root at
+    # all. A symlink PLANTED INSIDE the tree is still lstat'd during the walk
+    # exactly as before and is still reported, which this case checks in the
+    # same run so the fix is not proven to overcorrect into silence.
+    #
+    # Calibration, run against a scratch copy with the walks reverted to
+    # `find "$TARGET" ...` (no cd, no relative walk): the first half of this
+    # case returns "a symlinked root accused itself: ... non-regular (exit
+    # 1)". With the cd-relative walk it returns "root clean, plant caught".
+    if os.name != "posix":
+        # Same platform gap as gd_vinstall_symlink above: os.symlink writes an
+        # NTFS reparse point, and nothing here establishes that the
+        # Git-for-Windows shell's own `cd` and `find` dereference a
+        # command-line symlink argument the same way a POSIX shell does, so
+        # this case is measured on the POSIX legs only.
+        return ("PLATFORM-GAP: os.symlink writes an NTFS reparse point and "
+                "nothing here establishes that the Git-for-Windows shell's "
+                "cd/find dereference a symlinked root the same way a POSIX "
+                "shell does, so this case is measured on the POSIX legs only")
+    import hashlib, shutil
+    real = os.path.join(root, "real", "inst")
+    os.makedirs(os.path.join(real, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(real, "scripts", "verify-install.sh"))
+    write(root, os.path.join("real", "inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(real, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(real, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    link = os.path.join(root, "link")
+    os.symlink(real, link)
+    clean = subprocess.run(["sh", os.path.join(link, "scripts", "verify-install.sh"),
+                            os.path.join(link, "CHECKSUMS.sha256"), link],
+                           capture_output=True, text=True, timeout=120)
+    if clean.returncode != 0:
+        return ("a symlinked root accused itself: %s (exit %d)"
+                % (_re_missing_extra(clean.stdout), clean.returncode))
+    if "0 non-regular" not in clean.stdout:
+        return ("the symlinked root was not reported as 0 non-regular: %s"
+                % clean.stdout[-200:])
+    payload = os.path.join(root, "outside-payload.py")
+    write(root, "outside-payload.py", "print('PLANTED')\n")
+    os.symlink(payload, os.path.join(real, "planted.py"))
+    planted = subprocess.run(["sh", os.path.join(link, "scripts", "verify-install.sh"),
+                              os.path.join(link, "CHECKSUMS.sha256"), link],
+                             capture_output=True, text=True, timeout=120)
+    if planted.returncode == 0:
+        return "a symlinked plant inside a symlinked root still passes"
+    if "NON-REGULAR" not in planted.stdout or "planted.py" not in planted.stdout:
+        return ("the plant inside the symlinked root was not named: %s"
+                % planted.stdout[-200:])
+    return "root clean, plant caught"
+
+
 @case("a-symlinked-module-under-tools-fails-the-honesty-suite", "guard", "refused unwalked")
 def gd_symlink_module(root):
     # The other half of the same hole: tool_sources() walked with `find`-like
@@ -2422,6 +2592,50 @@ def _first_diff_offset(a, b):
         if a[i] != b[i]:
             return i
     return None if len(a) == len(b) else n
+
+
+def _sha256_of_file(path):
+    """Hash one file the way scripts/checksums.sh does: binary, in chunks."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _reread_still_disagrees_with_manifest(rel_path, manifest_hash, root=None):
+    """Second opinion on ONE drifted path: does it STILL disagree with the manifest?
+
+    The re-read has to ask the same question the drift was found on. Drift is
+    found by hashing the working tree and comparing those hashes against the ones
+    the committed manifest records, so the second opinion re-hashes the file and
+    compares it against that same manifest hash.
+
+    The previous form compared the working-tree file against the COMMITTED GIT
+    BLOB instead. That answers a different question, and on a clean checkout it
+    answers it the same way every time: after any commit the blob and the working
+    tree are identical by construction, so every genuinely stale path re-read as
+    "identical bytes", was classified transient, and was forgiven. CI checks out a
+    clean tree, so this gate could not fail there, which is the one place it
+    exists to fail. Reproduced before this fix, on a committed clean tree: the
+    manifest recorded 4c8b2430... for README.md while the file hashed to
+    0d75ef2c..., and the gate still reported "The manifest matches".
+
+    The race this filter exists for survives, which is why this is a re-hash
+    rather than a deletion. On a host where a file read immediately after checkout
+    differs from the same file read a moment later, the second hash lands on the
+    manifest's own value and the path is still correctly forgiven. What can no
+    longer happen is forgiving a file whose bytes really do not match what shipped.
+
+    True means persistent, a real stale manifest. False means transient.
+    An unreadable file is persistent: absent evidence never exonerates.
+    """
+    base = _REPO if root is None else root
+    try:
+        return _sha256_of_file(os.path.join(base, rel_path)) != manifest_hash
+    except OSError:
+        return True
 
 
 @case("the-tracked-manifest-matches-the-tree-it-ships-with", "guard", "matches")
@@ -2515,29 +2729,23 @@ def gd_manifest_fresh(root):
     # Seeded with the set difference, which is never eligible for the re-read.
     persistent, transient = list(set_difference), []
     for p in same_path_mismatch:
-        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
-        if blob.returncode != 0:
+        if _reread_still_disagrees_with_manifest(p, hl[p]):
             persistent.append(p)
-            continue
-        try:
-            with open(os.path.join(_REPO, p), "rb") as f:
-                if _first_diff_offset(blob.stdout, f.read()) is None:
-                    transient.append(p)
-                else:
-                    persistent.append(p)
-        except OSError:
-            persistent.append(p)
+        else:
+            transient.append(p)
     if transient and not persistent:
         # Disclosed loudly, never silently: a reader has to be able to see that
         # this happened, and a run where it happens every time is a real signal
         # about the host even though it is not a stale manifest.
         sys.stderr.write(
-            "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
-            "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
-            "the first hash was taken before this host had settled. Reported rather "
-            "than hidden. This branch is reachable ONLY for same-path hash mismatches: "
-            "a path added to or removed from the tracked set is never re-read and never "
-            "forgiven.\n" % (len(transient), ", ".join(transient[:6])))
+            "the-tracked-manifest: %d path(s) hashed as drifted and then RE-HASHED to "
+            "exactly what the manifest records (%s). The manifest matches; the first "
+            "hash was taken before this host had settled. Reported rather than hidden. "
+            "This branch is reachable ONLY for a same-path hash mismatch whose second "
+            "hash lands on the manifest's own value: a path added to or removed from "
+            "the tracked set is never re-read, and a path whose bytes still disagree "
+            "with the manifest is never forgiven.\n"
+            % (len(transient), ", ".join(transient[:6])))
         return "matches"
     drift = persistent
 

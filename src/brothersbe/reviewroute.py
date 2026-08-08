@@ -365,7 +365,7 @@ def _evidence_hits(cwd):
         from . import tasks as tasks_mod
     except ImportError:
         return []
-    evidence_dir = os.path.join(cwd, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(cwd)
     if not os.path.isdir(evidence_dir):
         return []
     hits = []

@@ -575,7 +575,16 @@ def registry_patterns(cwd, root=None):
     pats = [os.path.join(cwd, PROJECT_REGISTRY)]
     if root and os.path.realpath(root) != os.path.realpath(cwd):
         pats.append(os.path.join(root, PROJECT_REGISTRY))
-    pats += [p.strip() for p in os.environ.get(REGISTRIES_ENV, "").split(":")
+    # SPLIT ON THE PLATFORM'S LIST SEPARATOR, NOT ON A LITERAL COLON. A Windows
+    # path begins with a drive letter and a colon, so splitting `C:\work\STATE.md`
+    # on ":" yields "C" and "\work\STATE.md" and the registry is never found.
+    # The consequence was not a crash: the hook found no fence and ALLOWED the
+    # write, so on Windows the one-writer-per-file boundary silently did not
+    # bind for any registry named this way. `tools/sbe_score.py:42` already had
+    # this right, which makes this drift from an existing correct pattern rather
+    # than an open question, and the three tools that read this variable have to
+    # agree or they disagree about what is fenced.
+    pats += [p.strip() for p in os.environ.get(REGISTRIES_ENV, "").split(os.pathsep)
              if p.strip()]
     seen, out = set(), []
     for p in pats:

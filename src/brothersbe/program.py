@@ -1037,7 +1037,23 @@ def build_program_report(root):
     section_order, sections_by_key, section_names, undeclared_waves = \
         _wave_sections(items, declared_groupings)
 
-    all_parse_errors = item_parse_errors + dependency_errors + data.source_errors
+    # Tagged by `kind` so a consumer (the board, specifically) can single out
+    # "a work-item file could not be read or was missing a required field"
+    # from a dependency-naming error on an item that DID load, and from a
+    # whole-source NO-DATA error. The tag changes nothing about the existing
+    # `path`/`reason` shape every caller already reads; it only adds a way
+    # to filter without inventing a second vocabulary for the same facts.
+    def _tag_errors(entries, kind):
+        tagged = []
+        for entry in entries:
+            tagged_entry = dict(entry)
+            tagged_entry["kind"] = kind
+            tagged.append(tagged_entry)
+        return tagged
+
+    all_parse_errors = (_tag_errors(item_parse_errors, "item")
+                         + _tag_errors(dependency_errors, "dependency")
+                         + _tag_errors(data.source_errors, "source"))
 
     report = {
         "schemaVersion": SCHEMA_VERSION,
@@ -1383,3 +1399,369 @@ def check_status_md(root):
         return False
     fresh_block = render_status_md(report)
     return current_block == fresh_block
+
+
+# ---------------------------------------------------------------------------
+# Rendering: the board (one self-contained HTML file)
+# ---------------------------------------------------------------------------
+
+#: Every file this module writes as a board carries this exact comment, so a
+#: later write can tell "a file this tool generated, safe to regenerate"
+#: from "a file this tool has never seen", and refuse the second case rather
+#: than overwrite content it did not write. Never change this string once
+#: shipped: a changed marker makes every previously written board unrecognized
+#: and therefore unwritable-over.
+BOARD_MARKER = "<!-- brothersbe-program-board:v1 -->"
+
+_NO_DATA = "NO-DATA"
+
+
+def _html_escape(text):
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _acceptance_met_indices(acceptance, acceptance_met):
+    """The set of `acceptance` indices `acceptance_met` marks as met, using
+    the identical matching rule `_progress_for` uses (an int index in range,
+    or a string equal to the criterion's own text) so the board's ticks and
+    the status line's percentage can never disagree about which criteria
+    count as met. Returns `None`, never a guess, when `acceptance_met` was
+    never recorded at all: that is a different fact from "recorded as
+    matching nothing", and the board renders the two differently."""
+    if acceptance_met is None:
+        return None
+    total = len(acceptance)
+    matched = set()
+    for entry in acceptance_met:
+        if isinstance(entry, int) and 0 <= entry < total:
+            matched.add(entry)
+        elif isinstance(entry, str) and entry in acceptance:
+            matched.add(acceptance.index(entry))
+    return matched
+
+
+def _board_state_label(status):
+    return status.replace("_", " ") if isinstance(status, str) and status.strip() else _NO_DATA
+
+
+def _render_board_subitems(item):
+    """One `<ul>` of the item's acceptance criteria, a tick per index
+    `acceptance_met` names, an empty box for one it does not, and `NO-DATA`
+    for the whole list when either `acceptance` is empty or `acceptance_met`
+    was never recorded: both are read as "cannot say", never as zero met."""
+    acceptance = item["acceptance"]
+    if not acceptance:
+        return '<p class="board-nodata">%s (no acceptance criteria recorded)</p>' % _NO_DATA
+    matched = _acceptance_met_indices(acceptance, item["acceptance_met"])
+    rows = []
+    for i, criterion in enumerate(acceptance):
+        if matched is None:
+            mark = '<span class="board-nodata">%s</span>' % _NO_DATA
+        elif i in matched:
+            mark = '<span class="board-tick" aria-hidden="true">&#10003;</span>'
+        else:
+            mark = '<span class="board-untick" aria-hidden="true">&#9744;</span>'
+        rows.append('<li>%s <span class="board-subitem-text">%s</span></li>' % (
+            mark, _html_escape(criterion)))
+    return "<ul class=\"board-subitems\">%s</ul>" % "".join(rows)
+
+
+def _render_board_evidence(item):
+    evidence = item["evidence"]
+    if not evidence:
+        return '<p class="board-nodata">%s</p>' % _NO_DATA
+    return "<ul class=\"board-evidence\">%s</ul>" % "".join(
+        "<li>%s</li>" % _html_escape(e) for e in evidence)
+
+
+_BOARD_CSS = """
+:root {
+  --board-bg: #f7f7f8;
+  --board-fg: #1a1a1e;
+  --board-muted: #5a5a63;
+  --board-card-bg: #ffffff;
+  --board-border: #d8d8dd;
+  --board-accent: #2b6cb0;
+  --board-done: #1a7f37;
+  --board-progress: #9a6700;
+  --board-blocked: #b42318;
+  --board-nodata: #8a8a92;
+  --board-tick: #1a7f37;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --board-bg: #16161a;
+    --board-fg: #e8e8ec;
+    --board-muted: #a3a3ad;
+    --board-card-bg: #202024;
+    --board-border: #37373f;
+    --board-accent: #6fa8dc;
+    --board-done: #4caf50;
+    --board-progress: #d9a441;
+    --board-blocked: #e5787a;
+    --board-nodata: #7d7d86;
+    --board-tick: #4caf50;
+  }
+}
+:root[data-theme="dark"] {
+  --board-bg: #16161a;
+  --board-fg: #e8e8ec;
+  --board-muted: #a3a3ad;
+  --board-card-bg: #202024;
+  --board-border: #37373f;
+  --board-accent: #6fa8dc;
+  --board-done: #4caf50;
+  --board-progress: #d9a441;
+  --board-blocked: #e5787a;
+  --board-nodata: #7d7d86;
+  --board-tick: #4caf50;
+}
+:root[data-theme="light"] {
+  --board-bg: #f7f7f8;
+  --board-fg: #1a1a1e;
+  --board-muted: #5a5a63;
+  --board-card-bg: #ffffff;
+  --board-border: #d8d8dd;
+  --board-accent: #2b6cb0;
+  --board-done: #1a7f37;
+  --board-progress: #9a6700;
+  --board-blocked: #b42318;
+  --board-nodata: #8a8a92;
+  --board-tick: #1a7f37;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--board-bg);
+  color: var(--board-fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.45;
+}
+.board-header {
+  border-bottom: 1px solid var(--board-border);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+.board-header h1 { margin: 0 0 6px 0; font-size: 1.5rem; }
+.board-header .board-sub { color: var(--board-muted); font-size: 0.95rem; }
+.board-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.board-count {
+  background: var(--board-card-bg);
+  border: 1px solid var(--board-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+.board-count b { display: block; font-size: 1.2rem; }
+.board-loop {
+  background: var(--board-card-bg);
+  border: 1px solid var(--board-border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.board-loop h2 { margin: 0 0 8px 0; font-size: 1.1rem; }
+.board-item { margin-bottom: 14px; }
+.board-item:last-child { margin-bottom: 0; }
+.board-item-title { font-weight: 600; }
+.board-item-id { color: var(--board-muted); font-weight: 400; margin-right: 6px; }
+.board-state {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 0.8rem;
+  margin-left: 8px;
+  border: 1px solid var(--board-border);
+}
+.board-state-done { color: var(--board-done); border-color: var(--board-done); }
+.board-state-in_progress, .board-state-ready { color: var(--board-accent); border-color: var(--board-accent); }
+.board-state-partially_done { color: var(--board-progress); border-color: var(--board-progress); }
+.board-state-blocked { color: var(--board-blocked); border-color: var(--board-blocked); }
+.board-subitems, .board-evidence { margin: 6px 0 0 0; padding-left: 0; list-style: none; }
+.board-subitems li { margin: 3px 0; }
+.board-evidence { padding-left: 20px; list-style: disc; color: var(--board-muted); }
+.board-evidence li { margin: 3px 0; }
+.board-subitem-text { color: var(--board-fg); }
+.board-tick { color: var(--board-tick); font-weight: 700; margin-right: 4px; }
+.board-untick { color: var(--board-muted); margin-right: 4px; }
+.board-nodata { color: var(--board-nodata); font-style: italic; }
+.board-evidence-label { color: var(--board-muted); font-size: 0.85rem; margin: 6px 0 2px 0; }
+"""
+
+
+def render_board_html(report):
+    """One self-contained HTML file rendering `report`, the same program
+    report `build_program_report` already produces: no field on it is
+    recomputed here, only formatted. Per loop (the record's own declared
+    wave/plan_wave/delivery_grouping sections, identical to `render_gantt`'s
+    sections so the board and the gantt never disagree about grouping): the
+    section name, and per item its title, its recorded `status` (never a
+    percentage standing in for it), a tick per acceptance criterion
+    `acceptance_met` names as met, and its recorded `evidence` lines. A
+    missing field renders the literal text NO-DATA, never a blank and never
+    a guess. Carries `BOARD_MARKER` so a second render of the same path can
+    be told apart from a file this tool never wrote. Zero network
+    references: every byte of CSS is inlined below, nothing is fetched."""
+    program = report["program"]
+    summary = report["summary"]
+    name = program.get("program") or _NO_DATA
+    version_target = program.get("version_target") or _NO_DATA
+    objective = program.get("objective")
+
+    section_order = report["_sectionOrder"]
+    sections_by_key = report["_sectionsByKey"]
+    section_names = report["_sectionNames"]
+    # EVERY parse error is named here, not one kind of them. These must never
+    # simply vanish from the board: a shrunk item count with no trace of why is
+    # the exact failure this product exists to refuse, so each one gets its own
+    # NO-DATA row below, naming the file and the reason, in the same words
+    # `sbe program status` already uses for the identical fact.
+    #
+    # This filtered on `kind == "item"` and dropped the other two, which an
+    # independent clean-room review reproduced and blocked the release over. A
+    # work-items directory that cannot be read is a `source` error, and that
+    # rendered as `0 of 0 items measured` with no trace: an unreadable program
+    # presented as an empty one, on the very surface added to stop that. A
+    # `dependency` error naming an unknown work item disappeared the same way.
+    # Reading the kinds from the tagging site rather than naming one of them
+    # means a kind added later is reported by default instead of silently
+    # dropped, which is the failure mode that produced this bug.
+    unreadable_items = list(report["parseErrors"])
+
+    parts = []
+    parts.append("<!doctype html>")
+    parts.append(BOARD_MARKER)
+    parts.append(
+        "<!-- Generated by `sbe program board`. Regenerate, do not hand-edit: "
+        "hand edits are lost on the next run. -->")
+    parts.append('<html lang="en"><head><meta charset="utf-8">')
+    parts.append('<meta name="viewport" content="width=device-width, initial-scale=1">')
+    parts.append("<title>%s: program board</title>" % _html_escape(name))
+    parts.append("<style>%s</style>" % _BOARD_CSS)
+    parts.append("</head><body>")
+
+    parts.append('<div class="board-header">')
+    parts.append("<h1>%s</h1>" % _html_escape(name))
+    sub_bits = ["version target: %s" % _html_escape(version_target)]
+    if isinstance(objective, str) and objective.strip():
+        sub_bits.append(_html_escape(objective.strip()))
+    parts.append('<div class="board-sub">%s</div>' % " &middot; ".join(sub_bits))
+
+    aggregate = summary["aggregate_percent"]
+    aggregate_text = ("%d%%" % aggregate) if aggregate is not None else _NO_DATA
+    parts.append('<div class="board-counts">')
+    parts.append('<div class="board-count"><b>%s</b>overall position</div>' % aggregate_text)
+    parts.append('<div class="board-count"><b>%d of %d</b>items measured</div>' % (
+        summary["measured_count"], summary["total_count"]))
+    if unreadable_items:
+        # The header count on its own ("N of M measured") would let a
+        # reader believe the program has exactly M items. It does not: it
+        # has M items that could be read, plus however many below could
+        # not. This chip is the one place that makes that gap visible
+        # before a reader ever reaches the NO-DATA section.
+        parts.append(
+            '<div class="board-count board-count-nodata"><b>%d</b>item(s) could not '
+            'be read (see NO-DATA below)</div>' % len(unreadable_items))
+    counts = summary["counts"]
+    for status in STATUS_VALUES:
+        n = counts.get(status, 0)
+        if n:
+            parts.append('<div class="board-count"><b>%d</b>%s</div>' % (
+                n, _html_escape(status.replace("_", " "))))
+    parts.append("</div>")  # board-counts
+    parts.append("</div>")  # board-header
+
+    if unreadable_items:
+        # Never dropped silently: one visible row per file that could not
+        # be read or normalized, naming the file and the reason, mirroring
+        # `sbe program status`'s own "### Parse errors" wording rather than
+        # inventing a second vocabulary for the same fact.
+        parts.append('<section class="board-loop board-nodata-section">')
+        parts.append("<h2>%s: items that could not be read</h2>" % _NO_DATA)
+        for pe in unreadable_items:
+            parts.append('<div class="board-item board-item-nodata">')
+            parts.append(
+                '<div><span class="board-item-id">%s</span>'
+                '<span class="board-item-title">%s</span></div>' % (
+                    _NO_DATA, _html_escape(pe["path"])))
+            parts.append('<p class="board-nodata">%s</p>' % _html_escape(pe["reason"]))
+            parts.append("</div>")  # board-item
+        parts.append("</section>")
+
+    for key in section_order:
+        section_title = section_names.get(key, key)
+        parts.append('<section class="board-loop">')
+        parts.append("<h2>%s</h2>" % _html_escape(section_title))
+        for item in sections_by_key[key]:
+            parts.append('<div class="board-item">')
+            parts.append(
+                '<div><span class="board-item-id">%s</span>'
+                '<span class="board-item-title">%s</span>'
+                '<span class="board-state board-state-%s">%s</span></div>' % (
+                    _html_escape(item["id"]), _html_escape(item["title"]),
+                    _html_escape(item["status"]), _html_escape(_board_state_label(item["status"]))))
+            parts.append(_render_board_subitems(item))
+            parts.append('<div class="board-evidence-label">evidence</div>')
+            parts.append(_render_board_evidence(item))
+            parts.append("</div>")  # board-item
+        parts.append("</section>")
+
+    parts.append("</body></html>")
+    return "\n".join(parts) + "\n"
+
+
+def write_program_board(root, out_path, report=None):
+    """Write `render_board_html`'s output to `out_path`. Refuses rather than
+    overwriting a file `out_path` already names when that file does not
+    carry `BOARD_MARKER`: that file was not written by this tool, and
+    silently replacing it would destroy content this module has no way to
+    reconstruct. A file that already carries the marker (a previous board
+    render, at this same path) is fair game to regenerate. Raises
+    `ProgramParseError` on refusal, the same exception class every other
+    refusal in this module raises, so a caller has one exception type to
+    catch."""
+    if report is None:
+        report = build_program_report(root)
+    html = render_board_html(report)
+    if os.path.exists(out_path):
+        if os.path.isdir(out_path):
+            raise ProgramParseError(
+                "%s: refusing to write the board there, a directory already exists at that "
+                "path" % out_path)
+        # A FILE WE CANNOT READ IS A FILE WE MUST NOT OVERWRITE. Both of these
+        # used to escape as a raw traceback: an existing file that is not UTF-8
+        # raised UnicodeDecodeError, and one whose permissions deny reading
+        # raised PermissionError. Each exited 1, which is this CLI's code for a
+        # control that refused, so a crash was indistinguishable from a
+        # principled refusal to anything reading the exit status. It also read
+        # badly to a person: a stack trace where the tool has a perfectly good
+        # sentence to say. The refusal is the same either way, because the guard
+        # cannot confirm this file is one of ours, and the rule that follows from
+        # not knowing is do not touch it.
+        try:
+            with open(out_path, "r", encoding="utf-8") as fh:
+                existing = fh.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ProgramParseError(
+                "%s: refusing to overwrite. That file already exists and could not be read "
+                "(%s), so this tool cannot confirm it is a board it wrote. Move or delete it "
+                "by hand, or point --out at a different path" % (out_path, exc))
+        if BOARD_MARKER not in existing:
+            raise ProgramParseError(
+                "%s: refusing to overwrite. That file already exists and does not carry "
+                "%r, the marker this tool stamps on every board it writes, so it was not "
+                "written by `sbe program board`. Move or delete it by hand, or point --out "
+                "at a different path" % (out_path, BOARD_MARKER))
+    parent = os.path.dirname(os.path.abspath(out_path))
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        fh.write(html)
+    return html

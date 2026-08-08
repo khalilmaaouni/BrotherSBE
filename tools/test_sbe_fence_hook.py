@@ -34,6 +34,36 @@ import sys
 import tempfile
 import unittest
 
+
+def _chmod_can_deny_reads():
+    """True when chmod 000 on this host actually makes a file unreadable.
+
+    Asked of the filesystem rather than of sys.platform, the same idiom
+    `_posix_modes_enforced` in test_sbe.py uses for mode bits. The two tests
+    guarded by this one build their scenario by revoking read access, and on
+    Windows os.chmod writes no access list at all, so the file stays readable,
+    the registry parses fine, and the hook correctly refuses a cross-fence
+    write. The old guard asked only whether this process was root, which is the
+    same question one platform later: can this host construct the condition
+    under test. It could not, and two tests failed for a reason that had nothing
+    to do with fail-open behaviour.
+
+    A skip here is a genuine NO-DATA, not a pass: on a host where the scenario
+    cannot be built, nothing was examined, and the skip line says so.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        probe = os.path.join(d, "probe")
+        with open(probe, "w") as f:
+            f.write("x")
+        try:
+            os.chmod(probe, 0o000)
+            with open(probe):
+                return False          # still readable, so chmod proved nothing
+        except (OSError, PermissionError):
+            return True
+        finally:
+            os.chmod(probe, 0o600)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOOK_PATH = os.path.join(HERE, "sbe_fence_hook.py")
 
@@ -362,9 +392,9 @@ class TestFailOpen(FenceCase):
             "none of them carries a live fence line",
             "the registry file parses but declares no fence")
 
-    @unittest.skipIf(os.geteuid() == 0 if hasattr(os, "geteuid") else False,
-                     "running as root, which can read a mode 000 file, so this "
-                     "scenario cannot be constructed here")
+    @unittest.skipUnless(_chmod_can_deny_reads(),
+                         "this host cannot construct an unreadable file with "
+                         "chmod, so the scenario under test cannot be built here")
     def test_fail_open_registry_file_unreadable(self):
         os.chmod(self.registry, 0o000)
         self.assertFailedOpen(
@@ -382,8 +412,10 @@ class TestFailOpen(FenceCase):
             "not a regular file",
             "the registry path is a directory")
 
-    @unittest.skipIf(os.geteuid() == 0 if hasattr(os, "geteuid") else False,
-                     "running as root, which can enter a mode 000 directory")
+    @unittest.skipUnless(_chmod_can_deny_reads(),
+                         "this host cannot construct an unenterable directory "
+                         "with chmod, so the scenario under test cannot be "
+                         "built here")
     def test_fail_open_when_a_registry_directory_cannot_be_entered(self):
         """glob returns FEWER paths, not an error, over a directory it cannot
         enter, so a denied parent is exactly how a configured registry set

@@ -206,7 +206,7 @@ def _worktree_path(directory, root, task_id):
 
 
 def _evidence_dir(root):
-    return os.path.join(root, *tasks_mod.DEFAULT_EVIDENCE_DIR.split("/"))
+    return tasks_mod.evidence_dir(root)
 
 
 def _matching_receipt(root, verify_command, head):
