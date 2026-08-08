@@ -50,6 +50,35 @@
 # outcome is a working installation, while this one's default outcome moves an
 # installation BACKWARD, and a destructive default is not a shape to inherit.
 #
+# WHAT --install-dir ON AN UNRECORDED DIRECTORY USED TO DO, AND WHY THAT WAS
+# REMOVED RATHER THAN KEPT. Before this fix, --install-dir replaced only the
+# directory this script operated on; the version, commit, and marketplace it
+# printed and rolled back kept coming from whichever entry the harness record
+# already had (the one install on the machine, or the first one this script
+# happened to choose among several). Pointed at a directory the record did
+# not name, the script still ran to completion: it attached A RECORDED
+# INSTALLATION'S IDENTITY to bytes that installation never produced, verified
+# and reported that identity, and exited 0. That is the defect: a rollback
+# claiming to describe the directory named on the command line while actually
+# describing a different, unrelated installation. Unrecorded directories are
+# refused now, by design (refusal 3 below), not guessed at.
+#
+# Rejected alternative: keep running, but report the directory's identity as
+# UNKNOWN instead of borrowing a recorded one, then roll back release history
+# against it anyway. That removes the false identity claim but not the
+# wrong-state action underneath it: this script would still check out git
+# history and reinstall over a directory it cannot verify was ever a
+# brothersbe install, only now silently, with nothing left to compare
+# afterward. Refusing holds the same invariant the other ten refusals hold:
+# nothing is written until this script can correctly name what it is about to
+# change. Constrain, do not widen.
+#
+# ORDERING CONSEQUENCE: on a machine with at least one brothersbe install
+# recorded, an --install-dir naming a path that is BOTH not on disk AND not a
+# recorded installPath now fails at refusal 3 (no matching record), never
+# reaching refusal 5 (not on disk). Refusal 5 only fires for a path that DOES
+# match a recorded installPath but whose directory has since been deleted.
+#
 # IT REFUSES RATHER THAN GUESSES. ELEVEN refusals, every one of them
 # evaluated BEFORE the first write, so a refused run leaves both directories
 # byte for byte as it found them:
@@ -115,10 +144,11 @@
 #   scripts/rollback-install.sh --apply              performs the rollback and
 #                                                     verifies the INSTALLED
 #                                                     result, not the source
-#   scripts/rollback-install.sh --install-dir <path> rolls back the
-#                                                     installation at <path>
-#                                                     instead of the one the
-#                                                     harness records
+#   scripts/rollback-install.sh --install-dir <path> selects, by path, WHICH
+#                                                     recorded installation to
+#                                                     roll back; a path matching
+#                                                     no record is REFUSED
+#                                                     (refusal 3), never adopted
 #   scripts/rollback-install.sh --source-dir <path>  takes release history from
 #                                                     <path> instead of the
 #                                                     marketplace source the
