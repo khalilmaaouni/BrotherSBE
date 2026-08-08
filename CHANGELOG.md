@@ -8,6 +8,28 @@ checklist's own rules.
 
 ## 1.0.0-rc.29
 
+### Windows says what it can actually enforce, and one shipped sentence stops overpromising
+
+Windows reached the tool tests for the first time in this project's history, having never before got past the honesty meta-test, and reported four failures out of 108. Three distinct defects, all reproduced here by simulating the platform rather than waiting for a runner.
+
+**A shipped sentence was false on Windows, and that is the worst of the three.** `data-export` printed that it had written a file `(owner-only)`. The writes ask for mode `0o600`, but on Windows that argument sets only a read-only attribute and writes no access list, so the file inherits whatever the parent directory allows, while carrying redacted but still sensitive session context. The sentence now reports the mode the platform actually gave and says plainly that it does not promise enforcement where POSIX modes are ignored, reusing wording this repository already had in `tools/sbe_autosave.sh`. The same overclaim was corrected in the command help, in the stored inventory that `data-show` prints, and in the export's own JSON. `docs/KNOWN-LIMITS.md` now carries the limitation, names the four writing sites, and records the rejected alternative: setting a real access list needs pywin32 or icacls, a new dependency with its own failure modes in a project that ships none.
+
+**The eighth defect of a shape that has now produced eight.** `DEFAULT_EVIDENCE_DIR` is the string `.sbe/evidence`, and joining it with the platform separator produced `...\.sbe/evidence` on Windows, a mixed path that was then serialized into a JSON field. A path was again treated as syntax rather than as data. The correct idiom already existed three files away, so this was drift rather than an unknown: a single `tasks.evidence_dir(root)` helper now owns the join and eight call sites route through it. The rest of the sweep was checked one site at a time and deliberately left alone, because a join that only ever opens a file is fine on Windows; the ones that were fixed are those whose result gets compared, serialized, or printed.
+
+**A path spelling no native reader could resolve.** The recovery command asks the Git-for-Windows shell for a temporary directory and gets back an MSYS spelling like `/tmp/tmp.XXXXXXXX`. Git understands it, native Python does not, and resolves the leading slash against the current drive, so the command printed a directory a Windows user could not change into. It now emits the native spelling through `cygpath -w`, falling back to the original everywhere else. Fixing it surfaced a second bug in the same line: `echo` was eating the backslash in `\Temp`, so the line is a `printf` now.
+
+**The permission tests were made platform-aware rather than skipped.** Asserting `0o666` on Windows would have pinned a platform accident, and skipping would have removed a real check. POSIX keeps the exact `0o600` assertion; Windows asserts the guarantee that is actually reachable, which is that the write went through the owner-only path and that the message printed claims nothing more.
+
+### Deleting ambiguity: one duplicated judgement, one decorative version claim, one artifact deliberately kept
+
+The approval judgement in `src/brothersbe/status.py` existed twice, and the two copies had already drifted: one remedy ended in `(MISSING APPROVAL)` and the other did not, one recorded a full path and the other a bare filename. The inline copy is gone and both callers now share one function. No test pinned either spelling, which is its own finding.
+
+The explainer page carried a hand-written version string that nothing updates and that had been wrong for twenty-seven releases. It was decoration rather than a declaration, so the claim was deleted instead of being wired into the bump command.
+
+`skills/help/map-template.html` was proposed for deletion as dead and is deliberately RETAINED. Two independent reasons: a live test class guards it, and `src/brothersbe/mapgen.py` states in its own docstring that it does not supersede the template, because the template's richer slots need dossier content that the generator deliberately leaves out of scope. An artifact that a shipped module names as intentionally not-yet-replaced is not dead code.
+
+Also recorded rather than changed: `.brothersbe/config.json` is tracked and carries a `toolVersion` that goes stale every release. Nothing reads that field, including the `project-init` doctor check, which tests only that the file exists.
+
 ### The freshness gate was blind in the one place it runs, plus the Windows fixture writer and the install checker's last two path defects
 
 **The most serious finding first: the manifest freshness gate could not fail on a clean checkout.** Two releases ago this gate was fixed so that a path added to or removed from the tracked set could no longer be forgiven by its race filter. The other half of the same filter was left as it was, and it was worse. For a path whose hash disagreed with the manifest, the filter re-read the working-tree file against the COMMITTED GIT BLOB and forgave the path when those two matched. After any commit those two are identical by construction, so a genuinely stale manifest always re-read as identical, was classified transient, and was forgiven. CI checks out a clean, committed tree, which means this gate has never been able to fail in the place it exists to protect.
