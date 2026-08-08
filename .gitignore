@@ -41,3 +41,5 @@ docs/book/BrotherSBE-for-Dummies.html
 # shows up as untracked in every concurrent session's sweep and as an
 # unexplained EXTRA to the install verifier. It is scratch, never a fixture.
 docs/book/.replay-*.sh
+LANE-CHECKPOINT.patch
+LANE-CHECKPOINT.progress
