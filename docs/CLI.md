@@ -25,11 +25,11 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | Command | Does |
 |---|---|
 | `doctor` | checks this installation and the environment it will run in |
-| `verify` | design completeness check, then the hard gates, then the scored surface |
-| `review` | the scored surface including soft findings, plus the hard gates |
+| `verify` | design completeness check, then the hard gates, then the scored surface. WRITES into the target directory by default, on every run, with no dry-run flag: it mints evidence receipts under `.sbe/evidence` and, for every FAIL or WAIVED line, a decision package (suppress the decision packages only with `--no-decisions`; the evidence receipts still write) |
+| `review` | the scored surface including soft findings, plus the hard gates. Prints only unless `--write` is given, which persists `11-review.json` into the dossier |
 | `design` | delegates to `tools/sbe_design.py` |
-| `gate` | delegates to `tools/sbe_gate.py` (a gate name, or a directory for all of them) |
-| `score` | delegates to `tools/sbe_score.py` |
+| `gate` | delegates to `tools/sbe_gate.py` (a gate name, or a directory for all of them). WRITES a decision package into the target directory for every FAIL or WAIVED line, unless `--no-decisions` is given |
+| `score` | delegates to `tools/sbe_score.py`. WRITES a decision package into the target directory for every FAIL or WAIVED line, unless `--no-decisions` is given |
 | `intake` | delegates to `tools/sbe_intake.py` |
 | `decide` | delegates to `tools/sbe_decide.py` |
 | `fences` | prints the live fences the write hook would enforce |
@@ -50,6 +50,10 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `converge` | does base..head still match the approved dossier: scope, contracts, data, architecture, verification; no force flag exists |
 | `explain` | print the decision package for a decision id, or for a gate or check name; with no recorded run it regenerates one from the shipped registry and marks the verdict NO-DATA, and it never overwrites a package bound to another commit |
 | `lineage` | walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, an evidence pointer on every hop; an absent store is a named NO-DATA hop, never a shorter chain |
+| `scope` | did the changes that survived stay inside declared scope: `scope verify --base REF [--head REF] [--strict]` is the CI backstop for the Bash and Stop write boundary, `scope report` says what the Stop hook would decide right now (delegates to `tools/sbe_session_reconcile.py`) |
+| `protections` | is the repository itself protecting the control plane: `protections verify --repository owner/name --branch main` reads CODEOWNERS locally and the branch ruleset through `gh api` |
+| `map` | a deterministic, offline HTML status page built from canonical state only: `sbe map --out FILE`. WRITES the named output file |
+| `program` | program-wide status from the ledger: gantt, finished, in flight, blocked, risks with mitigations, docs, budget; `program check` fails when `STATUS.md` drifted |
 
 `sbe work brief --plan <08-plan.json> --task <id> [--out <path>] [--json]` runs every `start`
 refusal (plan validation, unknown task, an open dependency, a task another OPEN registry record
@@ -146,7 +150,7 @@ so a consumer can tell which contract it is reading:
 ```json
 {
   "tool": "sbe",
-  "toolVersion": "1.0.0-rc.2",
+  "toolVersion": "1.0.0-rc.28",
   "schemaVersion": "1.0",
   "command": "doctor",
   "result": "PASS",
