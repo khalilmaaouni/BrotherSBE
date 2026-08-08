@@ -1,0 +1,37 @@
+id: LOOP-1
+title: "Windows fixture writer goes binary, pinned on every platform"
+why: >
+  A fixture writer that behaves differently on Windows than everywhere else
+  is a defect this project's own promise of cross-platform honesty cannot
+  carry. This loop pins the writer to binary mode on every platform so the
+  same bytes land regardless of host.
+persona_need: "P2 small engineering team on Windows, P4 solo engineer"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: in_progress
+wave: loop-1
+milestone: M1
+depends_on:
+  - "LOOP-0"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "PR 31 opened with the binary fixture writer"
+  - "local suite green"
+  - "real windows-latest CI run confirms green"
+acceptance_met:
+  - 0
+  - 1
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "PR 31 open, local suite green"
+  - "real windows-latest run pending"
+risks:
+  - risk: "A Windows-specific failure only surfaces on the real windows-latest runner, not locally."
+    mitigation: "The loop does not close until that real run is observed green, not merely inferred from local behavior."
+    severity: medium
+blocked_by: []
+alerts: []

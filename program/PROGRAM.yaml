@@ -30,52 +30,42 @@ target_window:
   latest_stated: 2026-11-23
   condition: only if every release gate in the plan passes
 
-# The plan defines seven waves, numbered 0 through 6.
+# The plan defines nine loops, numbered 0 through 8: the V1 final mile. This
+# replaces the 2026-07-31 seven-wave November schedule below (wave-0 through
+# wave-6, and the delivery groupings that sat beside it), which no longer
+# describes the work in flight. See program/MASTER-PLAN-2026-08-06.md for the
+# founder-approved plan this schedule renders, and
+# program/MASTER-PLAN-2026-08-06.md's predecessor, program/MASTER-PLAN.md, for
+# the retired 2026-07-31 plan this schedule used to render (kept as written,
+# never edited, as history).
 waves:
-  - id: wave-0
-    name: Truth reset and feature freeze
-    work_items: BR-0001 to BR-0006
-    token_budget: 430000
-  - id: wave-1
-    name: Canonical lifecycle and maintainable contracts
-    work_items: BR-0101 to BR-0106
-    token_budget: 890000
-  - id: wave-2
-    name: Guided experience and onboarding
-    work_items: BR-0201 to BR-0208
-    token_budget: 1180000
-  - id: wave-3
-    name: Installation, packaging, update, and rollback
-    work_items: BR-0301 to BR-0307
-    token_budget: 1130000
-  - id: wave-4
-    name: Cross-host adapters
-    work_items: BR-0401 to BR-0409
-    token_budget: 1200000
-  - id: wave-5
-    name: Team control, governance, and release engineering
-    work_items: BR-0501 to BR-0507
-    token_budget: 1240000
-  - id: wave-6
-    name: Human validation and release candidate
-    work_items: BR-0601 to BR-0607
-    token_budget: 1340000
-
-# The delivery groupings the shipped work items actually carry. These predate the
-# wave schedule above and were never declared here, which meant seven real items
-# named a wave no reader could resolve. Found on 2026-08-06 by the Phase 0
-# reporter's hostile refuter and fixed in the data rather than worked around in
-# the reader: an item may not name a grouping the program record does not know.
-delivery_groupings:
-  - id: guided-experience
-    name: The guided layer slice
-    work_items: BR-0000, BR-0201, BR-0310
-  - id: release-readiness
-    name: Release readiness
-    work_items: BR-0301
-  - id: team-control
-    name: Team control and ownership
-    work_items: BR-0520, BR-0521, BR-0522
+  - id: loop-0
+    name: One main, staged safely
+    work_items: LOOP-0
+  - id: loop-1
+    name: Windows fixture writer goes binary, pinned on every platform
+    work_items: LOOP-1
+  - id: loop-2
+    name: Install honesty
+    work_items: LOOP-2
+  - id: loop-3
+    name: Public surfaces say what they do
+    work_items: LOOP-3
+  - id: loop-4
+    name: PR 29 reconciled
+    work_items: LOOP-4
+  - id: loop-5
+    name: Quarantined patches adjudicated
+    work_items: LOOP-5
+  - id: loop-6
+    name: One clean repository
+    work_items: LOOP-6
+  - id: loop-7
+    name: Hostile close
+    work_items: LOOP-7
+  - id: loop-8
+    name: Simplify, seal, verdict bound to one SHA
+    work_items: LOOP-8
 
 # Release gate categories, one per plan section 11.x. A stable release requires
 # every gate in every category to pass; a documented no-go is a valid outcome.
@@ -91,10 +81,10 @@ release_gates:
 
 # ---------------------------------------------------------------------------
 # The 2026-08-06 master plan layer, added after the founder approved
-# program/MASTER-PLAN-2026-08-06.md. The seven waves above remain the record of
-# the 2026-07-31 release program; the plan reconciles the two as milestones and
-# names which meaning of 1.0.0 each one carries. Work items BR-1000 to BR-1008
-# carry this layer.
+# program/MASTER-PLAN-2026-08-06.md. Re-measured 2026-08-08 to the nine-loop
+# V1 final mile above (loop-0 through loop-8), which replaced the phase-0 and
+# loop-b through loop-g mapping this section used to carry. Work items LOOP-0
+# to LOOP-8 carry this layer now.
 # ---------------------------------------------------------------------------
 
 plan_2026_08_06: MASTER-PLAN-2026-08-06.md
@@ -109,56 +99,17 @@ milestones:
       checked, the release packet assembled. The tag itself is cut by the
       founder alone. Distribution is the public repository with install.sh and
       the plugin manifest.
-    work_items: BR-1000 to BR-1007
+    work_items: LOOP-0 to LOOP-8
   - id: M2
     name: Human validated stable
     definition: >
       The benchmark kit has run with real unfamiliar users, findings are
       repaired, and only then does stable language apply. The founder schedules
       these runs after the tag, by his own ratified score bar.
-    work_items: after BR-1006
+    work_items: after LOOP-8
   - id: M3
     name: Reach
     definition: >
       Cross host adapters, marketplace submission and IDE surfaces. Out of scope
-      until M2 closes. Loop G is the only M3 slice funded now and it never gates
-      the tag.
-    work_items: BR-1008
-
-plan_waves:
-  - id: phase-0
-    name: Controls before work
-    work_items: BR-1000
-    token_budget: 1800000
-  - id: loop-b
-    name: Contracts, the foundation everything consumes
-    work_items: BR-1001
-    token_budget: 2000000
-  - id: loop-c
-    name: Install to nine
-    work_items: BR-1002
-    token_budget: 2000000
-  - id: loop-d
-    name: Workspace foundation, loopback only
-    work_items: BR-1003
-    token_budget: 2000000
-  - id: loop-e
-    name: Guided operations and the human benchmark kit
-    work_items: BR-1004
-    token_budget: 2000000
-  - id: loop-f
-    name: Team and maintainability closed
-    work_items: BR-1005
-    token_budget: 2000000
-  - id: packet
-    name: The release packet
-    work_items: BR-1006
-    token_budget: 600000
-  - id: parallel
-    name: Windows, under an explicit founder exception
-    work_items: BR-1007
-    token_budget: 400000
-  - id: loop-g
-    name: Codex track, never gating the tag
-    work_items: BR-1008
-    token_budget: 1500000
+      until M2 closes. Not currently funded by any of the nine loops.
+    work_items: not currently funded

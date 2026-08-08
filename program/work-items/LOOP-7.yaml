@@ -1,0 +1,29 @@
+id: LOOP-7
+title: "Hostile close"
+why: >
+  Every gate in this project exists to catch a claim before it becomes a
+  release. The release itself needs the same treatment: a security
+  refutation and a clean-room architecture review, run by someone whose job
+  is to find why this should not ship.
+persona_need: "P1 founder who needs a hostile check before the tag, independent-refuter"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: loop-7
+milestone: M1
+depends_on:
+  - "LOOP-6"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "security refutation review complete"
+  - "clean-room architecture review complete"
+acceptance_met: null
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks: []
+blocked_by: []
+alerts: []

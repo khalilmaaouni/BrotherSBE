@@ -1,0 +1,30 @@
+id: LOOP-8
+title: "Simplify, seal, verdict bound to one SHA"
+why: >
+  The last loop of the final mile: a simplify pass so nothing shipped is
+  more complex than it needs to be, the release sealed, and the verdict
+  bound to the one commit it was actually run against, never a floating
+  claim about "the current state".
+persona_need: "P1 founder cutting the tag, independent-refuter"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: not_started
+wave: loop-8
+milestone: M1
+depends_on:
+  - "LOOP-7"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "simplify pass complete"
+  - "release sealed"
+  - "verdict bound to one SHA"
+acceptance_met: null
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence: []
+risks: []
+blocked_by: []
+alerts: []

@@ -1556,6 +1556,9 @@ def _cmd_program(args):
     percentage. `status` renders (or with --write regenerates STATUS.md between
     its markers); `check` exits 1 when the committed STATUS.md no longer
     matches a fresh render, so drift fails a gate instead of aging quietly.
+    `board` WRITES one self-contained HTML file rendering the same ledger to
+    the path named by --out; it refuses rather than overwriting a file it did
+    not itself generate.
     """
     root = os.path.abspath(args.path)
     if not os.path.isdir(root):
@@ -1576,6 +1579,20 @@ def _cmd_program(args):
         sys.stdout.write("program STATUS.md is stale or unwritable from its sources; "
                          "regenerate with: sbe program status --write\n")
         return EXIT_CONTROL_FAILED
+
+    if args.action == "board":
+        if not args.out:
+            sys.stderr.write("sbe program board: --out is required (the path to write the "
+                             "generated HTML board to). This command WRITES a file.\n")
+            return EXIT_USAGE
+        out_path = os.path.abspath(args.out)
+        try:
+            program_mod.write_program_board(root, out_path)
+        except program_mod.ProgramParseError as exc:
+            sys.stderr.write("sbe program board: %s\n" % exc)
+            return EXIT_CONTROL_FAILED
+        sys.stdout.write("wrote %s\n" % out_path)
+        return EXIT_OK
 
     try:
         report = program_mod.build_program_report(root)
@@ -1829,7 +1846,9 @@ COMMANDS = [
             "sbe map --out FILE",
      _cmd_map),
     ("program", "program-wide status from the ledger: gantt, finished, in flight, blocked, "
-                "risks with mitigations, docs, budget; `check` fails when STATUS.md drifted",
+                "risks with mitigations, docs, budget; `check` fails when STATUS.md drifted; "
+                "`board --out FILE` WRITES a self-contained HTML board rendering the same "
+                "ledger",
      _cmd_program),
 ]
 
@@ -2021,9 +2040,12 @@ def build_parser():
                                     "current one)")
             child.add_argument("--json", action="store_true", help="machine-readable output")
         elif name == "program":
-            child.add_argument("action", choices=("status", "check"),
+            child.add_argument("action", choices=("status", "check", "board"),
                                help="status renders the program report; check exits 1 when "
-                                    "the committed STATUS.md drifted from a fresh render")
+                                    "the committed STATUS.md drifted from a fresh render; "
+                                    "board WRITES one self-contained HTML file rendering the "
+                                    "program record to --out, refusing to overwrite a file it "
+                                    "did not itself generate")
             child.add_argument("path", nargs="?", default=".",
                                help="the repository holding program/ (default: the current one)")
             child.add_argument("--json", action="store_true",
@@ -2031,6 +2053,10 @@ def build_parser():
             child.add_argument("--write", action="store_true",
                                help="regenerate program/STATUS.md between its markers "
                                     "(status only); prose outside the markers survives")
+            child.add_argument("--out", default=None,
+                               help="the file to WRITE the generated HTML board to (board "
+                                    "only, required); refused if it already exists and was "
+                                    "not itself written by this command")
         elif name == "status":
             child.add_argument("path", nargs="?", default=".",
                                help="the repository to summarize (default: the current one)")

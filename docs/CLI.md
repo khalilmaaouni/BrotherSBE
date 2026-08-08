@@ -53,7 +53,7 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `scope` | did the changes that survived stay inside declared scope: `scope verify --base REF [--head REF] [--strict]` is the CI backstop for the Bash and Stop write boundary, `scope report` says what the Stop hook would decide right now (delegates to `tools/sbe_session_reconcile.py`) |
 | `protections` | is the repository itself protecting the control plane: `protections verify --repository owner/name --branch main` reads CODEOWNERS locally and the branch ruleset through `gh api` |
 | `map` | a deterministic, offline HTML status page built from canonical state only: `sbe map --out FILE`. WRITES the named output file |
-| `program` | program-wide status from the ledger: gantt, finished, in flight, blocked, risks with mitigations, docs, budget; `program check` fails when `STATUS.md` drifted |
+| `program` | program-wide status from `program/PROGRAM.yaml` and `program/work-items/`: gantt, finished, in flight, blocked, risks, docs, budget; `check` fails when `STATUS.md` drifted; `board --out FILE` WRITES a self-contained HTML board rendering the same ledger |
 
 `sbe work brief --plan <08-plan.json> --task <id> [--out <path>] [--json]` runs every `start`
 refusal (plan validation, unknown task, an open dependency, a task another OPEN registry record
@@ -765,6 +765,34 @@ business-risk acceptance belong to the named human alone. The same rule the writ
 already enforces mechanically for `status: "accepted"`, a reviewer can never accept its own risk,
 holds here too, only unenforced by a schema check: Fable may not resolve a business-risk
 acceptance on the human owner's behalf.
+
+## `sbe program`, the program-wide ledger and its board
+
+```bash
+bin/sbe program status .                      # renders the program report (gantt, finished, in
+                                               # flight, still to do, blocked, risks, docs, budget)
+bin/sbe program status . --json               # the same report, machine-readable
+bin/sbe program status . --write              # regenerates program/STATUS.md between its markers
+bin/sbe program check .                       # exits 1 when the committed STATUS.md drifted
+bin/sbe program board . --out board.html      # WRITES one self-contained HTML board
+```
+
+Reads only `program/PROGRAM.yaml` and `program/work-items/*.yaml`, never source code, never git,
+never a suite run: if a truthful answer needs any of those, this command stops and says so rather
+than inventing one. A status word never becomes a percentage; progress is `declared`
+(`percent_complete`), `derived from acceptance` (`acceptance_met` against `acceptance`), or `not
+measured`, and every aggregate names which of the three it used. An item naming a `wave` the
+record itself never declared renders anyway, under its own value, and is also named in
+`undeclaredWaves` rather than silently dropped or silently accepted.
+
+`board` is the one subcommand here that WRITES: it renders the identical ledger to one
+self-contained HTML file at the path named by `--out` (`--out` is required), inline CSS only, zero
+network references, readable in light and dark. Per loop it shows the loop's name, and per item its
+title, its recorded status, a tick per `acceptance` criterion `acceptance_met` names as met, and
+its recorded `evidence` lines; a field the ledger never recorded renders the literal text NO-DATA,
+never a blank and never a guess. It refuses rather than overwriting a file at `--out` that already
+exists and does not carry the marker this command stamps on every board it writes, so a board can
+be regenerated in place but a file this command never wrote is never silently replaced.
 
 ## `sbe status`, and the rule that keeps it from becoming a second gate runner
 
