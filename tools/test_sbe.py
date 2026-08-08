@@ -1803,7 +1803,11 @@ class TestVerifyMintsEvidence(unittest.TestCase):
                          "a dirty-tree receipt must never be counted as sound evidence")
         self.assertEqual(data["brokenClaims"], [],
                          "a dirty-tree receipt is NO-DATA, not a broken claim")
-        self.assertIn(".sbe/evidence", status.stdout,
+        # The evidence store is reported as an ABSOLUTE path, so it is spelled
+        # the way the host spells paths. Asserting the POSIX spelling here
+        # passed on Linux and macOS while failing on Windows for a reason that
+        # had nothing to do with the behaviour under test. Read the field.
+        self.assertIn(os.path.join(".sbe", "evidence"), status.stdout,
                       "status must still show the evidence store was inspected")
 
         # Re-run over the SAME dirty tree; exit code must not depend on

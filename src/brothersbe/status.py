@@ -299,7 +299,18 @@ def _scan_evidence(root, evidence_dir):
                 paths.append(os.path.join(dirpath, name))
     paths.sort()
     for full in paths:
-        rel = os.path.relpath(full, root)
+        # SERIALIZED RELATIVE PATHS ARE POSIX-SPELLED, ON EVERY PLATFORM.
+        # `os.path.relpath` answers in the host's spelling, so on Windows this
+        # read `.sbe\evidence\design.json` and the same receipt therefore had two
+        # different names depending on which machine printed the JSON. A relative
+        # path inside a machine-readable contract is an identifier, not a
+        # filesystem instruction: consumers compare it, store it, and send it
+        # between machines, so it has to mean one thing everywhere. This project
+        # already spells its own canonical relative constants that way
+        # (`tasks.DEFAULT_EVIDENCE_DIR` is ".sbe/evidence"). Absolute paths in
+        # this same envelope stay host-spelled on purpose, because those ARE
+        # filesystem instructions for the machine reading them.
+        rel = os.path.relpath(full, root).replace(os.sep, "/")
         try:
             receipt_run_id = evidence_mod.load(full).get("runId")
         except evidence_mod.ReceiptUnreadable:
