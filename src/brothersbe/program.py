@@ -1618,13 +1618,22 @@ def render_board_html(report):
     section_order = report["_sectionOrder"]
     sections_by_key = report["_sectionsByKey"]
     section_names = report["_sectionNames"]
-    # Work-item files that could not be read at all (missing a required
-    # field, or unparseable): these items must never simply vanish from the
-    # board. A shrunk item count with no trace of why is the exact failure
-    # this product exists to refuse, so every one of them gets its own
+    # EVERY parse error is named here, not one kind of them. These must never
+    # simply vanish from the board: a shrunk item count with no trace of why is
+    # the exact failure this product exists to refuse, so each one gets its own
     # NO-DATA row below, naming the file and the reason, in the same words
     # `sbe program status` already uses for the identical fact.
-    unreadable_items = [pe for pe in report["parseErrors"] if pe.get("kind") == "item"]
+    #
+    # This filtered on `kind == "item"` and dropped the other two, which an
+    # independent clean-room review reproduced and blocked the release over. A
+    # work-items directory that cannot be read is a `source` error, and that
+    # rendered as `0 of 0 items measured` with no trace: an unreadable program
+    # presented as an empty one, on the very surface added to stop that. A
+    # `dependency` error naming an unknown work item disappeared the same way.
+    # Reading the kinds from the tagging site rather than naming one of them
+    # means a kind added later is reported by default instead of silently
+    # dropped, which is the failure mode that produced this bug.
+    unreadable_items = list(report["parseErrors"])
 
     parts = []
     parts.append("<!doctype html>")

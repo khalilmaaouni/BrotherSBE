@@ -1058,6 +1058,38 @@ class TestBoardHtml(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="sbe-program-board-")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
+    def test_an_unreadable_work_items_source_is_named_not_rendered_as_empty(self):
+        # Found by an independent clean-room review, which BLOCKED the release
+        # over it. The board filtered parse errors to `kind == "item"` and threw
+        # the other two kinds away, so a work-items directory that cannot be
+        # read (a `source` error) rendered as a program with nothing in it: `0
+        # of 0 items measured`, exit 0, no trace of why. An unreadable program
+        # presented as an empty one, on the surface that exists to stop exactly
+        # that, while `sbe program status` reported the same fact correctly.
+        root = _make_root(self.tmp, items={"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"})
+        os.chmod(os.path.join(root, "program", "work-items"), 0o000)
+        self.addCleanup(os.chmod, os.path.join(root, "program", "work-items"), 0o755)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn(program_mod.NO_DATA_MARKER, html)
+        self.assertIn("work-items", html,
+                      "the board must NAME the source it could not read, never "
+                      "render its absence as an empty program")
+
+    def test_a_dependency_parse_error_is_named_on_the_board(self):
+        # The second kind the filter discarded. A work item depending on an id
+        # that does not exist is a `dependency` error: status names it, and the
+        # board used to say nothing at all.
+        items = {
+            "LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
+                           "depends_on:\n  - GHOST-99\n",
+        }
+        root = _make_root(self.tmp, items=items)
+        report = program_mod.build_program_report(root)
+        html = program_mod.render_board_html(report)
+        self.assertIn("GHOST-99", html,
+                      "the board must name a dependency it cannot resolve")
+
     def test_missing_field_renders_no_data_not_blank(self):
         # An item with no acceptance criteria and no evidence recorded must
         # render the literal word NO-DATA in both spots, never a blank

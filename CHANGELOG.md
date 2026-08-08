@@ -8,6 +8,16 @@ checklist's own rules.
 
 ## 1.0.0-rc.29
 
+### The write boundary did not bind on Windows, and the board hid what it could not read
+
+Two findings from independent review, both reproduced before they were believed.
+
+**The fence hook split its registry list on a literal colon.** A Windows path begins with a drive letter and a colon, so `C:\work\STATE.md` split into `C` and `\work\STATE.md`, and the registry was never opened. The consequence was not a crash, which is what makes it serious: the hook found no fence and ALLOWED the write, so the one-writer-per-file boundary silently failed to bind for any registry named through `BROTHERSBE_REGISTRIES` on that platform. `tools/sbe_score.py` already used `os.pathsep` correctly, so this was drift from a pattern the repository already had, in two of the three tools that read that variable. All three now agree, which the tests require of them, and the ninth defect of the class this project keeps finding: a path read as syntax rather than as data.
+
+**The program board discarded two of three kinds of parse error.** A clean-room architecture review blocked the release over this, and it was right to. The board named work-item errors and threw away source and dependency errors, so a work-items directory that could not be read rendered as a program with nothing in it: zero of zero items measured, exit zero, no trace of why, while `sbe program status` reported the same fact correctly. An unreadable program presented as an empty one, on the surface that exists to stop exactly that. The board now reports every parse error it is given rather than a named subset, which also means a kind added later is reported by default instead of silently dropped. Both cases are pinned by tests calibrated against the old filter.
+
+**The profile module work landed under its SPLIT verdict.** Both of its known Majors were re-verified by putting each defect back and watching the test fail: deleting the module-enforcement check makes the merge-path test name the loss, and re-gating the update notice behind the release module makes the unconditional-notice test fail on both halves. The hunks carrying stale counts were discarded rather than applied, and the one sentence in `SKILL.md` that quotes lint numbers was regenerated from a live run instead of from the patch, which turned out to be wrong before and after: it read 90 clean files where the tree has 92.
+
 ### SECURITY: the install verifier certified a planted backdoor, and a filename was the exploit
 
 An adversarial security review found this and reproduced it before anyone believed it. It is the most serious defect this project has shipped.

@@ -1300,7 +1300,10 @@ def cmd_fence_lint(argv):
     # treated as occupied, not as empty. Same rule, same shared helper, as the
     # sibling scorer check that already adopted it.
     pats = [os.path.join(cwd, "STATE.md")]
-    pats += [p.strip() for p in os.environ.get("BROTHERSBE_REGISTRIES", "").split(":") if p.strip()]
+    # os.pathsep, not a literal colon: a Windows path starts `C:\`, so a colon
+    # split tears the drive letter off and the registry is never opened. Same
+    # correction as tools/sbe_fence_hook.py; tools/sbe_score.py already had it.
+    pats += [p.strip() for p in os.environ.get("BROTHERSBE_REGISTRIES", "").split(os.pathsep) if p.strip()]
     for pat in pats:
         paths, denied = glob_with_denials(pat)
         unread.extend(denied)
