@@ -19,7 +19,12 @@ in this repository, so the system of record is always a path.
   markers inside the Chapter file, with the renderer named in the BEGIN marker.
 - **SourceBinding**: the record that a GeneratedSection was rendered from a
   named file at a named SHA-256; system of record:
-  `docs/fieldbook/bindings.json`.
+  `docs/fieldbook/bindings.json`. It carries NO timestamp, decided during
+  implementation: a wall-clock field would have broken the determinism this
+  design commits to in 07, two runs would never be byte-identical, and git
+  already records when a binding moved. The alternative considered and rejected
+  was keeping the timestamp and weakening the determinism claim to "identical
+  apart from a timestamp", which is a claim no test can state cleanly.
 - **BoundSource**: a file in this repository that a renderer parses; system of
   record: the file itself (`src/brothersbe/cli.py`, `agents/*.md`,
   `src/brothersbe/checks.py`, `tools/sbe_checks.py`, `DIGEST.md`,
@@ -60,7 +65,6 @@ in this repository, so the system of record is always a path.
 | renderer | GeneratedSection | identifier |
 | path | BoundSource | identifier |
 | sha256 | SourceBinding | descriptor |
-| recorded_at | SourceBinding | temporal |
 | item_count | GeneratedSection | measure |
 | verdict | DriftVerdict | status |
 | reason | DriftVerdict | descriptor |
@@ -102,10 +106,17 @@ is the commit that moved it.
 
 ## Physical
 
-`bindings.json` is a single JSON object keyed by `"<chapter-slug>#<renderer>"`,
-each value holding `sources` (a list of `{path, sha256}`), `recorded_at` and
-`item_count`. It is written with sorted keys and a trailing newline so its diff
-is readable and its bytes are deterministic.
+`bindings.json` is a single JSON object keyed by the renderer name, each value
+holding `sources` (a list of `{path, sha256}`), `item_count` and `verdict`. It
+is written with sorted keys, two-space indentation and a trailing newline, so
+its diff is readable and its bytes are deterministic.
+
+The key is the renderer name alone rather than `"<chapter-slug>#<renderer>"`,
+which is what this artifact said before implementation. A renderer has exactly
+one home, enforced: generation raises when zero chapters carry a section's
+markers and raises again when more than one does. With that invariant held
+mechanically, the chapter slug in the key was a second copy of a fact already
+guaranteed, and a second copy is a thing that can disagree.
 
 Chapters are UTF-8 markdown with a YAML front matter block carrying `slug`,
 `title`, `part` and `verified-against`. Generated blocks are delimited by

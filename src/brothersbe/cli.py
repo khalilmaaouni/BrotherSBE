@@ -1610,6 +1610,19 @@ def _cmd_map(args):
                            exit_usage=EXIT_USAGE)
 
 
+def _cmd_book(args):
+    """The field book: the explainer whose enumerated sections are generated
+    from canonical state rather than typed, and whose drift from those sources
+    is a check rather than something a reader has to notice. Not a delegation:
+    like `map`, `evidence`, `task`, `work` and `handover`, there is no tool in
+    `tools/` behind it. See `brothersbe.book` for the five renderers, what each
+    one binds to, and why a stale prose stamp is NO-DATA rather than a FAIL.
+    """
+    from . import book as book_mod
+    return book_mod.main(args.rest, exit_ok=EXIT_OK, exit_failed=EXIT_CONTROL_FAILED,
+                         exit_usage=EXIT_USAGE)
+
+
 def _cmd_status(args):
     """Blocker-first: where a change stands, read from state other commands
     already recorded. See `brothersbe.status` for exactly what it reads and
@@ -1831,6 +1844,10 @@ COMMANDS = [
     ("program", "program-wide status from the ledger: gantt, finished, in flight, blocked, "
                 "risks with mitigations, docs, budget; `check` fails when STATUS.md drifted",
      _cmd_program),
+    ("book", "the field book: regenerate the explainer whose command, role, check and "
+             "limit tables are derived from canonical state; `--check` fails when a "
+             "bound source moved without a regenerate",
+     _cmd_book),
 ]
 
 
@@ -1846,7 +1863,7 @@ COMMANDS = [
 PASSTHROUGH = frozenset((
     "design", "gate", "score", "intake", "decide", "fences", "plan",
     "evidence", "task", "work", "handover", "pr", "protections", "explain", "lineage",
-    "instruction-surface", "map", "scope"))
+    "instruction-surface", "map", "scope", "book"))
 
 
 def build_parser():

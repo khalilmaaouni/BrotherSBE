@@ -40,6 +40,16 @@ with no network call to do it.
 
 </details>
 
+**Handing this to a team?** Give them
+[the Field Book](docs/fieldbook/BrotherSBE-Field-Book.html). Two pages tell
+anyone what this is, what it actually enforces and one honest limit; the
+chapters after that carry the personas, the adoption path, and worked scenarios
+for warehouse and BI work (Snowflake, Databricks, Power BI, Azure), backend
+services, web and app builds, and architecture decisions. Its command, role,
+check and limit tables are generated from this repository, and
+`sbe book --check` fails in CI when a source moves without a regenerate, so it
+cannot quietly describe a version that no longer ships.
+
 That command looks at where you are and takes it from there: a new project or one already in progress, it finds the right next step. Along the way, three guided companions in [`skills/`](skills/) keep you oriented: `/brothersbe:next` recommends exactly one next action, `/brothersbe:status` explains where you are in plain language, and `/brothersbe:help` lays out the whole map when you ask for it. New to any of this? [The beginner explainer](docs/explainer/index.html) covers the same ground in plain language.
 
 ---

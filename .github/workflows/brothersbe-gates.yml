@@ -169,6 +169,13 @@ jobs:
         run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
+      - name: Field book fixtures (every generated table checked against an independent read)
+        run: python3 tools/test_sbe_fieldbook.py
+      # The drift gate itself, not its fixtures: a bound source that moved without
+      # a regenerate is a FAIL here and stops the merge. A stale prose stamp is
+      # NO-DATA and does not, because no tool computes whether prose went wrong.
+      - name: Field book drift (a derived table that no longer matches its source)
+        run: python3 bin/sbe book --check --strict
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
       - name: Consumer minting fixtures (the job produces the evidence it demands)
@@ -437,6 +444,13 @@ jobs:
         run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
+      - name: Field book fixtures (every generated table checked against an independent read)
+        run: python3 tools/test_sbe_fieldbook.py
+      # The drift gate itself, not its fixtures: a bound source that moved without
+      # a regenerate is a FAIL here and stops the merge. A stale prose stamp is
+      # NO-DATA and does not, because no tool computes whether prose went wrong.
+      - name: Field book drift (a derived table that no longer matches its source)
+        run: python3 bin/sbe book --check --strict
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
         run: python3 tools/test_sbe_bypass.py
       - name: Consumer minting fixtures (the job produces the evidence it demands)

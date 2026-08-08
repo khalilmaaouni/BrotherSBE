@@ -2,6 +2,12 @@
 
 BrotherSBE reviews engineering design work and reports what it checked.
 
+> **Newer and broader:** [the Field Book](../fieldbook/BrotherSBE-Field-Book.html)
+> now holds the canonical command, role, check and limit tables, generated from
+> this repository rather than typed, plus the comparison against other plugins,
+> the personas, and worked scenarios per stack. Start there. The role guides in
+> this directory stay as the deep reading behind it.
+
 ## What it does
 
 Two things, both mechanical.

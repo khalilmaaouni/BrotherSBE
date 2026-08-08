@@ -1,0 +1,144 @@
+{
+  "checks": {
+    "item_count": 32,
+    "sources": [
+      {
+        "path": "tools/sbe_plan.py",
+        "sha256": "4a5e0069afb6894686448257687380fac201543c46e95fbb07a7e43e3f73faca"
+      },
+      {
+        "path": "tools/sbe_design.py",
+        "sha256": "1247c25e110be782dfe1a6afdee23f5c455c56079e7f1a5ddd03b37debc8824c"
+      },
+      {
+        "path": "tools/sbe_gate.py",
+        "sha256": "c0ce2c240397494f868cd1eb7438b69795027693d618872c9048d7a18475fa27"
+      },
+      {
+        "path": "tools/sbe_score.py",
+        "sha256": "c1575f44b11536ff27c3421fd44799829b13a6da939a1f94afe94816c50cd10c"
+      },
+      {
+        "path": "tools/sbe_instruction_surface.py",
+        "sha256": "35bf0a7297b9b558834e353d869e54d61133362c6fd02aa2a23a6d9b75efbe46"
+      },
+      {
+        "path": "tools/sbe_release_invariant.py",
+        "sha256": "bafa90df522981415b6d72779539c7fec33a0bc9477d29e5bb84ff841901070e"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "cli-commands": {
+    "item_count": 33,
+    "sources": [
+      {
+        "path": "src/brothersbe/cli.py",
+        "sha256": "aa1bc88924bce111bee004e089c7e1773b4aecf6af6645b274a92e8fb6d39df6"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "guided-commands": {
+    "item_count": 12,
+    "sources": [
+      {
+        "path": "skills/adopt/SKILL.md",
+        "sha256": "2e8f2f843040855a6c854399f5e26f635899bf2d8b1f8e0db6da538a7016c39e"
+      },
+      {
+        "path": "skills/design/SKILL.md",
+        "sha256": "733154f80d7cb91d2ebece6b7156a04d1cb6260e0509be78274d8ea583b05aed"
+      },
+      {
+        "path": "skills/handover/SKILL.md",
+        "sha256": "3c61152326a193a607482a2e4da50f298d9b1bf445b3f7593844a6e060aa6ad9"
+      },
+      {
+        "path": "skills/help/SKILL.md",
+        "sha256": "69ded69e66828ccc71b8a5b23f8a0719fa7927ec008a9572b59620c7c35feb98"
+      },
+      {
+        "path": "skills/kickoff/SKILL.md",
+        "sha256": "895c1d0e950faf896ba29feea5bf752b058f6e7781b39df5bb6fd7ce52f9ff59"
+      },
+      {
+        "path": "skills/learn/SKILL.md",
+        "sha256": "bb79b79d53f14d1bb96ffbde7e97ab238b5e3419b199d8870d3c34e608b60e95"
+      },
+      {
+        "path": "skills/next/SKILL.md",
+        "sha256": "0654b0dd7dcc9675ac26c651c21a58264c373fa99406d479571039e84a739efa"
+      },
+      {
+        "path": "skills/review/SKILL.md",
+        "sha256": "0dd92623ce99efaf71c06faf99f44d6b9e6d58b8bc8762213ac6ec6552fad076"
+      },
+      {
+        "path": "skills/start/SKILL.md",
+        "sha256": "b24742c3a5e3587c0d98edd5bd232f9e1c328f681cf4efd248e65141525ae26a"
+      },
+      {
+        "path": "skills/status/SKILL.md",
+        "sha256": "a08bcbc347f4301c44d3f359da494f61623a2f89573564bbfd8123e8d8b8f8ea"
+      },
+      {
+        "path": "skills/verify/SKILL.md",
+        "sha256": "0557be0bd78cafa705eb1a04ecefed6d8fe4ea14ad01c6fef6ac9c1f00f1fbc4"
+      },
+      {
+        "path": "skills/work/SKILL.md",
+        "sha256": "4880fae8957480ac10d7df9b860fef4a19a73dac6d62faa0bd2bb971d4137f3e"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "limits": {
+    "item_count": 60,
+    "sources": [
+      {
+        "path": "docs/KNOWN-LIMITS.md",
+        "sha256": "d9626d2b436465ac6db4d398c3f6b0a398248cef0599e9cce422397e8626c21b"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "roles": {
+    "item_count": 8,
+    "sources": [
+      {
+        "path": "agents/backend-reviewer.md",
+        "sha256": "0a96393fd62af278b46b9c1e1be513ab1e73074896fbf908958e1187c382ae2e"
+      },
+      {
+        "path": "agents/data-reviewer.md",
+        "sha256": "55f99b0bb1fd6a42407e3f6ba7cf66c8b75445e43d9532cecb87f901711e1d51"
+      },
+      {
+        "path": "agents/evidence-auditor.md",
+        "sha256": "fac7da407d0c9490c371662c2d68a8db15f9bd654d56fd3f3462c85e7e8c4bbe"
+      },
+      {
+        "path": "agents/implementation-worker.md",
+        "sha256": "97bd3481de93bdad412ac32d7ebab7dd1eaafe41e4957d465915847dfe98c5fa"
+      },
+      {
+        "path": "agents/migration-reviewer.md",
+        "sha256": "3933aa38b0364511ca0a02a341a01d08b5b8099b1ac5c1a588cdc80b9d719368"
+      },
+      {
+        "path": "agents/principal-architect.md",
+        "sha256": "55972bb3b269e2dda4b19a268b6a6ec07d08d9f51804d06cf4d466924fd7e6e1"
+      },
+      {
+        "path": "agents/qa-reviewer.md",
+        "sha256": "3daa3f65eda1a33866735cb63ea088230519f47d8891fa6cb7542ee821109f6a"
+      },
+      {
+        "path": "agents/security-reviewer.md",
+        "sha256": "fb87543cee2386685acb44e01aed2cd957adb93dd8744ac42a5b6a9554d8b7c5"
+      }
+    ],
+    "verdict": "PASS"
+  }
+}
