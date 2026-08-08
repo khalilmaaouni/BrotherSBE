@@ -370,7 +370,7 @@
   <pre><code>sbe status                                    <span class="c"># where this stands, blockers first</span>
 sbe verify .                                  <span class="c"># design check plus the hard gates</span>
 sbe review                                    <span class="c"># the scored surface, soft findings included</span>
-sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run a registered check, mint its receipt</span></code></pre>
+sbe evidence run --check &lt;id&gt; --out &lt;receipt&gt;  <span class="c"># run a registered check; the command comes from the registry</span></code></pre>
 
   <h4>Every check that ships, with its severity and its empty state</h4>
 

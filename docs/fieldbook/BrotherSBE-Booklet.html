@@ -868,8 +868,9 @@ python3 tools/sbe_intake.py design/daily-revenue
 
   <p>Adaeze restores a copy, runs both legs, records the receipt through the evidence wrapper, and the gate passes on evidence rather than on reading.</p>
 
-  <pre><code>sbe evidence run --check migration-rehearsal -- \
-  scripts/rehearse_migration.sh --restore nightly-2026-08-05
+  <pre><code><span class="c"># the rehearsal command, its arguments and its working directory all come</span>
+<span class="c"># from the registry entry in .sbe/checks.yml; nothing typed here replaces them</span>
+sbe evidence run --check migration-rehearsal --out .sbe/evidence/migration-rehearsal.json
 
 sbe gate migration design/daily-revenue
 <span class="c">migration  PASS  forward and reverse both recorded against restore</span>
@@ -2795,7 +2796,7 @@ bin/sbe evidence verify &lt;receipt&gt;
   <pre><code>sbe status                                    <span class="c"># where this stands, blockers first</span>
 sbe verify .                                  <span class="c"># design check plus the hard gates</span>
 sbe review                                    <span class="c"># the scored surface, soft findings included</span>
-sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run a registered check, mint its receipt</span></code></pre>
+sbe evidence run --check &lt;id&gt; --out &lt;receipt&gt;  <span class="c"># run a registered check; the command comes from the registry</span></code></pre>
 
   <h4>Every check that ships, with its severity and its empty state</h4>
 
