@@ -2546,6 +2546,50 @@ def _first_diff_offset(a, b):
     return None if len(a) == len(b) else n
 
 
+def _sha256_of_file(path):
+    """Hash one file the way scripts/checksums.sh does: binary, in chunks."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _reread_still_disagrees_with_manifest(rel_path, manifest_hash, root=None):
+    """Second opinion on ONE drifted path: does it STILL disagree with the manifest?
+
+    The re-read has to ask the same question the drift was found on. Drift is
+    found by hashing the working tree and comparing those hashes against the ones
+    the committed manifest records, so the second opinion re-hashes the file and
+    compares it against that same manifest hash.
+
+    The previous form compared the working-tree file against the COMMITTED GIT
+    BLOB instead. That answers a different question, and on a clean checkout it
+    answers it the same way every time: after any commit the blob and the working
+    tree are identical by construction, so every genuinely stale path re-read as
+    "identical bytes", was classified transient, and was forgiven. CI checks out a
+    clean tree, so this gate could not fail there, which is the one place it
+    exists to fail. Reproduced before this fix, on a committed clean tree: the
+    manifest recorded 4c8b2430... for README.md while the file hashed to
+    0d75ef2c..., and the gate still reported "The manifest matches".
+
+    The race this filter exists for survives, which is why this is a re-hash
+    rather than a deletion. On a host where a file read immediately after checkout
+    differs from the same file read a moment later, the second hash lands on the
+    manifest's own value and the path is still correctly forgiven. What can no
+    longer happen is forgiving a file whose bytes really do not match what shipped.
+
+    True means persistent, a real stale manifest. False means transient.
+    An unreadable file is persistent: absent evidence never exonerates.
+    """
+    base = _REPO if root is None else root
+    try:
+        return _sha256_of_file(os.path.join(base, rel_path)) != manifest_hash
+    except OSError:
+        return True
+
+
 @case("the-tracked-manifest-matches-the-tree-it-ships-with", "guard", "matches")
 def gd_manifest_fresh(root):
     # A pristine clone of HEAD failed its own integrity check: CHECKSUMS.sha256
@@ -2637,29 +2681,23 @@ def gd_manifest_fresh(root):
     # Seeded with the set difference, which is never eligible for the re-read.
     persistent, transient = list(set_difference), []
     for p in same_path_mismatch:
-        blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
-        if blob.returncode != 0:
+        if _reread_still_disagrees_with_manifest(p, hl[p]):
             persistent.append(p)
-            continue
-        try:
-            with open(os.path.join(_REPO, p), "rb") as f:
-                if _first_diff_offset(blob.stdout, f.read()) is None:
-                    transient.append(p)
-                else:
-                    persistent.append(p)
-        except OSError:
-            persistent.append(p)
+        else:
+            transient.append(p)
     if transient and not persistent:
         # Disclosed loudly, never silently: a reader has to be able to see that
         # this happened, and a run where it happens every time is a real signal
         # about the host even though it is not a stale manifest.
         sys.stderr.write(
-            "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
-            "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
-            "the first hash was taken before this host had settled. Reported rather "
-            "than hidden. This branch is reachable ONLY for same-path hash mismatches: "
-            "a path added to or removed from the tracked set is never re-read and never "
-            "forgiven.\n" % (len(transient), ", ".join(transient[:6])))
+            "the-tracked-manifest: %d path(s) hashed as drifted and then RE-HASHED to "
+            "exactly what the manifest records (%s). The manifest matches; the first "
+            "hash was taken before this host had settled. Reported rather than hidden. "
+            "This branch is reachable ONLY for a same-path hash mismatch whose second "
+            "hash lands on the manifest's own value: a path added to or removed from "
+            "the tracked set is never re-read, and a path whose bytes still disagree "
+            "with the manifest is never forgiven.\n"
+            % (len(transient), ", ".join(transient[:6])))
         return "matches"
     drift = persistent
 

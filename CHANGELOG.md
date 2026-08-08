@@ -8,6 +8,18 @@ checklist's own rules.
 
 ## 1.0.0-rc.29
 
+### The freshness gate was blind in the one place it runs, plus the Windows fixture writer and the install checker's last two path defects
+
+**The most serious finding first: the manifest freshness gate could not fail on a clean checkout.** Two releases ago this gate was fixed so that a path added to or removed from the tracked set could no longer be forgiven by its race filter. The other half of the same filter was left as it was, and it was worse. For a path whose hash disagreed with the manifest, the filter re-read the working-tree file against the COMMITTED GIT BLOB and forgave the path when those two matched. After any commit those two are identical by construction, so a genuinely stale manifest always re-read as identical, was classified transient, and was forgiven. CI checks out a clean, committed tree, which means this gate has never been able to fail in the place it exists to protect.
+
+Reproduced before the fix, on a committed tree with nothing uncommitted: `CHECKSUMS.sha256` recorded `4c8b2430...` for `README.md` while the file hashed to `0d75ef2c...`, and the check printed `The manifest matches`.
+
+The fix makes the second opinion ask the question the drift was found on. Drift is detected by hashing the working tree and comparing against the hashes the manifest records, so the re-read now re-hashes the file and compares it against that same manifest hash. The race filter survives, because that was never the part that was wrong: on a host where a file read immediately after checkout differs from the same file read a moment later, the second hash lands on the manifest's value and the path is still correctly forgiven. What can no longer happen is forgiving a file whose bytes do not match what shipped.
+
+Calibrated in an isolated clone, both directions. A clean tree with a fresh manifest still reports `matches`. A clean, committed tree with one tracked byte changed and the manifest deliberately not regenerated now reports `the tracked manifest is stale for: README.md`, where the previous code reported `matches`.
+
+This is the third time a check in this repository has been found reporting PASS over evidence contradicting it, and all three were the same shape: a filter written for a real edge case that answered a slightly different question than the one being asked.
+
 ### The Windows fixture writer, the install checker's last two path defects, and two lanes that graded themselves too kindly
 
 **The Windows cause, fixed at the writer rather than the fixture.** `evals/test_no_data_class.py` wrote every fixture through `open(path, "w")`. Text mode on Windows turns each newline into two bytes, so the fixture on disk stopped matching the hash the registry pinned, and the freshness check in `tools/sbe_plan.py` failed. The writer now opens in binary and encodes to UTF-8, which cannot translate a newline on any platform. Calibrated by emulating the Windows translation and watching `FAIL sbe_plan.py freshness [full] want PASS got FAIL` appear, then restoring.
