@@ -1,4 +1,5 @@
 # The first loop
+<!-- replay: chapter requires posix -->
 
 ## Where a change starts
 

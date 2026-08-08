@@ -1,4 +1,5 @@
 # Gates and decisions
+<!-- replay: chapter requires posix -->
 
 ## The fourth question, now with a real gate behind it
 

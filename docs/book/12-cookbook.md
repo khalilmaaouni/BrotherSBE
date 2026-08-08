@@ -1,4 +1,5 @@
 # The cookbook
+<!-- replay: chapter requires posix -->
 
 ## One page per shape of work
 

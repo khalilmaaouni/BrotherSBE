@@ -1,4 +1,5 @@
 # Evidence, not vibes
+<!-- replay: chapter requires posix -->
 
 ## The defect a receipt has to close
 

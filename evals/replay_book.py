@@ -138,6 +138,35 @@ def extract_blocks(text):
 
 
 CAPABILITIES = {
+    # A POSIX SHELL TOOLCHAIN, WHICH IS WHAT THESE TRANSCRIPTS ARE.
+    # The chapters declaring this are recordings of a real POSIX session, and
+    # they invoke `python3` by name 84 times. On Windows the interpreter is
+    # `python.exe` and `python3` resolves to nothing, so every block failed at
+    # once: that leg reported `compared 136 output blocks, 136 differ` in 1.28
+    # seconds, where the same suite takes about eleven on a POSIX host. It was
+    # never 136 content defects. It was one missing interpreter name.
+    #
+    # A SKIP HERE IS NO-DATA AND NAMES ITSELF, which is the only honest verdict
+    # available: on that platform these transcripts cannot run as written, so
+    # nothing was examined and nothing may be reported as matching.
+    #
+    # The two other repairs were considered and rejected on the record.
+    # Rewriting the book to say `python` changes shipped documentation for every
+    # reader to suit one platform, and on a host where `python` is Python 2 it
+    # is actively wrong. Handing the harness a `python3` shim on Windows
+    # manufactures a toolchain the machine does not have, which buys a pass by
+    # lying about the machine.
+    #
+    # Detected by asking the host, never by naming a platform, so a POSIX box
+    # that genuinely lacks `python3` also skips and also says why.
+    #
+    # Founder decision, 2026-08-08, recorded in the vault as
+    # DECISION-2026-08-08-windows-book-chapters. What it costs is stated there
+    # rather than implied: these transcripts are verified on Linux and macOS,
+    # and are NOT verified on Windows. Verifying them there needs a
+    # Windows-native transcript set captured on Windows, which is POST-V1.
+    "posix": ("a POSIX shell toolchain where the interpreter is named python3",
+              lambda: __import__("shutil").which("python3") is not None),
     "claude": ("the Claude Code CLI on PATH",
                lambda: __import__("shutil").which("claude") is not None),
     "vault": ("a wired BrotherSBE vault (BROTHERSBE_VAULT set and present)",

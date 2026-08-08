@@ -1,4 +1,5 @@
 # Coordinating humans and agents
+<!-- replay: chapter requires posix -->
 
 ## The whole cast, one change
 

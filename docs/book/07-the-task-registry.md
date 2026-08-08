@@ -1,4 +1,5 @@
 # The task registry
+<!-- replay: chapter requires posix -->
 
 ## The gap a hook cannot close
 
