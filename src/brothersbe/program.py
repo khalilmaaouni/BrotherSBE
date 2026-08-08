@@ -1037,7 +1037,23 @@ def build_program_report(root):
     section_order, sections_by_key, section_names, undeclared_waves = \
         _wave_sections(items, declared_groupings)
 
-    all_parse_errors = item_parse_errors + dependency_errors + data.source_errors
+    # Tagged by `kind` so a consumer (the board, specifically) can single out
+    # "a work-item file could not be read or was missing a required field"
+    # from a dependency-naming error on an item that DID load, and from a
+    # whole-source NO-DATA error. The tag changes nothing about the existing
+    # `path`/`reason` shape every caller already reads; it only adds a way
+    # to filter without inventing a second vocabulary for the same facts.
+    def _tag_errors(entries, kind):
+        tagged = []
+        for entry in entries:
+            tagged_entry = dict(entry)
+            tagged_entry["kind"] = kind
+            tagged.append(tagged_entry)
+        return tagged
+
+    all_parse_errors = (_tag_errors(item_parse_errors, "item")
+                         + _tag_errors(dependency_errors, "dependency")
+                         + _tag_errors(data.source_errors, "source"))
 
     report = {
         "schemaVersion": SCHEMA_VERSION,
@@ -1602,6 +1618,13 @@ def render_board_html(report):
     section_order = report["_sectionOrder"]
     sections_by_key = report["_sectionsByKey"]
     section_names = report["_sectionNames"]
+    # Work-item files that could not be read at all (missing a required
+    # field, or unparseable): these items must never simply vanish from the
+    # board. A shrunk item count with no trace of why is the exact failure
+    # this product exists to refuse, so every one of them gets its own
+    # NO-DATA row below, naming the file and the reason, in the same words
+    # `sbe program status` already uses for the identical fact.
+    unreadable_items = [pe for pe in report["parseErrors"] if pe.get("kind") == "item"]
 
     parts = []
     parts.append("<!doctype html>")
@@ -1628,6 +1651,15 @@ def render_board_html(report):
     parts.append('<div class="board-count"><b>%s</b>overall position</div>' % aggregate_text)
     parts.append('<div class="board-count"><b>%d of %d</b>items measured</div>' % (
         summary["measured_count"], summary["total_count"]))
+    if unreadable_items:
+        # The header count on its own ("N of M measured") would let a
+        # reader believe the program has exactly M items. It does not: it
+        # has M items that could be read, plus however many below could
+        # not. This chip is the one place that makes that gap visible
+        # before a reader ever reaches the NO-DATA section.
+        parts.append(
+            '<div class="board-count board-count-nodata"><b>%d</b>item(s) could not '
+            'be read (see NO-DATA below)</div>' % len(unreadable_items))
     counts = summary["counts"]
     for status in STATUS_VALUES:
         n = counts.get(status, 0)
@@ -1636,6 +1668,23 @@ def render_board_html(report):
                 n, _html_escape(status.replace("_", " "))))
     parts.append("</div>")  # board-counts
     parts.append("</div>")  # board-header
+
+    if unreadable_items:
+        # Never dropped silently: one visible row per file that could not
+        # be read or normalized, naming the file and the reason, mirroring
+        # `sbe program status`'s own "### Parse errors" wording rather than
+        # inventing a second vocabulary for the same fact.
+        parts.append('<section class="board-loop board-nodata-section">')
+        parts.append("<h2>%s: items that could not be read</h2>" % _NO_DATA)
+        for pe in unreadable_items:
+            parts.append('<div class="board-item board-item-nodata">')
+            parts.append(
+                '<div><span class="board-item-id">%s</span>'
+                '<span class="board-item-title">%s</span></div>' % (
+                    _NO_DATA, _html_escape(pe["path"])))
+            parts.append('<p class="board-nodata">%s</p>' % _html_escape(pe["reason"]))
+            parts.append("</div>")  # board-item
+        parts.append("</section>")
 
     for key in section_order:
         section_title = section_names.get(key, key)

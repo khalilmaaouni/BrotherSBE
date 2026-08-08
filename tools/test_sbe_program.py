@@ -15,6 +15,7 @@ Two fixture families:
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import shutil
@@ -1120,6 +1121,15 @@ class TestBoardHtml(unittest.TestCase):
         self.assertNotIn("https://", html)
 
     def test_tick_marks_a_completed_sub_item(self):
+        # A false pin lived here before: asserting only that the strings
+        # "board-tick" and "board-untick" appear anywhere in the file never
+        # checks what mark is actually inside either span. Swapping the
+        # tick glyph for the empty-box glyph across the whole render (so a
+        # met criterion and an unmet one look identical) left both class
+        # names present and the assertions green. The fix compares the two
+        # criteria's own rendered fragments against each other: a met
+        # criterion and an unmet one must render as different marks, and
+        # this test must go red if a change makes them the same.
         items = {
             "LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: in_progress\n"
                            "acceptance:\n  - one\n  - two\n"
@@ -1130,6 +1140,27 @@ class TestBoardHtml(unittest.TestCase):
         html = program_mod.render_board_html(report)
         self.assertIn("board-tick", html)
         self.assertIn("board-untick", html)
+
+        met_li = re.search(r"<li>.*?\bone\b.*?</li>", html)
+        unmet_li = re.search(r"<li>.*?\btwo\b.*?</li>", html)
+        self.assertIsNotNone(met_li, "no <li> found for the met criterion 'one'")
+        self.assertIsNotNone(unmet_li, "no <li> found for the unmet criterion 'two'")
+
+        met_mark = re.search(r'<span class="board-tick"[^>]*>(.*?)</span>', met_li.group(0))
+        unmet_mark = re.search(r'<span class="board-untick"[^>]*>(.*?)</span>', unmet_li.group(0))
+        self.assertIsNotNone(met_mark, "met criterion is not wrapped in board-tick")
+        self.assertIsNotNone(unmet_mark, "unmet criterion is not wrapped in board-untick")
+
+        # The load-bearing assertion: the glyph inside a met mark and the
+        # glyph inside an unmet mark must differ. If both were replaced
+        # with the same glyph (the exact regression under test), this
+        # fails even though "board-tick" and "board-untick" both still
+        # appear in the file.
+        self.assertNotEqual(
+            met_mark.group(1), unmet_mark.group(1),
+            "a met and an unmet criterion render the identical mark %r; a completed "
+            "acceptance criterion must be visually distinguishable from one that is "
+            "not" % (met_mark.group(1),))
 
     def test_defines_dark_mode_colors(self):
         report = program_mod.build_program_report(_make_root(self.tmp))
