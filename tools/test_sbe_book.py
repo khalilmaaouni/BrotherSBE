@@ -161,8 +161,27 @@ class TestChapterCapabilities(unittest.TestCase):
     every later excerpt; capability is a chapter property by design."""
 
     def test_a_bare_machine_skips_the_declared_chapters_by_name(self):
+        import shutil
         import subprocess
-        env = dict(os.environ, PATH="/usr/bin:/bin", SBE_REPLAY_TIMEOUT="240")
+        # A BARE MACHINE, EXPRESSED PER PLATFORM. This used to hardcode
+        # PATH="/usr/bin:/bin", which is bare-but-workable on POSIX: the
+        # interpreter and the shell this replay needs are still on it, so the
+        # chapters declaring no special capability still ran and still matched.
+        # On Windows those two directories hold nothing, so EVERY chapter
+        # failed instead of the two meant to skip, and the run reported 136
+        # differences where the honest answer was zero. The scenario under test
+        # is "this machine lacks `claude` and a vault", never "this machine
+        # lacks a shell", so the minimal PATH is built from the toolchain the
+        # harness itself requires and joined with the platform's own separator.
+        essential = [os.path.dirname(sys.executable)]
+        for tool in ("bash", "git"):
+            found = shutil.which(tool)
+            if found:
+                essential.append(os.path.dirname(found))
+        if os.name != "nt":
+            essential += ["/usr/bin", "/bin"]
+        bare_path = os.pathsep.join(dict.fromkeys(p for p in essential if p))
+        env = dict(os.environ, PATH=bare_path, SBE_REPLAY_TIMEOUT="240")
         env.pop("BROTHERSBE_VAULT", None)
         out = subprocess.run([sys.executable,
                               os.path.join(ROOT, "evals", "replay_book.py")],
