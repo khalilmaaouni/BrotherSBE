@@ -52,8 +52,8 @@ is a separate change with its own risk, and it is not being smuggled into a pack
 | `lineage` | walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, an evidence pointer on every hop; an absent store is a named NO-DATA hop, never a shorter chain |
 | `scope` | did the changes that survived stay inside declared scope: `scope verify --base REF [--head REF] [--strict]` is the CI backstop for the Bash and Stop write boundary, `scope report` says what the Stop hook would decide right now (delegates to `tools/sbe_session_reconcile.py`) |
 | `protections` | is the repository itself protecting the control plane: `protections verify --repository owner/name --branch main` reads CODEOWNERS locally and the branch ruleset through `gh api` |
-| `map` | a deterministic, offline HTML status page built from canonical state only: `sbe map --out FILE`. WRITES the named output file |
-| `program` | program-wide status from `program/PROGRAM.yaml` and `program/work-items/`: gantt, finished, in flight, blocked, risks, docs, budget; `check` fails when `STATUS.md` drifted; `board --out FILE` WRITES a self-contained HTML board rendering the same ledger |
+| `map` | a deterministic, offline HTML status page for ONE CHANGE, built from canonical state only: `sbe map --out FILE`. WRITES the named output file. Reach for this when the question is "what is the state of the work in front of me" |
+| `program` | program-wide status from `program/PROGRAM.yaml` and `program/work-items/`: gantt, finished, in flight, blocked, risks, docs, budget; `check` fails when `STATUS.md` drifted; `board --out FILE` WRITES a self-contained HTML board rendering the same ledger. Reach for this when the question is "where is the whole programme of work", across many changes |
 
 `sbe work brief --plan <08-plan.json> --task <id> [--out <path>] [--json]` runs every `start`
 refusal (plan validation, unknown task, an open dependency, a task another OPEN registry record

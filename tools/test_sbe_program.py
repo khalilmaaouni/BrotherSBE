@@ -1058,6 +1058,23 @@ class TestBoardHtml(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="sbe-program-board-")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
+    def test_an_existing_file_that_cannot_be_read_is_refused_not_crashed_over(self):
+        # Both of these used to escape as a raw traceback, which exits 1, the
+        # same code this CLI uses for a control that refused. A crash was
+        # therefore indistinguishable from a principled refusal to anything
+        # reading the exit status. The refusal is correct in both cases: the
+        # guard cannot confirm the file is one of ours, so it must not write.
+        root = _make_root(self.tmp, items={"LOOP-X.yaml": "id: LOOP-X\ntitle: T\nstatus: done\n"})
+        not_utf8 = os.path.join(self.tmp, "notutf8.html")
+        with open(not_utf8, "wb") as fh:
+            fh.write(b"\xff\xfe\x00\x01binary")
+        with self.assertRaises(program_mod.ProgramParseError) as caught:
+            program_mod.write_program_board(root, not_utf8)
+        self.assertIn("could not be read", str(caught.exception))
+        with open(not_utf8, "rb") as fh:
+            self.assertEqual(fh.read(), b"\xff\xfe\x00\x01binary",
+                             "a refused write must leave the file byte-identical")
+
     def test_an_unreadable_work_items_source_is_named_not_rendered_as_empty(self):
         # Found by an independent clean-room review, which BLOCKED the release
         # over it. The board filtered parse errors to `kind == "item"` and threw

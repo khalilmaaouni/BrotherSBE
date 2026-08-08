@@ -1735,8 +1735,24 @@ def write_program_board(root, out_path, report=None):
             raise ProgramParseError(
                 "%s: refusing to write the board there, a directory already exists at that "
                 "path" % out_path)
-        with open(out_path, "r", encoding="utf-8") as fh:
-            existing = fh.read()
+        # A FILE WE CANNOT READ IS A FILE WE MUST NOT OVERWRITE. Both of these
+        # used to escape as a raw traceback: an existing file that is not UTF-8
+        # raised UnicodeDecodeError, and one whose permissions deny reading
+        # raised PermissionError. Each exited 1, which is this CLI's code for a
+        # control that refused, so a crash was indistinguishable from a
+        # principled refusal to anything reading the exit status. It also read
+        # badly to a person: a stack trace where the tool has a perfectly good
+        # sentence to say. The refusal is the same either way, because the guard
+        # cannot confirm this file is one of ours, and the rule that follows from
+        # not knowing is do not touch it.
+        try:
+            with open(out_path, "r", encoding="utf-8") as fh:
+                existing = fh.read()
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ProgramParseError(
+                "%s: refusing to overwrite. That file already exists and could not be read "
+                "(%s), so this tool cannot confirm it is a board it wrote. Move or delete it "
+                "by hand, or point --out at a different path" % (out_path, exc))
         if BOARD_MARKER not in existing:
             raise ProgramParseError(
                 "%s: refusing to overwrite. That file already exists and does not carry "
