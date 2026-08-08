@@ -1,0 +1,95 @@
+name: First run report
+description: What happened in your first five minutes with BrotherSBE. Rough is fine, and rough is useful.
+title: "[first-run] "
+labels: ["first-run", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the report I care about most. It is fine if you stopped after
+        two minutes, and it is fine if nothing worked. A report that says "I
+        gave up here" is more useful to me than a polite one that says it went
+        well, because I cannot fix what nobody names.
+
+        You do not need to have finished anything to file this.
+
+  - type: dropdown
+    id: path
+    attributes:
+      label: Which path were you on?
+      options:
+        - The guided start (/brothersbe:start)
+        - The sandbox guide
+        - A real change in my own repository
+        - Trying to break it
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-broke
+    attributes:
+      label: What broke, confused you, or made you stop?
+      description: >-
+        One sentence is enough. Paste the exact output if you have it. If
+        something refused to run, `python3 bin/sbe doctor`'s output is the
+        most useful thing you can paste here.
+      placeholder: I ran the install command and nothing appeared in /plugin.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-far
+    attributes:
+      label: How far did you get?
+      options:
+        - I did not manage to install it
+        - Installed, but I did not know what to type next
+        - Ran a command, did not understand the answer
+        - Ran it on a real project and got a result
+        - Ran it on a real project and the result was wrong
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cost
+    attributes:
+      label: How much did it cost you?
+      options:
+        - Blocker, I could not continue
+        - Major, I continued but it cost me real time or trust
+        - Minor, rough edge, did not slow me down much
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      description: Skip this if it is obvious from the answer above.
+    validations:
+      required: false
+
+  - type: input
+    id: install-route
+    attributes:
+      label: How did you install it?
+      placeholder: marketplace, git clone, or --plugin-dir
+    validations:
+      required: false
+
+  - type: input
+    id: setup
+    attributes:
+      label: Operating system and Python version
+      description: "`python3 --version` prints the second one."
+      placeholder: macOS 15.2, Python 3.11.7
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: followup
+    attributes:
+      label: Follow-up
+      options:
+        - label: I am willing to answer a follow-up question in this thread.
+          required: false
