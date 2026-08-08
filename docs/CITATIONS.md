@@ -258,10 +258,10 @@ captured.
 - date: linked from TESTERS.md, captured 2026-08-06
 - limit: vendor page naming its own product, not a measurement, and its install instructions may change without notice here
 
-## https://github.com/khalilmaaouni/BrotherSBE/issues/new?template=tester-report.md
-- claim: the issue form testers file findings through, prefilled with this repository's tester report template
-- population: this repository's own GitHub issue tracker, tester-report template
-- date: template added 2026-08-06
+## https://github.com/khalilmaaouni/BrotherSBE/issues/new?template=first-run.yml
+- claim: the issue form testers file findings through, prefilled with this repository's first-run report template
+- population: this repository's own GitHub issue tracker, first-run report template
+- date: template added 2026-08-06, merged with the former tester-report.md template 2026-08-08
 - limit: a link into this repository's own tracker, so it carries no external evidence at all, and it resolves only while that template file exists
 
 ## https://claude.com/plugins
