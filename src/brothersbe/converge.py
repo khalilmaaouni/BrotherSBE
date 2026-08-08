@@ -230,7 +230,16 @@ def evaluate(dossier_dir, cwd, base, head):
     dossier_dir = os.path.abspath(dossier_dir)
     base_sha = _resolve(cwd, base)
     head_sha = _resolve(cwd, head)
-    rel_dossier = os.path.relpath(dossier_dir, cwd)
+    # SERIALIZED RELATIVE PATHS ARE POSIX-SPELLED, ON EVERY PLATFORM (see
+    # status.py:302 for the same rule stated at length). rel_dossier is
+    # compared below against `changed`, which is git-diff output and always
+    # forward-slash-spelled regardless of host; it is also serialized into
+    # the report as "dossier" and into finding "evidence" fields. Left as
+    # `os.path.relpath` answers, it read `design\chg` on Windows, which never
+    # matched a `design/chg/...` git path: every dossier-artifact edit fell
+    # through into "unplanned", so SCOPE read REVIEW-REQUIRED forever, on
+    # every range, on Windows only. Canonicalize once, here.
+    rel_dossier = os.path.relpath(dossier_dir, cwd).replace(os.sep, "/")
 
     changed = impact_mod.changed_files(cwd, base_sha, head_sha)
 
@@ -263,7 +272,7 @@ def evaluate(dossier_dir, cwd, base, head):
     scope_findings = []
     in_scope, unplanned, unmeasured = [], [], []
     for rel in changed:
-        if rel.startswith(rel_dossier + os.sep) or rel.startswith(".sbe/"):
+        if rel.startswith(rel_dossier + "/") or rel.startswith(".sbe/"):
             continue  # design artifacts and stores are not implementation scope
         if rel in owned or rel in dossier_named:
             in_scope.append(rel)
