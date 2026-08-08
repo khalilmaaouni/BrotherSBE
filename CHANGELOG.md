@@ -6,6 +6,30 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.29
+
+### The Windows fixture writer, the install checker's last two path defects, and two lanes that graded themselves too kindly
+
+**The Windows cause, fixed at the writer rather than the fixture.** `evals/test_no_data_class.py` wrote every fixture through `open(path, "w")`. Text mode on Windows turns each newline into two bytes, so the fixture on disk stopped matching the hash the registry pinned, and the freshness check in `tools/sbe_plan.py` failed. The writer now opens in binary and encodes to UTF-8, which cannot translate a newline on any platform. Calibrated by emulating the Windows translation and watching `FAIL sbe_plan.py freshness [full] want PASS got FAIL` appear, then restoring.
+
+A pin in two halves came with it, in the shape this file already uses elsewhere. One half asserts the bytes on disk are exactly what was handed in. The other asserts the writer itself is still non-translating, so an edit back to text mode goes red on Linux and macOS too, instead of waiting for a Windows run to notice. The second half was calibrated separately: reverting to text mode leaves the freshness check green on macOS and still turns the pin red.
+
+**The fifth and sixth install-checker defects, both of the same shape as the four before them.** `scripts/verify-install.sh` spliced the install root into `find -path` glob patterns, so a root containing `[` and `]` turned every exclusion into a character class and a documented exclusion came back as an added file. Both walks now run from inside the install root, which makes every pattern a literal string. Reproduced before and after on a root at `x[1]/inst`: one extra file and FAILED, then zero extra and PASSED.
+
+The second: `find` emits its starting point as its own entry when that starting point is a symlink, and the relative-path strip never fired on an exact match, so the script flagged the install root as a planted non-regular entry. Its own comment scopes that rule to entries inside the tree, and `install.sh` says a symlinked clone is supported, so two shipped surfaces contradicted each other. Changing into the root before walking resolves it. A symlink planted inside the tree is still caught.
+
+**The undo stops guessing which installation it is undoing.** `scripts/rollback-install.sh` let `--install-dir` replace the directory while version, commit and marketplace kept coming from whichever entry the harness record already held. Pointed at a directory the record did not name, it ran to completion and attached one installation's identity to another installation's bytes. It now refuses, naming both paths. A directory that does match a record adopts that record's own identity. The rejected alternative, reporting the identity as unknown and rolling back anyway, is recorded in the script's header: it removes the false claim but not the wrong-state action underneath it.
+
+**`install.sh` was telling the truth.** Its claim that both sides of the self-install comparison resolve through `cd ... && pwd` was checked against lines 48 and 99 and found correct, so nothing changed. A claim that survives an audit is worth recording as clearly as one that does not.
+
+**Two lanes graded themselves too kindly, and hostile review caught both.** The Windows lane reported `536 evals: 536 passed, 0 regressions`. An independent refuter re-ran it and got `535 passed, 1 regressions`, then found why: the lane had committed its own checkpoint scratch files, which the manifest did not name. A path present on one side only is exactly the drift this project fixed the freshness gate to stop forgiving two releases ago, so the gate was right and the lane's summary was wrong. The checkpoint files are untracked now and ignored.
+
+The install lane's fixes all reproduced, but its new refusal removed a capability that nothing disclosed. That removal is now a decision in the script's header rather than a surprise, with two behavioral tests that were watched failing, printing the borrowed identity, before they were watched passing.
+
+Neither correction came from the author of the work. That is the whole argument this project makes, applied to itself.
+
+**Counts moved, so the documents that quote them moved in the same change.** Two new eval cases took the suite from 536 to 538, and six shipped documents quoting the old line were swept with it.
+
 ## 1.0.0-rc.28
 
 ### The benchmark harness reaches the merge path, and a law I had been overstating
