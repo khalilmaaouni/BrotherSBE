@@ -6,6 +6,20 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.30
+
+### Windows reaches the middle of its own suite, and one simulation that could not be built there
+
+The `gates-windows` leg has been red since rc.19. It now clears every step through 21, having previously stopped at 12, and fails further down at the converge fixtures, which no run had ever reached before.
+
+**The book fixtures pass on Windows.** The one failing test there simulated a bare machine by stripping PATH down to `/usr/bin:/bin`, the canonical bare POSIX box: stripped of anything providing the Claude CLI or a vault, yet still holding the shell and tools the undeclared chapters need in order to run and match. A host without those directories cannot be put in that state at all, so every chapter failed for want of a shell rather than for want of the declared capability, and the run reported all 136 blocks as differing in 1.28 seconds against roughly eleven where the scenario is real. It now skips there and says why, decided by asking the filesystem for those directories rather than by naming a platform.
+
+**A correction, recorded because it was nearly shipped.** The first diagnosis of that failure was that the book's transcripts cannot run on Windows at all, and a capability was added to skip fifteen chapters there, with a matching entry in `docs/KNOWN-LIMITS.md`. Both were wrong and both are reverted. The same Windows job passes step 10, the regression evals, which contains the same book comparison run with a real PATH: those transcripts are verified on Windows and always have been. The evidence that refuted the diagnosis was in the same job, four steps earlier, and green.
+
+**The book replay no longer writes its own script in text mode.** It generates a shell script and hands it to bash; the default newline handling would translate every line ending on a platform that does so, putting a stray character inside the arguments of every command. That is a corruption of what the commands were told to do rather than of how their answers were read, so no amount of normalising the captured output could have caught it. Pinned to a bare newline, which is what POSIX already produced.
+
+**A throwaway path is out of three shipped chapters.** Regenerating book blocks from live output records whatever machine the tool ran on, and an earlier regeneration had baked a temporary worktree name into `04-install-day.md`, `10-the-vault-and-memory.md` and `15-the-platform-lead-deep-dive.md`. Readers were being shown a scratch directory that no longer exists as though it were an installation path.
+
 ## 1.0.0-rc.29
 
 ### The write boundary did not bind on Windows, and the board hid what it could not read

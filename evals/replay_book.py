@@ -43,6 +43,29 @@ import difflib, io, os, re, subprocess, sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK_DIR = os.path.join(REPO, "docs", "book")
 WRITE = "--write" in sys.argv
+
+# --write REFUSES TO RUN FROM A THROWAWAY CHECKOUT, because it records whatever
+# machine it ran on. This mode re-captures live output and patches it into
+# shipped chapters, so every absolute path the tools print becomes documentation.
+# Run from a temporary worktree, it wrote that worktree's own directory into the
+# book: readers were shown a scratch path that no longer existed, presented as an
+# installation. That reached main once before it was caught, and was then very
+# nearly repeated by the same hand in the same session, which is why this is a
+# refusal in the code and not a line in a checklist.
+#
+# The test is the path itself rather than a flag anyone can forget: a checkout
+# under a temporary directory is not a place shipped content may be generated
+# from. Reading and comparing are untouched; only --write is refused.
+if WRITE:
+    _real = os.path.realpath(REPO)
+    for _tmp in (os.path.realpath(p) for p in ("/tmp", "/private/tmp", "/var/folders")):
+        if _real == _tmp or _real.startswith(_tmp + os.sep):
+            sys.stderr.write(
+                "replay_book --write: refusing to regenerate shipped chapters from %s.\n"
+                "This mode pastes live output, including absolute paths, into the book, so\n"
+                "the directory it runs from becomes documentation. Run it from the primary\n"
+                "checkout of the repository, never a temporary worktree.\n" % REPO)
+            sys.exit(2)
 # Overridable because wall-clock is a fact about the MACHINE, not the book:
 # five concurrent sessions starved 4-second chapters past the old fixed cap,
 # and a timeout counted as differing blocks that were never compared at all.
