@@ -3626,5 +3626,141 @@ class TestHelpMapTemplate(unittest.TestCase):
         self.assertEqual(en_dash_count, 0, "an en dash (U+2013) slipped into the map template")
 
 
+class TestProfileInvariantsOnTheMergePath(unittest.TestCase):
+    """The profile's four invariants, run from a suite CI already runs.
+
+    The full battery (defect re-injected, verdict watched go red, file restored,
+    verdict watched go green again) is tools/test_sbe_profile.py, which the shipped
+    workflow does not yet call. This class is the one assertion that rides an
+    existing step: the shipped tree's own profile must be clean under --strict, so a
+    module leaking into the default profile, or a law falling out of the routing
+    table, stops a merge today rather than on the day a workflow step is added.
+
+    Every check name below is written out BY HAND rather than derived from
+    sbe_profile.CHECKS, and the count is asserted from the report's own summary
+    line. A hostile refuter deleted `check_module_enforcement` from that tuple and
+    this class stayed green, because it named only three of the four checks: a check
+    that can be removed with no test noticing is not on the merge path, whatever the
+    report prints. Deriving the expected names from the tuple would recreate exactly
+    that hole, since the deletion would also shrink the expectation. Adding a fifth
+    check therefore means editing this list, on purpose, which is the point.
+    """
+
+    def test_the_shipped_tree_passes_its_own_profile_checks_under_strict(self):
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        r = subprocess.run([sys.executable, os.path.join(HERE, "sbe_profile.py"),
+                            "check", "--root", root, "--strict"],
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(0, r.returncode,
+                         "tools/sbe_profile.py check --strict blocks on this tree:\n%s%s"
+                         % (r.stdout, r.stderr))
+        for name in ("profile-declaration", "profile-law-routing", "profile-module-isolation",
+                     "profile-module-enforcement"):
+            self.assertIn(name, r.stdout, "the profile report lost the %s check" % name)
+        self.assertIn("4 check(s)", r.stdout,
+                      "the profile report no longer runs the four checks this class pins; "
+                      "a check was added or removed without this list being updated:\n%s"
+                      % r.stdout)
+        red = [ln for ln in r.stdout.splitlines()
+               if len(ln.split(None, 2)) == 3 and ln.split(None, 2)[1] == "FAIL"]
+        self.assertEqual([], red, "a profile check is red: %s" % red)
+        self.assertIn("19 law(s) and 6 phase(s)", r.stdout,
+                      "every law and phase must still resolve from the routing table")
+
+
+class TestTheUpdateNoticeIsUnconditional(unittest.TestCase):
+    """The notice that the skill itself changed prints at EVERY profile.
+
+    The regression this blocks, in one sentence: a size optimisation put the
+    session-start update check behind the release module, and the observable effect
+    was that an already-installed copy, upgraded, silently stopped printing
+
+        BROTHERSBE: the skill changed since your last session (<old> -> <new>).
+        Read the diff before relying on it:
+          git -C <install> log --oneline <old>..<new>
+
+    A user who is not told the governance engine changed will trust an install they
+    have not read, so this is a trust regression rather than a size win, and it was
+    refused. The decision and the 236 bytes it costs are written down in
+    references/modules.md and references/module-release.md.
+
+    This class lives in tools/test_sbe.py, which CI runs, rather than in
+    tools/test_sbe_profile.py, which it does not: a control for a safety-adjacent
+    notice belongs on the merge path. Both halves matter. The behavioural half runs
+    the real hook and reads what it actually printed. The source half pins the
+    absence of a guard, so re-introducing one is red even on a machine where the
+    behavioural half could not reach a git checkout.
+    """
+
+    NOTICE = "BROTHERSBE: the skill changed since your last session"
+
+    def test_the_default_profile_still_prints_the_skill_changed_notice(self):
+        root = os.path.abspath(os.path.join(HERE, ".."))
+        work = tempfile.mkdtemp()
+        try:
+            # A FRESH vault whose marker holds a different sha: check-update writes
+            # that marker itself, so a vault it has already seen prints nothing and
+            # the assertion below would pass over silence.
+            vault = os.path.join(work, "vault")
+            tel = os.path.join(vault, "99-System", "telemetry")
+            os.makedirs(tel)
+            with io.open(os.path.join(tel, "installed-skill-version-brothersbe"),
+                         "w", encoding="utf-8") as fh:
+                fh.write("0" * 40 + "\n")
+            env = dict(os.environ, BROTHERSBE_VAULT=vault)
+            env.pop("SBE_PROFILE", None)          # the DEFAULT profile, which is the case
+            env.pop("SBE_PROFILE_MODULES", None)  # the gated draft got wrong
+            r = subprocess.run(["sh", os.path.join(root, "tools", "sbe_sessionstart.sh")],
+                               input="{}", capture_output=True, text=True, env=env,
+                               timeout=180)
+            self.assertEqual(0, r.returncode, "SessionStart must always exit 0")
+            if "the update check is skipped" in r.stdout:
+                self.skipTest("not a git checkout the update check can read, so the "
+                              "notice could not fire here; the source half below still runs")
+            self.assertIn(self.NOTICE, r.stdout,
+                          "the default profile lost the notice that the skill changed "
+                          "under the user:\n%s" % r.stdout)
+            self.assertTrue(any(" log --oneline " in ln for ln in r.stdout.splitlines()),
+                            "the notice printed without the git command that reads the "
+                            "diff, which is the half a user acts on:\n%s" % r.stdout)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    def test_no_profile_guard_stands_between_the_hook_and_the_update_check(self):
+        """The source half: check-update must not sit inside an OPEN `enabled <id>`
+        block. Depth is tracked rather than a fixed window of lines above, because
+        the telemetry guard closes with its own `fi` two lines before check-update
+        and a window would read that closed guard as if it applied."""
+        with io.open(os.path.join(HERE, "sbe_sessionstart.sh"), encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        depth, opened_by, offenders, found = 0, [], [], False
+        for i, raw in enumerate(lines):
+            line = raw.strip()
+            if line.startswith("#"):
+                continue
+            if line.startswith("if ") and "enabled " in line:
+                depth += 1
+                opened_by.append((i + 1, line))
+            elif line == "fi" and depth:
+                depth -= 1
+                opened_by.pop()
+            if "check-update" in line:
+                found = True
+                if depth:
+                    offenders.append((i + 1, list(opened_by)))
+        self.assertTrue(found, "the hook no longer runs check-update at all")
+        self.assertEqual([], offenders,
+                         "check-update is gated again: %s. The skill-changed notice must "
+                         "print at every profile, including the default one." % offenders)
+        spec_p = importlib.util.spec_from_file_location(
+            "sbe_profile_pin", os.path.join(HERE, "sbe_profile.py"))
+        prof = importlib.util.module_from_spec(spec_p)
+        spec_p.loader.exec_module(prof)
+        self.assertNotIn("check-update", prof.STARTUP_EMITTERS,
+                         "sbe_profile.py claims a module owns check-update, which would "
+                         "make an ungated hook FAIL module-isolation and push the notice "
+                         "back behind a profile: %s" % (prof.STARTUP_EMITTERS,))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

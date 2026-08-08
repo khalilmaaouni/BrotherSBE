@@ -33,9 +33,32 @@ printf '%s' "$PAYLOAD" | python3 "$DIR/tools/sbe_session_baseline.py" write >/de
 # casualty in the one line whose job is to explain a context loss. The
 # recovery-relevant half now gets the whole budget it needs and the marker
 # states what was actually cut, measured rather than assumed.
+# ONE startup emitter is PROFILE-GATED (V1 profile lane): the telemetry nags. The
+# default profile is the safety floor plus design, implementation boundaries and
+# verification, and the nags are a working-rhythm prompt, so a session that has not
+# asked for the ledger spends no context on them. `sbe_profile.py enabled` exits 1
+# for "not enabled" AND for every failure it can meet (a missing file, unparseable
+# JSON, an unknown module id), carrying the reason on stderr: the smallest surface
+# is the safe direction to fail in for a hook that must never fail a session, and
+# the reason is printed rather than eaten. The guard sits on the line directly above
+# its emitter because tools/sbe_profile.py's own module-isolation check reads this
+# file and FAILs when a gated emitter is not guarded by the module that owns it.
+#
+# TWO emitters are UNCONDITIONAL, and both are unconditional on purpose. The
+# compaction hint is the recovery pointer. `check-update` is the notice that the
+# governance engine itself changed under the user since their last session, and a
+# user who is not told that will trust an install they have not read: silently
+# turning it off as a side effect of a size optimisation is the quiet downgrade this
+# project exists to refuse. A draft of this lane did gate it behind the release
+# module; the measured saving is in references/modules.md, and it did not come close
+# to paying for the trust it cost. The release module's own scope therefore EXCLUDES
+# this notice, which is why `check-update` is absent from sbe_profile.py's
+# STARTUP_EMITTERS and the release row carries DECLARED BUT NOT ENFORCED.
 HEAD_OUT="$(
   printf '%s' "$PAYLOAD" | python3 "$DIR/tools/sbe_telemetry.py" compact-hint 2>/dev/null
-  python3 "$DIR/tools/sbe_telemetry.py" startup-nags 2>/dev/null
+  if python3 "$DIR/tools/sbe_profile.py" enabled telemetry >/dev/null 2>&1; then
+    python3 "$DIR/tools/sbe_telemetry.py" startup-nags 2>/dev/null
+  fi
   python3 "$DIR/tools/sbe_telemetry.py" check-update 2>/dev/null
 )"
 DIGEST_OUT="$(cat "$DIR/DIGEST.md" 2>/dev/null)"
