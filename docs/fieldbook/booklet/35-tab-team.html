@@ -1,0 +1,489 @@
+<!-- =================== TAB THREE: HOW THE TEAM WORKS =================== -->
+<section class="part" id="team">
+  <span class="part-label">Tab three</span>
+  <h2 class="part-head">How does the work get shared out when a machine writes most of the code?</h2>
+  <p class="part-blurb">Nine pieces, most of them pictures. Who owns which decision, where AI workers are allowed to write, who is allowed to challenge them, and what has to exist on disk before anybody merges. Framework first, then one real change walked end to end.</p>
+
+  <p class="lede">The promise this tab has to earn is narrow and specific: your senior people stop being the standing verification layer, and stay the people who decide.</p>
+
+  <p>Teams that ship with AI keep arriving at the same shape by accident. Work is generated quickly, and then it queues behind the two or three people who can tell whether it is true. Nothing in that arrangement is written down, so nobody can change it. The queue is invisible until somebody goes on holiday.</p>
+
+  <p>What follows is the arrangement written down. One governed workflow from intent to proof, with three mechanisms holding it up: design before code, own work before parallelism, evidence before done. Read the diagrams first. The prose is there to argue with them.</p>
+
+  <h3 id="team-lifecycle">Who owns each step, and how much writing does a change actually owe?</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-labelledby="t35-life">
+      <title id="t35-life">Ten stages of one change laid left to right: outcome, risk, design, refute, plan, handover, build, review, prove, merge. Three brackets group them. Design before code covers the first four stages, own work then parallel covers the middle three, evidence before done covers the last three. Lines beneath state that the weight a change owes is computed at stage two from five questions, that stage four may raise that tier and may never lower it, that most changes owe nothing beyond stage two, and that four of the stages belong to named humans by arrangement rather than by any enforcement.</title>
+      <defs>
+        <marker id="ar35" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">Design before code</text>
+        <text x="256" y="14">Own work, then parallel</text>
+        <text x="448" y="14">Evidence before done</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M0 26 L0 34 L250 34 L250 26"/>
+        <path d="M256 26 L256 34 L442 34 L442 26"/>
+        <path d="M448 26 L448 34 L634 34 L634 26"/>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="52" width="58" height="46" rx="3"/><rect x="64" y="52" width="58" height="46" rx="3"/>
+        <rect x="128" y="52" width="58" height="46" rx="3"/><rect x="192" y="52" width="58" height="46" rx="3"/>
+        <rect x="256" y="52" width="58" height="46" rx="3"/><rect x="320" y="52" width="58" height="46" rx="3"/>
+        <rect x="384" y="52" width="58" height="46" rx="3"/><rect x="448" y="52" width="58" height="46" rx="3"/>
+        <rect x="512" y="52" width="58" height="46" rx="3"/><rect x="576" y="52" width="58" height="46" rx="3"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.75" text-anchor="middle">
+        <text x="29" y="70">1</text><text x="93" y="70">2</text><text x="157" y="70">3</text><text x="221" y="70">4</text>
+        <text x="285" y="70">5</text><text x="349" y="70">6</text><text x="413" y="70">7</text><text x="477" y="70">8</text>
+        <text x="541" y="70">9</text><text x="605" y="70">10</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.95" text-anchor="middle">
+        <text x="29" y="89">outcome</text><text x="93" y="89">risk</text><text x="157" y="89">design</text><text x="221" y="89">refute</text>
+        <text x="285" y="89">plan</text><text x="349" y="89">handover</text><text x="413" y="89">build</text><text x="477" y="89">review</text>
+        <text x="541" y="89">prove</text><text x="605" y="89">merge</text>
+      </g>
+
+      <line x1="0" y1="118" x2="638" y2="118" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="138" fill="currentColor" opacity="0.95">The weight a change owes is computed at stage two, from five objective questions rather than argued.</text>
+      <text class="svg-small" x="0" y="156" fill="currentColor" opacity="0.95">Stage four may raise that tier from what the diff touched. It may never lower it.</text>
+      <text class="svg-small" x="0" y="174" fill="currentColor" opacity="0.95">Most changes owe nothing beyond stage two. That is the point of computing it rather than arguing it.</text>
+      <text class="svg-small" x="0" y="192" fill="currentColor" opacity="0.95">Stages 1, 4, 8 and 10 belong to named humans. That is the arrangement, and no tool enforces it.</text>
+    </svg>
+    <figcaption>A workflow that applies the same ceremony to every change teaches people to route around it, and a workflow with no rule at all loses the one change that needed the care. The whole design rests on deciding the weight once, early, from answers that do not depend on how busy anybody feels that afternoon.</figcaption>
+  </figure>
+
+  <p>Ten stages, and for each one a question worth being blunt about: who owns it, what surface the product actually provides, what artifact is shared with the next group, and what has to be true before it is finished.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Stage</th><th>Human owner</th><th>BrotherSBE surface</th><th>Shared artifact</th><th>Exit condition</th></tr></thead>
+    <tbody>
+      <tr><th>1. Name the outcome</th><td>The requester, with the owner or technical BA</td><td>None. It sees nothing outside the repository.</td><td>A written outcome and a stated blast radius</td><td>The change has one named owner, not a channel</td></tr>
+      <tr><th>2. Score the risk</th><td>Technical BA, with whoever knows the money and personal-data answers in the room</td><td>The five-question intake, first match wins</td><td><code>00-intake.json</code>: five answers and the computed tier</td><td>A tier exists on disk rather than in somebody's head</td></tr>
+      <tr><th>3. Design</th><td>Technical BA on purpose and process, senior IC on architecture and data model, QA on the verification rows</td><td>Dossier templates and five design checks</td><td>Up to seven markdown files in one directory</td><td>The design checks pass on shape. They never read the prose for content.</td></tr>
+      <tr><th>4. Refute the dossier</th><td>A second reader, never the author</td><td><code>sbe_design.py --strict</code>, plus <code>sbe impact</code> reconciled against the declared tier</td><td>A design verdict block and an impact verdict block</td><td>The declared tier survives what the diff touches, or is raised</td></tr>
+      <tr><th>5. Plan</th><td>Owner with the senior IC</td><td><code>sbe plan</code>, then one work brief per task</td><td><code>08-plan.json</code> and one deterministic brief per task</td><td>Every task carries scope, must-not-touch, acceptance, verification commands and stop conditions</td></tr>
+      <tr><th>6. Hand over</th><td>The outgoing owner prepares, a named receiver acknowledges</td><td><code>sbe handover</code>: prepare, show, acknowledge, reject</td><td><code>12-handover.json</code>, bound to a commit</td><td>A named human acknowledged, or rejected with a reason</td></tr>
+      <tr><th>7. Build</th><td>The engineer accountable for the task, whether the code is typed or generated</td><td>The scoped brief, one branch and one worktree per task, the implementation worker role</td><td>Commits on one branch per task, plus evidence receipts</td><td>The named verification command ran and left a receipt</td></tr>
+      <tr><th>8. Review</th><td>The reviewers who own that risk, plus your existing approval rules</td><td><code>sbe review-route</code> from the diff, read-only specialist roles</td><td>Normalised findings, and no edits</td><td>Every finding is answered by a change or by a recorded decision</td></tr>
+      <tr><th>9. Prove</th><td>QA owns which command counts as the check</td><td><code>sbe evidence run</code> and <code>verify</code>, then the four gates</td><td>Receipts bound to a commit and to declared covered paths</td><td>Each registered check reports PASS, FAIL or NO-DATA by name</td></tr>
+      <tr><th>10. Decide the merge</th><td>The humans your branch rules already name</td><td>Gate verdicts, convergence, team status, assembled against the release commit</td><td>A verdict block on the exact commit being merged</td><td>A human merged, and the reason sits on the commit rather than in a chat window</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="panel warn">
+    <h4>Where the chain is held together by hand, said now rather than later</h4>
+    <p>There is no tracker integration. None, of any kind. Stage one happens in whatever system your team already uses, and the product cannot see it. The link from a ticket to a design directory is a line somebody types, and if they stop typing it the chain breaks in silence: nothing detects a missing link, and nothing reports a broken one. Everything downstream reads a git diff, a JSON file or a markdown file, so anything that never becomes one of those three is invisible here.</p>
+  </div>
+
+  <h3 id="team-lanes">Who does what, when a machine is holding the keyboard</h3>
+
+  <p>This is the picture the rest of the tab exists to support. Seven lanes, one change, left to right.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 448" role="img" aria-labelledby="t35-lanes">
+      <title id="t35-lanes">A swimlane diagram of one change across seven lanes: the owner or technical BA, the senior IC, BrotherSBE, the implementation worker, the read-only reviewers, QA and CI. Thirteen numbered steps run left to right and cross between lanes. The owner describes the outcome, BrotherSBE asks the purpose and the five intake questions, the owner confirms boundaries and risk, the senior IC records design decisions, BrotherSBE validates the dossier and derives the plan then issues one scoped work brief per task, the implementation worker returns code plus a named verification result, BrotherSBE routes specialists from the diff, the reviewers return findings only and make no edits, QA registers and runs the verification, BrotherSBE mints receipts and the gates read them, CI reports PASS, FAIL or NO-DATA, and the senior IC makes the human merge decision. The sequence begins and ends with a human.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">One change, seven lanes, thirteen steps</text>
+      <line x1="0" y1="20" x2="638" y2="20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.16">
+        <line x1="0" y1="62" x2="638" y2="62"/><line x1="0" y1="94" x2="638" y2="94"/>
+        <line x1="0" y1="126" x2="638" y2="126"/><line x1="0" y1="158" x2="638" y2="158"/>
+        <line x1="0" y1="190" x2="638" y2="190"/><line x1="0" y1="222" x2="638" y2="222"/>
+      </g>
+      <g class="svg-label" fill="currentColor" opacity="0.9">
+        <text x="0" y="50">Owner / BA</text><text x="0" y="82">Senior IC</text><text x="0" y="114">BrotherSBE</text>
+        <text x="0" y="146">Worker</text><text x="0" y="178">Reviewers</text><text x="0" y="210">QA</text><text x="0" y="242">CI</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M141 46 H151 V110 H161"/><path d="M179 110 H189 V46 H199"/>
+        <path d="M217 46 H227 V78 H237"/><path d="M255 78 H265 V110 H275"/>
+        <path d="M293 110 H313"/><path d="M331 110 H341 V142 H351"/>
+        <path d="M369 142 H379 V110 H389"/><path d="M407 110 H417 V174 H427"/>
+        <path d="M445 174 H455 V206 H465"/><path d="M483 206 H493 V110 H503"/>
+        <path d="M521 110 H531 V238 H541"/><path d="M559 238 H569 V78 H579"/>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.85">
+        <circle cx="132" cy="46" r="9"/><circle cx="170" cy="110" r="9"/><circle cx="208" cy="46" r="9"/>
+        <circle cx="246" cy="78" r="9"/><circle cx="284" cy="110" r="9"/><circle cx="322" cy="110" r="9"/>
+        <circle cx="360" cy="142" r="9"/><circle cx="398" cy="110" r="9"/><circle cx="436" cy="174" r="9"/>
+        <circle cx="474" cy="206" r="9"/><circle cx="512" cy="110" r="9"/><circle cx="550" cy="238" r="9"/>
+        <circle cx="588" cy="78" r="9"/>
+      </g>
+      <g class="svg-small" fill="currentColor" text-anchor="middle">
+        <text x="132" y="50">1</text><text x="170" y="114">2</text><text x="208" y="50">3</text>
+        <text x="246" y="82">4</text><text x="284" y="114">5</text><text x="322" y="114">6</text>
+        <text x="360" y="146">7</text><text x="398" y="114">8</text><text x="436" y="178">9</text>
+        <text x="474" y="210">10</text><text x="512" y="114">11</text><text x="550" y="242">12</text>
+        <text x="588" y="82">13</text>
+      </g>
+
+      <line x1="0" y1="258" x2="638" y2="258" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <g class="svg-small" fill="currentColor" opacity="0.95">
+        <text x="0" y="276">1  describe the outcome and the blast radius</text>
+        <text x="0" y="292">2  purpose, then the five intake questions</text>
+        <text x="0" y="308">3  confirm the boundaries and the risk tier</text>
+        <text x="0" y="324">4  design decisions, written before code</text>
+        <text x="0" y="340">5  validate the dossier, derive the plan</text>
+        <text x="0" y="356">6  one scoped work brief per task</text>
+        <text x="0" y="372">7  code plus a named verification result</text>
+        <text x="326" y="276">8  route specialists from the diff</text>
+        <text x="326" y="292">9  findings only, and no edits</text>
+        <text x="326" y="308">10  register the check, then run it</text>
+        <text x="326" y="324">11  receipts, then the gates read them</text>
+        <text x="326" y="340">12  PASS, FAIL or NO-DATA, each by name</text>
+        <text x="326" y="356">13  the human merge decision</text>
+      </g>
+      <line x1="0" y1="390" x2="638" y2="390" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="408" fill="currentColor" opacity="0.95">The line starts in a human lane and ends in a human lane. Everything between is scoped, read-only or mechanical.</text>
+      <text class="svg-small" x="0" y="426" fill="currentColor" opacity="0.95">The product itself does not merge, approve or deploy. It prints verdicts and writes files.</text>
+      <text class="svg-small" x="0" y="444" fill="currentColor" opacity="0.95">What any other account is allowed to do stays with your branch rules and your credentials.</text>
+    </svg>
+    <figcaption>Humans own intent and judgment, AI workers own scoped implementation, reviewers challenge but cannot edit, and CI decides only what the evidence supports. Read the crossings rather than the boxes: every time the line leaves a human lane it carries a written artifact, and every time it returns it carries a result somebody can check. The lanes are not a suggested etiquette. The reviewer roles are declared with read and search tools and without Edit or Write, so what comes back from a review is a finding rather than a silent edit.</figcaption>
+  </figure>
+
+  <p class="statement wide">A reviewer that can edit will fix what it finds, and a finding fixed in silence is a finding nobody recorded.</p>
+
+  <p class="evidence">The separation is declared rather than merely instructed: every specialist reviewer role is registered with <code>Read, Grep, Glob, Bash</code> and nothing else, and exactly one role in the register holds <code>Edit</code> and <code>Write</code>. That role writes code and reviews nothing. Be exact about the strength of it: <code>Bash</code> is in that reviewer set, so this is a role boundary a host honours, not a sandbox that makes writing impossible.</p>
+
+  <h3 id="team-parallel">How do you run three workers at once without a merge nobody can unpick?</h3>
+
+  <p>Parallelism is where small teams lose their nerve, and they are right to. Two agents editing the same file at the same time produces a merge you cannot reason about, and the cost lands on the person who has to unpick it.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 336" role="img" aria-labelledby="t35-par">
+      <title id="t35-par">An approved plan at the top fans out into three tasks. Each task declares the files it claims, and each gets its own branch, its own worktree and one writer. All three converge back against the same dossier along scope, contracts, data, architecture and verification, and then flow into review routing and evidence. A line at the foot states that nothing compares one lane's file scope against another lane's, so overlap appears in a registry a human reads rather than being refused.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">One approved plan, three lanes, one convergence</text>
+      <line x1="0" y1="20" x2="638" y2="20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <rect x="220" y="30" width="200" height="32" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="320" y="51" fill="currentColor" text-anchor="middle">APPROVED PLAN</text>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M320 62 V79 H95 V96"/><path d="M320 62 V79 H320 V96"/><path d="M320 62 V79 H545 V96"/>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="96" width="190" height="58" rx="3"/><rect x="225" y="96" width="190" height="58" rx="3"/>
+        <rect x="450" y="96" width="190" height="58" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="116">TASK ONE</text><text x="237" y="116">TASK TWO</text><text x="462" y="116">TASK THREE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="12" y="132">claims the order paths</text><text x="237" y="132">claims the search index</text><text x="462" y="132">claims the two front ends</text>
+        <text x="12" y="148">one branch, one worktree</text><text x="237" y="148">one branch, one worktree</text><text x="462" y="148">one branch, one worktree</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M95 154 V178 H320 V196"/><path d="M320 154 V196"/><path d="M545 154 V178 H320 V196"/>
+      </g>
+
+      <rect x="40" y="196" width="560" height="44" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="54" y="216" fill="currentColor">CONVERGE AGAINST THE SAME DOSSIER</text>
+      <text class="svg-small" x="54" y="232" fill="currentColor" opacity="0.9">scope, contracts, data, architecture, verification, with no force flag</text>
+
+      <path d="M320 240 V258" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)"/>
+      <rect x="40" y="258" width="560" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="54" y="281" fill="currentColor">THEN ROUTE THE REVIEW, THEN PROVE IT</text>
+
+      <text class="svg-small" x="0" y="314" fill="currentColor" opacity="0.95">Starting a task refuses a taken branch, a taken worktree and a reopened task id. It does not compare one task's</text>
+      <text class="svg-small" x="0" y="328" fill="currentColor" opacity="0.95">file scope against another's, so overlap is visible in a registry a human reads, and is not refused for you.</text>
+    </svg>
+    <figcaption>Parallelism holds together here for a boring reason: each lane declares what it may touch before it starts, and every lane is judged at the end against the same design rather than against its own account of itself. Be exact about the limit. The registry refuses a second worker on the same branch, worktree or task, and it does not refuse two tasks that claim overlapping files. That comparison is still a person reading a list, which is why the plan step is a person's job.</figcaption>
+  </figure>
+
+  <p>The practical effect on a small team is that scope stops being a conversation. A brief names the paths in scope, the paths that must not be touched, the dependencies, the acceptance criteria, the commands that count as verification, the constraints already known, and the conditions on which to stop rather than improvise. Two runs of the same brief produce byte-identical JSON, and a brief that would exceed its size limit is refused rather than truncated, because a silently shortened brief is a scope change nobody agreed to.</p>
+
+  <h3 id="team-trace">From a business outcome to a merge decision, and back again</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 224" role="img" aria-labelledby="t35-trace">
+      <title id="t35-trace">A chain of eight links running forwards: business outcome, purpose, decision, task, code change, test or check, receipt, merge decision. Underneath, a single long arrow runs right to left, showing the same chain walked backwards from an incident to the decision that allowed it, one evidence pointer per hop.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Forwards: how an outcome becomes a merge decision</text>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="30" width="145" height="40" rx="3"/><rect x="165" y="30" width="145" height="40" rx="3"/>
+        <rect x="330" y="30" width="145" height="40" rx="3"/><rect x="495" y="30" width="145" height="40" rx="3"/>
+        <rect x="0" y="100" width="145" height="40" rx="3"/><rect x="165" y="100" width="145" height="40" rx="3"/>
+        <rect x="330" y="100" width="145" height="40" rx="3"/><rect x="495" y="100" width="145" height="40" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="10" y="49">BUSINESS OUTCOME</text><text x="175" y="49">PURPOSE</text><text x="340" y="49">DECISION</text><text x="505" y="49">TASK</text>
+        <text x="10" y="119">CODE CHANGE</text><text x="175" y="119">TEST OR CHECK</text><text x="340" y="119">RECEIPT</text><text x="505" y="119">MERGE DECISION</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="10" y="64">what somebody wanted</text><text x="175" y="64">why this change exists</text><text x="340" y="64">and its flip condition</text><text x="505" y="64">with a declared scope</text>
+        <text x="10" y="134">on one branch</text><text x="175" y="134">registered up front</text><text x="340" y="134">exit code and duration</text><text x="505" y="134">taken by a person</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M145 50 H165"/><path d="M310 50 H330"/><path d="M475 50 H495"/>
+        <path d="M567 70 V85 H72 V100"/>
+        <path d="M145 120 H165"/><path d="M310 120 H330"/><path d="M475 120 H495"/>
+      </g>
+
+      <path d="M637 168 H4" stroke="currentColor" stroke-width="1" opacity="0.5" fill="none" marker-end="url(#ar35)"/>
+      <text class="svg-label" x="0" y="158" fill="currentColor" opacity="0.85">Backwards: the walk an incident takes</text>
+      <text class="svg-small" x="0" y="190" fill="currentColor" opacity="0.95">Every hop carries an evidence pointer, so the question is never who remembers, it is which link is missing.</text>
+      <text class="svg-small" x="0" y="206" fill="currentColor" opacity="0.95">The chain is only as good as the hop somebody typed by hand: the first link is not computed by anything.</text>
+    </svg>
+    <figcaption>The value of the chain is not the forwards direction, which any team can approximate with discipline. It is the backwards direction at three in the morning: from a failing release to a commit, from a commit to the design directory, from the design directory to the decision that made this the right shape and to the condition that would change it. A team that can walk that chain argues about a decision. A team that cannot argues about memory.</figcaption>
+  </figure>
+
+  <h3 id="team-route">Who reviews this change, and why it is not a matter of opinion</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 360" role="img" aria-labelledby="t35-route">
+      <title id="t35-route">A diff enters a router. The router selects at most two specialist reviewers in a fixed priority order, and names every trigger that fired but lost its slot as unmeasured, which nothing here resolves. The selected reviewers produce normalised findings, which flow to an evidence audit where a receipt is claimed, and then to a human decision. The unmeasured box has no outgoing arrow.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">From a diff to a decision, with no model choosing the reviewer</text>
+      <line x1="0" y1="20" x2="638" y2="20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <rect x="0" y="52" width="120" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="12" y="77" fill="currentColor">THE DIFF</text>
+      <path d="M120 72 H158" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)"/>
+
+      <rect x="158" y="44" width="170" height="56" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="170" y="68" fill="currentColor">DETERMINISTIC ROUTE</text>
+      <text class="svg-small" x="170" y="86" fill="currentColor" opacity="0.9">one fixed priority order</text>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M328 72 H345 V35 H370"/><path d="M328 72 H345 V72 H370"/><path d="M328 72 H345 V109 H370"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="370" y="18" width="240" height="34" rx="3"/><rect x="370" y="55" width="240" height="34" rx="3"/>
+        <rect x="370" y="92" width="240" height="34" rx="3"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.95">
+        <text x="380" y="39">the primary specialist</text>
+        <text x="380" y="76">a second, only at the higher tiers</text>
+        <text x="380" y="113">unmeasured: every trigger that lost a slot</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M610 35 H626 V168 H502"/><path d="M610 72 H626"/>
+      </g>
+      <path d="M510 168 H502" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)"/>
+      <text class="svg-small" x="380" y="140" fill="currentColor" opacity="0.8">named, and resolved by nobody here</text>
+
+      <rect x="180" y="150" width="320" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="192" y="173" fill="currentColor">NORMALISED FINDINGS</text>
+      <g class="svg-small" fill="currentColor" opacity="0.85"><text x="0" y="166">every reviewer role</text><text x="0" y="180">declares no Edit or Write</text></g>
+
+      <path d="M340 186 V214" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)"/>
+      <rect x="180" y="214" width="320" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="192" y="237" fill="currentColor">EVIDENCE AUDIT</text>
+      <g class="svg-small" fill="currentColor" opacity="0.85"><text x="0" y="230">only where a</text><text x="0" y="244">receipt is claimed</text></g>
+
+      <path d="M340 250 V278" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)"/>
+      <rect x="180" y="278" width="320" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <text class="svg-title" x="192" y="301" fill="currentColor">A HUMAN DECISION</text>
+
+      <text class="svg-small" x="0" y="334" fill="currentColor" opacity="0.95">Zero triggers is a legal result and produces zero reviewers, which is what keeps a small change cheap.</text>
+      <text class="svg-small" x="0" y="350" fill="currentColor" opacity="0.95">A route is not a review, so the router never reports PASS. It reports that a route was computed, or NO-DATA.</text>
+    </svg>
+    <figcaption>Convening every specialist on every change teaches a team to ignore the review, and convening nobody loses the migration. The rule here is the boring middle: the same diff always produces the same reviewers, and the priority order is written in one place. Two consequences worth stating plainly. A change with no trigger gets no reviewer at all, which is how routine work stays fast. And a trigger that fired but lost its slot is printed by name rather than dropped, because a quietly discarded signal is how a review process starts lying to the people who rely on it.</figcaption>
+  </figure>
+
+  <div class="panel accent">
+    <h4>No model decides which specialist reviews the change. The diff does.</h4>
+    <p>The order is fixed and unarguable: migration, then security, then data, then backend, then infrastructure, then QA, then evidence. At most two reviewers are ever selected, and how many slots exist depends only on the tier. The router reads the diff, the intake file when one is discoverable, and the evidence store when one exists, and nothing else: no clock, no random source, no model call. Run it twice on the same two commits and you get the same answer, which is the property that lets a person argue with it.</p>
+  </div>
+
+  <h3 id="team-handover">Ownership moves when somebody accepts it, not when somebody sends it</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 300" role="img" aria-labelledby="t35-hand">
+      <title id="t35-hand">A state machine for handing over work. Ownership starts as owned by the outgoing owner. Prepare produces a prepared record frozen at a commit. From prepared, acknowledge moves ownership, and reject returns it to the outgoing owner with a named reason. If the bound commit moves, the record becomes stale, acknowledge is refused naming both commits, and the record must be prepared again at the new commit.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Ownership as a state machine, not as a message</text>
+      <line x1="0" y1="20" x2="638" y2="20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.5">
+        <rect x="0" y="60" width="150" height="44" rx="3"/><rect x="190" y="60" width="190" height="44" rx="3"/>
+        <rect x="430" y="12" width="210" height="44" rx="3"/><rect x="430" y="112" width="210" height="44" rx="3"/>
+        <rect x="190" y="150" width="190" height="44" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="82">OWNED</text><text x="202" y="82">PREPARED</text>
+        <text x="442" y="34">ACKNOWLEDGED</text><text x="442" y="134">REJECTED</text><text x="202" y="172">STALE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="12" y="98">by the outgoing owner</text><text x="202" y="98">frozen at one commit</text>
+        <text x="442" y="50">ownership has moved</text><text x="442" y="150">with a named reason</text><text x="202" y="188">the bound commit moved</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M150 82 H190"/>
+        <path d="M380 76 H400 V34 H430"/>
+        <path d="M380 90 H400 V134 H430"/>
+        <path d="M285 104 V150"/>
+        <path d="M285 194 V216 H166 V78 H190"/>
+        <path d="M430 134 H412 V244 H75 V104"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="152" y="54">prepare</text>
+        <text x="392" y="172">acknowledge is refused here,</text>
+        <text x="392" y="186">naming both commits</text>
+        <text x="300" y="212">prepare again, at the new commit</text>
+        <text x="300" y="240">ownership never moved</text>
+      </g>
+
+      <line x1="0" y1="276" x2="638" y2="276" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="294" fill="currentColor" opacity="0.95">It notifies nobody, wakes nobody and enforces no response time. It makes the state honest, not urgent.</text>
+    </svg>
+    <figcaption>Ownership does not transfer because a message was sent. It transfers when the named receiver acknowledges, and rejection is a first-class outcome that leaves the work exactly where it was. This matters most where the two people are never awake at the same time. What crosses today is usually a sentence in a chat window that nobody can query afterwards, and which cannot settle what was finished, what was half done, what was never started and what question was left open. What crosses instead is a file bound to a commit, where most of that answer is derived rather than typed. The part that matters most at six in the morning, the open question, is still typed by a human or it is not there.</figcaption>
+  </figure>
+
+  <p>The record derives what it can and refuses to invent the rest. Done, in flight and not started come from the plan compared against the task registry. Active tasks carry their worktree and base commit. Every worktree is checked for uncommitted work, and every evidence item is tagged current, stale or unavailable. Open questions, decisions and required access are written empty on purpose, because the tool cannot know them and a plausible guess in that field is worse than a blank one.</p>
+
+  <h3 id="team-learn">How a lesson becomes something the whole team does</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-labelledby="t35-learn">
+      <title id="t35-learn">A loop of seven steps. An incident or a repeated finding leads to reproducing it, then to proposing a lesson, then to human review. Human review produces a rule, a skill or a check, which shapes the next change, which produces earlier detection, which feeds back to the start. The proposal step cannot land a change on its own.</title>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">The learning loop, with a human in the only gap that matters</text>
+      <line x1="0" y1="20" x2="638" y2="20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="36" width="150" height="40" rx="3"/><rect x="170" y="36" width="140" height="40" rx="3"/>
+        <rect x="330" y="36" width="140" height="40" rx="3"/><rect x="490" y="36" width="150" height="40" rx="3"/>
+        <rect x="490" y="116" width="150" height="40" rx="3"/><rect x="330" y="116" width="140" height="40" rx="3"/>
+        <rect x="170" y="116" width="140" height="40" rx="3"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.95">
+        <text x="10" y="55">an incident, or the same</text><text x="10" y="69">finding twice</text>
+        <text x="180" y="55">reproduce it</text><text x="180" y="69">against a fixture</text>
+        <text x="340" y="55">propose a lesson</text><text x="340" y="69">in rule form</text>
+        <text x="500" y="55">a human reviews it</text><text x="500" y="69">and merges, or does not</text>
+        <text x="500" y="135">a rule, a skill</text><text x="500" y="149">or a registered check</text>
+        <text x="340" y="135">the next change</text><text x="340" y="149">meets it by default</text>
+        <text x="180" y="135">detected earlier,</text><text x="180" y="149">by a check</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" marker-end="url(#ar35)">
+        <path d="M150 56 H170"/><path d="M310 56 H330"/><path d="M470 56 H490"/>
+        <path d="M565 76 V116"/>
+        <path d="M490 136 H470"/><path d="M330 136 H310"/>
+        <path d="M170 136 H75 V76"/>
+      </g>
+      <line x1="0" y1="176" x2="638" y2="176" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="194" fill="currentColor" opacity="0.95">A session may propose an amendment. It may not land one. The rule that has no enforcement point is advice,</text>
+      <text class="svg-small" x="0" y="210" fill="currentColor" opacity="0.95">and advice goes in a different file, which says so about itself.</text>
+    </svg>
+    <figcaption>A lesson becomes team behaviour only through a reviewed change. That constraint is doing real work: the alternative, where a session quietly rewrites the rules everybody else is running under, produces a team whose standards nobody can state out loud. A proposal has to carry four things: the defect and what it cost, the rule in a form with an observable trigger and a named enforcement point, a fixture that proves the check catches the defect, and which existing rule it replaces. A rule that only accretes beside the last one is how a rule file grows past the point where anyone reads it.</figcaption>
+  </figure>
+
+  <h3 id="team-rules">If you adopted nothing else, which five rules would change a week?</h3>
+
+  <p>Everything above compresses into five sentences. If your team adopted nothing else, these five would still change how a week runs.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Rule</th><th>What it means on a Tuesday</th><th>Stages it governs</th></tr></thead>
+    <tbody>
+      <tr><th>Intent has an owner</th><td>One named person owns what the change is for. Not a channel, not a ticket queue, not the model that wrote the code. Ownership moves only when somebody accepts it.</td><td>1, 2, 6</td></tr>
+      <tr><th>Risk decides ceremony</th><td>The weight a change owes is computed from five objective questions, first match wins, so nobody negotiates it upward because they are cautious or downward because it is Friday. The rule is fixed. The five answers are still typed by a human, and nothing contradicts a wrong one at intake time.</td><td>2, 4, 5</td></tr>
+      <tr><th>Every writer has a lane</th><td>A writer, human or agent, gets a declared scope, its own branch and its own worktree, and a list of paths it must not touch. Starting a second writer on a branch, worktree or task already taken is refused. Two tasks claiming overlapping files are not refused: that overlap appears in a registry a human reads.</td><td>5, 7</td></tr>
+      <tr><th>Reviewers challenge, writers change</th><td>The reviewing roles are declared without Edit or Write. Findings come back as findings, and the person or worker who owns the lane makes the change or records the decision not to.</td><td>3, 8</td></tr>
+      <tr><th>Done is an evidence state</th><td>Done means a registered check ran and left a receipt. Not that somebody wrote the word. Absent evidence is reported by name and is never counted as a pass.</td><td>7, 9, 10</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement">Absent evidence is NO-DATA. NO-DATA is never a pass.</p>
+
+  <p>That last rule is the one that changes meetings. When someone says a change is done, the reply is no longer a judgment about their diligence. It is a question with a mechanical answer: which check, run against which commit, over which paths, exiting with what code, taking how long.</p>
+
+  <h3 id="team-worked">One change, walked end to end</h3>
+
+  <p class="lede">A price-bearing field on the product master is retyped, and its unit meaning changes. Three systems read it: the order service, the cart service and the search index. The design happens in one timezone and the build happens in another.</p>
+
+  <p>This is the ordinary case, not the dramatic one. Nothing here is an outage. It is one field, three consumers, two working days that do not overlap, and a set of seams where work is usually lost.</p>
+
+  <span class="daymark">Day one, morning, the design site</span>
+
+  <div class="scene">
+    <p>A retailer sees the wrong case pack price. The account team establishes which customers and which surfaces are affected, and what the workaround is. None of this touches the product: it has no tracker integration and cannot see any of it.</p>
+    <p>The only discipline available at this seam is a convention the team keeps: a request states an outcome and a blast radius before an analyst picks it up.</p>
+  </div>
+
+  <p><strong>The seam.</strong> Request to design. <strong>What crosses.</strong> A ticket description, and later the same words transcribed into the purpose file. The link from that ticket to the design directory is a line somebody types by hand, and a broken link gives no signal at all.</p>
+
+  <span class="daymark">Day one, late morning</span>
+
+  <p>The analyst runs the intake with the commercial requester in the room, because they are the only people who can answer the money question. Yes to money computes the top tier, which owes all seven artifacts. No would compute the bottom tier, which owes nothing, and at that moment nothing contradicts a wrong answer. That is the honest shape of it: the rule is unarguable, and the inputs are five sentences a human typed.</p>
+
+  <p>Purpose, process and verification get written while the people who know the intent are awake. The process artifact names an actor, a trigger and an exception path for every step, and the exception states are named across all three surfaces: a stale price, a partial sync, an index behind the database, a voucher service unreachable while a discount stacks.</p>
+
+  <p class="evidence">Be exact about what is checked here. Nothing reads purpose, process or verification for content. The design checks verify that the file exists and is no longer the shipped template. A one-sentence purpose brief passes.</p>
+
+  <span class="daymark">Day one, afternoon</span>
+
+  <p>The integration lead writes down which store owns the field, once, for real: which system is the system of record, which tables are a replica, which index is derived, and which store owns editorial copy and not price. Every relationship carries a cardinality, including the one that traps this business, where a variant to a stock unit to a contract price list is many to many and gets implemented as one to many by whoever writes the sync first.</p>
+
+  <p>One decision record says why this store and not that one, with two genuinely distinct rejected alternatives and a flip condition. The second analyst then refutes the dossier rather than approving it, and reconciles the declared tier against what the diff actually touches.</p>
+
+  <div class="panel warn">
+    <h4>The check that names the field, and the check that cannot know the answer</h4>
+    <p>The data model check fails an entity with no named system of record and a relationship with no cardinality. It cannot tell a correct answer from a confident wrong one: naming the editorial store where the truth is the product master passes every check that ships. The same holds for the decision record, where the shape is checked and the judgment is not. This is why stage four is a second human reading, and why no amount of tooling removes it.</p>
+  </div>
+
+  <span class="daymark">Day one, evening. The timezone seam, outbound</span>
+
+  <div class="scene">
+    <p>The plan is derived and one work brief is minted per task: the export and the sync mapping, the order and cart contracts and their consumers, the index mapping and reindex, and the two front ends.</p>
+    <p>Ownership is prepared at a specific commit and does not move until a named engineer on the receiving side runs acknowledge. Reject is available, and leaves the work where it was.</p>
+  </div>
+
+  <p><strong>The seam.</strong> Day to night. <strong>What crosses.</strong> One byte-identical brief per task going out, carrying scope, must-not-touch, dependencies, acceptance, verification commands, known constraints, stop conditions and the baseline commit. <strong>What still does not cross.</strong> Nothing notifies anybody. The people who can answer an intent question are asleep for the whole build window. A stop condition converts an eight-hour stall into a written escalation, and nothing converts it into an answer.</p>
+
+  <span class="daymark">Day one, night, the build site</span>
+
+  <p>The night engineers work against the dossier instead of a chat scrollback. Evidence is minted by the runner that executed the command and never typed: base and head commit, redacted arguments, exit code, duration, and content digests of the declared covered paths. The migration receipt records the forward and the reverse leg, both run against a restored copy, with matching row counts. A stop condition becomes a recorded stop and a written open question rather than eight hours of guessing.</p>
+
+  <p class="evidence">Receipts minted on a laptop are labelled local and advisory. The label is part of the receipt, so nobody has to remember which machine produced it.</p>
+
+  <span class="daymark">Day two, morning. The timezone seam, inbound</span>
+
+  <p>The night shift prepares the return handover at a specific commit. The lead acknowledges, or rejects with a named reason such as a consumer that was not updated. Acknowledge refuses outright on a stale record and names both commits, and a receiver who reads as the outgoing owner is refused at both ends.</p>
+
+  <p><strong>What still does not cross.</strong> Nothing stops the lead merging while ignoring the record entirely. The record makes the state honest. Your branch rules are what make it binding.</p>
+
+  <span class="daymark">Day two, the merge path</span>
+
+  <p>The reviewers are routed from the diff, not chosen. Findings come back as findings. The gates read the receipts. Convergence compares the diff against the approved dossier along scope, contracts, data, architecture and verification, and reports the file types it could not read as unmeasured rather than as a verdict, which is the difference between a limit and a lie. A human merges.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Seam</th><th>What crosses it today</th><th>What crosses it instead</th><th>What still does not</th></tr></thead>
+    <tbody>
+      <tr><th>Request to design</th><td>A ticket and a chat thread</td><td>A purpose file, and a hand-typed link to it</td><td>Nothing detects a missing or broken link</td></tr>
+      <tr><th>Design to build, across timezones</th><td>A sentence in a chat window</td><td>A deterministic work brief out, a handover record back</td><td>It notifies nobody and shortens no clock</td></tr>
+      <tr><th>Admin screen to version control</th><td>Nothing. A field saved in an admin screen produces no diff.</td><td>An exported definition committed on a branch, if the team builds that export</td><td>Only the shape crosses. Publishing the values still bypasses every environment.</td></tr>
+      <tr><th>Publisher to consumer</th><td>A handoff sentence somebody typed</td><td>The same sentence, plus a declared contract and a routed reviewer</td><td>No consumer impact analysis, and no deploy ordering check</td></tr>
+      <tr><th>Repository to people without accounts</th><td>An analyst emailing files</td><td>Nothing yet. This one is unbuilt.</td><td>The people whose words are in the purpose file still cannot open it.</td></tr>
+      <tr><th>CI to the production approval</th><td>A build number, and a recollection</td><td>An evidence pack assembled against the release commit</td><td>The deployment approval and the product's approval gate are two different approvals</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="panel hot">
+    <h4>What this arrangement does not do, stated where a buyer can find it</h4>
+    <p>It does not shrink a timezone. It blocks nothing on its own: every gate is a command that prints a verdict, and your own branch rules and CI configuration sit between a failing verdict and a stopped merge. It cannot see absent evidence, only declared evidence, so a change that declares nothing produces NO-DATA lines rather than a failure. It reads no ticketing system, no admin screen and no telemetry, so anything that never becomes a diff, a JSON file or a markdown file is invisible to it. And a complete dossier written after the code passes every check identically, which is why stage four is a person and not a script.</p>
+  </div>
+
+  <p class="statement wide">The point is not that the machine is trusted. It is that trust stops being a personal favour your senior engineer does for the team every week.</p>
+</section>

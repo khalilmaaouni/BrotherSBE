@@ -1,0 +1,359 @@
+<!-- =================== TAB FIVE: START SMALL =================== -->
+<section class="part" id="start">
+  <span class="part-label">Tab five</span>
+  <h2 class="part-head">Start small</h2>
+  <p class="part-blurb">You are not buying a process. You are testing one claim, on one change, this week: that your senior people can stop being the standing verification layer for everything the machine writes. Here is the smallest honest way to find out, what it costs, how to tell it is working, how to tell it is not, and how to take it back out.</p>
+
+  <p class="lede">Nothing in the first fortnight changes how anything merges. It is files in your own repository, read by people who already work there. The first thing that could stop a merge arrives in week eight, and it is your own platform that does the stopping.</p>
+
+  <h3 id="start-first">What should we point it at first?</h3>
+
+  <p>Pick the change you are already dreading. Not a toy, and not the riskiest thing in the backlog either: the ordinary change that you know, from experience, is going to cost somebody senior an afternoon of checking. Six seats, six versions of that same instruction.</p>
+
+  <span class="seat">Seat one</span>
+  <h4>The staff engineer: the change you already know will land on your desk</h4>
+
+  <p>Take the next change you are certain you will be asked to review, and run the intake with its author in the room before they write anything. You are not reviewing earlier. You are moving the argument you were going to have in a pull request to the hour where it is cheap, and putting it in a file that the next person can read. When the diff arrives, the reviewer routing picks specialists from the diff itself rather than from whoever is free, and every routed reviewer is read-only by construction.</p>
+
+  <span class="seat">Seat two</span>
+  <h4>The backend engineer: the contract change whose consumers nobody has enumerated</h4>
+
+  <p>Be clear about what this does and does not do. It does not go and find your consumers, and it does not stop the change. What it does is make the change harder to treat as a small one: the tier is computed from five answers rather than chosen, and reading the diff afterwards proposes a floor. That floor is a proposal. The tool moves nobody's declared tier in either direction, so a tier declared below the floor comes back as a disagreement somebody has to record by name, against a named commit. The list of who breaks is written by a human, before the change, into the process and data-model artifacts, and the reviewer who reads it can name what is missing. The improvement is that the list exists and is dated, not that a machine produced it.</p>
+
+  <span class="seat">Seat three</span>
+  <h4>The data engineer: the number Finance already questioned once</h4>
+
+  <p>Take the figure somebody has already challenged and that survived the challenge because you re-ran the model and got the same answer. Register it: a second derivation whose text genuinely differs from the first, re-run to zero drift against a pinned snapshot. Know the height of the floor before you stand on it. The gate checks that the two derivations differ by more than case, whitespace and comments, and that the two figures recorded from the re-run agree. It executes no query and cannot read which tables each derivation touches, so two reads of the same broken view still agree and still pass. It is a floor worth having and a ceiling worth printing on the wall.</p>
+
+  <span class="seat">Seat four</span>
+  <h4>The QA engineer: the release where the suite is green and you still do not trust it</h4>
+
+  <p>Wrap one real suite in the evidence runner, so the claim that it ran carries a receipt naming the command, its exit code, its duration and the paths it covered, minted by the runner rather than typed by anybody. Then look at what the receipt says about the runs you were previously calling green. A check that took no time did not run. A registered check that produced nothing comes back NO-DATA, and NO-DATA is never a pass.</p>
+
+  <span class="seat">Seat five</span>
+  <h4>The technical business analyst: the requirement that has changed meaning three times</h4>
+
+  <p>Write the decision record for it: the criteria, two genuinely distinct rejected alternatives, and the condition that would flip the decision back. The check reads the shape, never the judgement. It refuses a file still carrying the shipped template and refuses a record with no flip condition, and a thin but complete answer passes. The value this week is the argument the flip condition forces, and the fact that in three months the argument is still on disk rather than in somebody's memory of a call.</p>
+
+  <span class="seat">Seat six</span>
+  <h4>The platform engineer: the migration whose rollback has never actually been run</h4>
+
+  <p>Rehearse it forward and backward against a restored copy, and record the row counts on both sides. The gate reads that receipt; it does not produce it, and nothing resolves the rehearsal id against your job system, so that field is a pointer for a human to follow. A receipt with no row counts is NO-DATA rather than a pass, which is the entire point: the gate says what it compared instead of asserting a comparison it never made.</p>
+
+  <p class="evidence">Every mechanism named above ships with tests and runs in this project's own CI. What none of them do: read your purpose or process artifacts for content, detect that a change needed an approval nobody declared, enumerate consumers, or block anything on their own.</p>
+
+  <h3 id="start-fifteen">What do the first fifteen minutes actually cost?</h3>
+
+  <p>Two commands to install, one command to score a change, one recommended action to act on. Nothing else is required, and nothing in your merge path changes.</p>
+
+  <pre><code>claude plugin marketplace add khalilmaaouni/BrotherSBE
+claude plugin install brothersbe@brothersbe</code></pre>
+
+  <p>Then, inside Claude Code, one command that looks at where you are and takes it from there.</p>
+
+  <pre><code>/brothersbe:start</code></pre>
+
+  <p>The one thing worth doing by hand on the first day, because it is the measurement the rest of the decision rests on, is scoring a real change.</p>
+
+  <pre><code>mkdir -p design/my-change     <span class="c">&lt;- the intake refuses a missing dir</span>
+sbe intake design/my-change   <span class="c">&lt;- five questions, one JSON file</span></code></pre>
+
+  <p>Five questions: does it change a contract others depend on, does it cross a boundary, is it reversible in under an hour, does it touch money or partner data or personal data or production state, and how many downstream consumers break if it is wrong. Highest matching rule wins. Then ask for exactly one next step rather than a menu.</p>
+
+  <pre><code>/brothersbe:next</code></pre>
+
+  <figure>
+    <svg viewBox="0 0 640 286" role="img" aria-labelledby="s60-fifteen-title">
+      <title id="s60-fifteen-title">The first fifteen minutes as three steps left to right: install, which is two commands and changes no repository file; score one change, which is five questions and one JSON file; and read one recommended action rather than a menu. Below a dashed fold, the four tiers the score can return and what each one obliges the team to write: T0 nothing at all, T1 a single purpose brief, T2 six artifacts, T3 seven. A closing line states that no merge behaves differently yet because no CI stage exists.</title>
+      <defs>
+        <marker id="s60ar" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Fifteen minutes, in three moves</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="34" width="186" height="38" rx="3"/>
+        <rect x="226" y="34" width="186" height="38" rx="3"/>
+        <rect x="452" y="34" width="186" height="38" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="14" y="58">INSTALL</text><text x="240" y="58">SCORE ONE CHANGE</text><text x="466" y="58">READ ONE ACTION</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M188 53 L222 53" marker-end="url(#s60ar)"/>
+        <path d="M414 53 L448 53" marker-end="url(#s60ar)"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="0" y="90">two commands</text><text x="0" y="105">no repository file changes</text>
+        <text x="226" y="90">five questions</text><text x="226" y="105">one JSON file on a branch</text>
+        <text x="452" y="90">one recommended step</text><text x="452" y="105">not a menu of options</text>
+      </g>
+
+      <line x1="0" y1="128" x2="638" y2="128" stroke="currentColor" stroke-width="1" opacity="0.55" stroke-dasharray="3 3"/>
+      <text class="svg-label" x="0" y="148" fill="currentColor" opacity="0.85">What the score decides you owe</text>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="160" width="150" height="52" rx="3"/><rect x="163" y="160" width="150" height="52" rx="3"/>
+        <rect x="326" y="160" width="150" height="52" rx="3"/><rect x="489" y="160" width="149" height="52" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="14" y="182">T0</text><text x="177" y="182">T1</text><text x="340" y="182">T2</text><text x="503" y="182">T3</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="14" y="202">nothing at all</text><text x="177" y="202">one purpose brief</text>
+        <text x="340" y="202">six artifacts</text><text x="503" y="202">seven artifacts</text>
+      </g>
+
+      <line x1="0" y1="238" x2="638" y2="238" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="258" fill="currentColor" opacity="0.95">The rule is fixed and the highest match wins. The five answers are typed by a human.</text>
+      <text class="svg-small" x="0" y="278" fill="currentColor" opacity="0.95">Nothing merges differently today: no pipeline stage exists yet, and none is needed to get a reading.</text>
+    </svg>
+    <figcaption>The trial is bounded by arithmetic rather than by good intentions. A team that scores its last four weeks of real changes learns, before spending anything, how much writing this method would actually have demanded of it. If that mix comes back mostly T0, the cost is close to nothing and the decision is easy. If it comes back mostly T2 and T3, you have learned that too, in week one, for the price of an afternoon.</figcaption>
+  </figure>
+
+  <div class="panel accent">
+    <h4>What you have deliberately not done yet</h4>
+    <p>No pipeline stage, no merge check, no branch protection, no keys, no registry. Nobody's merge is slower and nobody's build is redder. Everything above is a verdict printed on a laptop and a few files on a branch, which is exactly why it is safe to try on a real change instead of a sandbox.</p>
+  </div>
+
+  <h3 id="start-rollout">How do we roll this out without stopping anyone's merge?</h3>
+
+  <p>Advisory first, every time. Print verdicts for weeks before anything is allowed to block, and read them against your own codebase's idioms rather than against a vendor's assumptions. The order below works on a plain repository with nothing special enabled.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Week</th><th>What you add</th><th>What it can block</th><th>Who does the wiring</th></tr></thead>
+    <tbody>
+      <tr><th>1</th><td>No tooling in the pipeline at all. Score the last four weeks of real changes with the intake, on a laptop, and publish the tier mix.</td><td>Nothing.</td><td>One engineer, one afternoon.</td></tr>
+      <tr><th>2</th><td>The handover only, on one change: a work brief out, a handover record back, acknowledged or rejected by a named human at a specific commit.</td><td>Nothing. Ownership stays with the outgoing owner until somebody acknowledges.</td><td>Whoever runs the handoff today.</td></tr>
+      <tr><th>3</th><td>One dossier on one real change above T0. A second person runs the design check and tries to refute it.</td><td>Nothing. Laptops only.</td><td>The author and one reviewer.</td></tr>
+      <tr><th>4</th><td>The first CI stage, and only one: the silent-failure linter, wrapped so a failure marks the build unstable rather than red.</td><td>Nothing yet, by choice.</td><td>Your CI owner. Confirm a Python 3.9 or newer runtime on the agent first.</td></tr>
+      <tr><th>5</th><td>The tier reconciliation stage, still advisory, plus the branching that keeps T0 changes free of everything else.</td><td>Nothing yet.</td><td>Your CI owner. The test this week is negative: if a T0 change ever goes red, the wiring is wrong and gets fixed before anything else proceeds.</td></tr>
+      <tr><th>6</th><td>The approver public keys, imported on the CI agent, and one reviewer signing one commit to prove the host verifies it.</td><td>Nothing yet.</td><td>Whoever owns your secret distribution. Public keys are not secret; this is distribution and rotation, not confidentiality.</td></tr>
+      <tr><th>7</th><td>One real check wrapped in the evidence runner, with its registry entry owned by a named person and the receipt written outside the tree it covers.</td><td>Nothing yet.</td><td>The engineer who owns that suite.</td></tr>
+      <tr><th>8</th><td>The first enforcing gate. Unwrap one stage, then bind your branch protection or merge check to that build status.</td><td>A merge, and your platform is what stops it.</td><td>A repository administrator. Decide the emergency-fix path in the same change, never during an incident.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 640 284" role="img" aria-labelledby="s60-block-title">
+      <title id="s60-block-title">Where a failing verdict actually stops a merge. A chain runs left to right: the gate prints FAIL, strict mode exits with a nonzero code, a CI stage the team wrote reports a build status, and a merge rule the team bound to that status refuses the merge. A bracket marks the last two links as belonging to the team rather than to the tool. A second lower path shows a NO-DATA verdict, which prints and does not decide an exit code on its own, so on its own it reaches no merge rule, under a closing line warning that a green build can carry several NO-DATA lines.</title>
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">From a verdict to a stopped merge</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="40" width="140" height="40" rx="3"/><rect x="166" y="40" width="140" height="40" rx="3"/>
+        <rect x="332" y="40" width="140" height="40" rx="3"/><rect x="498" y="40" width="140" height="40" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="58">FAIL PRINTED</text><text x="178" y="58">EXIT NONZERO</text>
+        <text x="344" y="58">BUILD STATUS</text><text x="510" y="58">MERGE REFUSED</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="12" y="74">the gate reads</text><text x="178" y="74">under strict mode</text>
+        <text x="344" y="74">a stage you wrote</text><text x="510" y="74">a rule you bound</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M142 60 L162 60" marker-end="url(#s60ar)"/>
+        <path d="M308 60 L328 60" marker-end="url(#s60ar)"/>
+        <path d="M474 60 L494 60" marker-end="url(#s60ar)"/>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.5" fill="none">
+        <path d="M332 96 L332 106 L638 106 L638 96"/>
+      </g>
+      <text class="svg-label" x="332" y="126" fill="currentColor" opacity="0.9">Yours, not the tool's</text>
+      <text class="svg-small" x="332" y="144" fill="currentColor" opacity="0.9">No pipeline file, no protection rule and no</text>
+      <text class="svg-small" x="332" y="159" fill="currentColor" opacity="0.9">merge check ships here. A file naming reviewers</text>
+      <text class="svg-small" x="332" y="174" fill="currentColor" opacity="0.9">does not block a merge on its own either.</text>
+
+      <line x1="0" y1="196" x2="638" y2="196" stroke="currentColor" stroke-width="1" opacity="0.55" stroke-dasharray="3 3"/>
+      <text class="svg-label" x="0" y="216" fill="currentColor" opacity="0.85">And the path most people misread</text>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="226" width="140" height="30" rx="3"/><rect x="166" y="226" width="140" height="30" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="246">NO-DATA</text><text x="178" y="246">EXIT ZERO</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M142 241 L162 241" marker-end="url(#s60ar)"/>
+      </g>
+      <text class="svg-small" x="332" y="238" fill="currentColor" opacity="0.95">Never a pass as a verdict.</text>
+      <text class="svg-small" x="332" y="254" fill="currentColor" opacity="0.95">Not a block on its own.</text>
+      <text class="svg-small" x="0" y="276" fill="currentColor" opacity="0.95">Read the verdict, not the colour: a green build can carry several NO-DATA lines.</text>
+    </svg>
+    <figcaption>This is why the advisory phase is honest rather than timid. The tool never stops a merge; your own platform does, and only once somebody deliberately connects the two. That is a limit and it is also the reason adopting this cannot break your delivery: for as long as you want, the strongest thing a bad verdict can do is print.</figcaption>
+  </figure>
+
+  <div class="panel warn">
+    <h4>The stronger path, where your plan includes it</h4>
+    <p>Some code hosting tiers offer an evaluate-only mode for repository rulesets, which lets a rule report what it would have done across many repositories at once without refusing anything. Where a team has that tier, use it: it is a better advisory phase than a wrapped pipeline stage, because it measures the rule itself rather than one job's exit code. Do not plan around it before you have checked. That mode is gated at organisation and enterprise level, so on a plain repository it is simply not there, and the eight-week ladder above assumes it is not.</p>
+  </div>
+
+  <h3 id="start-strict">What happens on the first pull request that runs strict?</h3>
+
+  <div class="scene">
+    <p>The build goes amber before it goes red, because the first strict stage is one stage on one path, and most changes never touch it.</p>
+    <p>The verdicts arrive blocker first. One of them is a FAIL and everybody looks at it. Three of them say NO-DATA and almost nobody does, which is the reading that matters.</p>
+  </div>
+
+  <p>Expect these four, and expect the third to be the one that changes how your team reads a green build.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>What you see</th><th>What it means</th><th>What to do about it</th></tr></thead>
+    <tbody>
+      <tr><td><span class="stamp s-unsupported">FAIL</span> on a design check</td><td>Something the check reads is missing or is still the shipped template. Structure, not judgement: a complete but shallow answer passes.</td><td>Fix it, then ask the harder question the check cannot ask, which is whether the answer is true.</td></tr>
+      <tr><td><span class="stamp s-experimental">NO-DATA</span> on approval</td><td>Until the approver public keys are imported on the agent, a signed approval cannot be verified there, and the verdict is the absence of evidence rather than a refusal.</td><td>Import the keyring. Until you do, treat the approval gate as not yet installed rather than as passing.</td></tr>
+      <tr><td>A green build carrying several <span class="stamp s-experimental">NO-DATA</span> lines</td><td>Strict mode exits nonzero on a FAIL. A NO-DATA does not decide an exit code on its own, so a change that declares nothing at all can produce a page of NO-DATA and a green build. One deliberate exception is worth knowing before you meet it: a strict tier reconciliation that detected work above the cheapest tier with no intake to reconcile it against does exit nonzero, and so does one that could not read the diff.</td><td>Read the verdicts, never the colour. If you want absence to block, that is a separate deliberate decision.</td></tr>
+      <tr><td>Files reported as unmeasured</td><td>The silent-failure linter reads <code>.py</code>, <code>.sql</code>, <code>.swift</code>, <code>.rb</code>, <code>.js</code>, <code>.ts</code> and <code>.go</code>. A run that opened no file reports NO-DATA naming why, never clean.</td><td>Check those extensions against your real estate before promising anyone coverage, and keep your existing static analysis running beside this, never instead of it.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="panel hot">
+    <h4>The one that surprises people in week nine</h4>
+    <p>A receipt is bound to two things on purpose: the head commit it was minted against, and the exact bytes of every file it says it covers. Both have to still hold when somebody checks it. So if your repository rewrites history on merge, a receipt minted on the branch tip stops matching at the merge commit, and any later commit at all moves the head out from under it. That is strict by design, and it means regenerating receipts on the post-merge head belongs in your pipeline as a designed step rather than as something you work out during an incident.</p>
+  </div>
+
+  <h3 id="start-signals">How will we know it is helping, and how will we know it is not?</h3>
+
+  <p>Decide the readings before you start, so the answer in six weeks is a number somebody wrote down rather than an impression somebody defends. Two of these readings are designed to tell you to stop.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Reading</th><th>Healthy</th><th>What an unhealthy reading is telling you</th></tr></thead>
+    <tbody>
+      <tr><th>The tier mix over four weeks</th><td>A spread, with the cheapest tier the largest group.</td><td>If nearly everything comes back T2 or T3, somebody is answering the intake wrongly, or your boundaries genuinely are that wide. Re-score ten changes with two people in the room before you blame the tool or the team.</td></tr>
+      <tr><th>NO-DATA, per check, per week</th><td>Falling, and each remaining one explainable.</td><td>The same check returning NO-DATA week after week means the evidence is not being produced. That is a workflow problem, not a verdict problem: usually the command never runs where you think it runs, or the receipt is written into the very tree it covers.</td></tr>
+      <tr><th>Share of the diff nothing could read</th><td>Small, and known by name.</td><td>A large unmeasured share means the automated readers are looking at a corner of your estate. Say that out loud rather than reading a green run as coverage.</td></tr>
+      <tr><th>Open questions on a handover</th><td>Typed, specific, and answered by name.</td><td>Always empty means the handover has become a formality. That field is written empty by design and only a human fills it, so an empty one is a person deciding not to.</td></tr>
+      <tr><th>Wall clock added to every push</th><td>Measured, and small enough that nobody wants a way around it.</td><td>Unmeasured is the unhealthy reading. A merge path that gets slower without anybody quantifying it is a merge path people learn to bypass.</td></tr>
+      <tr><th>Senior hours spent re-deriving somebody else's output</th><td>Falling. This is the thing you are actually testing.</td><td>Nothing here measures it. Have the two or three people carrying that load log it for a fortnight before you start and a fortnight after, or you will not be able to answer the only question that matters.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 640 276" role="img" aria-labelledby="s60-signal-title">
+      <title id="s60-signal-title">Two unhealthy readings, each traced to the place it actually points. First: every change scoring T2 or T3. The chain runs from five typed answers, through a fixed tier rule, to a tier, and the label look here points at the answers, not at the rule. Second: the same check returning NO-DATA every week. The chain runs from a registered check, to a command run somewhere, to a receipt written outside the covered tree, to the gate reading it, and the label look here points at the middle two links. A closing line states that a bad reading names a place in the team's workflow rather than a defect in the verdict.</title>
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Signal one: everything comes back T2 or T3</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="34" width="178" height="34" rx="3"/><rect x="222" y="34" width="178" height="34" rx="3"/>
+        <rect x="444" y="34" width="150" height="34" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="55">FIVE ANSWERS</text><text x="234" y="55">THE TIER RULE</text><text x="456" y="55">THE TIER</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M180 51 L218 51" marker-end="url(#s60ar)"/>
+        <path d="M402 51 L440 51" marker-end="url(#s60ar)"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="0" y="86">typed by a human</text>
+        <text x="222" y="86">fixed, unarguable, highest match wins</text>
+        <text x="444" y="86">the writing you owe</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.6" fill="none">
+        <path d="M60 118 L60 94" marker-end="url(#s60ar)"/>
+      </g>
+      <text class="svg-label" x="0" y="132" fill="currentColor" opacity="0.95">Look here</text>
+      <text class="svg-small" x="90" y="132" fill="currentColor" opacity="0.9">the five answers, checked against nothing at intake</text>
+
+      <line x1="0" y1="150" x2="638" y2="150" stroke="currentColor" stroke-width="1" opacity="0.55" stroke-dasharray="3 3"/>
+      <text class="svg-label" x="0" y="170" fill="currentColor" opacity="0.85">Signal two: one check returns NO-DATA every week</text>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="180" width="140" height="30" rx="3"/><rect x="166" y="180" width="140" height="30" rx="3"/>
+        <rect x="332" y="180" width="140" height="30" rx="3"/><rect x="498" y="180" width="140" height="30" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="200">REGISTERED</text><text x="178" y="200">COMMAND RAN</text>
+        <text x="344" y="200">RECEIPT WRITTEN</text><text x="510" y="200">GATE READS IT</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M142 195 L162 195" marker-end="url(#s60ar)"/>
+        <path d="M308 195 L328 195" marker-end="url(#s60ar)"/>
+        <path d="M474 195 L494 195" marker-end="url(#s60ar)"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.6" fill="none">
+        <path d="M226 232 L226 214" marker-end="url(#s60ar)"/>
+        <path d="M392 232 L392 214" marker-end="url(#s60ar)"/>
+      </g>
+      <text class="svg-label" x="166" y="246" fill="currentColor" opacity="0.95">Look here</text>
+      <text class="svg-small" x="0" y="268" fill="currentColor" opacity="0.95">A bad reading names a place in your workflow, not a defect in the verdict.</text>
+    </svg>
+    <figcaption>Both of these look like the tool misbehaving and neither is. A tier that never comes out cheap is a statement about five typed answers, because the rule between them is fixed. A check that is permanently NO-DATA is a statement about whether anybody is producing the evidence, because the verdict describes what was there to read. Adopting this seriously means being willing to act on a reading that points back at yourselves.</figcaption>
+  </figure>
+
+  <p class="statement wide">If four weeks in, the only thing that has changed is that people write more files, stop. That is a real result and this page will not argue you out of it.</p>
+
+  <h3 id="start-back-out">How do we take it back out?</h3>
+
+  <p>Plainly, because an adoption you cannot reverse is a decision nobody should make on a Tuesday.</p>
+
+  <ul>
+    <li><strong>In the first three weeks there is nothing to undo.</strong> Everything written is files on a branch in your own repository. Delete the branch, or keep the files and stop running the commands.</li>
+    <li><strong>Remove the plugin</strong> with <code>claude plugin uninstall brothersbe</code>. That removes the tooling, and it removes nothing you wrote: your dossiers, receipts, pipeline stages and branch settings are yours and you remove those yourself.</li>
+    <li><strong>Go back a version rather than out entirely</strong> with <code>scripts/rollback-install.sh</code>, which previews by default and only acts on <code>--apply</code>, and which refuses rather than guesses when it cannot identify the installation it is meant to move.</li>
+    <li><strong>Stop enforcing without removing anything</strong> by putting the CI stage back to its wrapped, advisory form. That is a one-line change in your own pipeline file, because the enforcement was always yours.</li>
+  </ul>
+
+  <h3 id="start-commands">Which commands will we actually run?</h3>
+
+  <pre><code><span class="c"># install, update, remove</span>
+claude plugin marketplace add khalilmaaouni/BrotherSBE
+claude plugin install brothersbe@brothersbe
+claude plugin update brothersbe    <span class="c">&lt;- restart to apply</span>
+claude plugin uninstall brothersbe
+
+<span class="c"># inspect before you trust: one session, no persistent install</span>
+git clone https://github.com/khalilmaaouni/BrotherSBE \
+    ~/.claude/skills/brothersbe
+claude plugin validate ~/.claude/skills/brothersbe
+claude --plugin-dir ~/.claude/skills/brothersbe
+
+<span class="c"># does the installed copy match the published manifest</span>
+sh scripts/verify-install.sh
+
+<span class="c"># is this machine able to run what it is about to promise</span>
+sbe doctor
+
+<span class="c"># week one: score a real change, then ask for one next step</span>
+mkdir -p design/my-change
+sbe intake design/my-change
+<span class="c"># then, in Claude Code: /brothersbe:start, /brothersbe:next</span>
+
+<span class="c"># week five onward, in CI, advisory first</span>
+sbe impact . --base origin/main    <span class="c">&lt;- advisory: no --strict</span>
+sbe verify design/my-change        <span class="c">&lt;- design check plus gates</span>
+
+<span class="c"># the enforcing form, once you have decided to enforce</span>
+sbe impact . --base origin/main --strict \
+    --intake design/my-change/00-intake.json</code></pre>
+
+  <p class="derived">Every command above is a surface this project ships. What none of them do is merge, approve, deploy or write to production.</p>
+
+  <h3 id="start-supply">What do we have to supply ourselves?</h3>
+
+  <p>Four things, and a fifth that is not a purchase. None of them ship in the box, and a plan that assumes otherwise fails in week eight rather than week one.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>You supply</th><th>Why it cannot come from us</th><th>Without it</th></tr></thead>
+    <tbody>
+      <tr><th>Branch protection, or your host's merge checks</th><td>Only your code host can refuse a merge. No pipeline file, no protection rule and no merge check ships here, and a reviewers file does not block a merge on its own either.</td><td>Every verdict is advice. Nothing stops anything.</td></tr>
+      <tr><th>Signing keys, and the approver public keys imported on the CI agent</th><td>Verification happens on the host that runs the check, using keys you control. Public keys are not secret, but distributing and rotating them is your operation.</td><td>The approval gate reads NO-DATA permanently, which is honest and useless.</td></tr>
+      <tr><th>A registry of your real checks</th><td>We do not know which of your suites counts as proof of what. That mapping is a judgement your QA owner makes and maintains.</td><td>Receipts describe commands nobody agreed were the check, and editing the registry later invalidates receipts minted before the edit.</td></tr>
+      <tr><th>A review habit, with named humans</th><td>Reviewers here are routed and read-only by construction. Nothing approves, and nothing detects that a change needed an approval nobody declared.</td><td>A complete dossier written after the code passes every check identically.</td></tr>
+      <tr><th>A CI agent that can run it</th><td>Python 3.9 or newer on the agent, and a full clone with tags, because signatures and commit trailers cannot be read from a shallow one.</td><td>Stages fail for infrastructure reasons in week four and get switched off before anyone reads a verdict.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement">Start with one change, one command and one reading. Decide in four weeks, on evidence you collected yourselves.</p>
+</section>

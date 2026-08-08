@@ -1,0 +1,216 @@
+<!-- =================== TAB ONE: WHY BROTHERSBE =================== -->
+<section class="part" id="why">
+  <span class="part-label">Start here</span>
+  <h2 class="part-head">Ship AI-built backend and data work without becoming the full-time reviewer of it</h2>
+  <p class="part-blurb">One governed workflow carries a change from the sentence somebody says out loud to the evidence a human reads before merging. Three mechanisms hold it together: design before code, own work before parallelism, evidence before done.</p>
+
+  <p class="statement">Design before code. Evidence before done.</p>
+
+  <p class="lede">Small teams can now produce far more engineering than they can personally verify. BrotherSBE is the workflow that closes that gap without putting your best person permanently on review duty.</p>
+
+  <h3 id="why-newjob">AI increased your team's output. It also created a new job</h3>
+
+  <p>The writing got faster. The deciding did not. Every change your team ships still owes somebody an answer to the same six questions, and none of them is answered by reading the diff more carefully.</p>
+
+  <ul>
+    <li><strong>Was the right thing designed?</strong> Not the thing that was asked for in a hurry on Monday morning, the thing the work is actually for.</li>
+    <li><strong>Did two agents change the same ground?</strong> Two workers on the same file, in the same hour, with nobody holding the pen.</li>
+    <li><strong>Did the migration actually reverse?</strong> Not whether a rollback was written. Whether the reverse leg was ever run.</li>
+    <li><strong>Does the number reconcile independently?</strong> Or was it confirmed by re-running the query that produced it.</li>
+    <li><strong>Do the tests prove the requirement?</strong> Or only the code that happened to get written.</li>
+    <li><strong>Who reviewed the part that actually changed?</strong> A contract, a schema, a secret path, a production config, each wants a different pair of eyes.</li>
+  </ul>
+
+  <p>On a team of two hundred, those questions get absorbed by process. On a team of five, they land on one person, and it is always the same person: the one senior enough to be trusted with them. That is the new job nobody applied for. It arrives quietly, it never appears on a roadmap, and it scales directly with how much of your engineering the agents write.</p>
+
+  <p class="statement wide">Output went up. Your most expensive person became the bottleneck for whether any of it is true.</p>
+
+  <h3 id="why-lifecycle">Where does a change go, from the first sentence to the merge decision?</h3>
+
+  <p>Through ten stages, in this order. The order is the product. Five of the ten are finished before there is a line of code to argue about, which is precisely why arguing about the code catches so little.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 300" role="img" aria-labelledby="why-life-title">
+      <title id="why-life-title">The ten stage lifecycle of one change, drawn as two rows of five boxes. The top row, all of it completed before any code exists, runs: intent, what and why; risk and scope, computed from five questions; design, written before any code; plan, tasks in order; claim, taken before it is written. A connector returns to the second row, which runs: implement, in parallel; review, specialists routed by the diff; verify, evidence or NO-DATA; merge, a human decides; handover, to a named receiver. Below the rows, three statements: stages one to five finish before the first line of code exists; stage nine is a person, and this workflow never merges, approves or deploys; stage ten hands the reasoning to whoever picks the work up next.</title>
+      <defs>
+        <marker id="ar05" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">One change, intent to merge</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g class="svg-label" fill="currentColor" opacity="0.6">
+        <text x="0" y="36">01</text><text x="131" y="36">02</text><text x="262" y="36">03</text>
+        <text x="393" y="36">04</text><text x="524" y="36">05</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="42" width="116" height="46" rx="3"/><rect x="131" y="42" width="116" height="46" rx="3"/>
+        <rect x="262" y="42" width="116" height="46" rx="3"/><rect x="393" y="42" width="116" height="46" rx="3"/>
+        <rect x="524" y="42" width="116" height="46" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor" opacity="0.95">
+        <text x="10" y="62">INTENT</text><text x="141" y="62">RISK, SCOPE</text><text x="272" y="62">DESIGN</text>
+        <text x="403" y="62">PLAN</text><text x="534" y="62">CLAIM</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="10" y="79">what and why</text><text x="141" y="79">five questions</text><text x="272" y="79">before any code</text>
+        <text x="403" y="79">tasks in order</text><text x="534" y="79">taken before written</text>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M116 65 L129 65" marker-end="url(#ar05)"/><path d="M247 65 L260 65" marker-end="url(#ar05)"/>
+        <path d="M378 65 L391 65" marker-end="url(#ar05)"/><path d="M509 65 L522 65" marker-end="url(#ar05)"/>
+      </g>
+
+      <text class="svg-small" x="0" y="104" fill="currentColor" opacity="0.9">Everything above is finished before a diff exists.</text>
+      <g stroke="currentColor" stroke-width="1" opacity="0.4" fill="none">
+        <path d="M582 88 L582 120 L58 120 L58 148" marker-end="url(#ar05)"/>
+      </g>
+
+      <g class="svg-label" fill="currentColor" opacity="0.6">
+        <text x="0" y="144">06</text><text x="131" y="144">07</text><text x="262" y="144">08</text>
+        <text x="393" y="144">09</text><text x="524" y="144">10</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="150" width="116" height="46" rx="3"/><rect x="131" y="150" width="116" height="46" rx="3"/>
+        <rect x="262" y="150" width="116" height="46" rx="3"/><rect x="393" y="150" width="116" height="46" rx="3"/>
+        <rect x="524" y="150" width="116" height="46" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor" opacity="0.95">
+        <text x="10" y="170">IMPLEMENT</text><text x="141" y="170">REVIEW</text><text x="272" y="170">VERIFY</text>
+        <text x="403" y="170">MERGE</text><text x="534" y="170">HANDOVER</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="10" y="187">in parallel</text><text x="141" y="187">routed by the diff</text><text x="272" y="187">evidence or NO-DATA</text>
+        <text x="403" y="187">a human decides</text><text x="534" y="187">a named receiver</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M116 173 L129 173" marker-end="url(#ar05)"/><path d="M247 173 L260 173" marker-end="url(#ar05)"/>
+        <path d="M378 173 L391 173" marker-end="url(#ar05)"/><path d="M509 173 L522 173" marker-end="url(#ar05)"/>
+      </g>
+
+      <line x1="0" y1="222" x2="638" y2="222" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="242" fill="currentColor" opacity="0.95">Stages 01 to 05 finish before the first line of code exists.</text>
+      <text class="svg-small" x="0" y="262" fill="currentColor" opacity="0.95">Stage 09 is a person. This workflow never merges, approves or deploys.</text>
+      <text class="svg-small" x="0" y="282" fill="currentColor" opacity="0.95">Stage 10 hands the reasoning to whoever picks the work up next.</text>
+    </svg>
+    <figcaption>Most tooling attaches at stage 07 or 08, which is after the grain was chosen, after the boundary was drawn and after the consumers were assumed. The expensive mistakes are made in the top row and only become visible in the bottom one. Putting the top row on disk, in one directory, in a fixed order, is the whole bet.</figcaption>
+  </figure>
+
+  <h3 id="why-outcomes">What actually changes in your working week</h3>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>The outcome</th><th>What it looks like on a Tuesday</th><th>What produces it</th></tr></thead>
+    <tbody>
+      <tr><th>The important decisions get made before the diff exists</th><td>The grain, the system of record, the rejected alternatives and the condition that would flip the decision are written down and committed beside the code, before anybody starts typing it.</td><td>A structured design phase, and a risk tier computed from five intake answers rather than picked by whoever is in a hurry.</td></tr>
+      <tr><th>Humans and agents work in parallel without losing ownership</th><td>Work is claimed before it is started, so two people heading for the same file show up in a registry somebody can read instead of in a merge conflict at the end. Work crosses a timezone as a scoped brief instead of a chat scrollback, and ownership only moves when a named human accepts it and may refuse it.</td><td>Scoped task and writer coordination, plus an explicit handover surface with a named receiver.</td></tr>
+      <tr><th>You can tell green apart from proven</th><td>A registered check that never ran stops being indistinguishable from one that passed. It is reported by name as absent, and absent is never reported as a pass.</td><td>Evidence recorded for registered checks, absent evidence reported as NO-DATA, and configured CI gates that can block under strict mode.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement wide">Three mechanisms: design before code, own work before parallelism, evidence before done.</p>
+
+  <h3 id="why-leverage">Does every change now owe paperwork?</h3>
+
+  <p>No, and this is the part that decides whether a team keeps using it. The amount you have to write scales with what the change can break, and the lowest tier owes nothing at all. A rename, a log line, a copy fix and a test tweak pass through with no ceremony. Rigour is spent where the money is. How much of your work lands in that lowest tier is the first thing worth measuring, in your own first week, on your own last month of requests, because it has never been measured on your estate and this booklet will not quote you a number for it.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 244" role="img" aria-labelledby="why-tier-title">
+      <title id="why-tier-title">Four tiers of change drawn as bars of increasing length, showing how much has to be written down. A routine change has an almost invisible bar and owes nothing. A boundary change has a short bar and owes a written purpose. A contract or multi-consumer change has a long bar and owes a design. A change touching money, production or anything hard to reverse has the longest bar and owes proof. A short vertical tick sits at the start of every bar, identical on all four rows, marking that the standard of evidence is the same at every tier.</title>
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">How much a change owes</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g class="svg-title" fill="currentColor" opacity="0.95">
+        <text x="0" y="46">ROUTINE</text><text x="0" y="92">BOUNDARY</text>
+        <text x="0" y="138">CONTRACT</text><text x="0" y="184">MONEY OR PRODUCTION</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="0" y="62">almost no ceremony</text><text x="0" y="108">write the purpose</text>
+        <text x="0" y="154">design it before you build it</text><text x="0" y="200">prove it, and keep the receipt</text>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.5">
+        <rect x="250" y="36" width="26" height="12" rx="2"/>
+        <rect x="250" y="82" width="96" height="12" rx="2"/>
+        <rect x="250" y="128" width="210" height="12" rx="2"/>
+        <rect x="250" y="174" width="360" height="12" rx="2"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1.8" opacity="0.9">
+        <path d="M242 32 L242 52"/><path d="M242 78 L242 98"/>
+        <path d="M242 124 L242 144"/><path d="M242 170 L242 190"/>
+      </g>
+
+      <line x1="0" y1="208" x2="638" y2="208" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="226" fill="currentColor" opacity="0.95">The bar is how much you write down. It grows with what the change can break.</text>
+      <text class="svg-small" x="0" y="242" fill="currentColor" opacity="0.95">The tick is the standard of evidence. It is the same size on every row.</text>
+    </svg>
+    <figcaption>A governance layer that charges the same toll on a typo and on a pricing migration gets routed around within a month, and then it protects nothing. The tier is computed from five fixed questions rather than negotiated, so the cheap path stays cheap and nobody has to argue their way into it. A later pass over the paths a change actually touched can raise that tier and can never lower it, which is the direction you want the error to run.</figcaption>
+  </figure>
+
+  <h3 id="why-seats">What it does for the seat you sit in</h3>
+
+  <h4>Staff or Principal engineer: stop being the compression layer for everyone else's context</h4>
+  <p>The reasoning you would otherwise repeat in four review comments gets written once, before implementation, as a decision with its rejected alternatives and the condition that would flip it. Specialist reviewers are routed deterministically from the diff, so the question of who should look at a contract change stops being answered with whoever is free. It names the roles the diff calls for and adds nobody to anything: the routing is yours to act on, which is also why it can never quietly hand your name to a queue.</p>
+
+  <h4>Backend engineer: the contract change stops being a surprise to whoever consumes it</h4>
+  <p>Boundaries, systems of record and the shape of what you are changing are settled before the implementation, not reconstructed from the diff afterwards. Your own work is claimed and scoped before it starts, so a parallel worker heading for the same file is something a human can see in a registry rather than something you discover in a merge conflict.</p>
+
+  <h4>Data engineer: the grain gets argued before the SQL exists</h4>
+  <p>Every entity has to name a system of record and every relationship has to state a cardinality before the design passes, which forces the argument that would otherwise happen months later, during an incident, with five candidate stores and no agreed answer. The check confirms the answer was written, never that it is right, and that is the point: it puts the question in front of the people who can settle it while settling it is still cheap.</p>
+
+  <h4>QA engineer: your checks become the thing that decides done</h4>
+  <p>A registered check leaves a receipt minted by the runner that executed it, recording what ran, its exit code and how long it took, rather than a claim somebody typed. A registered check with no receipt is reported by name as absent, and absent is never reported as a pass. What it cannot do is notice a check that nobody registered, which is why the register is the part of this that belongs to you.</p>
+
+  <h4>Technical BA: what you wrote survives the handover to people who were asleep when you wrote it</h4>
+  <p>Purpose, process and verification are written before code and committed in one directory beside it, so the next person reads the intent rather than guessing at it; no machine reads those three for meaning, and they are not meant to, because the reader is a person. Work crosses a shift boundary as a scoped brief carrying acceptance criteria, dependencies and stop conditions, and comes back as a handover record bound to a specific commit.</p>
+
+  <h4>Platform engineer: the enforcement stays yours, and it finally gets something worth enforcing</h4>
+  <p>The workflow separates writer and reviewer roles structurally, keeps reviewers read only, and under strict mode can block the CI gates you configure. It ships no branch protection and no merge checks of its own, so the enforcement stays yours: it produces the verdict, your platform decides what a verdict stops. A merge rule still reads a name and a conclusion and cannot tell a failure from an absence, which is exactly why the verdict prints that difference by name for the human who reads it.</p>
+
+  <h3 id="why-trust">What it will claim, and what it refuses to claim</h3>
+
+  <p>Everything in this booklet is checkable, and where the floor is low the booklet says how low rather than hiding it. That is a design position, not modesty: a team that believes a gate proves more than it does will trust it at exactly the wrong moment.</p>
+
+  <div class="panel accent">
+    <h4>What it proves</h4>
+    <p>That the design artifacts exist, in the required shape, on the commit under review. That the risk tier was computed from the five answers rather than chosen by whoever was in a hurry. That a named check ran, on a specific commit, and left a receipt carrying its exit code and its duration. That a declared approval carries a host verified signature naming somebody other than the author. That work crossed a boundary to a named receiver who could have refused it.</p>
+  </div>
+
+  <div class="panel warn">
+    <h4>What it refuses to claim</h4>
+    <p>No percentages, because nothing here has been independently measured across teams. It does not prevent incidents, does not reduce defects by any number, and does not make a small team perform like a larger one. It never merges, approves or deploys, and it cannot see a change that needed a design and declared none. It cannot prove that the design came before the code, because a dossier written afterwards passes the same checks. It cannot stop two people editing the same file: it makes the collision legible to a human rather than refusing it.</p>
+  </div>
+
+  <p>Three worked examples of the same honesty, each of which is a limit the workflow prints on its own runs:</p>
+
+  <ul>
+    <li><strong>A skipped check is not a pass.</strong> A job skipped by a condition still reports success to a merge rule, which compares a name to a conclusion and has no opinion about whether anything was examined. That is reported here as absent evidence, by name.</li>
+    <li><strong>An unsigned approval is not an approval.</strong> Without host verified signatures, a declared approval reads as absent rather than as a pass. On a CI agent with no reviewer keys imported, nothing passes, and the booklet says so before you find out in a pipeline.</li>
+    <li><strong>A second derivation is not proof of independence.</strong> The numbers gate proves that two derivations differ in text and that two transcribed figures match. It runs no query of its own. Two queries over the same broken view still agree, and that limit is printed on every run.</li>
+  </ul>
+
+  <p class="statement">Absent evidence is NO-DATA. NO-DATA is never a pass.</p>
+
+  <p>Never a pass, and on its own never a block either. It prints. What a printed verdict is allowed to stop stays a decision your platform makes, on rules you already own. The point of the distinction is that a human reading the verdict can tell a failure from a silence, which no merge rule can do for them.</p>
+
+  <p>The trust tab later in this booklet carries the full mechanics: how receipts are bound to a commit, why reviewers are read only, how reviewer routing is derived from the diff rather than assigned, what strict mode can and cannot block, and the register of known limits with the gap printed beside each entry.</p>
+
+  <h3 id="why-start">Try it on the change you would be most embarrassed to get wrong</h3>
+
+  <p>Not the toy. The one you would not want to explain in a post mortem. That is the change where the workflow either earns its place in an afternoon or does not, and either answer is worth having quickly.</p>
+
+  <ul>
+    <li><strong>Staff or Principal engineer.</strong> The decision you have now explained three times in three different threads, that still is not written down anywhere a new joiner can find it.</li>
+    <li><strong>Backend engineer.</strong> The contract change with two consumers you are fairly sure about and one you are not.</li>
+    <li><strong>Data engineer.</strong> The figure that appears in a board pack, that nobody has re-derived by a genuinely different route since the week it was written.</li>
+    <li><strong>QA engineer.</strong> The suite that is green today, which you could not prove actually opened a file.</li>
+    <li><strong>Technical BA.</strong> The request whose blast radius was settled in a meeting nobody minuted.</li>
+    <li><strong>Platform engineer.</strong> The required check that would still report success if the job it runs were deleted tomorrow.</li>
+  </ul>
+
+  <p>Pick one. Run it through the ten stages once. Then read the evidence the workflow produced and decide whether you would have had it otherwise.</p>
+</section>

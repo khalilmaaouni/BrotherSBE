@@ -1,48 +1,302 @@
-<!-- =================== ACT FIVE =================== -->
+<!-- =================== PART FOUR: WHY TRUST IT =================== -->
 <section class="part" id="how">
-  <span class="part-label">Act five</span>
-  <h2 class="part-head">How it works, and why trust it</h2>
-  <p class="part-blurb">Now the machinery, once you have a reason to care about it. Four of the tables in this act are generated from the repository rather than typed, and a check in CI fails when a source moves without this booklet being rebuilt.</p>
+  <span class="part-label">Tab four</span>
+  <h2 class="part-head">Why trust it</h2>
+  <p class="part-blurb">Everything claimed so far is worth exactly what the mechanics underneath it are worth. This part is the mechanics, in the order a sceptical engineer asks for them: what a verdict means, what happens before code, what a receipt is, who is allowed to write, what actually stops a merge, and every place the system will not help you.</p>
 
-  <h3 id="arch">The architecture, by responsibility</h3>
+  <h3 id="verdicts">What does a green build actually prove?</h3>
+
+  <p class="lede">Most tooling has two answers: it passed, or it failed. That is one answer short, and the missing one is where wrong results live.</p>
+
+  <p>A check can pass. A check can fail. And a check can find that there was nothing there to read at all, which is a completely different fact and deserves its own word.</p>
+
+  <p class="statement">Absent evidence is NO-DATA. NO-DATA is never a pass.</p>
+
+  <p>Three of the situations below contain no evidence whatsoever. A two-state system has only one place to put them, and it is the good one.</p>
 
   <figure>
-    <svg viewBox="0 0 640 250" role="img" aria-labelledby="arch-title">
-      <title id="arch-title">Four layers. A guided surface of slash commands sits above a command line of subcommands. Both drive a design layer and an evidence layer. Underneath, a registry of checks declares what each one reads and what its empty state is, and CI runs the same checks under strict.</title>
-      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
-        <rect x="0" y="8" width="300" height="42" rx="3"/><rect x="338" y="8" width="300" height="42" rx="3"/>
-        <rect x="0" y="76" width="300" height="60" rx="3"/><rect x="338" y="76" width="300" height="60" rx="3"/>
-        <rect x="0" y="162" width="638" height="42" rx="3"/>
+    <svg viewBox="0 0 640 302" role="img" aria-labelledby="verdict-title">
+      <title id="verdict-title">A table of five situations compared across two systems. When the check ran and the claim held, both record PASS. When the check ran and the claim broke, both record FAIL. When the job was skipped by a condition, when the linter matched no files, and when no receipt was ever declared, a two-state system records PASS for all three, and a three-state system records NO-DATA for all three.</title>
+
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">The situation</text><text x="336" y="14">Two states</text><text x="486" y="14">Three states</text>
       </g>
-      <g class="svg-title" fill="currentColor">
-        <text x="14" y="28">GUIDED SURFACE</text><text x="352" y="28">COMMAND LINE</text>
-        <text x="14" y="96">DESIGN</text><text x="352" y="96">EVIDENCE</text>
-        <text x="14" y="182">THE CHECK REGISTRY</text>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.35"/>
+
+      <g class="svg-body" fill="currentColor" opacity="0.92">
+        <text x="0" y="52">the check ran, and the claim held</text>
+        <text x="0" y="92">the check ran, and the claim broke</text>
+        <text x="0" y="132">the job was skipped by a condition</text>
+        <text x="0" y="172">the linter matched no files at all</text>
+        <text x="0" y="212">no receipt was ever declared</text>
       </g>
-      <g class="svg-small" fill="currentColor" opacity="0.88">
-        <text x="14" y="44">slash commands, one recommended action at a time</text>
-        <text x="352" y="44">subcommands, what CI actually runs</text>
-        <text x="14" y="112">intake, tier, dossier, decision tables</text>
-        <text x="14" y="128">five checks over a directory</text>
-        <text x="352" y="112">receipts, four hard gates, the linter</text>
-        <text x="352" y="128">a receipt binds a run to a registered command</text>
-        <text x="14" y="198">every check declares what it reads and what its empty state is; PASS is refused as an empty state</text>
+      <g class="svg-title" fill="currentColor" opacity="0.95">
+        <text x="336" y="52">PASS</text><text x="486" y="52">PASS</text>
+        <text x="336" y="92">FAIL</text><text x="486" y="92">FAIL</text>
+        <text x="336" y="132">PASS</text><text x="486" y="132">NO-DATA</text>
+        <text x="336" y="172">PASS</text><text x="486" y="172">NO-DATA</text>
+        <text x="336" y="212">PASS</text><text x="486" y="212">NO-DATA</text>
       </g>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
-        <path d="M150 50 L150 74" marker-end="url(#ar)"/><path d="M488 50 L488 74" marker-end="url(#ar)"/>
-        <path d="M150 136 L150 160" marker-end="url(#ar)"/><path d="M488 136 L488 160" marker-end="url(#ar)"/>
+      <g stroke="currentColor" stroke-width="1" opacity="0.18">
+        <line x1="0" y1="64" x2="638" y2="64"/><line x1="0" y1="104" x2="638" y2="104"/>
+        <line x1="0" y1="144" x2="638" y2="144"/><line x1="0" y1="184" x2="638" y2="184"/>
       </g>
-      <line x1="0" y1="222" x2="638" y2="222" stroke="currentColor" stroke-width="1" opacity="0.25"/>
-      <text class="svg-small" x="0" y="240" fill="currentColor" opacity="0.95">Advisory in a session: print the verdict, exit zero. Enforcing in CI under --strict: exit nonzero, stop the merge.</text>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.5">
+        <rect x="472" y="112" width="166" height="112" rx="3"/>
+      </g>
+
+      <line x1="0" y1="248" x2="638" y2="248" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="268" fill="currentColor" opacity="0.95">The bottom three rows are the absence of evidence, wearing the costume of evidence.</text>
+      <text class="svg-small" x="0" y="284" fill="currentColor" opacity="0.95">Two states leave one home for them, and a reader treats that home as safety.</text>
+      <text class="svg-small" x="0" y="300" fill="currentColor" opacity="0.95">The third verdict costs nothing to add and is the reason the rest of this part is worth reading.</text>
     </svg>
-    <figcaption>The registry at the bottom is the part that makes the rest trustworthy. A check is not a function somebody remembered to call; it is an entry declaring what it reads and what verdict it returns when that evidence is absent, and the declaration is validated when the check is constructed.</figcaption>
+    <figcaption>None of the bottom three rows is hypothetical. A job skipped by an <code>if:</code> condition reports success and satisfies a required status check on the host, so a well-meaning condition is enough to make a required gate disappear without anyone editing a rule. A linter handed a path that matches nothing exits zero. A change that declares no evidence produces no evidence to read. Every one of those looks identical to real work from the outside, and the whole design here follows from refusing to record them the same way.</figcaption>
   </figure>
 
-  <h3 id="controls">The controls, the commands and the reviewers</h3>
+  <p>This is not a convention anybody has to police. A check is <strong>refused registration at construction</strong> if it declares PASS as its empty state, so the rule cannot be forgotten by a check written next year. A meta-test walks the registries themselves rather than a hand-typed list, so a new check is covered the day it is registered.</p>
 
-  <h4>The guided surface, which is where a new joiner starts</h4>
+  <p class="evidence">The same discovery rule generates the check register printed later in this part, which is why that table and the honesty test can never drift apart: they enumerate the same objects.</p>
 
-  <p>Nobody on your team needs the command line to use this. These are the slash commands, and one of them is enough on day one.</p>
+  <div class="panel warn">
+    <h4>The fine print, printed here rather than buried</h4>
+    <p>NO-DATA is never a pass <strong>as a verdict</strong>, and it is not a block <strong>as an exit code</strong>. Under <code>--strict</code>, a FAIL exits nonzero and a NO-DATA prints and exits zero. So a change that declares nothing at all can produce several NO-DATA lines and a green build.</p>
+    <p>That is deliberate, and it is also the sharpest edge in the product. It means a clean run is not a safety claim. It means the question to ask of a green build is not "did anything fail", it is <strong>"how many of these lines say NO-DATA, and why"</strong>. A team that reads a repeated NO-DATA as noise has turned a control into decoration.</p>
+  </div>
+
+  <h3 id="arch">Why design before code, rather than better review?</h3>
+
+  <p>The decisions that cost the most are taken before there is a diff to review. The grain of a table. The contract two other teams already depend on. Which of five stores is the system of record. By the time a reviewer opens a pull request, all of those are settled, and the review is an argument about spelling.</p>
+
+  <p>So the order is fixed. A change is scored first, by five objective questions with a first-match-wins ladder, and the tier decides how much writing it owes. Most changes come out at the bottom tier and owe nothing at all, which is the only reason the top tier can afford to owe a great deal.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 216" role="img" aria-labelledby="tier-title">
+      <title id="tier-title">Five questions feeding a first-match-wins ladder. Sensitive or slow to reverse gives tier three and seven artifacts. A contract change or many consumers gives tier two and six. One boundary or some consumers gives tier one and the purpose brief. Otherwise tier zero, which owes nothing.</title>
+      <defs>
+        <marker id="ar50" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Five objective questions</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="0" y="44">changes a contract others depend on</text>
+        <text x="0" y="60">crosses a service, system or team boundary</text>
+        <text x="0" y="76">reversible in under an hour</text>
+        <text x="0" y="92">touches money, partner data, personal data, production state</text>
+        <text x="0" y="108">how many consumers break if it is wrong</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M300 76 L346 76" marker-end="url(#ar50)"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="356" y="30" width="282" height="26" rx="3"/><rect x="356" y="62" width="282" height="26" rx="3"/>
+        <rect x="356" y="94" width="282" height="26" rx="3"/><rect x="356" y="126" width="282" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="368" y="48">T3</text><text x="368" y="80">T2</text><text x="368" y="112">T1</text><text x="368" y="144">T0</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="404" y="48">sensitive, or not reversible in an hour: all seven</text>
+        <text x="404" y="80">a contract change, or many consumers: six</text>
+        <text x="404" y="112">one boundary, or some consumers: the purpose brief</text>
+        <text x="404" y="144">none of the above: nothing at all</text>
+      </g>
+      <line x1="0" y1="170" x2="638" y2="170" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="188" fill="currentColor" opacity="0.95">First match wins, top down. T0 is the common case, and it is meant to be.</text>
+      <text class="svg-small" x="0" y="206" fill="currentColor" opacity="0.95">An override moves three fields that must agree, plus a written reason. A half-declared override fails and names the missing field.</text>
+    </svg>
+    <figcaption>A tool that taxes every change equally gets switched off in a fortnight, which is why the bottom tier owes nothing and is expected to be most of your week. The awkwardness of the override is the design: it is not hard because somebody was punitive, it is hard because the alternative is the tier quietly becoming whatever the deadline needs. A later scan re-reads the diff and may raise a declared tier; it may never lower one.</figcaption>
+  </figure>
+
+  <p>What the design checks then read is <strong>shape, never content</strong>, and this is where the mechanism stops and your judgment starts. The data-model check fails an entity with no named system of record and a relationship with no stated cardinality. The decision record must carry two distinct rejected alternatives and a condition that would flip it. A diagram node that traces back to no declared entity fails. A file still carrying the shipped template fails. That is the shape of it, and shape is all of it.</p>
+
+  <p>None of it can tell a correct answer from a confident wrong one. Naming the wrong system of record passes every check that ships. A one-sentence purpose brief passes. A complete dossier written after the code passes identically to one written before it.</p>
+
+  <p class="statement wide">The value is the argument the data model forces out of a room. The file is only the receipt for having had it.</p>
+
+  <h3 id="receipts">Why a receipt beats a green stage</h3>
+
+  <p>A green stage is a name and a conclusion. Nothing in it records what ran, how long it took, or which files it was looking at. That is why a skipped job and a four-minute job look the same from the merge rule's side of the wall.</p>
+
+  <p>A receipt is minted by the runner that executed the command, never typed by the thing making the claim. It seals the command with its arguments redacted, the exit code, the duration, the base and head commit, and a content digest of every path the check declared it covers.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>What a receipt lets you ask</th><th>What a green stage can answer</th></tr></thead>
+    <tbody>
+      <tr><td>Which exact command produced this?</td><td>Nothing. A name is not a command.</td></tr>
+      <tr><td>Did it take any time at all?</td><td>Nothing. A zero-second success is still a success.</td></tr>
+      <tr><td>Which commit was it looking at?</td><td>The head of a branch that has since moved.</td></tr>
+      <tr><td>Have the files it covered changed since?</td><td>Nothing. Digests were never taken.</td></tr>
+      <tr><td>Was there a receipt at all?</td><td>Nothing, and the absence looks like success.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>That last row is the <code>ran</code> gate, and it is the smallest idea in the product: <strong>a check that exited zero having taken no time did not run.</strong> Registration matters for the same reason. A check has an entry naming the command it binds, so a receipt points at something declared in advance, and editing that entry invalidates every receipt minted before the edit.</p>
+
+  <p>Now the ceiling, because a receipt proves less than the word suggests. The highest trust level a continuous integration run reaches is <strong>CI-claimed</strong>, which the module's own text defines as CI-shaped metadata that nothing verified. A laptop exporting the same run identifier on a clean tree earns the same label. The seal is a checksum, not a signature, and there is no protected evidence level in this release. Receipts are also strictly commit-bound: one minted before a rebase fails at the merge commit, and a covered file rewritten afterwards invalidates it even when the bytes are identical, which is why a receipt is written outside the tree it covers and regenerated by the pipeline on the final head.</p>
+
+  <p class="evidence">The trust level is printed on every receipt rather than left to be inferred, and a run carrying no pipeline run identifier is labelled local-advisory. What the label records is what the environment claimed, not where the run happened, which is exactly why the level above it is called CI-claimed rather than CI-verified.</p>
+
+  <h3 id="controls">Who is allowed to write, and who can only read</h3>
+
+  <p>Reviewer selection is deterministic. The diff is read, at most two specialists are chosen, and zero is a legal result rather than a claim of a clean review. No model decides who reviews.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 246" role="img" aria-labelledby="writer-title">
+      <title id="writer-title">Three boxes in a row. The implementation worker writes to the change on disk. The change is read by the reviewer roles. A dashed line running back from the reviewers to the change is crossed out, showing there is no write path back. Below, the tool lists: the worker holds Read, Grep, Glob, Bash, Edit and Write; every reviewer holds Read, Grep, Glob and Bash and nothing else.</title>
+
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">One writer</text><text x="444" y="14">Many readers</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="40" width="196" height="50" rx="3"/>
+        <rect x="232" y="40" width="176" height="50" rx="3"/>
+        <rect x="444" y="40" width="194" height="50" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="14" y="62">THE WORKER</text><text x="246" y="62">THE CHANGE</text><text x="458" y="62">THE REVIEWERS</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="14" y="80">one task, one scope</text><text x="246" y="80">files on disk</text><text x="458" y="80">at most two, from the diff</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.5" fill="none">
+        <path d="M196 65 L228 65" marker-end="url(#ar50)"/>
+        <path d="M408 65 L440 65" marker-end="url(#ar50)"/>
+      </g>
+
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" stroke-dasharray="4 4">
+        <path d="M480 108 L300 108"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1.6" opacity="0.9" fill="none">
+        <path d="M382 100 L398 116"/><path d="M398 100 L382 116"/>
+      </g>
+      <text class="svg-small" x="0" y="112" fill="currentColor" opacity="0.9">no path back</text>
+
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="146">Tools it holds</text><text x="444" y="146">Tools they hold</text></g>
+      <line x1="0" y1="156" x2="638" y2="156" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="0" y="176">Read, Grep, Glob, Bash, Edit, Write</text>
+        <text x="444" y="176">Read, Grep, Glob, Bash</text>
+        <text x="444" y="192">no Edit. no Write. no exception.</text>
+      </g>
+
+      <line x1="0" y1="212" x2="638" y2="212" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="232" fill="currentColor" opacity="0.95">A reviewer that could edit would fix what it found, and a finding fixed in silence is a finding nobody recorded.</text>
+    </svg>
+    <figcaption>This is the cheapest control in the system and one of the few that lives in how a role is built rather than in what it is told. A reviewer is constructed with no Edit tool and no Write tool, so the obvious instrument for fixing a finding quietly is not in its hand at all. Read the tools column of the table below and count how many roles hold a write tool. Then read the paragraph after it, because the count is not the whole story.</figcaption>
+  </figure>
+
+  <p class="derived">Generated from the agent definitions in agents/. Read the tools column: it is the argument.</p>
+<!-- BEGIN GENERATED FIELDBOOK roles -->
+<div class="tw">
+<table>
+<thead><tr><th>Role</th><th>What it is for</th><th>What it covers</th><th>Tools it may use</th></tr></thead>
+<tbody>
+<tr><th><code>backend-reviewer</code></th><td>Read-only backend change review</td><td>Use when a service, API, endpoint, queue consumer or transactional path changes. Covers contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>data-reviewer</code></th><td>Read-only data and warehouse change review</td><td>Use when a data model, SQL transformation, dbt model, pipeline or reported figure changes. Covers grain, joins and fan-out, keys, systems of record, historization, reconciliation, freshness, quality and cost.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>evidence-auditor</code></th><td>Read-only audit of evidence provenance</td><td>Use when a receipt, a gate verdict, a test result, a rehearsal identifier or an approval is being relied on. Its job is to try to disprove the evidence, not to confirm it. It must never generate the evidence it audits.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>implementation-worker</code></th><td>Implementation worker for one sbe work brief</td><td>Use when a plan task has already been briefed (`sbe work brief`) and someone needs to write the code, not review it. Reads the brief, edits only inside its declared scope, runs the named verification, and returns a compact result contract. It is not a reviewer, never approves or blocks anyone else's change, and holds no merge, rebase, push or deploy rights of its own.</td><td><code>[Read, Grep, Glob, Edit, Write, Bash]</code></td></tr>
+<tr><th><code>migration-reviewer</code></th><td>Read-only database migration review</td><td>Use when a schema migration, backfill or destructive data operation is part of a change. Covers forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>principal-architect</code></th><td>Read-only architecture review</td><td>Use when a system boundary, a service split, a technology choice or a reversibility question is on the table, or when an ADR needs a second opinion before it is committed to. Returns a recommendation, the first and second alternative, and what would flip it.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>qa-reviewer</code></th><td>Read-only test coverage and traceability review</td><td>Use when a change is about to be called testable or done. Maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>security-reviewer</code></th><td>Read-only security and privacy review</td><td>Use when authentication, authorization, partner APIs, money movement, file upload, secrets, dependencies or personal data are touched. Covers threat model impact, authorization coverage, secret exposure, input validation, data classification and audit logging.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK roles -->
+
+  <p>Seven roles read. One role writes. The one that writes takes a single briefed task with a declared scope, and holds no merge, rebase, push or deploy rights of its own.</p>
+
+  <p>Now the part the tools column does not say out loud. Read-only here means <strong>no Edit tool and no Write tool</strong>. Every reviewer still holds a shell, and a shell can write a file. That last step is held by a written rule inside the role's own definition rather than by the tool list, so the half of this separation you can audit by reading a table is the half in the table, and the remainder is a written rule with all the strength a written rule has.</p>
+
+  <p>Two more limits belong beside that, because the separation is stronger than the fence around it. The scope comparison that keeps a worker inside its declared files runs as an editor hook whose own rule is to <strong>fail open, loudly</strong>: it binds work done through that editor, and it binds nobody typing in a different one. And the task registry refuses a taken branch, a taken worktree and a re-opened task identifier, but it never compares file scopes between two different tasks, so two people holding the same file get a registry a human reads, not a refusal.</p>
+
+  <h3 id="register">What actually stops a merge</h3>
+
+  <p>Four failure classes get a hard gate, chosen because each of them fails quietly rather than loudly.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Gate</th><th>What it reads</th><th>When its evidence is absent</th></tr></thead>
+    <tbody>
+      <tr><th><code>numbers</code></th><td>A manifest with a pinned snapshot, a second derivation whose text genuinely differs, and two figures that match.</td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+      <tr><th><code>migration</code></th><td>A rehearsal receipt recording the forward leg and the reverse leg, both run, with row counts on each side.</td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+      <tr><th><code>approval</code></th><td>A host-verified signature carrying an approval trailer that names somebody other than the author and the committer.</td><td><span class="stamp s-experimental">NO-DATA</span> when the change declares nothing at all, and <span class="stamp s-unsupported">FAIL</span> when it declares an approval and carries no identity behind it.</td></tr>
+      <tr><th><code>ran</code></th><td>A receipt showing a registered command that exited zero and took a nonzero amount of time.</td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Read the last column as the design decision it is. The default is NO-DATA, because absence genuinely might mean "there was no migration in this change". The approval gate is the one place a broken claim is told apart from an absent one: declaring an approval and putting no identity behind it is a claim that failed, so it reads FAIL, while a change that declared nothing reads NO-DATA like everything else. Self-approval fails at both ends.</p>
+
+  <p>Two things follow from that, and both of them cut against the product. A change that quietly needed an approval and never declared one is a green build, because there was nothing to read. And the approval gate is only ever real where the reviewers' public keys are imported on the machine running it: an agent without them reports an unverifiable signature, so every approval on that host reads NO-DATA no matter how carefully it was signed. On a fresh pipeline that is the normal state until somebody does the keyring work.</p>
+
+  <p>Severity is a separate axis from the verdict, and it changes the exit code and nothing else. It never changes what a check examines.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Stamp</th><th>What it means here</th></tr></thead>
+    <tbody>
+      <tr><td><span class="stamp s-certified">gate</span></td><td>A FAIL exits nonzero under <code>--strict</code>. This is the only severity a merge rule can be bound to at all.</td></tr>
+      <tr><td><span class="stamp s-beta">soft</span></td><td>A FAIL is graded and exits nonzero only under the opt-in <code>--strict-soft</code>.</td></tr>
+      <tr><td><span class="stamp s-experimental">NO-DATA</span></td><td>The empty state. Reported by name, never decides an exit code in either direction.</td></tr>
+      <tr><td><span class="stamp s-unsupported">FAIL</span></td><td>The empty state for a check where something was declared and nothing stands behind it, which is a broken claim rather than an absence.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Now the sentence that most tools in this category avoid. <strong>Nothing here stops a merge on its own.</strong> Every gate is a command that prints a verdict and, under <code>--strict</code>, exits nonzero. Three separate pieces of your own wiring sit between that nonzero exit and a merge that will not go through.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 224" role="img" aria-labelledby="wiring-title">
+      <title id="wiring-title">A chain of four links between a failing gate and a stopped merge. The gate prints FAIL and exits nonzero and ships with the product. A continuous integration job runs that command on every pull request and the team writes it. A merge rule requires that job by name and an administrator binds it. Branch rules stop a push that went around the rule and the team already has them. Only the first link ships.</title>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="30" width="148" height="40" rx="3"/><rect x="164" y="30" width="148" height="40" rx="3"/>
+        <rect x="328" y="30" width="148" height="40" rx="3"/><rect x="492" y="30" width="146" height="40" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="55">THE GATE</text><text x="176" y="55">A CI JOB</text>
+        <text x="340" y="55">A MERGE RULE</text><text x="504" y="55">BRANCH RULES</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.5" fill="none">
+        <path d="M148 50 L162 50" marker-end="url(#ar50)"/>
+        <path d="M312 50 L326 50" marker-end="url(#ar50)"/>
+        <path d="M476 50 L490 50" marker-end="url(#ar50)"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="0" y="90">prints FAIL and exits</text><text x="0" y="105">nonzero under strict</text>
+        <text x="164" y="90">runs the command on</text><text x="164" y="105">every pull request</text>
+        <text x="328" y="90">requires that job by</text><text x="328" y="105">name before a merge</text>
+        <text x="492" y="90">stop the push that</text><text x="492" y="105">went round the rule</text>
+      </g>
+      <line x1="0" y1="124" x2="638" y2="124" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-label" fill="currentColor" opacity="0.9">
+        <text x="0" y="144">ships with it</text><text x="164" y="144">yours to write</text>
+        <text x="328" y="144">yours to bind</text><text x="492" y="144">yours already</text>
+      </g>
+      <line x1="0" y1="166" x2="638" y2="166" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="186" fill="currentColor" opacity="0.95">Three of the four links are your repository's, not this product's.</text>
+      <text class="svg-small" x="0" y="202" fill="currentColor" opacity="0.95">Until they exist, adopting this changes what people write, and changes nothing about what CI does.</text>
+      <text class="svg-small" x="0" y="220" fill="currentColor" opacity="0.95">A vendor who tells you otherwise is selling you the first box and drawing the other three.</text>
+    </svg>
+    <figcaption>Say this at the start of an evaluation rather than at the end of one. A reference workflow ships for one host and is copied, not installed, so it guards nothing until you copy it. That is a smaller promise than most tools in this space make, and it is the promise that survives contact with your actual repository settings.</figcaption>
+  </figure>
+
+  <div class="panel warn">
+    <h4>Two things about your host that are easy to get wrong</h4>
+    <p><strong>A file naming code owners does not block anything by itself.</strong> It nominates reviewers. Something behind it, branch protection or a branch ruleset, has to require their review before the nomination has teeth. A repository with the file and neither of those has a suggestion, not a control.</p>
+    <p><strong>Advisory first, enforcing later is the right rollout, and it is not universally available.</strong> On the host that offers branch rulesets, the advisory evaluate mode is gated at organisation and enterprise level, so a smaller plan gets on or off rather than a soft first fortnight. If you are on one of those plans, get the same effect by wrapping the job in your own pipeline's soft-failure mechanism for the first two weeks, then unwrap one stage at a time.</p>
+  </div>
+
+  <h3 id="registries">What exactly do you get, listed by the repository rather than by us?</h3>
+
+  <p class="lede">You do not need to read this section. It is here so that you can.</p>
+
+  <p>What follows is generated from the repository at build time, not typed into a document: the commands, the registered checks with their severities, and the sources each table was read from. A check in this project's own pipeline fails when a bound source moves and this booklet was not rebuilt. That is the point of printing it. A feature list a human maintains is a feature list that drifts towards the optimistic. Nobody writes this one by hand, so the only way it flatters the product is if the code does.</p>
+
+  <h4>What a new joiner types, without touching a command line</h4>
+
+  <p>Nobody on your team needs the command line to use this.</p>
 
   <p class="derived">Generated from skills/*/SKILL.md. Not typed.</p>
 <!-- BEGIN GENERATED FIELDBOOK guided-commands -->
@@ -67,7 +321,7 @@
 
   <p>If your team remembers one, make it <code>/brothersbe:start</code>. It reads the ground, works out whether you are resuming or beginning, and returns exactly one recommended next action: what it is, why it is the one, what happens automatically, what decision stays yours, and how success will be checked.</p>
 
-  <h4>The command line, which is what CI runs</h4>
+  <h4>The command line, which is what your pipeline runs</h4>
 
   <p class="derived">Generated from the CLI command table itself, imported rather than parsed.</p>
 <!-- BEGIN GENERATED FIELDBOOK cli-commands -->
@@ -118,81 +372,7 @@ sbe verify .                                  <span class="c"># design check plu
 sbe review                                    <span class="c"># the scored surface, soft findings included</span>
 sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run a registered check, mint its receipt</span></code></pre>
 
-  <h4>The reviewers, as routing rather than a cast of characters</h4>
-
-  <p>Selection is deterministic. <code>sbe review-route</code> reads the diff and picks at most two specialists, and zero is a legal result rather than a claim of a clean review.</p>
-
-  <p class="derived">Generated from the agent definitions in agents/. Read the tools column: it is the argument.</p>
-<!-- BEGIN GENERATED FIELDBOOK roles -->
-<div class="tw">
-<table>
-<thead><tr><th>Role</th><th>What it is for</th><th>What it covers</th><th>Tools it may use</th></tr></thead>
-<tbody>
-<tr><th><code>backend-reviewer</code></th><td>Read-only backend change review</td><td>Use when a service, API, endpoint, queue consumer or transactional path changes. Covers contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>data-reviewer</code></th><td>Read-only data and warehouse change review</td><td>Use when a data model, SQL transformation, dbt model, pipeline or reported figure changes. Covers grain, joins and fan-out, keys, systems of record, historization, reconciliation, freshness, quality and cost.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>evidence-auditor</code></th><td>Read-only audit of evidence provenance</td><td>Use when a receipt, a gate verdict, a test result, a rehearsal identifier or an approval is being relied on. Its job is to try to disprove the evidence, not to confirm it. It must never generate the evidence it audits.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>implementation-worker</code></th><td>Implementation worker for one sbe work brief</td><td>Use when a plan task has already been briefed (`sbe work brief`) and someone needs to write the code, not review it. Reads the brief, edits only inside its declared scope, runs the named verification, and returns a compact result contract. It is not a reviewer, never approves or blocks anyone else's change, and holds no merge, rebase, push or deploy rights of its own.</td><td><code>[Read, Grep, Glob, Edit, Write, Bash]</code></td></tr>
-<tr><th><code>migration-reviewer</code></th><td>Read-only database migration review</td><td>Use when a schema migration, backfill or destructive data operation is part of a change. Covers forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>principal-architect</code></th><td>Read-only architecture review</td><td>Use when a system boundary, a service split, a technology choice or a reversibility question is on the table, or when an ADR needs a second opinion before it is committed to. Returns a recommendation, the first and second alternative, and what would flip it.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>qa-reviewer</code></th><td>Read-only test coverage and traceability review</td><td>Use when a change is about to be called testable or done. Maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-<tr><th><code>security-reviewer</code></th><td>Read-only security and privacy review</td><td>Use when authentication, authorization, partner APIs, money movement, file upload, secrets, dependencies or personal data are touched. Covers threat model impact, authorization coverage, secret exposure, input validation, data classification and audit logging.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
-</tbody></table></div>
-<!-- END GENERATED FIELDBOOK roles -->
-
-  <p>Every reviewer is read-only, holding <code>Read, Grep, Glob, Bash</code> and nothing else. Exactly one role in that table holds <code>Edit</code> and <code>Write</code>, and it is the implementation worker, which writes code and reviews nothing.</p>
-
-  <p>That separation is structural rather than instructional, and it is the cheapest control in the system. A reviewer that can edit will fix what it finds, and a finding fixed in silence is a finding nobody recorded.</p>
-
-  <h3 id="tier">The tier, and why you do not pick it</h3>
-
-  <figure>
-    <svg viewBox="0 0 640 216" role="img" aria-labelledby="tier-title">
-      <title id="tier-title">Five questions feeding a first-match-wins ladder. Sensitive or slow to reverse gives tier three and seven artifacts. A contract change or many consumers gives tier two and six. One boundary or some consumers gives tier one and the purpose brief. Otherwise tier zero, which owes nothing.</title>
-      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Five objective questions</text></g>
-      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
-      <g class="svg-small" fill="currentColor" opacity="0.9">
-        <text x="0" y="44">changes a contract others depend on</text>
-        <text x="0" y="60">crosses a service, system or team boundary</text>
-        <text x="0" y="76">reversible in under an hour</text>
-        <text x="0" y="92">touches money, partner data, personal data, production state</text>
-        <text x="0" y="108">how many consumers break if it is wrong</text>
-      </g>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M300 76 L346 76" marker-end="url(#ar)"/></g>
-      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
-        <rect x="356" y="30" width="282" height="26" rx="3"/><rect x="356" y="62" width="282" height="26" rx="3"/>
-        <rect x="356" y="94" width="282" height="26" rx="3"/><rect x="356" y="126" width="282" height="26" rx="3"/>
-      </g>
-      <g class="svg-title" fill="currentColor">
-        <text x="368" y="48">T3</text><text x="368" y="80">T2</text><text x="368" y="112">T1</text><text x="368" y="144">T0</text>
-      </g>
-      <g class="svg-small" fill="currentColor" opacity="0.9">
-        <text x="404" y="48">sensitive, or not reversible in an hour: all seven</text>
-        <text x="404" y="80">a contract change, or many consumers: six</text>
-        <text x="404" y="112">one boundary, or some consumers: the purpose brief</text>
-        <text x="404" y="144">none of the above: nothing at all</text>
-      </g>
-      <line x1="0" y1="170" x2="638" y2="170" stroke="currentColor" stroke-width="1" opacity="0.25"/>
-      <text class="svg-small" x="0" y="188" fill="currentColor" opacity="0.95">First match wins, top down. T0 is the common case, and it is meant to be.</text>
-      <text class="svg-small" x="0" y="206" fill="currentColor" opacity="0.95">An override moves three fields that must agree, plus a written reason. A half-declared override fails and names the missing field.</text>
-    </svg>
-    <figcaption>A tool that taxes every change equally gets switched off in a fortnight, which is why T0 owes nothing and is expected to be most of your work. The awkwardness of the override is the design: it is not hard because somebody was punitive, it is hard because the alternative is the tier quietly becoming whatever the deadline needs.</figcaption>
-  </figure>
-
-  <h3 id="register">What is proven, and how strongly</h3>
-
-  <p>Every check that ships, with the severity it declared at write time and the verdict it returns when its evidence is absent. Severity changes the exit code and nothing else: it never changes what a check examines.</p>
-
-  <div class="tw">
-  <table class="tight">
-    <thead><tr><th>Stamp</th><th>What it means here</th></tr></thead>
-    <tbody>
-      <tr><td><span class="stamp s-certified">gate</span></td><td>A FAIL blocks a <code>--strict</code> run. This is what stops a merge.</td></tr>
-      <tr><td><span class="stamp s-beta">soft</span></td><td>A FAIL is graded and blocks only under the opt-in <code>--strict-soft</code>.</td></tr>
-      <tr><td><span class="stamp s-experimental">NO-DATA</span></td><td>The empty state. Reported by name, never decides an exit code in either direction.</td></tr>
-      <tr><td><span class="stamp s-unsupported">FAIL</span></td><td>The empty state for a check where absence is itself a broken claim.</td></tr>
-    </tbody>
-  </table>
-  </div>
+  <h4>Every check that ships, with its severity and its empty state</h4>
 
   <p class="derived">Generated by walking the check registries, the same discovery rule the honesty meta-test applies. A check registered next year appears here the day it is registered.</p>
 <!-- BEGIN GENERATED FIELDBOOK checks -->
@@ -235,11 +415,44 @@ sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run 
 </tbody></table></div>
 <!-- END GENERATED FIELDBOOK checks -->
 
-  <p>No row in that table can carry PASS in the last column. That is not a convention anybody polices; a check declaring PASS as its empty state is refused registration at construction.</p>
+  <p>No row in that table can carry PASS in the last column, and that is not a convention anybody polices. A check declaring PASS as its empty state is refused registration when it is constructed.</p>
+
+  <h4>How these tables stay true</h4>
+
+  <p>Rebuild them at every loop close, and let the pipeline catch you when you forget.</p>
+
+  <pre><code>sbe book            <span class="c"># regenerate every derived table</span>
+sbe book --check    <span class="c"># does any bound source disagree with this booklet</span></code></pre>
+
+  <p>Under <code>--strict</code>, a bound source that moved without a rebuild is a FAIL naming the section and the file. A stale prose stamp is NO-DATA: it reports that nobody has reread the words, and it never claims the words are wrong, because no tool can compute that.</p>
+
+  <p class="derived">Provenance for this booklet is printed below, one line per generated section, naming every file it was read from.</p>
+<!-- BEGIN GENERATED FIELDBOOK provenance -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>Section</th><th>Verdict</th><th>Items</th><th>Read from</th></tr></thead>
+<tbody>
+<tr><th><code>guided-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>12</td><td><code>skills/adopt/SKILL.md</code> <code>skills/design/SKILL.md</code> <code>skills/handover/SKILL.md</code> <code>skills/help/SKILL.md</code> <code>skills/kickoff/SKILL.md</code> <code>skills/learn/SKILL.md</code> <code>skills/next/SKILL.md</code> <code>skills/review/SKILL.md</code> <code>skills/start/SKILL.md</code> <code>skills/status/SKILL.md</code> <code>skills/verify/SKILL.md</code> <code>skills/work/SKILL.md</code></td></tr>
+<tr><th><code>cli-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>33</td><td><code>src/brothersbe/cli.py</code></td></tr>
+<tr><th><code>roles</code></th><td><span class="stamp s-certified">PASS</span></td><td>8</td><td><code>agents/backend-reviewer.md</code> <code>agents/data-reviewer.md</code> <code>agents/evidence-auditor.md</code> <code>agents/implementation-worker.md</code> <code>agents/migration-reviewer.md</code> <code>agents/principal-architect.md</code> <code>agents/qa-reviewer.md</code> <code>agents/security-reviewer.md</code></td></tr>
+<tr><th><code>checks</code></th><td><span class="stamp s-certified">PASS</span></td><td>32</td><td><code>tools/sbe_plan.py</code> <code>tools/sbe_design.py</code> <code>tools/sbe_gate.py</code> <code>tools/sbe_score.py</code> <code>tools/sbe_instruction_surface.py</code> <code>tools/sbe_release_invariant.py</code></td></tr>
+<tr><th><code>limits</code></th><td><span class="stamp s-certified">PASS</span></td><td>60</td><td><code>docs/KNOWN-LIMITS.md</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK provenance -->
 
   <h3 id="limits">What it will not tell you</h3>
 
-  <p>The honest half of the product, collected in one place so it is not the hardest part to find. The body of each limit lives in the limits file, so there is one copy and this page cannot quietly soften it.</p>
+  <p>The honest half of the product, collected in one place so that it is not the hardest part to find. The body of each limit lives in the limits file, so there is one copy of the wording and this page cannot quietly soften it.</p>
+
+  <div class="panel accent">
+    <h4>The four that matter most to a small team</h4>
+    <p><strong>Nothing detects that a change needed an approval.</strong> The gate verifies an approval that was declared. What you actually need behind it is a code owners file and branch protection on your own repository.</p>
+    <p><strong>Two derivations differing in text is a floor, not a proof of independence.</strong> The numbers gate proves the two texts differ beyond case, whitespace, comments and trailing punctuation, and that two transcribed figures match. It executes no query. Two reads of the same broken view agree perfectly and both pass.</p>
+    <p><strong>A rehearsal identifier is a pointer, not a resolution.</strong> Nothing calls your job system to confirm that the rehearsal happened, or that the receipt describes the run it names.</p>
+    <p><strong>This repository's own merged pull requests carry no independent review.</strong> Applied to its own history, the approval law reports NO-DATA, not PASS. That is the honest answer to whether the project practises what it sells on that one axis: not yet, and it says so here rather than waiting to be asked.</p>
+  </div>
+
+  <p><strong>The measurement caveat, which applies to every number this product ships.</strong> Every threshold and every rubric baseline was measured on one estate. One. They are starting points rather than constants, and the honest instruction is to re-measure them on yours and change them when your own four weeks disagree.</p>
 
   <p class="derived">Generated from docs/KNOWN-LIMITS.md.</p>
 <!-- BEGIN GENERATED FIELDBOOK limits -->
@@ -310,61 +523,41 @@ sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run 
 </tbody></table></div>
 <!-- END GENERATED FIELDBOOK limits -->
 
-  <div class="panel accent">
-    <h4>The four that matter most to a small team</h4>
-    <p><strong>Nothing detects that a change needed an approval.</strong> The gate verifies an approval that was declared. What you actually need is CODEOWNERS and branch protection on your own repository.</p>
-    <p><strong>Two derivations differing in text is a floor, not a proof of independence.</strong> Two queries over the same broken view agree perfectly.</p>
-    <p><strong>A rehearsal identifier is a pointer, not a resolution.</strong> Nothing calls your job system to confirm the rehearsal happened.</p>
-    <p><strong>This repository's own merged pull requests carry no independent review.</strong> Applied to its own history, the approval law reports NO-DATA, not PASS. That is disclosed rather than hidden, and it is the honest answer to whether the project practises what it sells on that one axis: not yet, and it says so.</p>
-  </div>
-
-  <p><strong>The measurement caveat.</strong> Every threshold this project ships, and every baseline in its rubric, was measured on one estate. One. They are starting points rather than constants, and the honest instruction is to re-measure them on yours.</p>
-
   <p class="statement wide">Stating the limits is what makes the rest of the claims worth anything.</p>
 
-  <h3 id="first">Your first sprint</h3>
+  <h3 id="human">What stays human, and what you have to supply</h3>
 
-  <p>One repository. One lane of work. Two weeks advisory, then strict. Do not roll this across an estate before one team has an opinion, because a control that arrives everywhere at once gets switched off everywhere at once the first time it is inconvenient.</p>
+  <p>Three things are worth being blunt about before anybody signs anything.</p>
+
+  <p><strong>It never gets apply rights of its own.</strong> Nothing in it merges, approves, deploys or publishes, no role it ships is given a merge, push or deploy right, and it never learns that a human did any of those things. It drafts the command and its rollback, and a human runs it. Be equally clear about what that is not: it is not a fence between an agent and your production. Every role it ships holds a shell, so the thing that actually stops a deploy is the credentials on the machine and the rights on your host, and those stay your job. A manual approval step in your pipeline and a signed approval trailer are also two different approvals, and treating them as one is the most dangerous sentence available in this area.</p>
+
+  <p><strong>It stops at the deploy.</strong> No monitoring, no alerting, no error budget, no rollback trigger. No receipt describes production state, so the question your support team actually asks, is it live and is it fixed, has no answer here.</p>
+
+  <p><strong>It sees only what passes through a diff, a JSON file or a markdown file.</strong> A field retyped and saved in an administration console, a campaign built in a marketing tool, a voucher rule, a content type published from a headless store: none of those produce a diff, so none of them gets a design phase, a gate, a linter or a receipt, and nothing notices the omission. On the one estate this was mapped against, a large share of what the commercial and support side logged as a bug turned out to be product data or content rather than code. That is one team's experience rather than a measured rule, and the useful move is to check the same thing on your own tickets before assuming the gap is small. Say it on day one either way, not after the first miss.</p>
+
+  <p>What the team supplies is the other half of the system, and it is not a short list: the pipeline job, the merge rule, the branch protection, the signing keys on the machine that verifies approvals, the entry describing each registered check, and the export that makes a schema visible to git in the first place when it lives in a tool rather than in a file.</p>
+
+  <p>And then the judgment, which no part of this touches. Whether the system of record you named is the right one. Whether the alternative you rejected was the one worth rejecting. Whether the second derivation is genuinely independent or merely differently worded. Whether the check somebody registered is a good check. The product's position is that it makes those questions <strong>visible, arguable and dated</strong>, and answers none of them.</p>
+
+  <h4 id="first">A four-week adoption that does not get switched off</h4>
+
+  <p>One repository. One lane of work. Advisory first, then enforcing, one stage at a time. Do not roll this across an estate before one team has an opinion, because a control that arrives everywhere at once gets switched off everywhere at once the first time it is inconvenient.</p>
 
   <div class="tw">
   <table>
     <thead><tr><th>When</th><th>What you do</th><th>What you should see</th></tr></thead>
     <tbody>
-      <tr><th>Week 0</th><td><code>sbe adopt .</code>, which is a dry run and changes nothing. Read it. Then <code>--apply</code>.</td><td>A list of what would be installed, and nothing installed until you say so.</td></tr>
-      <tr><th>Week 1</th><td>Copy the CI workflow in, without <code>--strict</code>. Run the sprint normally.</td><td>Verdicts printed, nothing blocked. This week exists to find what is noisy on your codebase.</td></tr>
-      <tr><th>Week 2</th><td>Agree two sentences out loud, as a team, before turning it on.</td><td>"A FAIL blocks, a NO-DATA does not." And: "Nobody edits the workflow to make red go away."</td></tr>
-      <tr><th>Week 3</th><td>Turn on <code>--strict</code>.</td><td>One uncomfortable pull request. That is the system working.</td></tr>
-      <tr><th>Month 3</th><td>Read the weekly review honestly.</td><td>Most changes T0. Repeated NO-DATA treated as a workflow problem rather than a tool problem. Flip conditions occasionally met.</td></tr>
+      <tr><th>Week 0</th><td>Score your last four weeks of real changes against the five intake questions, on a laptop, with nothing installed.</td><td>Your own tier mix. If most of your work is not the bottom tier, argue the boundaries before adopting anything.</td></tr>
+      <tr><th>Week 1</th><td>Copy the workflow in, without <code>--strict</code>, and wrapped so a failure cannot fail the build. Run the sprint normally.</td><td>Verdicts printed, nothing blocked. This week exists to find what is noisy on your codebase, not to catch anybody.</td></tr>
+      <tr><th>Week 2</th><td>Agree two sentences out loud, as a team, before turning anything on.</td><td>"A FAIL blocks, a NO-DATA does not, and a repeated NO-DATA is a workflow problem." And: "Nobody edits the workflow to make red go away."</td></tr>
+      <tr><th>Week 3</th><td>Unwrap one stage. Bind the merge rule to it. Leave the rest advisory.</td><td>One uncomfortable pull request. That is the system working, and it is the only week that proves the wiring is real.</td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>That second sentence in week two is the entire control. It is why <code>--strict</code> moves only by a human editing the workflow file, where a reviewer sees it in the diff, and why a session instruction can never waive a hard gate.</p>
+  <p>That second sentence in week two is the entire control, and it is a human agreement rather than a mechanism. What the mechanism contributes is that everything capable of weakening a gate is a file: the <code>--strict</code> flag lives in your pipeline configuration, and a waiver is an exemption file naming which gate it waives and why. Both of those arrive as a diff somebody can see, which is a real improvement on a sentence typed in a session that leaves no trace. It is not a lock. The exemption check reads that a reason is present, never whether the reason is a true one.</p>
 
   <p class="statement">Try it on the change you would be most embarrassed to get wrong.</p>
-
-  <h4>Keeping this booklet true</h4>
-
-  <p>Four tables in this act are generated from the repository. Rebuild them at every loop close, and let CI catch you when you forget.</p>
-
-  <pre><code>sbe book            <span class="c"># regenerate every derived table</span>
-sbe book --check    <span class="c"># does any bound source disagree with this booklet</span></code></pre>
-
-  <p>Under <code>--strict</code> in CI, a bound source that moved without a rebuild is a FAIL naming the section and the file. A stale prose stamp is NO-DATA: it reports that nobody has reread the words, and it never claims the words are wrong, because no tool can compute that.</p>
-
-  <p class="derived">Provenance for this booklet is printed below, one line per generated section, naming every file it was read from.</p>
-<!-- BEGIN GENERATED FIELDBOOK provenance -->
-<div class="tw">
-<table class="tight">
-<thead><tr><th>Section</th><th>Verdict</th><th>Items</th><th>Read from</th></tr></thead>
-<tbody>
-<tr><th><code>guided-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>12</td><td><code>skills/adopt/SKILL.md</code> <code>skills/design/SKILL.md</code> <code>skills/handover/SKILL.md</code> <code>skills/help/SKILL.md</code> <code>skills/kickoff/SKILL.md</code> <code>skills/learn/SKILL.md</code> <code>skills/next/SKILL.md</code> <code>skills/review/SKILL.md</code> <code>skills/start/SKILL.md</code> <code>skills/status/SKILL.md</code> <code>skills/verify/SKILL.md</code> <code>skills/work/SKILL.md</code></td></tr>
-<tr><th><code>cli-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>33</td><td><code>src/brothersbe/cli.py</code></td></tr>
-<tr><th><code>roles</code></th><td><span class="stamp s-certified">PASS</span></td><td>8</td><td><code>agents/backend-reviewer.md</code> <code>agents/data-reviewer.md</code> <code>agents/evidence-auditor.md</code> <code>agents/implementation-worker.md</code> <code>agents/migration-reviewer.md</code> <code>agents/principal-architect.md</code> <code>agents/qa-reviewer.md</code> <code>agents/security-reviewer.md</code></td></tr>
-<tr><th><code>checks</code></th><td><span class="stamp s-certified">PASS</span></td><td>32</td><td><code>tools/sbe_plan.py</code> <code>tools/sbe_design.py</code> <code>tools/sbe_gate.py</code> <code>tools/sbe_score.py</code> <code>tools/sbe_instruction_surface.py</code> <code>tools/sbe_release_invariant.py</code></td></tr>
-<tr><th><code>limits</code></th><td><span class="stamp s-certified">PASS</span></td><td>60</td><td><code>docs/KNOWN-LIMITS.md</code></td></tr>
-</tbody></table></div>
-<!-- END GENERATED FIELDBOOK provenance -->
 </section>
 
 </main>
