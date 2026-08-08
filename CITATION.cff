@@ -6,6 +6,8 @@ authors:
   - given-names: Khalil
     family-names: Maaouni
 repository-code: "https://github.com/khalilmaaouni/BrotherSBE"
+version: 1.0.0-rc.28
+date-released: 2026-08-08
 abstract: >-
   A Claude Code plugin that acts as a senior backend and data engineering
   colleague. It designs systems in the order the work runs (purpose, process,

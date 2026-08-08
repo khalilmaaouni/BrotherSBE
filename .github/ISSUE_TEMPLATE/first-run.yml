@@ -13,11 +13,26 @@ body:
 
         You do not need to have finished anything to file this.
 
+  - type: dropdown
+    id: path
+    attributes:
+      label: Which path were you on?
+      options:
+        - The guided start (/brothersbe:start)
+        - The sandbox guide
+        - A real change in my own repository
+        - Trying to break it
+    validations:
+      required: false
+
   - type: textarea
     id: what-broke
     attributes:
       label: What broke, confused you, or made you stop?
-      description: One sentence is enough. Paste the exact output if you have it.
+      description: >-
+        One sentence is enough. Paste the exact output if you have it. If
+        something refused to run, `python3 bin/sbe doctor`'s output is the
+        most useful thing you can paste here.
       placeholder: I ran the install command and nothing appeared in /plugin.
     validations:
       required: true

@@ -79,8 +79,8 @@ Use it if you like structure; the looser suggestions below work too.
 
 ## Where to report
 
-Open a GitHub issue with the tester report template:
-[new issue](https://github.com/khalilmaaouni/BrotherSBE/issues/new?template=tester-report.md).
+Open a GitHub issue with the first-run report template:
+[new issue](https://github.com/khalilmaaouni/BrotherSBE/issues/new?template=first-run.yml).
 One issue per finding beats one giant issue. Include your OS, what you asked
 for, what you expected, and what happened.
 
