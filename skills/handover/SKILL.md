@@ -88,6 +88,13 @@ detail (the full `done`/`inFlight`/`notStarted` lists, every evidence entry, wor
 goes under a separate "Details" section after the summary, for the outgoing owner to hand the
 receiver alongside it, never folded into the summary itself.
 
+One field carries a refusal and has to be read before you tell anyone to accept: `requiredAccess`.
+The engine writes it empty at `prepare` time, because nothing computes what access a handover will
+need, so an empty value there is unknown rather than none. A human may fill it in by hand, and if
+it is non-empty when the receiver runs `acknowledge`, acceptance is REFUSED until that access is
+granted, naming what is outstanding. So check the field before promising the receiver a clean
+acceptance, and never present an empty one as proof that nothing is needed.
+
 ## 4. Tell the receiver exactly how to inspect and decide
 
 State these two commands verbatim, the receiver's whole next step:
