@@ -314,6 +314,23 @@ class TestCaseVariants(AuthorityCase):
         machine cannot construct the real collision above, so the filesystem
         confirmation is forced to answer False and the case-folded candidate
         must not be trusted on the string match alone."""
+        # This scenario needs the STRING MATCH to be the only evidence, which
+        # is why the filesystem confirmation is forced to answer False. On a
+        # host that canonicalises the spelling, the operating system supplies
+        # real confirmation before this function is ever consulted: Windows
+        # resolves "claude.md" to the true on-disk entry "CLAUDE.md", so the
+        # guard matches exactly and denies, correctly, on evidence this test is
+        # trying to withhold. That is not the behaviour under test failing, it
+        # is the premise of the test being unbuildable, so it is skipped there
+        # and the sibling above covers that world instead. Measured by asking
+        # the filesystem, never by naming a platform.
+        variant_probe = os.path.join(self.root, "claude.md")
+        if os.path.exists(variant_probe) and \
+                os.path.basename(os.path.realpath(variant_probe)) != "claude.md":
+            raise unittest.SkipTest(
+                "this filesystem canonicalises the spelling (realpath answers %r), so the "
+                "operating system confirms the match and 'string match alone' cannot be "
+                "constructed here" % os.path.basename(os.path.realpath(variant_probe)))
         original = fh._same_entry_case_insensitive
         fh_for_authority = ah.load_fence_module()
         original_loaded = fh_for_authority._same_entry_case_insensitive
