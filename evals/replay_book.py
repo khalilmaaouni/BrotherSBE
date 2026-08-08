@@ -208,8 +208,18 @@ def replay_chapter(name):
     if marker == 0:
         return lines, blocks, [], 0, [], skipped
 
+    # newline="\n" pins the write to a bare LF regardless of platform. The
+    # default (newline=None) translates every '\n' written to os.linesep,
+    # which is '\r\n' on Windows: the generated script's own commands then
+    # carry a trailing \r baked into their arguments (a path, a date, a
+    # heredoc line), and bash echoes that \r back inside the captured output
+    # instead of failing outright. That is not a captured-output encoding
+    # difference, so the comparison's own newline normalization can never
+    # catch it: the corruption is in what the command was TOLD to do, not in
+    # how its answer was later read. A fixture writer left in text mode was
+    # exactly the same defect family this project already fixed once before.
     sh_path = os.path.join(BOOK_DIR, ".replay-%s.sh" % name.replace("/", "_"))
-    io.open(sh_path, "w").write("\n".join(script) + "\n")
+    io.open(sh_path, "w", newline="\n").write("\n".join(script) + "\n")
     try:
         out = subprocess.run(["bash", sh_path], capture_output=True, text=True,
                              timeout=TIMEOUT_PER_CHAPTER, stdin=subprocess.DEVNULL)
