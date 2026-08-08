@@ -79,9 +79,7 @@ To: <intendedReceiver>
 Commit: <headSha, short>
 Done: <len(done)> items
 In flight: <len(inFlight)> item(s)
-Open questions: <len(openQuestions)>
 Evidence: <count where evidence[].status == "current"> current, <count == "stale"> stale
-Access needed: <requiredAccess, or "none">
 Ownership remains with <outgoingOwner> until <intendedReceiver> acknowledges.
 ```
 
@@ -131,12 +129,10 @@ than walking the rest of the record). Otherwise, answer with:
 
 1. **What you inherit**: `done`, `inFlight`, `notStarted` counts, and `activeTasks` naming who
    currently holds what.
-2. **What needs you**: `openQuestions` and `requiredAccess`, verbatim; a non-empty
-   `requiredAccess` blocks acceptance until it is granted, name it plainly.
-3. **One guided next action**: the record's own `nextAction` field, verbatim, naming the first
+2. **One guided next action**: the record's own `nextAction` field, verbatim, naming the first
    file and command to inspect. Never the project's whole history, never every evidence entry at
    once; the receiver asked for a start, not an archive.
-4. Only after the receiver has looked and is ready: the `acknowledge` or `reject` command from
+3. Only after the receiver has looked and is ready: the `acknowledge` or `reject` command from
    step 4, restated for them to run themselves. This skill never runs `acknowledge` or `reject`
    on anyone's behalf; the receiver's own identity has to be the one that types it.
 

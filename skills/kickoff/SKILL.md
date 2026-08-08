@@ -29,10 +29,11 @@ the routing table that says which reference file to load when. Do not work from 
 6. Score the intake:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/sbe" intake --help
+"${CLAUDE_PLUGIN_ROOT}/bin/sbe" intake <dossier directory>
 ```
 
-The intake writes `00-intake.json` into the dossier directory. The tier it computes decides
+That command delegates to `tools/sbe_intake.py`, which asks the five intake questions and
+writes `00-intake.json` into the dossier directory you gave it. The tier it computes decides
 which artifacts `/brothersbe:design` will require and which gates `/brothersbe:verify` will
 run.
 
