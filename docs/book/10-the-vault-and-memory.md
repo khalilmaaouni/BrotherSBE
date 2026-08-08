@@ -23,7 +23,7 @@ env -u BROTHERSBE_VAULT BROTHERSBE_PRIVATE_NAMES_FILE=/tmp/sbe-book-ch10-repo/no
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/.claude/worktrees/integrate-loops12/tools
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
 plugin-manifest  PASS     manifest 1.0.0-rc.29, VERSION 1.0.0-rc.29
 git              PASS     working directory is inside a git tree
 project-init     FAIL     .brothersbe/config.json is missing: this repository has never run `sbe init`, so BrotherSBE's main capability (dossiers, gates, evidence) cannot run here. REQUIRED-and-missing: preview the fix with `sbe init`, then apply it with `sbe init --apply` once you approve the preview
@@ -92,7 +92,7 @@ BROTHERSBE_VAULT=/tmp/sbe-book-ch10-repo/vault BROTHERSBE_PRIVATE_NAMES_FILE=/tm
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/.claude/worktrees/integrate-loops12/tools
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
 plugin-manifest  PASS     manifest 1.0.0-rc.29, VERSION 1.0.0-rc.29
 git              PASS     working directory is inside a git tree
 project-init     FAIL     .brothersbe/config.json is missing: this repository has never run `sbe init`, so BrotherSBE's main capability (dossiers, gates, evidence) cannot run here. REQUIRED-and-missing: preview the fix with `sbe init`, then apply it with `sbe init --apply` once you approve the preview

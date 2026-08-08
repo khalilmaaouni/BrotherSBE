@@ -263,7 +263,7 @@ ROOT="$(pwd)"
 
 ```
 python           PASS     3.9.6 (floor is 3.9)
-tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/.claude/worktrees/integrate-loops12/tools
+tools            PASS     all present in /Users/khalil.maaouni/Documents/BrotherSBE/tools
 plugin-manifest  PASS     manifest 1.0.0-rc.29, VERSION 1.0.0-rc.29
 git              PASS     working directory is inside a git tree
 project-init     PASS     .brothersbe/config.json is present; this repository carries BrotherSBE's local footprint
