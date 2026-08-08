@@ -30,53 +30,62 @@
   <p class="statement wide">Eventually your senior engineer is the design review, the migration gate and the reconciliation, for a machine that never gets tired.</p>
 
   <figure>
-    <svg viewBox="0 0 640 300" role="img" aria-labelledby="pain-title">
-      <title id="pain-title">Two arrangements compared. In the first, the team personally carries design review, evidence checking and re-derivation between themselves and Claude. In the second, those three jobs move into BrotherSBE, and the team keeps only judgment and domain knowledge.</title>
+    <svg viewBox="0 0 640 306" role="img" aria-labelledby="pain-title">
+      <title id="pain-title">Four required status checks on one pull request, drawn identically because the merge rule sees them identically. Below a fold, what each one actually did: the first examined 812 files over four minutes and passed on evidence; the second was skipped by a job-level condition and reported success; the third was posted directly to the commit statuses endpoint by a token with no code access; the fourth exited zero having matched no files at all. Three of the four are marked NO-DATA rather than pass.</title>
       <defs>
         <marker id="ar" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
         </marker>
       </defs>
 
-      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Today</text>
-      <text class="svg-big" x="104" y="40" fill="currentColor">YOUR TEAM</text>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
-        <path d="M118 50 L52 74" marker-end="url(#ar)"/><path d="M130 50 L130 74" marker-end="url(#ar)"/><path d="M142 50 L208 74" marker-end="url(#ar)"/>
-      </g>
-      <g class="svg-body" fill="currentColor" opacity="0.95">
-        <text x="4" y="90">design review</text><text x="104" y="90">evidence</text><text x="188" y="90">re-derivation</text>
-      </g>
-      <g class="svg-small" fill="currentColor" opacity="0.85">
-        <text x="4" y="106">you read it after</text><text x="104" y="106">you take its word</text><text x="188" y="106">you redo the maths</text>
-      </g>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
-        <path d="M34 116 L118 142" marker-end="url(#ar)"/><path d="M130 116 L130 142" marker-end="url(#ar)"/><path d="M216 116 L146 142" marker-end="url(#ar)"/>
-      </g>
-      <text class="svg-big" x="96" y="160" fill="currentColor">CLAUDE</text>
-      <text class="svg-small" x="0" y="186" fill="currentColor" opacity="0.9">Three jobs nobody was hired for,</text>
-      <text class="svg-small" x="0" y="200" fill="currentColor" opacity="0.9">all of them after the mistake was made.</text>
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">What the merge rule sees</text>
+      <line x1="0" y1="22" x2="638" y2="22" stroke="currentColor" stroke-width="1" opacity="0.3"/>
 
-      <line x1="290" y1="0" x2="290" y2="290" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="32" width="142" height="36" rx="3"/><rect x="166" y="32" width="142" height="36" rx="3"/>
+        <rect x="332" y="32" width="142" height="36" rx="3"/><rect x="498" y="32" width="142" height="36" rx="3"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.9">
+        <path d="M14 50 L19 56 L29 43"/><path d="M180 50 L185 56 L195 43"/>
+        <path d="M346 50 L351 56 L361 43"/><path d="M512 50 L517 56 L527 43"/>
+      </g>
+      <g class="svg-title" fill="currentColor" opacity="0.95">
+        <text x="40" y="55">PASS</text><text x="206" y="55">PASS</text>
+        <text x="372" y="55">PASS</text><text x="538" y="55">PASS</text>
+      </g>
+      <text class="svg-small" x="0" y="86" fill="currentColor" opacity="0.9">Required checks satisfied. Merge is allowed.</text>
 
-      <text class="svg-label" x="320" y="12" fill="currentColor" opacity="0.85">With BrotherSBE</text>
-      <text class="svg-big" x="424" y="40" fill="currentColor">YOUR TEAM</text>
-      <text class="svg-small" x="320" y="60" fill="currentColor" opacity="0.9">domain knowledge, judgment, the calls only you can make</text>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 70 L452 94" marker-end="url(#ar)"/></g>
-      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"><rect x="320" y="98" width="276" height="74" rx="3"/></g>
-      <text class="svg-title" x="334" y="120" fill="currentColor">BROTHERSBE</text>
+      <line x1="0" y1="104" x2="638" y2="104" stroke="currentColor" stroke-width="1" opacity="0.55" stroke-dasharray="3 3"/>
+      <text class="svg-label" x="0" y="124" fill="currentColor" opacity="0.85">What actually ran</text>
+
       <g class="svg-small" fill="currentColor" opacity="0.92">
-        <text x="334" y="138">a design phase that runs before the code</text>
-        <text x="334" y="152">gates that read receipts, not assurances</text>
-        <text x="334" y="166">absent evidence reported, never passed</text>
+        <text x="0" y="150">ran 4 minutes</text><text x="0" y="165">812 files examined</text>
+        <text x="166" y="150">skipped by a</text><text x="166" y="165">job-level condition</text>
+        <text x="332" y="150">POSTed to the commit</text><text x="332" y="165">statuses endpoint</text>
+        <text x="498" y="150">exited zero over</text><text x="498" y="165">zero matched files</text>
       </g>
-      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 172 L452 196" marker-end="url(#ar)"/></g>
-      <text class="svg-big" x="412" y="214" fill="currentColor">CLAUDE</text>
-      <text class="svg-small" x="320" y="236" fill="currentColor" opacity="0.9">writes the service, the migration, the pipeline</text>
-      <line x1="320" y1="254" x2="638" y2="254" stroke="currentColor" stroke-width="1" opacity="0.25"/>
-      <text class="svg-small" x="320" y="272" fill="currentColor" opacity="0.95">Your judgment stays with you.</text>
-      <text class="svg-small" x="320" y="288" fill="currentColor" opacity="0.95">The checking does not have to.</text>
+      <g class="svg-small" fill="currentColor" opacity="0.8">
+        <text x="0" y="182">a real reading</text>
+        <text x="166" y="182">nothing was examined</text>
+        <text x="332" y="182">no code was read</text>
+        <text x="498" y="182">nothing to examine</text>
+      </g>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45">
+        <rect x="0" y="196" width="142" height="26" rx="3"/><rect x="166" y="196" width="142" height="26" rx="3"/>
+        <rect x="332" y="196" width="142" height="26" rx="3"/><rect x="498" y="196" width="142" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="213">PASS</text><text x="178" y="213">NO-DATA</text>
+        <text x="344" y="213">NO-DATA</text><text x="510" y="213">NO-DATA</text>
+      </g>
+
+      <line x1="0" y1="246" x2="638" y2="246" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="266" fill="currentColor" opacity="0.95">The merge rule matches a check NAME against a CONCLUSION.</text>
+      <text class="svg-small" x="0" y="282" fill="currentColor" opacity="0.95">It has no opinion about whether anything was examined.</text>
+      <text class="svg-small" x="0" y="302" fill="currentColor" opacity="0.95">Three of these four are the absence of evidence, wearing the costume of evidence.</text>
     </svg>
-    <figcaption>Nothing here removes an engineering decision from your team. What moves is the work between the decisions: reviewing after the fact, taking a claim on trust, and redoing the arithmetic to see whether it holds. Those three are the whole product.</figcaption>
+    <figcaption>This is the whole problem in one picture, and none of it is hypothetical. A job skipped by an <code>if:</code> condition reports success and satisfies a required check. A token carrying only <code>repo:status</code> can post a passing conclusion for a context without reading a line of code. A linter handed a path that matches nothing exits zero. The merge rule cannot tell any of these apart from the one on the left, because it was never designed to: it compares a name to a conclusion. Everything BrotherSBE does follows from refusing that collapse.</figcaption>
   </figure>
 
   <h3 id="painkiller">The painkiller: stop taking the agent's word for it</h3>
