@@ -482,5 +482,3 @@ python3 tools/sbe_gate.py --strict design    # enforcing: exits nonzero on any F
 MIT. See [LICENSE](LICENSE).
 
 Created by Khalil Maaouni.
-
-<!-- probe: a tracked byte moves without the manifest moving -->
