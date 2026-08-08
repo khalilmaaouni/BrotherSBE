@@ -2013,6 +2013,54 @@ def gd_vinstall_metachar_path(root):
     return "clean tree reads clean"
 
 
+@case("a-planted-file-named-like-an-option-is-still-reported",
+      "guard", "the planted file is named")
+def gd_vinstall_dash_filename(root):
+    # SECURITY CRITICAL, found by an adversarial review and reproduced before it
+    # was believed. The eighth defect of the path-as-syntax shape, and the first
+    # where the syntax was OPTION syntax: the membership test passed `$rel` to
+    # grep as a bare operand, so an installed file whose name begins with a dash
+    # was parsed as a flag. The flag then consumed the manifest-paths filename as
+    # its own argument, leaving grep no FILE operand, so grep read STDIN, and
+    # stdin at that point is the walk output the enclosing loop is still reading.
+    # Every remaining walked entry was swallowed unchecked.
+    #
+    # What that cost, reproduced exactly: a tree holding an undeclared `-v` AND
+    # an undeclared `skills/backdoor.py` reported `0 extra`, `PASSED`, exit 0.
+    # The one tool whose entire job is telling you whether your installation has
+    # been tampered with certified a tampered installation.
+    #
+    # Calibration, against a scratch copy with the operand form restored: this
+    # case returns the planted file was not named. With `-e`, `--` and a denied
+    # stdin it returns "the planted file is named".
+    import hashlib, shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    os.makedirs(os.path.join(inst, "skills"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("inst", "hello.txt"), "hi\n")
+    # The dash-named file sorts before skills/, so under the defect it is the
+    # entry that steals stdin and hides everything after it.
+    write(root, os.path.join("inst", "-v"), "")
+    write(root, os.path.join("inst", "skills", "backdoor.py"), "print('planted')\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if "skills/backdoor.py" not in out.stdout:
+        return ("a planted file was NOT named, so the walk was truncated: exit %d, %s"
+                % (out.returncode, _re_missing_extra(out.stdout)))
+    if out.returncode == 0:
+        return ("the planted file was named but the run still exited 0, so the "
+                "verdict does not follow its own evidence")
+    return "the planted file is named"
+
+
 @case("a-glob-metacharacter-in-the-install-root-does-not-accuse-a-clean-tree",
       "guard", "clean tree reads clean")
 def gd_vinstall_glob_root(root):

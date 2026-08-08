@@ -1752,3 +1752,28 @@ receipt to its repository, workflow, commit and run. Until then, any document
 claiming this project can prove where a receipt came from is wrong, and this
 entry is the correction.
 
+
+## The install verifier reads no file contents, so configuration is reported rather than judged
+
+`scripts/verify-install.sh` compares bytes against a manifest. It never opens a
+file to understand what that file does. Inside the paths it excludes by design
+(`.claude/` most of all, which holds harness-written local state), that leaves a
+real gap: `.claude/settings.json` can declare a SessionStart hook, and the
+harness executes that hook on every session.
+
+The verifier now NAMES every configuration file it finds inside an excluded path
+and counts them separately, so their presence is visible rather than silent. It
+does not fail the run on their presence, and that is deliberate: a
+`.claude/settings.json` is ordinary state a correct installation has, and this
+script has already shipped four defects that told a clean installation it looked
+compromised. Failing on presence would have made a fifth.
+
+So the honest statement of what this control gives you: it proves the bytes of
+every manifest-named file, it tells you what unmanifested configuration exists
+where it cannot vouch for it, and it does not read that configuration. If you
+need to know what a hook will run, read the file it names.
+
+Rejected alternative, recorded: parse `.claude/settings.json` and judge the hooks
+it declares. That turns a byte-comparison tool into a policy engine for a schema
+this project does not own and cannot pin, and its verdicts would go stale the
+moment the harness changed the format.

@@ -47,7 +47,7 @@ design check was fed the defect its eval exists to catch, and caught it. The
 reinjection is executed by the eval bed itself on every run, not once at
 release: every fixture plants the defect and the suite fails if the check stops
 catching it. Measured 2026-07-31 by `python3 evals/run_evals.py`, ending
-"538 evals: 538 passed, 0 regressions." One representative reinjection per
+"539 evals: 539 passed, 0 regressions." One representative reinjection per
 check, from that run:
 
 | Check | Defect reinjected | Eval case | Result |

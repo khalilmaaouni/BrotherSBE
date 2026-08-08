@@ -8,6 +8,32 @@ checklist's own rules.
 
 ## 1.0.0-rc.29
 
+### SECURITY: the install verifier certified a planted backdoor, and a filename was the exploit
+
+An adversarial security review found this and reproduced it before anyone believed it. It is the most serious defect this project has shipped.
+
+`scripts/verify-install.sh` asked whether each walked file was named in the manifest by passing the filename to `grep` as a bare operand. A filename that begins with a dash is therefore parsed as an OPTION. The option then consumed the manifest-paths filename as its own argument, which left `grep` with no file to read, so `grep` read STDIN instead. Stdin, at that moment, is the walk output the enclosing loop is still consuming. Every remaining entry was swallowed and never checked.
+
+Reproduced here before the fix, on a tree containing an undeclared file named `-v` and an undeclared `skills/backdoor.py`:
+
+```
+verify-install: 2 file(s) match, 0 mismatched, 0 missing, 0 extra
+verify-install: PASSED. Every file the manifest names matches on disk,
+EXIT=0
+```
+
+The one tool whose entire job is telling you whether your installation has been tampered with certified a tampered installation, and did it silently. After the fix, the same tree reports `EXTRA: -v`, `EXTRA: skills/backdoor.py`, `2 extra`, `FAILED`, exit 1. The fix names the pattern with `-e`, ends option parsing with `--`, and denies stdin outright so a future edit reintroducing the operand mistake cannot steal the walk again. The same shape was swept and fixed in `scripts/checksums.sh`, where the input is maintainer-controlled and the risk was hardening rather than a live hole.
+
+This is the eighth defect of one class in this repository: a path read as syntax rather than as data. The first seven were regex, glob, escaping and spelling. This one was option syntax. It is pinned now by the eval `a-planted-file-named-like-an-option-is-still-reported`, calibrated by restoring the operand form and watching it report that the walk was truncated.
+
+### Executable configuration is reported without accusing a clean installation
+
+The same review planted a `.claude/settings.json` declaring a SessionStart hook, which the harness runs on every session, and the verifier counted it as "0 of them source code" and PASSED. The gap was real: it is the highest-value execution vector on this platform and it was invisible.
+
+The obvious repair, adding `*.json` to the source list, was tried and reverted, because it turned every healthy installation red. A `.claude/settings.json` is ordinary state a correct install is supposed to have, and this script has already shipped four separate defects that told a clean installation it looked compromised. Trading a fifth for this would have been a bad bargain.
+
+Configuration inside an excluded path is now counted and named on its own line, and does not by itself decide the verdict. That is this project's own vocabulary applied honestly: the file's presence is expected, its content is something this script does not read, and neither a pass nor a block follows from evidence that thin. The residual risk is written into the known-limits page rather than settled by a verdict it cannot support.
+
 ### Windows says what it can actually enforce, and one shipped sentence stops overpromising
 
 Windows reached the tool tests for the first time in this project's history, having never before got past the honesty meta-test, and reported four failures out of 108. Three distinct defects, all reproduced here by simulating the platform rather than waiting for a runner.

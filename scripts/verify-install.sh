@@ -286,7 +286,20 @@ while IFS= read -r walked; do
         NONREGULAR=$((NONREGULAR + 1))
         continue
     fi
-    if ! grep -q -x -F "$rel" "$WORKDIR/manifest_paths"; then
+    # A FILENAME IS DATA, NEVER OPTION SYNTAX. This is the same class as the
+    # seven path defects before it, one layer further out: `$rel` was handed to
+    # grep as a bare operand, so an installed file whose name begins with a dash
+    # was parsed as an OPTION. Two things then happened, and the second is the
+    # dangerous one. The option ate the manifest-paths filename as its own
+    # argument, leaving grep with no FILE operand, so grep read STDIN instead,
+    # and stdin here is the walk output this very loop is consuming. Every
+    # remaining entry was swallowed and never checked. Reproduced: a tree
+    # holding an undeclared `-v` and an undeclared `skills/backdoor.py` reported
+    # `0 extra`, `verify-install: PASSED`, exit 0. The one tool whose whole job
+    # is detecting a planted file certified a planted file.
+    # -e names the pattern, -- ends option parsing, and </dev/null denies the
+    # stdin theft even if some future edit reintroduces the operand mistake.
+    if ! grep -q -x -F -e "$rel" -- "$WORKDIR/manifest_paths" </dev/null; then
         echo "EXTRA:     $rel"
         EXTRA=$((EXTRA + 1))
     fi
@@ -334,6 +347,7 @@ done < "$WORKDIR/installed_raw"
 
 EXCLUDED=0
 EXCLUDED_SOURCE=0
+EXCLUDED_CONFIG=0
 EXCLUDED_NONREGULAR=0
 while IFS= read -r walked; do
     [ -z "$walked" ] && continue
@@ -346,7 +360,31 @@ while IFS= read -r walked; do
         continue
     fi
     case "$rel" in
-        *.py|*.sh|*.js|*.rb|*.pl|*.php)
+        # EXECUTABLE CONFIGURATION, REPORTED WITHOUT ACCUSING A CLEAN TREE.
+        # An adversarial review planted a `.claude/settings.json` declaring a
+        # SessionStart hook, which the harness runs on every session, and this
+        # script said "0 of them source code" and PASSED. That gap is real: it
+        # is the highest-value execution vector on this platform and it was
+        # invisible here.
+        #
+        # The obvious repair, adding *.json to the list below, was TRIED AND
+        # REVERTED, because it turned every healthy installation red: a
+        # `.claude/settings.json` is ordinary harness state that a correct
+        # install is supposed to have. This script has already shipped four
+        # separate defects that told a clean installation it looked compromised,
+        # and a fifth is not worth trading for this.
+        #
+        # So configuration is counted and named on its own line, and it does NOT
+        # by itself decide the verdict. That is this project's own vocabulary
+        # applied honestly: the file's PRESENCE is expected, its CONTENT is
+        # something this script cannot read, and NO-DATA is neither a pass nor a
+        # block. The residual risk is written down in docs/KNOWN-LIMITS.md
+        # rather than papered over with a verdict this evidence cannot support.
+        *.json|*.toml|*.yaml|*.yml)
+            echo "EXCLUDED-CONFIG: $rel (configuration inside an excluded path; the harness may EXECUTE what this declares, and this script reads no file contents, so it can neither vouch for it nor accuse it)"
+            EXCLUDED_CONFIG=$((EXCLUDED_CONFIG + 1))
+            ;;
+        *.py|*.sh|*.js|*.rb|*.pl|*.php|*.mjs|*.cjs|*.bash|*.zsh|*.ps1|*.bat|*.cmd)
             echo "EXCLUDED-SOURCE: $rel (source code inside an excluded path; the manifest cannot vouch for it and something on this host may execute it)"
             EXCLUDED_SOURCE=$((EXCLUDED_SOURCE + 1))
             ;;
@@ -362,7 +400,7 @@ fi
 if [ "$CRLF_LINES" -gt 0 ]; then
     echo "verify-install: $CRLF_LINES manifest line(s) ended in a carriage return (a CRLF manifest, which a text-mode write on Windows or a line-ending-normalising transport produces); the return was removed from each path before it was looked up, and is reported here rather than removed in silence."
 fi
-echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
+echo "verify-install: the excluded paths (*/__pycache__/*, .superpowers/, docs/superpowers/, .claude/ and .brothermode/ (harness-written local state, and NOTE that a linked git worktree under .claude/worktrees/ puts whole source trees inside an excluded path, which is why the excluded-source count below can be large and is reported rather than assumed harmless), .brothersbe/install-receipt.json (the local install record, gitignored because it names this machine's absolute path), the built book and the book estate's two generated data files (all three are build outputs regenerated on every run, never fixtures), docs/book/.replay-*.sh (scratch the excerpt replay harness writes beside a chapter while re-executing its blocks and removes when it finishes), and files named .DS_Store, *.pyc, STATE.md, ~\$*, *.docx; .git/ not enumerated) currently hold $EXCLUDED entr(y/ies) of any type, $EXCLUDED_SOURCE of them source code, $EXCLUDED_CONFIG of them configuration this script cannot read the contents of, and $EXCLUDED_NONREGULAR of them non-regular (a symlink or pipe this check cannot hash)."
 
 if [ "$MISMATCHED" -gt 0 ] || [ "$MISSING" -gt 0 ] || [ "$EXTRA" -gt 0 ] || [ "$EXCLUDED_SOURCE" -gt 0 ] || [ "$EXCLUDED_NONREGULAR" -gt 0 ] || [ "$NONREGULAR" -gt 0 ] || [ "$DENIED" -gt 0 ]; then
     echo "verify-install: FAILED. Do not trust this installed copy until you" \
