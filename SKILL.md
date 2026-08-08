@@ -36,8 +36,9 @@ action, re-read the laws and the project STATE.md. Laws live on disk, not in rec
 Every run, mechanically:
 1. CLASSIFY in one line: the work profile (backend service, warehouse and SQL, pipeline,
    data quality, infrastructure, performance, or artifact mode) and the tier from L1.
-2. Read memory: project overview, open items, failures index, LEARNED.md. Say so if memory
-   is missing; never block on it.
+2. Read memory: project overview, open items, failures index, LEARNED.md. Say so if
+   memory is missing; never block on it. (The vault module groups the surface this
+   reads. It is DECLARED BUT NOT ENFORCED, so this step runs at every profile.)
 3. Map the ground: git status first (foreign changes mean coordinate, never overwrite),
    disk as a numeric gate, the repo's own build, test, and CI commands copied verbatim,
    one cheap probe per named dependency.
@@ -56,13 +57,45 @@ field, a CI step, or the words "human review" when nothing mechanical exists).
 A rule that cannot name an enforcement point is not a law. It is advice, and it lives in
 [PRACTICES.md](PRACTICES.md), which says so.
 
-Every registered check also declares its severity at write time, in its constructor:
-`gate` means a FAIL blocks a `--strict` run, `soft` means a FAIL is graded and blocks only
-under the opt-in `--strict-soft`. The severity prints on every verdict line, and
-`tools/sbe_checks.py` refuses to register a check that declares neither, the same way it
-refuses one whose empty state is PASS. Severity states only what a FAIL does to the exit
-code; it does not change what a check examines or reports, and it does not decide what a
-FAIL is worth reading: a soft FAIL is still a finding.
+Every registered check declares its severity at write time (`gate` blocks a `--strict`
+run, `soft` is graded and blocks only under `--strict-soft`), and `tools/sbe_checks.py`
+refuses to register one that declares neither. The full contract, and the two
+control-plane files it governs, load with the policy module.
+
+## The profile: what loads by default
+
+The DEFAULT profile is this file (the floor plus design, implementation boundaries and
+verification) and, when its trigger fires, one reference file from the routing table
+below. Five further surfaces are grouped as OPTIONAL MODULES in the index at
+`references/modules.md`: vault, telemetry, team coordination, policy and release
+control.
+
+Only ONE of those five is gated by anything, and saying otherwise was the false claim
+an earlier draft of this section made. Telemetry has an enforcement point: its
+startup nags run only inside an `enabled telemetry` guard in
+`tools/sbe_sessionstart.sh`. Vault, team, policy and release carry the phrase
+DECLARED BUT NOT ENFORCED in that index, meaning nothing reads the declaration for
+them and switching them changes nothing observable; team execution is in fact still
+loaded unconditionally by the work skill, the handover skill and the implementation
+worker. Release is on that list by decision: the session-start notice that the skill
+itself changed stays unconditional, because an install that stops saying so is
+trusted unread, and the index measures what gating it would have saved.
+
+Declare a profile in `.brothersbe/profile.json` (`{"profile": "default", "modules":
+[]}`; `full` turns on every module), or per session with `SBE_PROFILE` and
+`SBE_PROFILE_MODULES`. The declaration is found by walking UP from the working
+directory, and every verdict line prints the ABSOLUTE path of the file that answered,
+saying plainly when that was the shipped install rather than a project.
+`python3 tools/sbe_profile.py resolve` prints what is active.
+
+ENFORCED BY: `tools/sbe_profile.py check --strict`, which FAILS on a module leaked
+into this file, a law no longer reachable from the table below, or an enforcement
+claim naming a file that never asks about that module. Its four checks are calibrated
+in `tools/test_sbe_profile.py` and run on the merge path by `tools/test_sbe.py`.
+
+No law is optional. All nineteen resolve through this file at every profile, because a
+law that disappears with a module switched off is worse than a long law file. A module
+changes which SURFACE a law runs against, and each module file says so in its own words.
 
 ## The unconditional floor
 
@@ -83,7 +116,7 @@ WHEN: source is written or changed in the operator's worktree.
 INPUTS: every `.py .sql .swift .rb .js .ts .go` file under the lint root (`SBE_LINT_ROOT` or a directory argument). Nothing consults git, so untracked files are scanned too.
 RULE: no bare except, except-then-pass, discarded subprocess result without check=True, conflict-skipping upsert, or force-try. A line carrying `# sbe: allow-silent <reason>` anywhere in the matched lines is exempt, because the exemption is then visible in the diff and auditable. The reason is READ, by the same `answered()` every receipt field goes through: a bare `# sbe: allow-silent` and one carrying `tbd` waive nothing and the hit says why, because a marker with no reason is an off switch rather than a reviewed exception, in the one gate a `.sbe-exempt` cannot waive.
 OUTPUT: proceed, or stop and ask (the first five hits name their file and line, and the evidence then says how many it did not name; the same is true of the waived lines and the files holding nothing to examine, which are named in a mixed run rather than counted silently inside the scanned total).
-ENFORCED BY: `tools/sbe_score.py` (the silent-failure-lints check), run under `--strict` in `.github/workflows/brothersbe-gates.yml`, which makes it the fifth non-waivable gate on the merge path. Two honest narrowings: the shipped patterns are textual, so the upsert pattern flags a conflict-skipping upsert whether or not a skip count is logged, and nothing anywhere counts skips. A run that opened no file reports NO-DATA naming why, never "clean", and a positional argument that is not a directory FAILs by name, because a mistyped path must not read as a clean scan. So does a run where every file scanned held a match and every one of those matches was waived, with the waived lines named: a scan whose every finding was suppressed examined nothing it was allowed to report. That condition is stricter than "every match in the run was waived", and the difference is deliberate rather than sloppy: this repository's own run has 53 waived hits and 90 files that were scanned and genuinely found clean (both numbers were stale for a wave, and both are now recomputed from a live run by an eval, the way the eval counts printed in the docs already are; the lint prints the clean-file count itself so the claim is checkable rather than asserted), so source WAS examined and PASS is the honest verdict, with the suppression count in the evidence either way. A file holding nothing, or holding nothing but a placeholder token, is counted as source nobody examined. The conflict-skipping upsert pattern reads the SQL wherever it is written, in any of the scanned languages, and stops at the statement's semicolon so a legitimate `ON CONFLICT ... DO UPDATE` beside it is not swept in. It used to require a Python `.execute(` on the same line, so the one lint that exists for warehouse work could not fire on a `.sql` file, which is the first non-Python extension this law names. The lint skips its own source file BY PATH, not by basename: comparing basenames skipped any file called `sbe_score.py` in the CALLER's tree, so a user's own file with that name was never opened while "1 file(s) scanned, clean" was printed over a directory holding two. The skip is named in the evidence line on every run, and so is any directory the walk pruned that holds scannable source.
+ENFORCED BY: `tools/sbe_score.py` (the silent-failure-lints check), run under `--strict` in `.github/workflows/brothersbe-gates.yml`, which makes it the fifth non-waivable gate on the merge path. Two honest narrowings: the shipped patterns are textual, so the upsert pattern flags a conflict-skipping upsert whether or not a skip count is logged, and nothing anywhere counts skips. A run that opened no file reports NO-DATA naming why, never "clean", and a positional argument that is not a directory FAILs by name, because a mistyped path must not read as a clean scan. So does a run where every file scanned held a match and every one of those matches was waived, with the waived lines named: a scan whose every finding was suppressed examined nothing it was allowed to report. That condition is stricter than "every match in the run was waived", and the difference is deliberate rather than sloppy: this repository's own run has 53 waived hits and 92 files that were scanned and genuinely found clean (both numbers were stale for a wave, and both are now recomputed from a live run by an eval, the way the eval counts printed in the docs already are; the lint prints the clean-file count itself so the claim is checkable rather than asserted), so source WAS examined and PASS is the honest verdict, with the suppression count in the evidence either way. A file holding nothing, or holding nothing but a placeholder token, is counted as source nobody examined. The conflict-skipping upsert pattern reads the SQL wherever it is written, in any of the scanned languages, and stops at the statement's semicolon so a legitimate `ON CONFLICT ... DO UPDATE` beside it is not swept in. It used to require a Python `.execute(` on the same line, so the one lint that exists for warehouse work could not fire on a `.sql` file, which is the first non-Python extension this law names. The lint skips its own source file BY PATH, not by basename: comparing basenames skipped any file called `sbe_score.py` in the CALLER's tree, so a user's own file with that name was never opened while "1 file(s) scanned, clean" was printed over a directory holding two. The skip is named in the evidence line on every run, and so is any directory the walk pruned that holds scannable source.
 
 ### L14. Blast radius: no apply rights on production state
 WHEN: a command or change is about to be applied, rather than drafted.
