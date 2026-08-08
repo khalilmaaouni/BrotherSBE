@@ -3,8 +3,8 @@
 
 Program: brothersbe-public-release
 Version target: 1.0.0
-Overall position: 69% across measured items.
-4 of 9 items measured.
+Overall position: 75% across measured items.
+5 of 9 items measured.
 
 ```mermaid
 gantt
@@ -20,7 +20,7 @@ gantt
     section Public surfaces say what they do
     Public surfaces say what they do :active, LOOP-3, after LOOP-2, 1d
     section PR 29 reconciled
-    PR 29 reconciled :active, LOOP-4, after LOOP-1, 1d
+    PR 29 reconciled :done, LOOP-4, after LOOP-1, 1d
     section Quarantined patches adjudicated
     Quarantined patches adjudicated :active, LOOP-5, after LOOP-0, 1d
     section One clean repository
@@ -33,12 +33,12 @@ gantt
 
 ### Finished
 - LOOP-0: One main, staged safely (completion date not recorded)
+- LOOP-4: PR 29 reconciled (completion date not recorded)
 
 ### In flight
 - LOOP-1: Windows fixture writer goes binary, pinned on every platform (owner: fable-orchestrator, progress: 67% (derived from acceptance))
 - LOOP-2: Install honesty (owner: fable-orchestrator, progress: not measured)
 - LOOP-3: Public surfaces say what they do (owner: fable-orchestrator, progress: not measured)
-- LOOP-4: PR 29 reconciled (owner: fable-orchestrator, progress: not measured)
 - LOOP-5: Quarantined patches adjudicated (owner: fable-orchestrator, progress: 75% (derived from acceptance))
 - LOOP-6: One clean repository (owner: fable-orchestrator, progress: 33% (derived from acceptance))
 

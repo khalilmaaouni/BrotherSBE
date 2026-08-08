@@ -8,7 +8,7 @@ why: >
 persona_need: "P3 agent orchestrator reconciling a stale branch"
 owner: fable-orchestrator
 reviewer: independent-refuter
-status: in_progress
+status: done
 wave: loop-4
 milestone: M1
 depends_on:
@@ -20,14 +20,23 @@ acceptance:
   - "one tester form"
   - "labels reconciled"
   - "checksums regenerated last"
-acceptance_met: null
+acceptance_met:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
 estimated_days: null
 token_budget: null
 tokens_used: null
 started_at: null
 completed_at: null
 evidence:
-  - "in flight"
+  - "PR 29 MERGED into main 2026-08-08T03:11:39Z, verified by gh pr view 29 --json state"
+  - "all five required checks green at merge: both ubuntu legs, both macos legs, consumer-checks"
+  - "branch gtm/launch-ready deleted local and remote, verified by git ls-remote returning nothing"
+  - "manifest regenerated last in the branch: 438 entries"
+  - "suite on the branch at merge: 536 evals: 536 passed, 0 regressions"
 risks: []
 blocked_by: []
 alerts: []
