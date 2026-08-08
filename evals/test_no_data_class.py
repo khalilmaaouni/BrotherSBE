@@ -495,6 +495,14 @@ NOT_A_VERDICT = {
                                         "not a verdict",
     ("sbe_checks.py", "glob_with_denials"): "returns (glob hits, directories it could not enter), "
                                             "not a verdict",
+    ("sbe_profile.py", "read_text"): "returns (file text, read problem), not a verdict",
+    ("sbe_profile.py", "_pick"): "returns (table header, rows) for the first table whose header "
+                                 "matches, not a verdict",
+    ("sbe_profile.py", "core_rows"): "returns (routing-table rows, read problem), not a verdict",
+    ("sbe_profile.py", "module_rows"): "returns (module-table rows, read problem), not a verdict",
+    ("sbe_profile.py", "module_ids"): "returns (module ids, read problem), not a verdict",
+    ("sbe_profile.py", "load_when"): "returns (the LOAD WHEN trigger line, read problem), "
+                                     "not a verdict",
     ("sbe_gate.py", "load_receipt"): "returns (parsed receipt, parse error), not a verdict",
     ("sbe_dispatch.py", "_blocking_owed_items"): "returns (blocking owed items, parse "
                                                  "problems), not a verdict",
