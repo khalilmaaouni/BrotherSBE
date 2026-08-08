@@ -40,10 +40,19 @@ OUT_FILE="$1"
 # --- pick a SHA256 tool: Linux ships sha256sum, macOS ships shasum -a 256.
 # Detect, never assume: a machine with coreutils installed via Homebrew can
 # have both, and a minimal container can have neither.
+# The file is fed on STDIN and the manifest line is assembled here, rather than
+# letting the tool print its own "<hash>  <name>" line. GNU coreutils escapes a
+# filename containing a backslash or a newline: it doubles the backslashes and
+# prefixes the line with one, which would write a manifest that verify-install.sh
+# reads one column off, so a maintainer on Linux and a maintainer on macOS would
+# produce different manifests for the same tree. Building the line here keeps the
+# format identical on every platform. Kept deliberately in step with the same
+# change in verify-install.sh: a generator and a checker that escape differently
+# is worse than either bug alone.
 if command -v sha256sum >/dev/null 2>&1; then
-    hash_file() { sha256sum "$1"; }
+    hash_file() { printf '%s  %s\n' "$(sha256sum < "$1" | cut -c1-64)" "$1"; }
 elif command -v shasum >/dev/null 2>&1; then
-    hash_file() { shasum -a 256 "$1"; }
+    hash_file() { printf '%s  %s\n' "$(shasum -a 256 < "$1" | cut -c1-64)" "$1"; }
 else
     echo "checksums.sh: neither sha256sum nor shasum is on PATH; cannot hash anything" >&2
     exit 1

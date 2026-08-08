@@ -301,6 +301,8 @@ This is what turns the gates from advisory into blocking, whichever path above y
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -429,7 +431,7 @@ having if it clears, and the two consistency lines are the docs checking their o
   no-shipped-doc-prints-an-eval-count-the-suite-does-not-produce want=consistent got=consistent ok
   no-shipped-doc-prints-a-meta-test-count-the-meta-test-does-not-produce want=consistent got=consistent ok
 
-531 evals: 531 passed, 0 regressions.
+536 evals: 536 passed, 0 regressions.
 ```
 
 The bed exits nonzero if any check stops catching its defect, so it doubles as a release gate for the skill itself.

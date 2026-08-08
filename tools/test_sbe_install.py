@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -716,6 +717,481 @@ class TestTeamProfileApplication(unittest.TestCase):
         code, data, text = self._sbe_json("init", target, "--apply", "--json")
         self.assertEqual(code, 0, text)
         self.assertTrue(os.path.exists(os.path.join(target, ".brothersbe", "config.json")), text)
+
+
+ROLLBACK_SCRIPT = os.path.join(ROOT, "scripts", "rollback-install.sh")
+
+# The stub `claude`. Not a no-op: on `plugin install` it does the one thing
+# the real harness does that this rollback depends on, namely copy the
+# marketplace source's CURRENT bytes into its own plugin store under a
+# version-named directory and record where they went. A stub that only
+# recorded its argv would let the script claim a rollback while the installed
+# copy never moved, which is the exact silence these tests exist to catch.
+CLAUDE_STUB = u'''#!/usr/bin/env python3
+import io
+import json
+import os
+import subprocess
+import sys
+
+log = os.environ["SBE_TEST_CLAUDE_LOG"]
+with io.open(log, "a", encoding="utf-8") as handle:
+    handle.write(u" ".join(sys.argv[1:]) + u"\\n")
+
+home = os.environ["HOME"]
+plugins = os.path.join(home, ".claude", "plugins")
+argv = sys.argv[1:]
+
+if argv[:2] == ["plugin", "install"]:
+    markets = json.load(io.open(os.path.join(plugins, "known_marketplaces.json"),
+                                encoding="utf-8"))
+    market = argv[2].split("@")[-1]
+    source = markets[market]["installLocation"]
+    version = io.open(os.path.join(source, "VERSION"), encoding="utf-8").read().strip()
+    dest = os.path.join(plugins, "cache", market, "brothersbe", version)
+    if not os.path.isdir(dest):
+        os.makedirs(dest)
+    tar = subprocess.Popen(["git", "-C", source, "archive", "HEAD"],
+                           stdout=subprocess.PIPE)
+    subprocess.check_call(["tar", "-x", "-C", dest], stdin=tar.stdout)
+    tar.stdout.close()
+    if tar.wait() != 0:
+        sys.exit("stub claude: git archive failed")
+    sha = subprocess.check_output(["git", "-C", source, "rev-parse", "HEAD"]).decode().strip()
+    record_path = os.path.join(plugins, "installed_plugins.json")
+    if os.path.isfile(record_path):
+        record = json.load(io.open(record_path, encoding="utf-8"))
+    else:
+        record = {"version": 1, "plugins": {}}
+    record["plugins"][argv[2]] = [{"scope": "user", "installPath": dest,
+                                   "version": version, "gitCommitSha": sha}]
+    with io.open(record_path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, indent=1))
+sys.exit(0)
+'''
+
+
+class TestRollbackInstallScript(unittest.TestCase):
+    """`scripts/rollback-install.sh`, the undo the RECOMMENDED install path
+    did not have.
+
+    Everything here runs against a DISPOSABLE HOME this test builds, laid out
+    the way a real machine is laid out and confirmed against one: a
+    marketplace install under `.claude/plugins/cache/brothersbe/brothersbe/
+    <version>` carrying no git history, the two harness records that name it
+    (`installed_plugins.json`, `known_marketplaces.json`), a marketplace
+    source clone carrying the release tags, AND a decoy clone at
+    `.claude/skills/brothersbe`, which is install.sh's own fallback path and
+    which an earlier draft of this script used as its default target. Both
+    exist at once here because both exist at once on a real machine, and a
+    rollback that quietly operated on the second while the person runs the
+    first would report success over an untouched installation.
+
+    `claude` is a stub (CLAUDE_STUB above) that performs the copy the real
+    harness performs; nothing here reaches a real Claude Code session, a real
+    HOME, or the network."""
+
+    def setUp(self):
+        # realpath, because the script resolves the directories it prints the
+        # same way (macOS routes /var through /private/var, so a raw tempfile
+        # path and a resolved one are not textually equal, which is the same
+        # trap _resolve() at the top of this file exists for).
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.log = os.path.join(self.tmp, "claude.log")
+        self._new_home("home")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _new_home(self, name):
+        """A fresh disposable HOME. A test needing more than one machine
+        (three refusal scenarios, each snapshotted around its own run) asks
+        for one per machine rather than reusing a record another scenario
+        already overwrote."""
+        home = os.path.join(self.tmp, name)
+        os.makedirs(os.path.join(home, ".claude", "plugins"))
+        self.home = home
+        return home
+
+    # -- fixture construction -------------------------------------------
+
+    def _git(self, repo, *args):
+        return subprocess.run(["git"] + list(args), cwd=repo, check=True,
+                              capture_output=True, text=True)
+
+    def _release_source(self, versions, name="source"):
+        """A git repository with one commit and one `v<version>` tag per entry
+        in `versions`, each commit carrying a VERSION file, a payload whose
+        bytes differ per release, this repository's own
+        scripts/verify-install.sh and scripts/checksums.sh, and a
+        CHECKSUMS.sha256 generated by the real checksums.sh over exactly that
+        commit's files. The rollback is therefore checked by this
+        repository's real verifier rather than by a stub that could only ever
+        agree."""
+        repo = os.path.join(self.tmp, name)
+        os.makedirs(os.path.join(repo, "scripts"))
+        for script in ("verify-install.sh", "checksums.sh"):
+            shutil.copy(os.path.join(ROOT, "scripts", script),
+                        os.path.join(repo, "scripts", script))
+        self._git(repo, "init", "-q")
+        self._git(repo, "config", "user.email", "rollback-fixture@fixture.test")
+        self._git(repo, "config", "user.name", "Rollback Fixture")
+        for version in versions:
+            with io.open(os.path.join(repo, "VERSION"), "w", encoding="utf-8") as fh:
+                fh.write(version + "\n")
+            with io.open(os.path.join(repo, "payload.txt"), "w", encoding="utf-8") as fh:
+                fh.write("this file is what release %s shipped\n" % version)
+            self._git(repo, "add", "-A")
+            # Generated AFTER the index knows this commit's files, because
+            # checksums.sh hashes what git tracks.
+            gen = subprocess.run(["sh", os.path.join(repo, "scripts", "checksums.sh"),
+                                  "CHECKSUMS.sha256"],
+                                 cwd=repo, capture_output=True, text=True)
+            self.assertEqual(gen.returncode, 0, gen.stdout + gen.stderr)
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-q", "-m", "release %s" % version)
+            self._git(repo, "tag", "v" + version)
+        return repo
+
+    def _decoy_clone(self, source):
+        """install.sh's own clone fallback target, `~/.claude/skills/
+        brothersbe`: a real clone, with the same tags, present exactly as it
+        is present on a machine that once took that branch. Nothing in a
+        correct run may touch it."""
+        dest = os.path.join(self.home, ".claude", "skills", "brothersbe")
+        os.makedirs(os.path.dirname(dest))
+        subprocess.run(["git", "clone", "-q", source, dest], check=True,
+                       capture_output=True)
+        return dest
+
+    def _marketplace_install(self, source):
+        """The recommended install: the source's current bytes copied into
+        the plugin store under a version-named directory, with NO .git, plus
+        the two records the harness writes to say where they went."""
+        plugins = os.path.join(self.home, ".claude", "plugins")
+        version = self._version_of(source)
+        dest = os.path.join(plugins, "cache", "brothersbe", "brothersbe", version)
+        os.makedirs(dest)
+        tar = subprocess.Popen(["git", "-C", source, "archive", "HEAD"],
+                               stdout=subprocess.PIPE)
+        subprocess.check_call(["tar", "-x", "-C", dest], stdin=tar.stdout)
+        tar.stdout.close()
+        self.assertEqual(tar.wait(), 0)
+        self.assertFalse(os.path.isdir(os.path.join(dest, ".git")),
+                         "the marketplace install must carry no git history, "
+                         "which is the whole reason the source is resolved separately")
+        sha = subprocess.run(["git", "-C", source, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        with io.open(os.path.join(plugins, "installed_plugins.json"), "w",
+                     encoding="utf-8") as fh:
+            fh.write(json.dumps({"version": 1, "plugins": {"brothersbe@brothersbe": [
+                {"scope": "user", "installPath": dest, "version": version,
+                 "gitCommitSha": sha}]}}, indent=1))
+        self._marketplace_record(source)
+        return dest
+
+    def _marketplace_record(self, source):
+        """`known_marketplaces.json` as `claude plugin marketplace add <dir>`
+        writes it: the marketplace's own on-disk location, which is where the
+        release tags live."""
+        path = os.path.join(self.home, ".claude", "plugins", "known_marketplaces.json")
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"brothersbe": {
+                "source": {"source": "directory", "path": source},
+                "installLocation": source}}, indent=1))
+        return path
+
+    def _estate(self, versions, name="source"):
+        """The whole machine in one call: source, marketplace install, decoy
+        clone. Returns (source, install_dir, decoy)."""
+        source = self._release_source(versions, name=name)
+        install = self._marketplace_install(source)
+        decoy = self._decoy_clone(source)
+        return source, install, decoy
+
+    def _stub_bin(self):
+        bindir = os.path.join(self.tmp, "bin")
+        if not os.path.isdir(bindir):
+            os.makedirs(bindir)
+        path = os.path.join(bindir, "claude")
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(CLAUDE_STUB)
+        os.chmod(path, 0o755)
+        return bindir
+
+    def _run(self, *argv):
+        env = dict(os.environ)
+        env["PATH"] = self._stub_bin() + os.pathsep + os.environ.get("PATH", "")
+        env["HOME"] = self.home
+        env["SBE_TEST_CLAUDE_LOG"] = self.log
+        out = subprocess.run(["sh", ROLLBACK_SCRIPT] + list(argv),
+                             capture_output=True, text=True, env=env, timeout=300)
+        return out.returncode, out.stdout, out.stderr
+
+    def _claude_calls(self):
+        if not os.path.exists(self.log):
+            return []
+        with io.open(self.log, encoding="utf-8") as fh:
+            return [line for line in fh.read().splitlines() if line.strip()]
+
+    def _version_of(self, tree):
+        with io.open(os.path.join(tree, "VERSION"), encoding="utf-8") as fh:
+            return fh.read().strip()
+
+    def _snapshot(self, tree):
+        """Every path under `tree` (excluding .git's own object store, which a
+        checkout legitimately rewrites) with its bytes, plus the commit HEAD
+        points at when there is one. Two snapshots comparing equal is the
+        whole meaning of 'left untouched'.
+
+        One dict, never a (head, files) pair: this project's honesty meta-test
+        (evals/test_no_data_class.py) reads any function returning a two-tuple
+        as a (verdict, evidence) result it must be able to prove never says
+        PASS, and a test helper is not a check."""
+        state = {}
+        for dirpath, dirnames, filenames in os.walk(tree):
+            if ".git" in dirnames:
+                dirnames.remove(".git")
+            for name in sorted(filenames):
+                full = os.path.join(dirpath, name)
+                with io.open(full, "rb") as fh:
+                    state[os.path.relpath(full, tree)] = fh.read()
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tree,
+                              capture_output=True, text=True).stdout.strip()
+        return {"head": head, "files": state}
+
+    def _record(self):
+        path = os.path.join(self.home, ".claude", "plugins", "installed_plugins.json")
+        with io.open(path, encoding="utf-8") as fh:
+            return json.load(fh)["plugins"]["brothersbe@brothersbe"][0]
+
+    # -- proof 1: the target is the marketplace install, not the clone ---
+
+    def test_target_resolution_finds_the_marketplace_install_not_the_clone(self):
+        """The finding this script was reworked around. Both directories exist
+        here, as they do on a real machine. Defaulting to the clone made a run
+        that reported success over an installation it never touched, which is
+        worse than shipping no undo: it converts "I have no undo" into "I ran
+        the undo and I am fine"."""
+        source, install, decoy = self._estate(["1.0.0", "1.0.1"])
+        code, out, err = self._run()
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("rollback-install: installation:  %s" % install, out, out)
+        self.assertNotIn(decoy, out,
+                         "the clone at ~/.claude/skills/brothersbe is not what the "
+                         "harness loads and must not be what this rolls back: %s" % out)
+        self.assertIn("harness record", out, out)
+        self.assertIn("release source: %s" % source, out, out)
+        self.assertIn("which is NOT the installation above", out,
+                      "running from a different copy than the installed one has to "
+                      "be stated, never left implicit: %s" % out)
+
+    # -- proof 2: a rollback to a previous version verifies clean --------
+
+    def test_rollback_to_the_previous_release_verifies_clean(self):
+        source, install, decoy = self._estate(["1.0.0", "1.0.1"])
+        self.assertEqual(self._version_of(install), "1.0.1")
+        decoy_before = self._snapshot(decoy)
+        code, out, err = self._run("--apply")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("verify-install: PASSED", out,
+                      "the rollback must be checked by the real verifier, not "
+                      "asserted: %s" % out)
+        self.assertIn("rollback-install: ROLLED BACK.", out, out)
+
+        after = self._record()
+        self.assertEqual(after["version"], "1.0.0",
+                         "the harness must now record the earlier version: %s" % out)
+        self.assertEqual(self._version_of(after["installPath"]), "1.0.0",
+                         "the bytes the harness loads must be the earlier release's")
+        with io.open(os.path.join(after["installPath"], "payload.txt"),
+                     encoding="utf-8") as fh:
+            self.assertIn("release 1.0.0", fh.read())
+        # And the verifier ran against THAT directory, not against the source.
+        self.assertIn("verifying the INSTALLED bytes at %s" % after["installPath"], out, out)
+        self.assertEqual(decoy_before, self._snapshot(decoy),
+                         "the clone was modified by a rollback that had nothing to do "
+                         "with it: %s" % out)
+        calls = self._claude_calls()
+        self.assertEqual([c.split()[:2] for c in calls],
+                         [["plugin", "marketplace"], ["plugin", "install"]],
+                         "the harness must be told, in the same marketplace pair "
+                         "install.sh uses: %s" % calls)
+
+    # -- proof 3: no previous version REFUSES and says why ---------------
+
+    def test_no_previous_release_refuses_and_names_the_reason(self):
+        source, install, decoy = self._estate(["1.0.0"])
+        code, out, err = self._run("--apply")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("REFUSED: no earlier release to roll back to.", out, out)
+        self.assertIn("no v<number> tag that is both an ancestor of that commit", out, out)
+        self.assertIn("Nothing has been changed.", out, out)
+        self.assertNotIn("ROLLED BACK", out, out)
+        self.assertEqual(self._claude_calls(), [],
+                         "a refusal must not reach the harness at all")
+
+    # -- proof 4: a refusal leaves the installation untouched ------------
+
+    def test_a_refusal_leaves_the_installation_untouched(self):
+        """Every refusal an --apply run can hit on a machine that HAS an
+        installation, each snapshotted around its own run, over the install
+        directory, the source, and the clone. One scenario alone is not the
+        claim: the no-previous-release case cannot go red by writing files it
+        has no target for, so a script that skipped its safety checks entirely
+        would still leave it untouched while destroying the others."""
+        scenarios = []
+
+        home1 = self._new_home("home-no-previous")
+        source1, install1, decoy1 = self._estate(["1.0.0"], name="source-1")
+        scenarios.append(("nothing to roll back to", home1, source1, install1, decoy1, []))
+
+        home2 = self._new_home("home-dirty")
+        source2, install2, decoy2 = self._estate(["1.0.0", "1.0.1"], name="source-2")
+        with io.open(os.path.join(source2, "payload.txt"), "a", encoding="utf-8") as fh:
+            fh.write("an uncommitted local edit somebody would be furious to lose\n")
+        scenarios.append(("uncommitted changes in the source", home2, source2, install2,
+                          decoy2, []))
+
+        home3 = self._new_home("home-bad-to")
+        source3, install3, decoy3 = self._estate(["1.0.0", "1.0.1"], name="source-3")
+        scenarios.append(("--to names no earlier release", home3, source3, install3, decoy3,
+                          ["--to", "v9.9.9"]))
+
+        for label, home, source, install, decoy, extra in scenarios:
+            self.home = home
+            before = (self._snapshot(install), self._snapshot(source), self._snapshot(decoy))
+            record_before = self._record()
+            code, out, err = self._run("--apply", "--source-dir", source,
+                                       "--install-dir", install, *extra)
+            self.assertEqual(code, 1, "%s: %s%s" % (label, out, err))
+            self.assertIn("REFUSED", out, "%s: %s" % (label, out))
+            self.assertEqual(
+                before, (self._snapshot(install), self._snapshot(source), self._snapshot(decoy)),
+                "%s: the refused run changed something it refused to touch: %s" % (label, out))
+            self.assertEqual(record_before, self._record(),
+                             "%s: the refused run rewrote the harness record" % label)
+
+    # -- it says what it will do BEFORE doing it ------------------------
+
+    def test_the_preview_names_every_step_and_writes_nothing(self):
+        source, install, decoy = self._estate(["1.0.0", "1.0.1"])
+        before = (self._snapshot(install), self._snapshot(source), self._snapshot(decoy))
+        code, out, err = self._run()
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("would roll back to: v1.0.0 (version 1.0.0)", out, out)
+        self.assertIn("git -C %s checkout --detach v1.0.0" % source, out, out)
+        self.assertIn("claude plugin install brothersbe@brothersbe", out, out)
+        self.assertIn("scripts/verify-install.sh", out, out)
+        self.assertIn("PREVIEW only, nothing has been changed.", out, out)
+        self.assertEqual(before, (self._snapshot(install), self._snapshot(source),
+                                  self._snapshot(decoy)), "a preview wrote something")
+        self.assertEqual(self._claude_calls(), [], "a preview called claude")
+
+    # -- the records are read, never assumed -----------------------------
+
+    def test_no_recorded_install_is_refused_rather_than_guessed_at(self):
+        """The machine has a clone at the old default path and no plugin
+        record. The honest answer is a refusal naming both remedies, never a
+        silent fall back onto the clone."""
+        source = self._release_source(["1.0.0", "1.0.1"])
+        decoy = self._decoy_clone(source)
+        code, out, err = self._run()
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("REFUSED", out, out)
+        self.assertIn("no record of a brothersbe install", out, out)
+        self.assertIn("--install-dir", out, out)
+        self.assertNotIn("would roll back to", out, out)
+
+    def test_an_install_with_no_release_history_is_refused(self):
+        """A marketplace install whose marketplace is gone: no source, no
+        history, no earlier version. Refused with the remedy, never served
+        from whatever git repository happens to be nearby."""
+        source, install, decoy = self._estate(["1.0.0", "1.0.1"])
+        os.remove(os.path.join(self.home, ".claude", "plugins", "known_marketplaces.json"))
+        code, out, err = self._run("--apply")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("no release history is reachable", out, out)
+        self.assertIn("--source-dir", out, out)
+
+    def test_a_clone_installation_rolls_back_in_place(self):
+        """The other real shape: install.sh's clone fallback, where the
+        installation IS the source. The same steps collapse onto one
+        directory rather than being special-cased away."""
+        source = self._release_source(["1.0.0", "1.0.1"])
+        self._marketplace_record(source)
+        code, out, err = self._run("--apply", "--install-dir", source)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("the installation IS the source", out, out)
+        self.assertIn("verify-install: PASSED", out, out)
+        self.assertEqual(self._version_of(source), "1.0.0", out)
+
+    # -- the header's own count is not maintained by hand ----------------
+
+    def test_the_refusal_count_in_the_header_matches_the_code(self):
+        """Major finding on the previous attempt: the header said five and the
+        code had four. A number in a comment that nothing checks is a claim,
+        so this checks it: the spelled-out count in the header equals the
+        number of `# --- refusal N:` markers, those markers are exactly 1..N
+        with no gaps and no repeats, and each one has a reachable message
+        (a `REFUSED:` line in the shell, or a `refuse(` call in the embedded
+        resolver, which the shell relays through one shared line)."""
+        with io.open(ROLLBACK_SCRIPT, encoding="utf-8") as fh:
+            text = fh.read()
+
+        words = {"ONE": 1, "TWO": 2, "THREE": 3, "FOUR": 4, "FIVE": 5, "SIX": 6,
+                 "SEVEN": 7, "EIGHT": 8, "NINE": 9, "TEN": 10, "ELEVEN": 11,
+                 "TWELVE": 12}
+        declared = re.findall(r"\b([A-Z]+) refusals\b", text)
+        self.assertEqual(len(declared), 1,
+                         "the header must state its refusal count exactly once: %s" % declared)
+        self.assertIn(declared[0], words, "unreadable refusal count: %s" % declared[0])
+        declared_count = words[declared[0]]
+
+        markers = [int(n) for n in re.findall(r"^\s*#\s*---\s*refusal (\d+):", text,
+                                              re.MULTILINE)]
+        self.assertEqual(sorted(markers), list(range(1, len(markers) + 1)),
+                         "refusal markers must be 1..N with no gaps or repeats: %s" % markers)
+        self.assertEqual(declared_count, len(markers),
+                         "the header says %d refusals and the code marks %d: %s"
+                         % (declared_count, len(markers), markers))
+
+        shell_refusals = [line for line in text.splitlines()
+                          if "REFUSED:" in line and line.lstrip().startswith("echo")]
+        relays = [line for line in shell_refusals if "$SBE_RB_REASON" in line]
+        self.assertEqual(len(relays), 1,
+                         "exactly one shell line relays the resolver's refusals: %s" % relays)
+        resolver_refusals = re.findall(r"^\s*refuse\((\d+),", text, re.MULTILINE)
+        reachable = (len(shell_refusals) - len(relays)) + len(resolver_refusals)
+        self.assertEqual(reachable, declared_count,
+                         "%d refusal messages are reachable and the header claims %d"
+                         % (reachable, declared_count))
+
+    def test_the_script_checks_for_git_before_it_calls_git(self):
+        """`command -v git`, the boundary check the previous attempt left out
+        while checking `command -v claude`: every step before the first write
+        is a git call."""
+        with io.open(ROLLBACK_SCRIPT, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("command -v git", text)
+        self.assertIn("command -v claude", text)
+        self.assertLess(text.index("command -v git"), text.index("git -C"),
+                        "the git check has to come before the first git call")
+
+        # And it fires, rather than only existing: a PATH with neither git nor
+        # python3 on it, and nothing else, gets the refusal in this script's
+        # own words instead of a shell "command not found" halfway through.
+        empty = os.path.join(self.tmp, "empty-bin")
+        os.makedirs(empty)
+        env = dict(os.environ)
+        env["PATH"] = empty
+        env["HOME"] = self.home
+        # /bin/sh by absolute path: the interpreter itself would not be
+        # findable on the stripped PATH this scenario is about.
+        out = subprocess.run(["/bin/sh", ROLLBACK_SCRIPT], capture_output=True, text=True,
+                             env=env, timeout=120)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("REFUSED: git is not on PATH", out.stdout, out.stdout + out.stderr)
 
 
 if __name__ == "__main__":

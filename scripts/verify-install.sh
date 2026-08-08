@@ -36,6 +36,36 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 DEFAULT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 TARGET="${2:-$DEFAULT_ROOT}"
+
+# TARGET is canonicalised ONCE, here, before anything derives a path from it.
+# The defect this removes is not a comparison bug, it is two DERIVATIONS of one
+# value: the walked files got their relative path by stripping `$TARGET` exactly
+# as the caller spelled it (that is what `find` echoes back), while the manifest
+# got its relative path through `cd ... && pwd`, which answers in the shell's own
+# spelling. Any input where those two disagree makes the manifest fail to
+# recognise itself, so it is walked, not matched, and reported as an added file:
+# `1 extra`, on an installation where nothing is wrong.
+#
+# On Windows that disagreement is guaranteed rather than incidental, because the
+# Git for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root the caller
+# passed as `D:\a\BrotherSBE`, and no amount of careful stripping reconciles two
+# spellings. It is reproducible on POSIX too, which is how it was fixed here
+# rather than guessed at: passing a root containing a `.` segment
+# (`/tmp/x/./inst`) makes `find` echo the dotted form while `pwd` answers the
+# normalised one, and the run reports `EXTRA: CHECKSUMS.sha256` and FAILED.
+#
+# Canonicalising once means every later path, walked or manifest, is derived the
+# same way from the same string, so the two can no longer drift apart. The
+# failure to enter the directory is surfaced rather than swallowed: a check that
+# cannot reach what it is checking must say so, not verify nothing and pass.
+if ! TARGET_CANONICAL=$(cd "$TARGET" 2>/dev/null && pwd); then
+    echo "verify-install: cannot enter $TARGET, so nothing here was checked" >&2
+    echo "verify-install: this is NOT a pass; the directory is missing, unreadable," \
+         "or not a directory." >&2
+    exit 2
+fi
+TARGET="$TARGET_CANONICAL"
+
 MANIFEST="${1:-$TARGET/CHECKSUMS.sha256}"
 
 if [ ! -f "$MANIFEST" ]; then
@@ -46,10 +76,23 @@ if [ ! -f "$MANIFEST" ]; then
     exit 2
 fi
 
+# The file is fed on STDIN, never named as an argument. GNU coreutils escapes
+# a filename containing a backslash or a newline: it doubles the backslashes
+# and prefixes the whole output line with one, which shifts the hash a column
+# to the right, so `cut -c1-64` returned a backslash glued to 63 hex digits and
+# every such file reported MISMATCH. Apple's and BSD's tools do not escape,
+# which is exactly why this only ever failed on the Linux leg while passing on
+# macOS. Reading from stdin keeps the name out of the output entirely, so no
+# escaping rule can apply on any platform.
+#
+# This is the THIRD defect in this one script of a single shape: a path being
+# read as syntax rather than as data (the first was a CRLF manifest line, the
+# second a path spliced into a sed regular expression). Recorded here because
+# the shape is the lesson, not the individual bug.
 if command -v sha256sum >/dev/null 2>&1; then
-    hash_file() { sha256sum "$1" | cut -c1-64; }
+    hash_file() { sha256sum < "$1" | cut -c1-64; }
 elif command -v shasum >/dev/null 2>&1; then
-    hash_file() { shasum -a 256 "$1" | cut -c1-64; }
+    hash_file() { shasum -a 256 < "$1" | cut -c1-64; }
 else
     echo "verify-install: neither sha256sum nor shasum is on PATH; cannot check anything" >&2
     exit 1
@@ -131,8 +174,21 @@ done < "$MANIFEST"
 # itself contains a character `find -path` treats as glob syntax
 # (*, ?, [ ]), the exclusions below can under- or over-match; named here
 # rather than silently assumed correct.
+# Prefix removal is done with parameter expansion, NOT with sed. The previous
+# form, sed "s|^$TARGET/||", spliced the install path into a REGULAR
+# EXPRESSION, so every metacharacter in the path changed what the pattern
+# meant. A path holding a backslash was the case that shipped: the strip
+# silently failed, every walked file kept its absolute path, none of them
+# matched a manifest entry, and this script told the reader their clean
+# installation held files "exactly the shape of a planted backdoor". That is
+# the same false accusation the CRLF fix removed, reached by a different route.
+# Windows supplies backslashes in every path, which is why the windows-latest
+# leg failed on it; a POSIX path containing a backslash, a `.`, a `*` or the
+# `|` delimiter itself hits it too, which is how the eval below reproduces it
+# on every leg. `${var#"$prefix"}` is POSIX, and the quotes make the pattern
+# literal, so no character in the path can be read as syntax.
 MANIFEST_ABS=$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")
-MANIFEST_REL=$(printf '%s\n' "$MANIFEST_ABS" | sed "s|^$TARGET/||")
+MANIFEST_REL=${MANIFEST_ABS#"$TARGET/"}
 
 # Every directory entry, whatever its TYPE, not just `-type f`. A manifest is
 # a set of hashes of regular files, and `find -type f` never returns a
@@ -182,7 +238,7 @@ EXTRA=0
 NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
-    rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
+    rel=${full#"$TARGET/"}
     [ "$rel" = "$MANIFEST_REL" ] && continue
     # A non-regular entry is a failure in its own right: a manifest is hashes
     # of regular files, and it cannot vouch for what a symlink points at or
@@ -242,7 +298,7 @@ EXCLUDED_SOURCE=0
 EXCLUDED_NONREGULAR=0
 while IFS= read -r full; do
     [ -z "$full" ] && continue
-    rel=$(printf '%s\n' "$full" | sed "s|^$TARGET/||")
+    rel=${full#"$TARGET/"}
     EXCLUDED=$((EXCLUDED + 1))
     if [ ! -f "$full" ] || [ -L "$full" ]; then
         echo "EXCLUDED-NON-REGULAR: $rel (a symlink, pipe, or other non-regular entry inside an excluded path; the manifest cannot hash what it resolves to, the exclusions are for machine state and this is not machine state, and something on this host may execute what it points at)"

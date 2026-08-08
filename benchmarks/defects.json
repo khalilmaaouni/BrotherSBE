@@ -1,0 +1,97 @@
+{
+  "schema": "sbe-bench-defects/1",
+  "why_this_file_exists": "Defects are planted IN ADVANCE with known locations. Without this manifest, 'defects missed' is unmeasurable by construction and any number printed for it is fiction. Nothing here is written into the fixture tree an estate is handed.",
+  "matching_rule": "A run's reported finding matches a defect when it names the same repo-relative path (forward slashes) and a line within line_window of the declared line. Nothing about the wording of the finding is scored, because wording is judgment and this harness computes from artifacts only.",
+  "defects": [
+    {
+      "id": "D1",
+      "scenario": "S1-migration",
+      "class": "migration-destructive-without-backfill",
+      "file": "db/migrations/0002_split_customer_name.up.sql",
+      "line": 9,
+      "line_window": 2,
+      "anchor": "ALTER TABLE customers DROP COLUMN customer_name;",
+      "what_is_wrong": "The source column is dropped in the same migration that adds its replacements, with no backfill between them. Every existing row loses its name."
+    },
+    {
+      "id": "D2",
+      "scenario": "S1-migration",
+      "class": "migration-reverse-fails-on-nonempty",
+      "file": "db/migrations/0002_split_customer_name.down.sql",
+      "line": 5,
+      "line_window": 2,
+      "anchor": "ALTER TABLE customers ADD COLUMN customer_name TEXT NOT NULL;",
+      "what_is_wrong": "The reverse adds a NOT NULL column with no default, so it fails on any table that already holds rows. The migration is only reversible on an empty database."
+    },
+    {
+      "id": "D3",
+      "scenario": "S2-api-contract",
+      "class": "contract-break-removed-field",
+      "file": "api/openapi.yaml",
+      "line": 21,
+      "line_window": 2,
+      "anchor": "- full_name",
+      "what_is_wrong": "The contract still lists full_name as required while the handler no longer returns it. Every conforming client breaks and the contract says the server is at fault."
+    },
+    {
+      "id": "D4",
+      "scenario": "S2-api-contract",
+      "class": "contract-break-error-code",
+      "file": "api/handlers/customer.py",
+      "line": 7,
+      "line_window": 2,
+      "anchor": "return {\"status\": 200, \"body\": {\"id\": customer_id}}",
+      "what_is_wrong": "A customer that does not exist is answered 200 with a body the contract calls invalid, so a caller cannot tell absence from a malformed record."
+    },
+    {
+      "id": "D5",
+      "scenario": "S3-data-pipeline",
+      "class": "silent-row-drop",
+      "file": "pipeline/load_orders.sql",
+      "line": 10,
+      "line_window": 2,
+      "anchor": "INNER JOIN shipments AS s",
+      "what_is_wrong": "An inner join against shipments drops every order that has not shipped yet, and nothing counts or logs the drop, so the curated table is quietly short."
+    },
+    {
+      "id": "D6",
+      "scenario": "S3-data-pipeline",
+      "class": "partial-result-reported-as-complete",
+      "file": "pipeline/run_load.py",
+      "line": 11,
+      "line_window": 2,
+      "anchor": "return {\"status\": \"complete\", \"batches_loaded\": len(loaded)}",
+      "what_is_wrong": "Batches that raised are logged at debug and then the run reports status complete, so a partial load is indistinguishable from a full one downstream."
+    },
+    {
+      "id": "D7",
+      "scenario": "S4-incident",
+      "class": "runbook-step-order-inverted",
+      "file": "runbooks/incident-payment-timeout.md",
+      "line": 12,
+      "line_window": 2,
+      "anchor": "1. Restore traffic to the payment service.",
+      "what_is_wrong": "Traffic is restored before the bad build is rolled back, so the first mitigation step sends live customers back onto the failing version."
+    },
+    {
+      "id": "D8",
+      "scenario": "S4-incident",
+      "class": "alert-cannot-fire",
+      "file": "ops/alerts.yaml",
+      "line": 5,
+      "line_window": 2,
+      "anchor": "threshold_ms: 30000",
+      "what_is_wrong": "The latency threshold sits above the gateway client timeout of 10000 ms declared in ops/payment-gateway.yaml, so p99 latency can never reach it and the page can never fire."
+    },
+    {
+      "id": "D9",
+      "scenario": "S4-incident",
+      "class": "alert-unrouted",
+      "file": "ops/alerts.yaml",
+      "line": 12,
+      "line_window": 2,
+      "anchor": "route: \"\"",
+      "what_is_wrong": "The gateway error rate alert has an empty route, so it evaluates, fires and reaches nobody."
+    }
+  ]
+}

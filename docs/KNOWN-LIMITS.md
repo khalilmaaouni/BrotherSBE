@@ -367,40 +367,75 @@ against a manifest that ever passed through a text-mode write or a
 line-ending-normalising transport was told their install looked like a planted
 backdoor, on any platform.
 
-## One Windows eval failure is open and unidentified (OWED-4)
+## Windows: the install-checker family is CLOSED and proven; one new cause is open (OWED-4)
 
-The `gates-windows` job was still red at the 1.0.0-rc.19 fold: run
-31043311726 showed it as the only failing leg, with one eval failure, while
-the four POSIX gates legs and the consumer checks were green. Which eval is
-not recorded anywhere in this repository, and it cannot be derived from a
-POSIX machine.
+Rewritten 2026-08-08 with evidence from the windows-latest run itself, which is
+what this entry spent three revisions lacking.
 
-The single fact a Windows run has to establish is the `got=` line: the one
-line of `python3 evals/run_evals.py` on `windows-latest` that ends
-`REGRESSION`, quoted verbatim with its case name and its verdict string. That
-line already exists in run 31043311726's log for the "Regression evals" step;
-nobody has read it back into this repository. Until somebody does, no fix for
-it can be honest, because every candidate below is a theory:
+**All four install-checker defects are fixed AND GREEN ON WINDOWS.** Not
+predicted, read. From run 31186212064, job 92891284093, head 4d780e86 (rc.24),
+each eliminated by its own log line:
 
-- `a-symlink-inside-an-excluded-path-fails-the-install-check` asserts that
-  `verify-install.sh` prints `EXCLUDED-NON-REGULAR` for a symlink created by
-  `os.symlink`. On Windows that is an NTFS reparse point, and nothing here
-  establishes that the Git-for-Windows shell's file tests read it as
-  non-regular. Its sibling `a-symlinked-planted-module-fails-the-install-check`
-  declares exactly this as its PLATFORM-GAP; this one declares nothing and is
-  free to fail.
-- `a-symlinked-source-directory-is-disclosed-not-silent` calls `os.symlink`
-  on a DIRECTORY without `target_is_directory=True`, which is ignored on POSIX
-  and load-bearing on Windows.
-- `the-tracked-manifest-matches-the-tree-it-ships-with` was the previous
-  round's suspect and should have been closed by turning line-ending
-  conversion off before checkout, but that has never been confirmed against a
-  Windows run's own byte-level output either.
+```
+a-crlf-manifest-verifies-instead-of-reporting-every-file-missing  got=read as paths ok
+a-backslash-in-the-install-path-does-not-accuse-a-clean-tree      got=clean tree reads clean ok
+no-checksum-tool-is-handed-a-filename-it-would-escape             got=both scripts hash from stdin ok
+two-spellings-of-one-root-do-not-make-the-manifest-an-intruder    got=one spelling throughout ok
+```
 
-Every axis a POSIX host CAN force was forced before this entry was written:
-the whole suite was re-run with text-mode writes translating to CRLF in this
-interpreter and in every child interpreter it spawns, which reproduced exactly
-the two verify-install failures fixed above and no others.
+The four were: a CRLF manifest line; the install root spliced into a sed regular
+expression; GNU coreutils escaping a backslash-bearing filename so `cut -c1-64`
+returned a 63-character hash; and two spellings of one root so the manifest
+failed to recognise itself. Every one was a path read as syntax rather than as
+data, and every one made the tool tell a clean installation it looked
+compromised.
+
+**A note on how this entry got it wrong before.** rc.22 predicted the sed fix
+would close both Windows regressions; the rc.23 run falsified that, and this
+file recorded the falsification. What it then failed to do was re-read the log
+after rc.24, which added the fourth fix. The family closed at rc.24 and nobody
+looked. A prediction is worth writing down only if somebody goes back to check
+it, and the checking is the part that was missing.
+
+**The lane is still red, one step further down, on a different defect.** Job
+`gates-windows`, step 12, "Honesty meta-test (no check may PASS over evidence it
+never examined)", running `python3 evals/test_no_data_class.py`:
+
+```
+32 checks discovered from 6 registries in 60 module(s), 3588 scenarios run, 2 waived by declared exemption, 2 failure(s).
+  FAIL sbe_plan.py freshness [full] want PASS got FAIL
+  FAIL sbe_plan.py freshness: the declared full_fixture did not produce PASS, so nothing here proves the check body ran or that its worked example is a real one
+```
+
+That is the FIRST error in the job; steps 1 through 11 all succeed. The two
+lines are one defect counted twice, the scenario plus the meta-assertion that a
+declared worked example must be a real one.
+
+**Mechanism, reproduced rather than reasoned about.** `evals/test_no_data_class.py`
+writes every fixture with `open(path, "w")`. Text mode on Windows translates
+each newline into a carriage return plus newline, so the fixture's BYTES differ
+from what the registry declared, its hash moves, and the freshness check in
+`tools/sbe_plan.py` that pins that hash fails. The harness's contract is "place
+exactly this content", and text mode silently breaks that contract on exactly
+one platform. It was reproduced on POSIX by patching the writer to emulate the
+translation, which turns the same two lines red here.
+
+The fix is at the writer, not the fixture: write bytes. Recomputing the fixture
+hash after writing was considered and rejected, because it needs new registry
+machinery (a fixture that names "the hash of the file you just wrote"), which is
+adding rather than constraining, and it would leave every other fixture still
+going through a translating writer.
+
+**What closure requires, stated so it cannot be fudged.** A green POSIX run is a
+PREDICTION. Closure is a real windows-latest run at or above the fix commit,
+read STEP BY STEP rather than by job conclusion: step 12 must read `success` AND
+its own output must contain `0 failure(s)`. Reading the job conclusion alone is
+not enough, because at rc.23 and rc.24 the conclusion was `failure` both times
+while the underlying cause was entirely different.
+
+`gates-windows` stays a non-required check until it has been green at least
+once, so none of this can quietly become a merge gate on the strength of a
+prediction.
 
 ## Every threshold was measured on one estate
 
@@ -808,6 +843,88 @@ the one fixture the script needs, never a weaker pass.
 Full text: `docs/ROLLOUT.md`, `scripts/test-install-artifact.sh`,
 `scripts/test-upgrade-rollback.sh`, `tools/test_sbe.py`
 (`TestMarketplaceManifest`).
+
+## The recommended install path has an undo now, and here is exactly how much of one
+
+NARROWED, not removed, and the narrowing is quoted rather than asserted.
+
+What stood here before was an asymmetry between the two install paths. The
+clone path could always go back (check out the older tag, re-run
+`scripts/verify-install.sh`, which is what `scripts/test-upgrade-rollback.sh`
+rehearses). The recommended plugin pair could only go forward: `claude plugin
+update brothersbe` moves an installation to the newest version and `claude
+plugin uninstall brothersbe` removes it, and neither one puts a machine back
+on the version it was running an hour ago.
+
+What is now true. `scripts/rollback-install.sh` gives the plugin path the
+same move over the same tags, checked by the same verifier, and it finds the
+installation by ASKING rather than by assuming a path. Both of these exist at
+once on a real machine, which is the whole difficulty:
+`~/.claude/plugins/cache/brothersbe/brothersbe/<version>` (the marketplace
+install, the bytes Claude Code loads, carrying no `.git`) and
+`~/.claude/skills/brothersbe` (the clone `install.sh`'s fallback branch
+makes). A first draft of this script defaulted to the second, which would
+have run to completion and reported success over an untouched installation, a
+worse outcome than shipping no undo at all: it converts "I have no undo" into
+"I ran the undo and I am fine." So the script reads Claude Code's own two
+records, `installed_plugins.json` for the install path and
+`known_marketplaces.json` for the repository that carries the release tags,
+the same way `scripts/verify-install.sh` and
+`src/brothersbe/__init__.py:repo_root()` compute their own root from their
+own file location rather than from a path typed into a document. After
+re-installing it RE-READS the first record, refuses to say the word if the
+version the harness reports did not move, and verifies the bytes that are now
+installed rather than the source they came from.
+
+It previews by default (the install it found and how it found it, the source,
+the version now, the version it would move to, and all four steps) and writes
+nothing without `--apply`, matching `sbe adopt` and `sbe init` rather than
+`install.sh`'s apply-by-default shape, because this command's default outcome
+moves an installation BACKWARD. It carries ten refusals, every one evaluated
+before the first write; the count in its header is checked against the code by
+`tools/test_sbe_install.py`, so a refusal added or removed without updating
+the header fails a test rather than leaving a number in a comment nobody
+reads.
+
+What it still does NOT do, stated here rather than left to be discovered:
+
+- It cannot pin a version inside Claude Code's own plugin store directly, and
+  it invents no way to. It moves the marketplace SOURCE to the earlier release
+  tag and re-runs the same `claude plugin marketplace add` plus `claude plugin
+  install` pair `install.sh` already uses. Whether the harness then loads the
+  rolled-back copy after a restart is the same platform behavior already
+  labeled DOCUMENTED CONTRACT on this page, not something a fixture here can
+  watch; what a fixture CAN watch, and does, is that the harness's own record
+  names the earlier version afterwards.
+- An installation with no reachable release history (a marketplace whose
+  source is gone, an extracted archive, a copied directory) is refused, not
+  served: no history means no earlier version, and the refusal names the
+  remedy (`--source-dir`).
+- On this repository as published, the honest outcome on most machines today
+  is a REFUSAL, not a rollback: "Only one tag is published on origin" above
+  still holds, and an installation built from the only published tag has no
+  earlier release to return to. The script says so in those words and changes
+  nothing. That is the same NO-DATA-is-not-a-pass rule this project applies
+  everywhere else, spelled as a refusal because a rollback with no previous
+  version to name is a guess, not an absence.
+- It never edits `~/.claude/settings.json` and removes nothing: coming forward
+  again is the `git checkout` its own closing line prints.
+- Maturity: INTERNAL-EVAL, the same word used everywhere else on this page.
+  `tools/test_sbe_install.py::TestRollbackInstallScript` builds a disposable
+  HOME laid out like a real one (marketplace install, both harness records,
+  release source, AND the decoy clone at `~/.claude/skills/brothersbe`) with a
+  stubbed `claude` and no network, and proves four things: the target
+  resolution finds the marketplace install and never mentions the clone, a
+  rollback to a previous release verifies clean through this repository's real
+  `scripts/verify-install.sh` (`verify-install: PASSED` in the run's own
+  output, not asserted by the test), an installation with no previous release
+  refuses and names why, and a refused run leaves the install, the source and
+  the clone byte for byte as they were. Each of those was calibrated by
+  re-injecting the defect it exists to catch and watching it go red. No
+  second, independent estate has run it.
+
+Full text: `scripts/rollback-install.sh`, `docs/ROLLOUT.md` (Upgrade and
+rollback), `tools/test_sbe_install.py` (`TestRollbackInstallScript`).
 
 ## A gate exemption cannot tell a real reason from a well-formed fake one
 

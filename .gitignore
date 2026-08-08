@@ -2,6 +2,11 @@
 *.pyc
 __pycache__/
 STATE.md
+# The timestamped backups the autosave writes beside it. STATE.md was already
+# ignored; these were not, so `git add -A` swept 477 KB of working state into
+# the release manifest in a33dfc0, including two files whose own first line
+# reads "gitignored, not shipped". Found by a hostile refuter, not by the seal.
+STATE.md.bak-*
 
 # Word owner-lock artifacts (embed the editor username)
 ~$*

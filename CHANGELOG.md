@@ -6,6 +6,434 @@ What this file does NOT record: internal working notes and measurements from
 the estates this project was built on, which stay untracked by the publish
 checklist's own rules.
 
+## 1.0.0-rc.28
+
+### The benchmark harness reaches the merge path, and a law I had been overstating
+
+37 benchmark tests shipped in rc.25 and not one of them ran in CI. Confirmed
+rather than assumed, because two agents disagreed about it and one was wrong:
+
+```
+grep -c "benchmarks" .github/workflows/brothersbe-gates.yml
+0
+```
+
+Among those 37 is the guard that stops the benchmark's own answers leaking into
+the exam paper it grades. That guard has already been broken twice: once by
+runbook examples naming real planted defect locations, and once by a scan that
+only looked inside json-tagged fences, so the defect could return simply by
+dropping the tag. A third break would have shipped in silence.
+
+Both jobs run it now, inserted between the Authority and Book steps so the
+file's own alphabetical ordering rule still holds.
+
+**On the law.** This project's sessions had been treating
+`.github/workflows/**` as human-edit-only, and deferring changes to the founder
+on that basis. Reading L16 rather than recalling it shows the claim was wider
+than the law:
+
+> A session instruction never waives a hard gate: --strict changes only by a
+> human editing the CI workflow, which is visible in the diff.
+
+L16 protects a gate from being WEAKENED. It does not forbid strengthening one.
+Adding a test step touches no `--strict` flag and waives nothing, so this was
+never blocked. Overstating a law is the same failure this project refuses
+everywhere else: a claim stronger than the thing that enforces it.
+
+The diff is verified to be only the addition, measured against the previous
+commit rather than against a remembered baseline:
+
+```
+--strict            before 16   after 16
+continue-on-error   before  2   after  2    (both pre-existing; one is a comment saying it is never set)
+total lines         before 506  after 510   (+4, the two steps)
+```
+
+**What this release does not claim.** That the step passes in CI. It passes
+here (`Ran 37 tests ... OK`), and a step that has never run in CI can fail there
+for reasons a local run cannot surface, on Windows most of all. The next run
+settles it, and if it goes red that is information the harness was hiding
+before, not a reason to revert.
+
+## 1.0.0-rc.27
+
+### A gate that reported PASS over a manifest it had just proven stale
+
+Found by a hostile refuter reading PR 29's CI run, where this gate PRINTED the
+three offending paths by name and then passed, in the same run where a different
+gate failed on those same three files.
+
+`the-tracked-manifest-matches-the-tree-it-ships-with` re-reads every drifted
+path's committed blob against the working tree and forgives any that come back
+byte-identical. That filter is correct, and it closes a documented Windows false
+block: on that host a file read immediately after checkout can differ from the
+same file read a moment later, which is a visibility race rather than a stale
+manifest.
+
+The defect was its SCOPE. The drift list was the union of both key sets, so it
+conflated two unrelated failures. A path on both sides with different hashes is
+a CONTENT change, where a race is genuinely possible. A path on only one side is
+an ADDITION or a REMOVAL, where no amount of re-reading can ever exonerate the
+manifest, because the bytes were never the question: the question was whether
+the manifest names the same set of files the tree tracks. Those paths re-read as
+identical every single time, so they were classed transient and forgiven.
+
+The fix splits them. Only same-path hash mismatches are eligible for the
+re-read; the set difference is seeded straight into persistent and can never be
+forgiven. The race filter is kept, not deleted, so it still closes the Windows
+false block, but it now only ever sees the failure it was written for.
+
+**Proven by isolation, in a detached worktree whose only drift was two files
+untracked while the manifest still named them, both measured from a baseline
+that read `matches`:**
+
+```
+old code:    VERDICT: matches                                    <- passed over a stale manifest
+fixed code:  VERDICT: the tracked manifest is stale for: STATE.md.bak-..., STATE.md.bak-...
+```
+
+The byte-level detail on those paths reads `identical bytes on this read`, which
+is precisely the evidence that used to buy them a pass.
+
+### A pin that could not fail, removed rather than shipped
+
+A shape test was written to pin the fix cheaply on every leg. Its calibration
+did not go red when the defect was re-injected, because the test's own source
+contained the literals it searched for, so it was matching itself rather than
+the function it audited. A test that cannot fail is the same defect class this
+release fixes, one level up. It was deleted rather than repaired under time
+pressure, and the behavioural proof above stands on its own.
+
+### Also in this release
+
+- `.gitignore` now covers `STATE.md.bak-*`. Two backups totalling 477 KB were
+  tracked and shipped in the release manifest, and their own first line reads
+  "gitignored, not shipped". They are untracked here, not deleted from disk.
+- `docs/KNOWN-LIMITS.md` OWED-4 rewritten with evidence read from the Windows
+  job rather than predicted: all four install-checker defects are green on
+  `windows-latest` at rc.24, each eliminated by its own quoted log line, and the
+  one remaining cause is named with its mechanism and its minimal fix.
+- `program/MASTER-PLAN-2026-08-06.md` retracts a claim that the ten hostile
+  scenarios were a hard release gate. No such gate was ever built; they are a
+  manual tester checklist. The retraction deliberately does NOT replace it with
+  a claim about eval coverage that has never been enumerated.
+
+## 1.0.0-rc.26
+
+### The benchmark lane blocked its own merge, and the policy engine was right
+
+rc.25's consumer-checks leg went red with `verdict: BLOCKED` and two MISSING
+requirements, `check:migration-rehearsal` and `check:migration-reconciliation`,
+demanded of a change that touches no database at all.
+
+The engine was not wrong. `benchmarks/defects.json` is the ground-truth file
+that ENUMERATES the defects the harness scores against, so it necessarily
+carries the DDL of the migration defect it plants. The `sql-ddl` content signal
+read those added lines and concluded a schema change was being shipped.
+
+This is the same shape `EXAMPLE_SURFACES` already existed to handle, and its own
+comment says so: the tests that PROVE a migration is caught contain the
+migration text, and the guides that TEACH the migration gate quote the DDL they
+teach. The benchmark harness is a third instance of exactly that, and it was
+simply missing from the list.
+
+**What was deliberately NOT done.** No requirement was waived, no gate was
+softened, no receipt was fabricated to satisfy a check that had no business
+firing. `benchmarks/` was added to the surfaces where a content signal is held
+back, which is a narrower change than any of those.
+
+**The half that keeps this from being a bypass.** `EXAMPLE_SURFACES` holds back
+only the INFERENCE FROM CONTENT that a file describes a change to production
+state. It does not touch path globs. So a real `.sql` file parked under
+`benchmarks/` is still caught by the rule's `**/*.sql` path match, and the new
+eval asserts that directly rather than trusting the mechanism's docstring. An
+exemption that quietly widened from holding back inference into disabling a rule
+would be worse than the bug it closes.
+
+Calibrated by removing the two benchmarks entries, which returns
+`benchmarks/defects.json is not held back from content signals`, the exact red
+the merge hit. The eval carries its own NO-DATA guard: if a refactor emptied the
+surface list, every assertion above would be vacuously true, so the check
+verifies the list actually contains what it claims to.
+
+## 1.0.0-rc.25
+
+### Comparative outcome benchmarks, with the ground truth kept out of the room
+
+Point 4 of the external assessment asked for the same tasks given to
+BrotherSBE, to unassisted work, and to a peer, measured on defects, time,
+tokens, corrections, false blocks and reviewer findings. `benchmarks/` is that
+harness: four scenarios (a migration, an API contract, a data pipeline, an
+incident), a fixture repository carrying nine planted defects, a scorer, and a
+report renderer.
+
+The interesting part is what it took to make the one measure with real ground
+truth trustworthy. This lane was refused twice.
+
+**The first refusal: the answers were printed in the exam paper.** Every
+scenario runbook's `findings.json` EXAMPLE named a real planted defect at its
+real declared line. Since scoring matches on file plus line window and
+deliberately never reads wording, an estate that pasted its own runbook's
+example scored those defects FOUND. Four of nine planted defects were
+unmissable by anyone who read their own instructions, which inflated
+`defects_missed` for every row in the results table.
+
+**The second refusal: the guard against that had a hole the exact size of the
+defect.** The rewritten leak test only scanned fences tagged ```json, so the
+same leak could be reintroduced simply by dropping the tag, with the test still
+reporting clean. That was demonstrated rather than argued: the previous guard's
+own bytes, run over a leak in an untagged fence, report `ok`.
+
+The scan now reads each document WHOLE and depends on no code fence at all.
+Three forms count as naming a location: a `file` key within 200 brace-free
+characters of a `line` key in either order, the `path:line` form, and a path
+within 60 characters of the words `line N` on one line in either order. The
+planted set is read out of `defects.json` and expanded over each defect's
+declared window, never hardcoded, so the guard cannot drift away from what it
+guards. Twelve evasion shapes were probed and caught; four clean shapes stayed
+clean.
+
+Three NO-DATA guards sit under it, each with its own sentence: zero planted
+locations, zero documents scanned, or zero pairs extracted all report that the
+scan vouched for nothing rather than reading clean.
+
+Calibrated, and independently repeated before this was merged: injecting the
+original leak into an UNTAGGED fence turns the suite red naming the document,
+the location, the defect id and the form it was carried in, while the count of
+```json fences stays unchanged so the tag is never the tell. Restoring returns
+a byte-identical fixture and green.
+
+`benchmarks/README.md` previously claimed the scan covered prose, which was
+broader than the code. It now states the three actual forms with their actual
+bounds, and says plainly that the JSON-example parse check does still read
+```json fences, rather than papering over the one place a fence still matters.
+A README that overstates a guard is the same failure class the lane was refused
+for, one level up.
+
+### Known limit, stated rather than implied
+
+The guard is a text scan. It is proof against the spellings above, not against
+every conceivable one: a path broken across two lines, a line number written as
+a word, or an encoded pair would pass it. Closing that needs the fixture line
+CONTENTS rather than their coordinates, which is a larger change than this lane
+authorised.
+
+`benchmarks/test_sbe_bench.py` is reached through the existing gates, so this
+change is covered by the shipped suite.
+
+## 1.0.0-rc.24
+
+### The fourth defect, and the claim that nearly shipped instead of a fix
+
+rc.23 shipped a sentence saying the remaining Windows cause was "not attempted,
+because a POSIX host cannot test it". That sentence was wrong twice. It asserted
+a cause that had never been reproduced, and it declared untestable something
+that had been tested by simulation an hour earlier, in this same file, when a
+Linux-only escaping bug was proven on macOS with a stub on PATH. It was caught
+by an instruction-drift check rather than by its author, which is worth
+recording: the failure was not a missing capability, it was stopping in front of
+one that had already been demonstrated.
+
+It was testable. It is now fixed.
+
+**The bug was two DERIVATIONS of one value, not a bad comparison.** A walked
+file got its relative path by stripping the install root exactly as the caller
+spelled it, because that is what `find` echoes back. The manifest got its
+relative path through `cd ... && pwd`, which answers in the shell's own
+spelling. Where those two disagree, the manifest fails to recognise itself, is
+walked, is not matched, and is reported as an added file. A clean installation
+reads `1 extra` and FAILED.
+
+Reproduced on POSIX by handing the script a root containing a `.` segment, which
+`find` echoes verbatim while `pwd` normalises away:
+
+```
+EXTRA:     CHECKSUMS.sha256
+verify-install: 2 file(s) match, 0 mismatched, 0 missing, 1 extra
+verify-install: FAILED.
+```
+
+`0 missing, 1 extra` is exactly the signature the windows-latest leg reported.
+On Windows the disagreement is guaranteed rather than incidental, because the
+Git for Windows shell answers `pwd` as `/d/a/BrotherSBE` for a root passed as
+`D:\a\BrotherSBE`, and two spellings of one directory never compare equal.
+
+The fix canonicalises the install root ONCE, before anything derives a path from
+it, so walked paths and the manifest path can no longer drift apart. That fixes
+Windows by construction rather than by guessing at MSYS specifics, and it also
+fixes every POSIX caller who passes a root with a `.` segment, a trailing slash,
+or a symlinked parent.
+
+Canonicalising means the script now depends on being able to ENTER the root, so
+that failure path got its own guard and its own eval: an unreachable root exits
+2 saying nothing was checked, and never prints PASSED over a tree it could not
+open. NO-DATA is never a pass, including in a path this release introduced.
+
+### Four defects, one shape
+
+A CRLF manifest line, a path spliced into a sed regular expression, a filename
+escaped by the hashing tool, and two spellings of one root. Every one was a path
+being read as syntax rather than as data. Every one made the tool whose entire
+job is detecting tampering tell a correct installation that it looked
+compromised. The shape was the finding, and looking for the shape is what turned
+up the third and the fourth.
+
+### What the legs say
+
+rc.23 closed the Linux failure: both ubuntu legs pass, confirming the coreutils
+escaping diagnosis. macOS passes. Windows remains red and remains a non-required
+check, and whether this release closes it is the one thing here that only a
+`windows-latest` run can settle.
+
+## 1.0.0-rc.23
+
+### The prediction rc.22 wrote down, and what Windows did to it
+
+rc.22 fixed one cause and predicted, in writing, that it would close both
+Windows regressions. Run 31182895590 falsified that. Recording it here rather
+than quietly restating the claim, because a prediction that only gets mentioned
+again when it was right is not a prediction.
+
+What actually happened, per leg:
+
+- **macOS, both Python versions: green.** First time in this series.
+- **Linux, both Python versions: one regression**, and it was the new eval rc.22
+  added. A genuinely different cause, described below, now fixed.
+- **Windows: still red**, and the fix moved the numbers without closing them.
+  The new eval reports `0 missing, 1 extra` there against 3 accused files
+  without the fix, so the walked files strip correctly now and exactly one entry
+  does not: the manifest itself. That last one is a path-FORM mismatch. The Git
+  for Windows shell answers `pwd` in MSYS form while the caller supplies the
+  install root in Windows-native form, and two spellings of one directory never
+  compare equal however carefully you strip a prefix.
+
+### The third instance of one shape
+
+GNU coreutils escapes a filename containing a backslash or a newline: it doubles
+the backslashes and prefixes the whole output line with one. That shifts the
+hash a column right, so `cut -c1-64` returned a backslash glued to 63 hex digits
+and every such file reported MISMATCH. Apple's and BSD's tools do not escape,
+which is exactly why every macOS leg was green while both Linux legs were red,
+and why this could not be found by running anything on the machine it was
+written on.
+
+`verify-install.sh` and `checksums.sh` now both feed the file on STDIN, so the
+name never enters the tool's output and no escaping rule can apply. Both were
+changed together deliberately: a generator that escapes and a checker that does
+not would produce manifests that disagree by platform, which is worse than
+either bug alone. The regenerated manifest is byte-identical for this tree
+except for the two scripts that were edited, so the change is behaviour
+preserving here and load bearing elsewhere.
+
+The mechanism was proven on macOS rather than assumed, with a stub on PATH that
+reproduces GNU's escaping. Under it the old argument form reports `0 file(s)
+match, 2 mismatched` and FAILED; the stdin form reports `2 file(s) match, 0
+mismatched, 0 missing, 0 extra` and PASSED.
+
+A CRLF manifest line, a path spliced into a sed regular expression, and a
+filename escaped by the hashing tool. Three defects, one shape: a path read as
+syntax rather than as data, each one making this script tell a correct
+installation that it looked compromised. The shape is the finding.
+
+### A failure message that named nothing
+
+The Linux failure read `a clean tree was accused: 0 missing, 0 extra (exit 1)`.
+Nothing missing, nothing extra, and a failure: the message omitted the one field
+the failure lived in, because it reported only missing and extra while the real
+signature was two MISMATCHED files. It now reports mismatched as well. This is
+the same flaw this release criticises in the older message whose "0 path(s)" is
+a hardcoded phrase rather than a measurement, and it cost an investigation
+before it was noticed.
+
+### Guarded so it cannot return
+
+`no-checksum-tool-is-handed-a-filename-it-would-escape` asserts the shape of
+both scripts rather than their output, because the defect is invisible to any
+macOS run. It carries its own NO-DATA guard: if a rewrite removed the hashing
+entirely, the check says it found nothing to vouch for instead of passing over
+an empty set. Calibrated by restoring `sha256sum "$1"` in either script, which
+turns it red naming that script and that line.
+
+## 1.0.0-rc.22
+
+### The install checker stops accusing clean installations, for the second time
+
+The `gates-windows` leg has been red since rc.19 with what this repository
+recorded as "one Windows eval failure, unidentified". Both halves of that
+sentence were wrong. The run reports TWO regressions, and the log naming them
+was readable the whole time; nobody had read it back. It has now been read, and
+every theory the KNOWN-LIMITS entry used to list was wrong.
+
+One cause explains both, and it is not really about Windows. `verify-install.sh`
+removed the install root from each walked path with `sed "s|^$TARGET/||"`,
+which splices the install path into a REGULAR EXPRESSION. Every metacharacter
+in that path changes what the pattern means. Windows supplies backslashes in
+every path, so the strip silently failed there: each walked file kept its
+absolute path, matched no entry in the manifest, and the script told the reader
+their clean installation contained files "exactly the shape of a planted
+backdoor". Three files existed in that fixture and all three were accused.
+
+That is the same false accusation the carriage-return fix removed in rc.20,
+reached by a different route. The repeat is the finding, not the backslash:
+both bugs were a path being read as syntax rather than as data, and this
+script's loudest sentence fired twice over installations where nothing at all
+was wrong.
+
+A backslash is legal in a POSIX directory name, so the defect was reproduced
+here rather than reasoned about: a target of `a\runner\inst` produced `2 extra`
+and FAILED, with the mangled prefix visible in the script's own output, which
+printed the path back as `aunner\inst`. All three sed sites now use
+`${var#"$TARGET/"}`, POSIX parameter expansion with a quoted and therefore
+literal pattern, so no character in a path can be read as syntax. After the fix
+the same tree reports `2 file(s) match, 0 mismatched, 0 missing, 0 extra` and
+PASSED.
+
+The new eval `a-backslash-in-the-install-path-does-not-accuse-a-clean-tree`
+runs on every leg. It was calibrated by putting the sed form back at all three
+sites, which turns exactly that one case red with `a clean tree was accused: 0
+missing, 2 extra (exit 1)`, and green again on restore.
+
+**Stated plainly: the fix is proven, its effect on Windows is predicted.** A
+POSIX host cannot execute the windows-latest leg, so that both Windows
+regressions close is a falsifiable prediction the next Windows run settles.
+`gates-windows` stays a non-required check until it has been green at least
+once, so a prediction never becomes a merge gate.
+
+### A seal that was broken by the next commit
+
+rc.21's ubuntu legs failed on `program/MASTER-PLAN-2026-08-06.md` MISMATCH. Not
+a code defect: the checksum manifest is regenerated last at seal, and then a
+documentation commit landed on top of it, which is enough to make an
+installation fail its own integrity check. The law is that checksums come last;
+what this run showed is that "last" has to mean last in the branch, not last in
+the seal.
+
+Evidence, all run after the final edit and quoted from this machine:
+
+```
+536 evals: 536 passed, 0 regressions.
+```
+
+## 1.0.0-rc.21 (2026-08-07)
+
+- New: `scripts/rollback-install.sh`, the undo the recommended install never
+  had. A first attempt was HELD rather than shipped because its default target
+  was the clone directory while the recommended install lives elsewhere; both
+  exist on a real machine, so that undo would have run, reported success, and
+  left the installation the user actually has untouched. A rollback that
+  silently does nothing is worse than none, because it turns "I have no undo"
+  into "I ran the undo and I am fine".
+  This one names no default path at all. It reads Claude Code's own records to
+  find where the plugin is installed and where its source lives, re-reads them
+  after applying, and refuses to print ROLLED BACK if the reported version did
+  not move. Ten refusals, all evaluated before the first write, and the count
+  is machine-checked rather than asserted: the header word must equal the
+  number of refusal markers, they must be contiguous, and the reachable
+  message count must match.
+  Ten new tests. Six defects were re-injected one at a time and each turned the
+  suite red before restoring it green, including the fatal one: pointing the
+  resolver at the clone path fails five tests.
+
 ## 1.0.0-rc.20 (2026-08-07)
 
 Loop B-close, four lanes, plus all five release blockers named

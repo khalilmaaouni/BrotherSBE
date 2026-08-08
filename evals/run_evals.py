@@ -1958,6 +1958,248 @@ def gd_vinstall_crlf(root):
     return "read as paths"
 
 
+@case("a-backslash-in-the-install-path-does-not-accuse-a-clean-tree", "guard",
+      "clean tree reads clean")
+def gd_vinstall_metachar_path(root):
+    # The second Windows condition, mounted on POSIX the same way the CRLF one
+    # above is. verify-install.sh stripped the install root off each walked
+    # path with sed "s|^$TARGET/||", which splices the path into a REGULAR
+    # EXPRESSION. Windows supplies backslashes in every path, so the strip
+    # silently failed there: each walked file kept its absolute path, matched
+    # no manifest entry, and a clean installation was told it held files
+    # "exactly the shape of a planted backdoor". That is the loudest sentence
+    # this script can print, fired over a tree where nothing was wrong, which
+    # is the same harm the CRLF fix removed by a different route.
+    #
+    # A backslash is legal in a POSIX directory name, so the defect is
+    # reproducible on every leg rather than only on windows-latest, and the
+    # regression that reached users is measured everywhere from now on.
+    # Calibration, run against a scratch copy with ${full#"$TARGET/"} put back
+    # to the sed form: this case returns "a clean tree was accused: 0 missing,
+    # 2 extra (exit 1)". With the parameter expansion it returns "clean tree
+    # reads clean".
+    import hashlib, shutil
+    inst = os.path.join(root, "a\\runner\\inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("a\\runner\\inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        # MISMATCHED is reported alongside missing and extra, and this is not
+        # cosmetic. The first version of this message printed only missing and
+        # extra, so the Linux failure it caught read "0 missing, 0 extra (exit
+        # 1)": a failure that named nothing, over a run whose real signature was
+        # two MISMATCHED files from GNU's filename escaping. A failure message
+        # that omits the field the failure lives in costs an investigation.
+        mismatched = re.search(r"(\d+) mismatched", out.stdout)
+        return ("a clean tree was accused: %s mismatched, %s (exit %d)"
+                % (mismatched.group(1) if mismatched else "an unreported number of",
+                   _re_missing_extra(out.stdout), out.returncode))
+    # Both halves assert. A nonzero exit is the loud failure, but a run that
+    # exits clean while having compared nothing would be the quiet one, so the
+    # match count is checked too: this tree holds exactly the files the
+    # manifest names, and all of them must have been verified.
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the tree exited clean without verifying both files, so nothing "
+                "here establishes the paths were compared: %s" % out.stdout[-200:])
+    return "clean tree reads clean"
+
+
+@case("no-checksum-tool-is-handed-a-filename-it-would-escape", "guard",
+      "both scripts hash from stdin")
+def gd_hash_from_stdin(root):
+    # The third defect of one shape in this pair of scripts, and the only one a
+    # macOS host cannot reproduce by running anything, which is why it is
+    # asserted on the SHAPE of the code instead of on its output.
+    #
+    # GNU coreutils escapes a filename containing a backslash or a newline: it
+    # doubles the backslashes and prefixes the whole output line with one. That
+    # shifts the hash a column right, so `cut -c1-64` returned a backslash glued
+    # to 63 hex digits and every such file reported MISMATCH. Apple's and BSD's
+    # tools do not escape, so the bug was invisible on macOS and red on Linux,
+    # which is exactly how it reached CI unnoticed.
+    #
+    # Feeding the file on stdin keeps the name out of the tool's output, so no
+    # escaping rule can apply. Both scripts must do it: a generator that escapes
+    # and a checker that does not would write manifests that disagree by
+    # platform, which is worse than either bug alone.
+    #
+    # Calibration: restoring `sha256sum "$1"` in either script turns this red
+    # naming that script and that line.
+    import re as _re
+    problems = []
+    for rel in ("scripts/verify-install.sh", "scripts/checksums.sh"):
+        path = os.path.join(_REPO, rel)
+        try:
+            with open(path) as handle:
+                text = handle.read()
+        except (IOError, OSError) as exc:
+            return "could not read %s, so this check established nothing: %s" % (rel, exc)
+        for num, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for tool in ("sha256sum", "shasum -a 256"):
+                # The tool invoked with the file as an ARGUMENT is the defect;
+                # invoked with `< "$1"` it is the fix. Matching the argument
+                # form directly, rather than the absence of the stdin form, so
+                # a line doing neither cannot read as safe.
+                if _re.search(r"%s\s+\"\$1\"" % _re.escape(tool), line):
+                    problems.append("%s:%d hands the filename to %s as an argument"
+                                    % (rel, num, tool))
+    if problems:
+        return "; ".join(problems)
+    # NO-DATA guard: a rename or a rewrite that removed the hashing entirely
+    # would leave `problems` empty and read as a pass over nothing.
+    found = sum(1 for rel in ("scripts/verify-install.sh", "scripts/checksums.sh")
+                if "| cut -c1-64" in open(os.path.join(_REPO, rel)).read())
+    if found != 2:
+        return ("only %d of the 2 scripts still hash at all, so this check found "
+                "nothing to vouch for" % found)
+    return "both scripts hash from stdin"
+
+
+@case("two-spellings-of-one-root-do-not-make-the-manifest-an-intruder", "guard",
+      "one spelling throughout")
+def gd_vinstall_path_form(root):
+    # The fourth defect of the same shape, and the one that was nearly shipped
+    # as "a POSIX host cannot test this". It could be tested, and this is how.
+    #
+    # The bug was two DERIVATIONS of one value rather than a bad comparison. A
+    # walked file got its relative path by stripping $TARGET exactly as the
+    # caller spelled it, because that is what `find` echoes back. The manifest
+    # got its relative path through `cd ... && pwd`, which answers in the
+    # shell's own spelling. Where those disagree, the manifest fails to
+    # recognise itself, is walked, is not matched, and is reported as an added
+    # file, so a clean installation reads `1 extra` and FAILED.
+    #
+    # On Windows the disagreement is guaranteed: the Git for Windows shell
+    # answers `pwd` as `/d/a/BrotherSBE` for a root passed as `D:\a\BrotherSBE`.
+    # That exact signature (`0 missing, 1 extra`) is what the windows-latest leg
+    # reported. A `.` segment reproduces the same irreconcilable pair here: find
+    # echoes `/tmp/x/./inst/...` while pwd answers `/tmp/x/inst`.
+    #
+    # Calibration: delete the `TARGET=$TARGET_CANONICAL` normalisation from a
+    # scratch copy and this case returns "a clean tree read 1 extra", naming
+    # CHECKSUMS.sha256 as the intruder.
+    import hashlib, shutil
+    inst = os.path.join(root, "x", "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("x", "inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    # The second spelling. `find` echoes this back verbatim; `pwd` normalises it
+    # away. Neither is wrong, and that is the point: the script must not depend
+    # on which one it happens to be handed.
+    dotted = os.path.join(root, "x", ".", "inst")
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(dotted, "CHECKSUMS.sha256"), dotted],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        extra = re.search(r"(\d+) extra", out.stdout)
+        named = [ln.split(":", 1)[1].strip() for ln in out.stdout.splitlines()
+                 if ln.startswith("EXTRA:")]
+        return ("a clean tree read %s extra%s (exit %d)"
+                % (extra.group(1) if extra else "an unreported number of",
+                   (", naming " + ", ".join(named)) if named else "",
+                   out.returncode))
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the run exited clean without verifying both files, so nothing "
+                "here establishes the spellings were reconciled: %s" % out.stdout[-200:])
+    return "one spelling throughout"
+
+
+@case("a-root-that-cannot-be-entered-is-refused-not-passed", "guard", "refused")
+def gd_vinstall_unenterable_root(root):
+    # The failure path of the normalisation above. Canonicalising a root means
+    # the script now depends on being able to ENTER it, and a check that cannot
+    # reach what it is checking must refuse loudly rather than verify an empty
+    # set and report PASSED. NO-DATA is never a pass.
+    import shutil
+    inst = os.path.join(root, "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        f.write("")
+    missing = os.path.join(root, "there-is-no-such-directory")
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), missing],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode == 0:
+        return ("an unreachable root exited 0, which reads as a pass over a tree "
+                "this check never opened: %s" % (out.stdout + out.stderr)[-200:])
+    if "PASSED" in out.stdout:
+        return "an unreachable root printed PASSED"
+    if "nothing here was checked" not in (out.stdout + out.stderr):
+        return ("it refused but did not say that nothing was checked, so a reader "
+                "cannot tell a refusal from a failure: %s" % (out.stdout + out.stderr)[-200:])
+    return "refused"
+
+
+@case("the-benchmark-ground-truth-does-not-demand-a-migration-rehearsal", "guard",
+      "content held back, path glob intact")
+def gd_policy_benchmark_surface(root):
+    # Found when the benchmark lane BLOCKED its own merge. benchmarks/defects.json
+    # enumerates the planted defects the harness scores against, so it
+    # necessarily carries the DDL of the migration defect it plants. The sql-ddl
+    # content signal fired on it and the consumer-checks leg went red demanding
+    # check:migration-rehearsal for a change that touches no database.
+    #
+    # BOTH halves are asserted, and the second is the one that matters. Adding a
+    # surface to EXAMPLE_SURFACES must hold back only the INFERENCE FROM CONTENT
+    # that a file describes a change to production state. It must never disable
+    # the path globs, or the exemption becomes a hole: anyone could park a real
+    # migration under benchmarks/ and walk past the gate. A fix that quietly
+    # widens into a bypass is worse than the bug it closes.
+    #
+    # Calibration: removing the two benchmarks entries from EXAMPLE_SURFACES
+    # returns "benchmarks/defects.json is not held back from content signals",
+    # which is the red the merge actually hit.
+    import sys as _sys
+    src = os.path.join(_REPO, "src")
+    if src not in _sys.path:
+        _sys.path.insert(0, src)
+    try:
+        from brothersbe.policy import _is_example_surface, path_matches
+    except ImportError as exc:
+        return "could not import the policy engine, so this check established nothing: %s" % exc
+
+    if not _is_example_surface("benchmarks/defects.json"):
+        return ("benchmarks/defects.json is not held back from content signals, so the "
+                "ground-truth file's own DDL demands a migration rehearsal receipt")
+    if not _is_example_surface("benchmarks/scenarios/S1-migration.md"):
+        return "a nested benchmark document is not held back, so only the top level is covered"
+
+    # The half that keeps this from being a bypass.
+    if not path_matches("**/*.sql", "benchmarks/real_migration.sql"):
+        return ("the **/*.sql PATH glob no longer matches under benchmarks/, so a real "
+                "migration parked there would walk past the gate: this exemption has "
+                "widened from holding back content inference into disabling the rule")
+    if not path_matches("**/*.sql", "db/migrations/0002_x.up.sql"):
+        return "the **/*.sql path glob stopped matching an ordinary migration path"
+
+    # NO-DATA guard: an EXAMPLE_SURFACES emptied by a refactor would make every
+    # check above vacuously true, which must not read as a pass.
+    from brothersbe.policy import EXAMPLE_SURFACES
+    if not any(s.startswith("benchmarks") for s in EXAMPLE_SURFACES):
+        return ("no benchmarks entry is present in EXAMPLE_SURFACES, so the checks above "
+                "passed over a list that does not contain what they claim to verify")
+    return "content held back, path glob intact"
+
+
 def _re_missing_extra(stdout):
     """The MISSING/EXTRA counts out of a verify-install summary line, for the
     failure sentence above. Returns a plain description rather than raising, so
@@ -2213,7 +2455,31 @@ def gd_manifest_fresh(root):
         return "matches"
     wl = {l.split("  ", 1)[1]: l[:64] for l in want.splitlines() if "  " in l}
     hl = {l.split("  ", 1)[1]: l[:64] for l in have.splitlines() if "  " in l}
-    drift = [p for p in sorted(set(wl) | set(hl)) if wl.get(p) != hl.get(p)]
+    # TWO DIFFERENT FAILURES, and conflating them is how this gate came to
+    # report PASS over a manifest it had just proven stale.
+    #
+    # A path present on BOTH sides with different hashes is a CONTENT change,
+    # and there a filesystem visibility race is genuinely possible, which is
+    # what the re-read below exists to catch.
+    #
+    # A path present on only ONE side is an ADDITION or a REMOVAL: the tree
+    # gained a tracked file the manifest never named, or the manifest still
+    # names a file the tree no longer tracks. NO amount of re-reading can
+    # exonerate that, and the re-read actively LIES about it: `git show HEAD:p`
+    # still resolves and the working-tree file still reads back byte-identical,
+    # so the path was classified "transient" and forgiven. Reproduced in this
+    # repository: two STATE.md.bak files were untracked while the committed
+    # manifest still named them, and the gate stayed silent about both.
+    #
+    # So the set difference is ALWAYS persistent and never eligible for the
+    # race filter. The filter is kept, not deleted, because it closes a
+    # documented Windows false block, but it now only ever sees the failure it
+    # was written for.
+    same_path_mismatch = [p for p in sorted(set(wl) & set(hl)) if wl[p] != hl[p]]
+    only_generated = sorted(set(wl) - set(hl))   # tracked, absent from the manifest
+    only_committed = sorted(set(hl) - set(wl))   # named by the manifest, no longer tracked
+    set_difference = only_generated + only_committed
+    drift = sorted(same_path_mismatch + set_difference)
     # Reproduction harness (windows-porting-lane finding 3): a Windows leg
     # read several of these as stale with no local way to reproduce why, so
     # rather than guess at a fix this states the evidence a Windows run would
@@ -2246,8 +2512,9 @@ def gd_manifest_fresh(root):
     #
     # Every drifted path is re-read here, not just the four that get printed,
     # because a verdict cannot rest on a sample of the evidence.
-    persistent, transient = [], []
-    for p in drift:
+    # Seeded with the set difference, which is never eligible for the re-read.
+    persistent, transient = list(set_difference), []
+    for p in same_path_mismatch:
         blob = subprocess.run(["git", "-C", _REPO, "show", "HEAD:" + p], capture_output=True)
         if blob.returncode != 0:
             persistent.append(p)
@@ -2268,7 +2535,9 @@ def gd_manifest_fresh(root):
             "the-tracked-manifest: %d path(s) hashed as drifted and then re-read as "
             "IDENTICAL bytes against the committed blob (%s). The manifest matches; "
             "the first hash was taken before this host had settled. Reported rather "
-            "than hidden.\n" % (len(transient), ", ".join(transient[:6])))
+            "than hidden. This branch is reachable ONLY for same-path hash mismatches: "
+            "a path added to or removed from the tracked set is never re-read and never "
+            "forgiven.\n" % (len(transient), ", ".join(transient[:6])))
         return "matches"
     drift = persistent
 

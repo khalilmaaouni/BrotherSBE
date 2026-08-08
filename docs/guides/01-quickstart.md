@@ -82,7 +82,7 @@ python3 "$SBE/evals/run_evals.py"
 ```
 
 ```
-531 evals: 531 passed, 0 regressions.
+536 evals: 536 passed, 0 regressions.
 ```
 
 Every case in `evals/run_evals.py` is a real failure class as a fixture. When you change a gate,
@@ -488,6 +488,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -754,6 +756,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -878,6 +882,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -1142,6 +1148,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -1264,6 +1272,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
@@ -1521,6 +1531,8 @@ jobs:
         run: python3 tools/test_sbe_adopt.py
       - name: Authority hook fixtures (undeclared edits to authority files refused)
         run: python3 tools/test_sbe_authority_hook.py
+      - name: Benchmark fixtures (the comparative harness, and its ground-truth leak guard)
+        run: python3 benchmarks/test_sbe_bench.py
       - name: Book estate fixtures (the worked example the book's chapters paste)
         run: python3 tools/test_sbe_book.py
       - name: Bypass fixtures (the ways a person or an agent gets past these controls)
