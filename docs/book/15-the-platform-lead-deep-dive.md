@@ -1,5 +1,4 @@
 # The platform lead's deep dive
-<!-- replay: chapter requires posix -->
 
 ## Forty repositories, one footprint
 

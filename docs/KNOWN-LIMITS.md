@@ -1778,26 +1778,3 @@ it declares. That turns a byte-comparison tool into a policy engine for a schema
 this project does not own and cannot pin, and its verdicts would go stale the
 moment the harness changed the format.
 
-## The book's worked transcripts are verified on Linux and macOS, not on Windows
-
-The chapters under `docs/book/` are recordings of a real POSIX shell session, and
-they invoke `python3` by name. On Windows the interpreter is `python.exe` and
-`python3` resolves to nothing, so those blocks cannot run there as written. The
-replay harness declares this as a capability (`requires posix`) and SKIPS those
-chapters on a host that lacks it, naming each chapter and the reason.
-
-What that means precisely, so nobody reads the green leg as more than it is: a
-skipped chapter is NO-DATA. Its blocks were never compared, and they are counted
-as never run rather than as matches. On Windows, nothing verifies that the book's
-transcripts still match what the tools print.
-
-Two repairs were rejected and the reasons are recorded rather than left implicit.
-Rewriting the book to say `python` would change shipped documentation for every
-reader to suit one platform, and on a host where `python` is Python 2 it would be
-actively wrong. Giving the Windows harness a `python3` shim would manufacture a
-toolchain the machine does not have, which buys a green run by lying about the
-machine.
-
-Verifying these transcripts on Windows properly means a Windows-native transcript
-set, captured on Windows and compared against Windows. That is real work and it is
-POST-V1. Founder decision, 2026-08-08.

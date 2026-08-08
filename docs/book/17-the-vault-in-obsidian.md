@@ -1,5 +1,4 @@
 # The vault in Obsidian, for real
-<!-- replay: chapter requires posix -->
 
 Chapter 10 named the environment variable and the shape of the tree. This
 chapter is what filling that tree in looks like on an ordinary Tuesday, and

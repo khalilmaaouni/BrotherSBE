@@ -1,7 +1,6 @@
 # The vault and memory
 
 <!-- replay: chapter requires vault -->
-<!-- replay: chapter requires posix -->
 
 ## One environment variable, and what is honest about it being unset
 

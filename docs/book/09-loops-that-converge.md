@@ -1,5 +1,4 @@
 # Loops that converge
-<!-- replay: chapter requires posix -->
 
 ## Five stages, not five new commands
 

@@ -1,5 +1,4 @@
 # The data engineer's deep dive
-<!-- replay: chapter requires posix -->
 
 ## The number finance does not believe
 

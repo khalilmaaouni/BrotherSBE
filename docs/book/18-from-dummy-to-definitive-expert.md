@@ -1,5 +1,4 @@
 # From dummy to definitive expert
-<!-- replay: chapter requires posix -->
 
 ## The same ladder, four times
 

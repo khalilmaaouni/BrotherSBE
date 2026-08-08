@@ -1,5 +1,4 @@
 # Reading the truth
-<!-- replay: chapter requires posix -->
 
 ## What sbe status is, and what it deliberately is not
 

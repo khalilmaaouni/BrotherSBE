@@ -1,5 +1,4 @@
 # Working as one team
-<!-- replay: chapter requires posix -->
 
 ## What chapter eleven already showed
 

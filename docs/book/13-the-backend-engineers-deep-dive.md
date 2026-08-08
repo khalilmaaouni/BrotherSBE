@@ -1,5 +1,4 @@
 # The backend engineer's deep dive
-<!-- replay: chapter requires posix -->
 
 ## One engagement, told completely
 
