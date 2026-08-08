@@ -1803,12 +1803,19 @@ class TestVerifyMintsEvidence(unittest.TestCase):
                          "a dirty-tree receipt must never be counted as sound evidence")
         self.assertEqual(data["brokenClaims"], [],
                          "a dirty-tree receipt is NO-DATA, not a broken claim")
-        # The evidence store is reported as an ABSOLUTE path, so it is spelled
-        # the way the host spells paths. Asserting the POSIX spelling here
-        # passed on Linux and macOS while failing on Windows for a reason that
-        # had nothing to do with the behaviour under test. Read the field.
-        self.assertIn(os.path.join(".sbe", "evidence"), status.stdout,
-                      "status must still show the evidence store was inspected")
+        # READ THE FIELD, DO NOT GREP THE SERIALIZED TEXT. This assertion has
+        # now been wrong twice for the same underlying reason, so it is worth
+        # stating. First it searched the raw stdout for ".sbe/evidence", which
+        # passed on POSIX and failed on Windows where the absolute path is
+        # spelled with backslashes. Then it searched for the platform spelling,
+        # which ALSO failed on Windows, because stdout here is JSON and JSON
+        # escapes every backslash: the text really contains ".sbe\\evidence".
+        # Both failures were about the encoding of the haystack rather than the
+        # behaviour under test. The behaviour under test is that status reports
+        # which evidence store it inspected, and that is a named field.
+        self.assertEqual(data["scope"]["storesInspected"]["evidenceDir"],
+                         self._evidence_dir(),
+                         "status must still show the evidence store was inspected")
 
         # Re-run over the SAME dirty tree; exit code must not depend on
         # whether evidence could be minted or on the tree's cleanliness.
