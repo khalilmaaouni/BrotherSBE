@@ -145,6 +145,18 @@ REGISTRY_LOCK_REL = REGISTRY_REL + ".lock"
 #: reviewer separation exists to stop.
 DEFAULT_EVIDENCE_DIR = ".sbe/evidence"
 
+
+def evidence_dir(root):
+    """`root` joined with `DEFAULT_EVIDENCE_DIR` using the platform's native
+    separator, never the constant's own slash. `DEFAULT_EVIDENCE_DIR` stays a
+    plain relative POSIX-style string because other code may still read it
+    as a key; a caller that needs an actual filesystem path calls this
+    instead of joining the constant directly with `os.path.join`, so the
+    slash cannot reach a comparison, a JSON field or a printed message as a
+    mixed separator on a platform where os.path.join does not split on it."""
+    return os.path.join(root, *DEFAULT_EVIDENCE_DIR.split("/"))
+
+
 ROLES = ("writer", "reviewer")
 STATUSES = ("open", "closed", "abandoned")
 

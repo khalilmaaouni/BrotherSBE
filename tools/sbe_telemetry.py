@@ -45,16 +45,18 @@ Subcommands:
                     outcomes, assembled from the vault. Pure: reads vault files,
                     redacts, writes one file. No subprocess, no network.
   purge-corrections Deletes captured correction candidates (excerpts of your own
-                    messages, secret-redacted and owner-only, but still yours to
-                    delete). Shows the count first; --yes to confirm.
+                    messages, secret-redacted and owner-only where the platform
+                    enforces that mode, but still yours to delete). Shows the
+                    count first; --yes to confirm.
   data-show         Every file this tool can write, by name: what it holds, how
                     many records are in it, its mode, and which capture switch
                     governs it. Reads; never writes. -h/--help anywhere in its
                     argv prints usage and exits 0 instead of running.
-  data-export       One JSON bundle of everything stored, owner-only, so the
-                    stored data can be read somewhere other than the vault.
-                    -h/--help anywhere in its argv prints usage and exits 0
-                    without touching the vault or writing a bundle.
+  data-export       One JSON bundle of everything stored, owner-only where the
+                    platform enforces that mode, so the stored data can be read
+                    somewhere other than the vault. -h/--help anywhere in its
+                    argv prints usage and exits 0 without touching the vault or
+                    writing a bundle.
   data-purge        Deletes what is stored. Shows the inventory first; --yes to
                     confirm; re-checks the filesystem after and reports what
                     survived. --category narrows it to one category. -h/--help
@@ -1796,7 +1798,8 @@ def stored_inventory():
         ("metrics", REVIEWS, "weekly review markers you typed with `review-mark`"),
         ("corrections", CORRECTIONS,
          "excerpts of your own messages that matched the correction pattern, capped at "
-         "400 characters and 5 per session, secret-redacted, owner-only"),
+         "400 characters and 5 per session, secret-redacted, owner-only where "
+         "the platform enforces that mode"),
         ("housekeeping", VERSION_MARK, "the git sha of the installed skill at the last check"),
     ]
     patterns = (
@@ -1847,9 +1850,10 @@ DATA_SHOW_USAGE = (
 DATA_EXPORT_USAGE = (
     "usage: data-export [--out PATH]\n"
     "  reads: the same inventory data-show reports, file content included.\n"
-    "  writes: one owner-only JSON bundle (mode 600) holding that content,\n"
-    "    default ./brothersbe-telemetry-export.json, or PATH. Nothing under\n"
-    "    the vault is touched.\n"
+    "  writes: one JSON bundle holding that content, requested at mode 600\n"
+    "    (owner-only where the platform enforces that mode), default\n"
+    "    ./brothersbe-telemetry-export.json, or PATH. Nothing under the\n"
+    "    vault is touched.\n"
     "  flags:\n"
     "    --out PATH        write the bundle to PATH instead of the default\n"
     "    -h, --help        print this and exit 0 without writing a bundle"
@@ -1959,9 +1963,14 @@ def cmd_data_export(argv):
         print("data-export: could not write %s (%s); nothing was exported"
               % (out, e.strerror or e))
         return
-    print("data-export: wrote %s (owner-only) from %d file(s) under %s; %d could not be read; "
-          "%d path(s) recorded as absent"
-          % (out, read, TEL_DIR, unread,
+    try:
+        out_mode = "%03o" % stat.S_IMODE(os.stat(out).st_mode)
+    except OSError:
+        out_mode = "unknown"
+    print("data-export: wrote %s (mode %s: owner-only intended, but this reports what the "
+          "platform gave, it does not promise enforcement on platforms that ignore POSIX "
+          "modes) from %d file(s) under %s; %d could not be read; %d path(s) recorded as absent"
+          % (out, out_mode, read, TEL_DIR, unread,
              len([f for f in bundle["files"] if not f["exists"]])))
     print("data-export: this file holds the stored data itself, so treat it as sensitive; "
           "redaction was applied at capture time and is best effort.")

@@ -417,7 +417,7 @@ def _receipt_entries(root):
     commit-bound and unmoved), stale (bound to a commit that moved, or a
     covered file that changed since), or unavailable (every other broken or
     failing reason `evidence.verify` names)."""
-    evidence_dir = os.path.join(root, tasks_mod.DEFAULT_EVIDENCE_DIR)
+    evidence_dir = tasks_mod.evidence_dir(root)
     scan = status_mod._scan_evidence(root, evidence_dir)
     entries = [{"kind": "receipt-store", "path": None,
                "status": "current" if scan["inspected"] else "absent",
