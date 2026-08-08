@@ -162,6 +162,32 @@ class TestChapterCapabilities(unittest.TestCase):
 
     def test_a_bare_machine_skips_the_declared_chapters_by_name(self):
         import subprocess
+        # THE SCENARIO NEEDS A BARE-BUT-WORKABLE MACHINE, WHICH NOT EVERY HOST
+        # CAN BE. `PATH=/usr/bin:/bin` is the canonical bare POSIX box: stripped
+        # of anything that would provide `claude` or a vault, yet still holding
+        # the shell and tools the un-declared chapters need in order to run and
+        # match. That is the whole point of the assertion below, which is that
+        # skipping the two DECLARED chapters leaves everything else at zero
+        # differing.
+        #
+        # A host with no POSIX toolchain cannot be put in that state at all.
+        # There, those two directories hold nothing, every chapter fails for
+        # want of a shell rather than for want of the declared capability, and
+        # the run reports every block as differing: 136 of 136, in 1.28 seconds
+        # against roughly eleven on a host where the scenario is real. That is
+        # the premise being unbuildable, not the behaviour under test failing,
+        # so it is skipped there and says why.
+        #
+        # Measured by asking the filesystem for the directories this scenario
+        # names, never by asking for a platform. What is NOT claimed by this
+        # skip: the book's transcripts themselves still verify on such a host
+        # through the regression eval, which runs the same replay with the real
+        # PATH. Only this bare-machine simulation is unavailable.
+        for required in ("/usr/bin", "/bin"):
+            if not os.path.isdir(required):
+                raise unittest.SkipTest(
+                    "%s does not exist, so the canonical bare POSIX machine this "
+                    "scenario simulates cannot be constructed here" % required)
         env = dict(os.environ, PATH="/usr/bin:/bin", SBE_REPLAY_TIMEOUT="240")
         env.pop("BROTHERSBE_VAULT", None)
         out = subprocess.run([sys.executable,

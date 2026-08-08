@@ -1777,3 +1777,4 @@ Rejected alternative, recorded: parse `.claude/settings.json` and judge the hook
 it declares. That turns a byte-comparison tool into a policy engine for a schema
 this project does not own and cannot pin, and its verdicts would go stale the
 moment the harness changed the format.
+

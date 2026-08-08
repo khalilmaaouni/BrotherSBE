@@ -43,6 +43,29 @@ import difflib, io, os, re, subprocess, sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK_DIR = os.path.join(REPO, "docs", "book")
 WRITE = "--write" in sys.argv
+
+# --write REFUSES TO RUN FROM A THROWAWAY CHECKOUT, because it records whatever
+# machine it ran on. This mode re-captures live output and patches it into
+# shipped chapters, so every absolute path the tools print becomes documentation.
+# Run from a temporary worktree, it wrote that worktree's own directory into the
+# book: readers were shown a scratch path that no longer existed, presented as an
+# installation. That reached main once before it was caught, and was then very
+# nearly repeated by the same hand in the same session, which is why this is a
+# refusal in the code and not a line in a checklist.
+#
+# The test is the path itself rather than a flag anyone can forget: a checkout
+# under a temporary directory is not a place shipped content may be generated
+# from. Reading and comparing are untouched; only --write is refused.
+if WRITE:
+    _real = os.path.realpath(REPO)
+    for _tmp in (os.path.realpath(p) for p in ("/tmp", "/private/tmp", "/var/folders")):
+        if _real == _tmp or _real.startswith(_tmp + os.sep):
+            sys.stderr.write(
+                "replay_book --write: refusing to regenerate shipped chapters from %s.\n"
+                "This mode pastes live output, including absolute paths, into the book, so\n"
+                "the directory it runs from becomes documentation. Run it from the primary\n"
+                "checkout of the repository, never a temporary worktree.\n" % REPO)
+            sys.exit(2)
 # Overridable because wall-clock is a fact about the MACHINE, not the book:
 # five concurrent sessions starved 4-second chapters past the old fixed cap,
 # and a timeout counted as differing blocks that were never compared at all.
@@ -138,6 +161,35 @@ def extract_blocks(text):
 
 
 CAPABILITIES = {
+    # A POSIX SHELL TOOLCHAIN, WHICH IS WHAT THESE TRANSCRIPTS ARE.
+    # The chapters declaring this are recordings of a real POSIX session, and
+    # they invoke `python3` by name 84 times. On Windows the interpreter is
+    # `python.exe` and `python3` resolves to nothing, so every block failed at
+    # once: that leg reported `compared 136 output blocks, 136 differ` in 1.28
+    # seconds, where the same suite takes about eleven on a POSIX host. It was
+    # never 136 content defects. It was one missing interpreter name.
+    #
+    # A SKIP HERE IS NO-DATA AND NAMES ITSELF, which is the only honest verdict
+    # available: on that platform these transcripts cannot run as written, so
+    # nothing was examined and nothing may be reported as matching.
+    #
+    # The two other repairs were considered and rejected on the record.
+    # Rewriting the book to say `python` changes shipped documentation for every
+    # reader to suit one platform, and on a host where `python` is Python 2 it
+    # is actively wrong. Handing the harness a `python3` shim on Windows
+    # manufactures a toolchain the machine does not have, which buys a pass by
+    # lying about the machine.
+    #
+    # Detected by asking the host, never by naming a platform, so a POSIX box
+    # that genuinely lacks `python3` also skips and also says why.
+    #
+    # Founder decision, 2026-08-08, recorded in the vault as
+    # DECISION-2026-08-08-windows-book-chapters. What it costs is stated there
+    # rather than implied: these transcripts are verified on Linux and macOS,
+    # and are NOT verified on Windows. Verifying them there needs a
+    # Windows-native transcript set captured on Windows, which is POST-V1.
+    "posix": ("a POSIX shell toolchain where the interpreter is named python3",
+              lambda: __import__("shutil").which("python3") is not None),
     "claude": ("the Claude Code CLI on PATH",
                lambda: __import__("shutil").which("claude") is not None),
     "vault": ("a wired BrotherSBE vault (BROTHERSBE_VAULT set and present)",
@@ -208,8 +260,18 @@ def replay_chapter(name):
     if marker == 0:
         return lines, blocks, [], 0, [], skipped
 
+    # newline="\n" pins the write to a bare LF regardless of platform. The
+    # default (newline=None) translates every '\n' written to os.linesep,
+    # which is '\r\n' on Windows: the generated script's own commands then
+    # carry a trailing \r baked into their arguments (a path, a date, a
+    # heredoc line), and bash echoes that \r back inside the captured output
+    # instead of failing outright. That is not a captured-output encoding
+    # difference, so the comparison's own newline normalization can never
+    # catch it: the corruption is in what the command was TOLD to do, not in
+    # how its answer was later read. A fixture writer left in text mode was
+    # exactly the same defect family this project already fixed once before.
     sh_path = os.path.join(BOOK_DIR, ".replay-%s.sh" % name.replace("/", "_"))
-    io.open(sh_path, "w").write("\n".join(script) + "\n")
+    io.open(sh_path, "w", newline="\n").write("\n".join(script) + "\n")
     try:
         out = subprocess.run(["bash", sh_path], capture_output=True, text=True,
                              timeout=TIMEOUT_PER_CHAPTER, stdin=subprocess.DEVNULL)
