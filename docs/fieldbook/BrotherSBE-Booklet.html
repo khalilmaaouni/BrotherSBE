@@ -1,0 +1,1421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BrotherSBE: design before code, evidence before done</title>
+
+<style>
+/* The BrotherSBE booklet shares BrotherMode's design language on purpose: same
+   structural CSS, same three type roles, same components. They are brothers and
+   should read as brothers. One thing moves: the accent walks one step around
+   the wheel from BrotherMode's deep green to a petrol blue, at the same depth
+   and saturation, on the same warm paper with the same amber and brick
+   supports. Blue carries the blueprint and assurance associations that suit a
+   product whose first rule is design before code. */
+:root {
+  --paper: #FAF8F4; --paper-2: #F3F0E9; --ink: #22302C; --muted: #5C6B66; --faint: #5E6C67;
+  --accent: #17607F; --accent-soft: #E7F0F5; --amber: #96590A; --amber-soft: #F8EFE2;
+  --brick: #8C3A2B; --brick-soft: #F8ECE8; --line: #DDE4E0; --line-strong: #C4CFC9;
+  --code-bg: #1B2724; --code-ink: #E4EDE9; --code-dim: #8FAFA5;
+  --ok: #00543A; --info-ink: #00436B; --warn-ink: #6B4400; --hot-ink: #8C2D00;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Hoefler Text", Georgia, serif;
+  --body: "Avenir Next", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101A1D; --paper-2: #172327; --ink: #E4EBE8; --muted: #A3B2AC; --faint: #8B9A94;
+    --accent: #55B4D8; --accent-soft: #14232B; --amber: #E0A55A; --amber-soft: #241B10;
+    --brick: #E39079; --brick-soft: #271713; --line: #26333A; --line-strong: #38474F;
+    --code-bg: #080D0F; --code-ink: #D7E4DF; --code-dim: #7E9B92;
+    --ok: #5FD3AE; --info-ink: #7FC4F5; --warn-ink: #F0B95A; --hot-ink: #FFA582;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101A1D; --paper-2: #172327; --ink: #E4EBE8; --muted: #A3B2AC; --faint: #8B9A94;
+  --accent: #55B4D8; --accent-soft: #14232B; --amber: #E0A55A; --amber-soft: #241B10;
+  --brick: #E39079; --brick-soft: #271713; --line: #26333A; --line-strong: #38474F;
+  --code-bg: #080D0F; --code-ink: #D7E4DF; --code-dim: #7E9B92;
+  --ok: #5FD3AE; --info-ink: #7FC4F5; --warn-ink: #F0B95A; --hot-ink: #FFA582;
+}
+:root[data-theme="light"] {
+  --paper: #FAF8F4; --paper-2: #F3F0E9; --ink: #22302C; --muted: #5C6B66; --faint: #5E6C67;
+  --accent: #17607F; --accent-soft: #E7F0F5; --amber: #96590A; --amber-soft: #F8EFE2;
+  --brick: #8C3A2B; --brick-soft: #F8ECE8; --line: #DDE4E0; --line-strong: #C4CFC9;
+  --code-bg: #1B2724; --code-ink: #E4EDE9; --code-dim: #8FAFA5;
+  --ok: #00543A; --info-ink: #00436B; --warn-ink: #6B4400; --hot-ink: #8C2D00;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 1.02rem; line-height: 1.68; -webkit-text-size-adjust: 100%; }
+.skip { position: absolute; left: -9999px; top: 0; background: var(--accent); color: var(--paper); padding: 0.6rem 1rem; z-index: 50; text-decoration: none; }
+.skip:focus { left: 0; }
+a { color: var(--accent); text-underline-offset: 0.18em; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+.cover { border-bottom: 2px solid var(--ink); padding: 5rem 1.25rem 3rem; max-width: 78rem; margin: 0 auto; }
+.cover-inner { max-width: 54rem; }
+.eyebrow-brand { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); margin: 0 0 1.6rem; }
+.tagline { font-family: var(--display); font-weight: 600; font-size: clamp(2.7rem, 8.5vw, 5.2rem); line-height: 1.01; letter-spacing: -0.028em; margin: 0 0 1rem; text-wrap: balance; }
+.tagline .b { display: block; color: var(--accent); }
+.category { font-family: var(--display); font-size: clamp(1.25rem, 3vw, 1.75rem); line-height: 1.3; color: var(--muted); margin: 0 0 2.2rem; }
+.cover-body { max-width: 50ch; margin: 0 0 2rem; }
+.cover-body p { margin: 0 0 0.55rem; }
+.cover-body .big { font-weight: 650; color: var(--ink); margin-top: 1rem; }
+.pillars { font-family: var(--mono); font-size: 0.82rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); padding: 1rem 0; margin: 0 0 1.8rem; }
+.cover-kicker { font-family: var(--display); font-size: 1.24rem; line-height: 1.45; max-width: 44ch; margin: 0 0 2rem; }
+.imprint { display: flex; flex-wrap: wrap; gap: 0.35rem 2rem; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); border-top: 1px solid var(--line); padding-top: 1.1rem; }
+.imprint b { color: var(--muted); font-weight: 600; }
+
+.shell { max-width: 78rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; display: grid; grid-template-columns: 1fr; }
+@media (min-width: 62rem) { .shell { grid-template-columns: 14rem minmax(0, 1fr); column-gap: 3.5rem; align-items: start; } }
+
+nav.toc { font-size: 0.88rem; line-height: 1.45; margin-bottom: 3rem; }
+@media (min-width: 62rem) { nav.toc { position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 1rem 1.5rem 3rem 0; margin-bottom: 0; border-right: 1px solid var(--line); } }
+.toc-title { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 0 0 1rem; display: none; }
+@media (min-width: 62rem) { .toc-title { display: block; } }
+details.toc-wrap { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.75rem 0; }
+details.toc-wrap > summary { cursor: pointer; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); list-style: none; }
+details.toc-wrap > summary::-webkit-details-marker { display: none; }
+details.toc-wrap > summary::after { content: " +"; color: var(--faint); }
+details.toc-wrap[open] > summary::after { content: " -"; }
+@media (min-width: 62rem) { details.toc-wrap { border: 0; padding: 0; } details.toc-wrap > summary { display: none; } }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc > .toc-wrap > ol > li { margin-bottom: 0.95rem; }
+nav.toc .part { display: block; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.11em; text-transform: uppercase; color: var(--faint); margin-bottom: 0.2rem; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 0.08rem 0; }
+nav.toc a:hover { color: var(--accent); }
+nav.toc ol ol { margin-top: 0.15rem; }
+nav.toc ol ol a { padding-left: 0.8rem; font-size: 0.83rem; color: var(--faint); }
+
+main { min-width: 0; }
+section.part { padding-top: 1rem; }
+section.part + section.part { margin-top: 4.5rem; }
+h2.part-head { font-family: var(--display); font-weight: 600; font-size: clamp(1.75rem, 4.2vw, 2.45rem); line-height: 1.1; letter-spacing: -0.015em; margin: 0 0 0.4rem; padding-top: 1.5rem; border-top: 2px solid var(--ink); text-wrap: balance; }
+.part-label { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.85rem; }
+.part-blurb { color: var(--muted); font-size: 1.04rem; max-width: 62ch; margin: 0 0 2.6rem; }
+
+h3 { font-family: var(--display); font-weight: 600; font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em; margin: 3rem 0 0.7rem; text-wrap: balance; }
+h4 { font-weight: 650; font-size: 1.01rem; margin: 2.1rem 0 0.5rem; }
+p, ul, ol { max-width: 68ch; }
+p { margin: 0 0 1.1rem; }
+main ul, main ol { padding-left: 1.15rem; margin: 0 0 1.2rem; }
+main li { margin-bottom: 0.45rem; }
+strong { font-weight: 650; }
+
+.statement { font-family: var(--display); font-weight: 600; font-size: clamp(1.5rem, 3.6vw, 2.1rem); line-height: 1.22; letter-spacing: -0.012em; margin: 2.2rem 0 1.4rem; max-width: 24ch; text-wrap: balance; }
+.statement.wide { max-width: 34ch; }
+.lede { font-family: var(--display); font-size: 1.26rem; line-height: 1.5; max-width: 58ch; margin: 0 0 1.6rem; }
+
+.scene { border-left: 1px solid var(--accent); padding: 0.2rem 0 0.2rem 1.3rem; margin: 0 0 1.8rem; max-width: 62ch; }
+.scene p { font-family: var(--display); font-size: 1.16rem; line-height: 1.5; margin-bottom: 0.8rem; }
+.scene p:last-child { margin-bottom: 0; }
+.daymark { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); display: block; margin: 2.6rem 0 0.5rem; }
+.seat { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); display: block; margin: 2.8rem 0 0.5rem; }
+
+.evidence { display: block; font-family: var(--mono); font-size: 0.73rem; line-height: 1.6; color: var(--muted); margin: -0.3rem 0 1.5rem; max-width: 68ch; overflow-wrap: anywhere; }
+.evidence::before { content: "evidence"; color: var(--faint); letter-spacing: 0.11em; text-transform: uppercase; font-size: 0.64rem; margin-right: 0.6rem; }
+
+.derived { display: block; font-family: var(--mono); font-size: 0.66rem; line-height: 1.6; color: var(--faint); letter-spacing: 0.09em; text-transform: uppercase; margin: 0 0 0.6rem; overflow-wrap: anywhere; }
+
+.stamp { display: inline-block; font-family: var(--mono); font-size: 0.63rem; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; padding: 0.14em 0.45em; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; vertical-align: 0.1em; }
+.s-certified { color: var(--ok); } .s-beta { color: var(--info-ink); } .s-experimental { color: var(--warn-ink); } .s-unsupported { color: var(--hot-ink); }
+
+.tw { overflow-x: auto; margin: 0 0 1.8rem; border-bottom: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; min-width: 32rem; font-size: 0.93rem; line-height: 1.5; font-variant-numeric: tabular-nums; }
+thead th { text-align: left; font-family: var(--mono); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line-strong); padding: 0 0.9rem 0.55rem 0; vertical-align: bottom; }
+tbody td, tbody th { border-bottom: 1px solid var(--line); padding: 0.7rem 0.9rem 0.7rem 0; vertical-align: top; }
+tbody th { text-align: left; font-weight: 600; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+table.tight tbody td, table.tight tbody th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+table.tight tbody th { white-space: nowrap; }
+td code, th code { font-size: 0.86em; }
+
+pre { background: var(--code-bg); color: var(--code-ink); font-family: var(--mono); font-size: 0.83rem; line-height: 1.65; padding: 1rem 1.1rem; border-radius: 3px; overflow-x: auto; margin: 0 0 1.4rem; max-width: 68ch; }
+pre .c { color: var(--code-dim); }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--paper-2); padding: 0.08em 0.3em; border-radius: 2px; }
+pre code { background: none; padding: 0; font-size: 1em; }
+
+figure { margin: 2rem 0 2.2rem; max-width: 46rem; }
+figure svg { width: 100%; height: auto; color: var(--ink); display: block; }
+figcaption { font-size: 0.88rem; line-height: 1.55; color: var(--muted); margin-top: 0.9rem; max-width: 62ch; }
+.svg-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; }
+.svg-big { font-family: var(--display); font-size: 19px; font-weight: 600; letter-spacing: 0.02em; }
+.svg-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; }
+.svg-body { font-family: var(--body); font-size: 13px; }
+.svg-small { font-family: var(--body); font-size: 11.5px; }
+
+.panel { border: 1px solid var(--line-strong); border-radius: 3px; padding: 1.2rem 1.3rem; margin: 0 0 1.8rem; max-width: 62rem; background: var(--paper-2); }
+.panel h4 { margin-top: 0; }
+.panel > :last-child { margin-bottom: 0; }
+.panel.accent { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.panel.warn { border-left: 3px solid var(--amber); background: var(--amber-soft); }
+.panel.hot { border-left: 3px solid var(--brick); background: var(--brick-soft); }
+
+.langbar { position: sticky; top: 0; z-index: 40; display: flex; gap: 0; justify-content: flex-end; background: var(--paper); border-bottom: 1px solid var(--line); padding: 0.4rem 1.25rem; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.langbar label { cursor: pointer; padding: 0.3rem 0.75rem; color: var(--muted); border: 1px solid transparent; }
+.langradio { position: absolute; opacity: 0; pointer-events: none; }
+#sbe-en:checked ~ .langbar label[for="sbe-en"],
+#sbe-ja:checked ~ .langbar label[for="sbe-ja"] { color: var(--accent); border-color: var(--line-strong); }
+.edition[data-lang="ja"] { display: none; }
+#sbe-ja:checked ~ .edition[data-lang="en"] { display: none; }
+#sbe-ja:checked ~ .edition[data-lang="ja"] { display: block; }
+
+@media print {
+  nav.toc, .langbar { display: none; }
+  .shell { display: block; max-width: none; }
+  section.part { break-before: page; }
+  pre, table, figure, .panel { break-inside: avoid; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#pain">Skip to the briefing</a>
+
+<input type="radio" name="sbe-lang" id="sbe-en" class="langradio" checked>
+<input type="radio" name="sbe-lang" id="sbe-ja" class="langradio">
+<div class="langbar" role="group" aria-label="Language">
+  <label for="sbe-en">English</label>
+</div>
+
+<div class="edition" data-lang="en" lang="en">
+<header class="cover">
+  <div class="cover-inner">
+    <p class="eyebrow-brand">BrotherSBE</p>
+    <h1 class="tagline">Design before code.<span class="b">Evidence before done.</span></h1>
+    <p class="category">The assurance layer for AI-assisted backend, infrastructure, QA, Technical BA and data engineering.</p>
+    <div class="cover-body">
+      <p>Claude can write the service, the migration and the pipeline.</p>
+      <p>The hard part starts when the work has to be <strong>right</strong>.</p>
+      <p>When the number in the report has to match the ledger.</p>
+      <p>When the rollback has never actually been run.</p>
+      <p>When two consumers depend on a contract nobody wrote down.</p>
+      <p>When the grain of a table was chosen in a conversation nobody kept.</p>
+      <p>When done has to mean more than the agent said so.</p>
+      <p class="big">That is what BrotherSBE is for.</p>
+    </div>
+    <p class="pillars">Designs &nbsp;&middot;&nbsp; Checks &nbsp;&middot;&nbsp; Proves</p>
+    <p class="cover-kicker">Architecture, migrations, pipelines and critical numbers are mechanically checked before the agent is allowed to call the job finished.</p>
+    <div class="imprint">
+      <span><b>For</b> small engineering teams, two to eight people</span>
+      <span><b>Describes</b> v1.0.0-rc.28</span>
+      <span><b>Read from the tree</b> 8 August 2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+<nav class="toc" aria-label="Contents">
+  <p class="toc-title">Contents</p>
+  <details class="toc-wrap" open>
+    <summary>Contents</summary>
+    <ol>
+      <li>
+        <span class="part">Act one</span>
+        <a href="#pain">The pain</a>
+        <ol>
+          <li><a href="#reviewer">You became the reviewer of record</a></li>
+          <li><a href="#painkiller">The painkiller</a></li>
+          <li><a href="#medicine">The medicine</a></li>
+          <li><a href="#the-number">The number that agreed with itself</a></li>
+          <li><a href="#pillars">Designs, checks, proves</a></li>
+          <li><a href="#whatitis">What it is, and is not</a></li>
+        </ol>
+      </li>
+      <li>
+        <span class="part">Act two</span>
+        <a href="#sprint">One team, one sprint</a>
+        <ol>
+          <li><a href="#mon">Monday: sized before it is scoped</a></li>
+          <li><a href="#tue">Tuesday: the grain, before the SQL</a></li>
+          <li><a href="#wed">Wednesday: the rollback nobody had run</a></li>
+          <li><a href="#wed-pm">Wednesday: two writers, one file</a></li>
+          <li><a href="#thu">Thursday: prove the number</a></li>
+          <li><a href="#fri">Friday: merge, or do not</a></li>
+          <li><a href="#sprint-pic">The sprint in one picture</a></li>
+        </ol>
+      </li>
+      <li>
+        <span class="part">Act three</span>
+        <a href="#seats">Five seats at the table</a>
+        <ol>
+          <li><a href="#seat-backend">Backend engineer</a></li>
+          <li><a href="#seat-data">Data engineer</a></li>
+          <li><a href="#seat-infra">Infrastructure engineer</a></li>
+          <li><a href="#seat-qa">QA engineer</a></li>
+          <li><a href="#seat-ba">Technical BA</a></li>
+          <li><a href="#overhead">When it earns its overhead</a></li>
+        </ol>
+      </li>
+      <li>
+        <span class="part">Act four</span>
+        <a href="#fit">Where it fits</a>
+        <ol>
+          <li><a href="#why-plugin">Why another plugin</a></li>
+          <li><a href="#summary">Pain, painkiller, medicine</a></li>
+          <li><a href="#notdo">What it does not do</a></li>
+        </ol>
+      </li>
+      <li>
+        <span class="part">Act five</span>
+        <a href="#how">How it works, and why trust it</a>
+        <ol>
+          <li><a href="#arch">The architecture</a></li>
+          <li><a href="#controls">Controls, commands, reviewers</a></li>
+          <li><a href="#tier">The tier, and why you do not pick it</a></li>
+          <li><a href="#register">What is proven, and how strongly</a></li>
+          <li><a href="#limits">What it will not tell you</a></li>
+          <li><a href="#first">Your first sprint</a></li>
+        </ol>
+      </li>
+    </ol>
+  </details>
+</nav>
+
+<main>
+<!-- =================== ACT ONE =================== -->
+<section class="part" id="pain">
+  <span class="part-label">Act one</span>
+  <h2 class="part-head">The pain</h2>
+  <p class="part-blurb">Six short sections. What is going wrong on teams shipping backend and data work with AI, what stops it immediately, what stops it coming back, and the one incident that started all of this.</p>
+
+  <h3 id="reviewer">Your team did not agree to become the reviewer of record for a machine</h3>
+
+  <p class="lede">The more engineering you hand to Claude, the more of your week goes to deciding whether what came back is true.</p>
+
+  <p>Your team is small. Two engineers, maybe five, maybe eight. Between you there is a backend, some infrastructure, a warehouse, a report the business actually looks at, and a test suite somebody has to believe in. Claude now writes a great deal of that, and it writes it fast. That is the good news, and it is genuinely good.</p>
+
+  <p>Here is the part nobody warns you about. More AI-written engineering creates more verification, and verification is the expensive kind of work.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>What your team ends up doing</th><th>How often it shows up</th></tr></thead>
+    <tbody>
+      <tr><td>Re-deriving a number by hand to see whether the first one was right</td><td>Every figure that reaches a decision</td></tr>
+      <tr><td>Reading a migration to work out whether the rollback would survive</td><td>Every schema change</td></tr>
+      <tr><td>Reconstructing why a table has the grain it has</td><td>Every time the model is questioned</td></tr>
+      <tr><td>Working out who actually consumes an endpoint before changing it</td><td>Every contract change</td></tr>
+      <tr><td>Deciding whether a test proves the thing it claims to prove</td><td>Every review</td></tr>
+      <tr><td>Re-running the check yourself because you do not trust the report</td><td>Every time done is asserted</td></tr>
+      <tr><td>Explaining to Finance where a figure came from</td><td>Every month end</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement wide">Eventually your senior engineer is the design review, the migration gate and the reconciliation, for a machine that never gets tired.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 300" role="img" aria-labelledby="pain-title">
+      <title id="pain-title">Two arrangements compared. In the first, the team personally carries design review, evidence checking and re-derivation between themselves and Claude. In the second, those three jobs move into BrotherSBE, and the team keeps only judgment and domain knowledge.</title>
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Today</text>
+      <text class="svg-big" x="104" y="40" fill="currentColor">YOUR TEAM</text>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M118 50 L52 74" marker-end="url(#ar)"/><path d="M130 50 L130 74" marker-end="url(#ar)"/><path d="M142 50 L208 74" marker-end="url(#ar)"/>
+      </g>
+      <g class="svg-body" fill="currentColor" opacity="0.95">
+        <text x="4" y="90">design review</text><text x="104" y="90">evidence</text><text x="188" y="90">re-derivation</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="4" y="106">you read it after</text><text x="104" y="106">you take its word</text><text x="188" y="106">you redo the maths</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M34 116 L118 142" marker-end="url(#ar)"/><path d="M130 116 L130 142" marker-end="url(#ar)"/><path d="M216 116 L146 142" marker-end="url(#ar)"/>
+      </g>
+      <text class="svg-big" x="96" y="160" fill="currentColor">CLAUDE</text>
+      <text class="svg-small" x="0" y="186" fill="currentColor" opacity="0.9">Three jobs nobody was hired for,</text>
+      <text class="svg-small" x="0" y="200" fill="currentColor" opacity="0.9">all of them after the mistake was made.</text>
+
+      <line x1="290" y1="0" x2="290" y2="290" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <text class="svg-label" x="320" y="12" fill="currentColor" opacity="0.85">With BrotherSBE</text>
+      <text class="svg-big" x="424" y="40" fill="currentColor">YOUR TEAM</text>
+      <text class="svg-small" x="320" y="60" fill="currentColor" opacity="0.9">domain knowledge, judgment, the calls only you can make</text>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 70 L452 94" marker-end="url(#ar)"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"><rect x="320" y="98" width="276" height="74" rx="3"/></g>
+      <text class="svg-title" x="334" y="120" fill="currentColor">BROTHERSBE</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="334" y="138">a design phase that runs before the code</text>
+        <text x="334" y="152">gates that read receipts, not assurances</text>
+        <text x="334" y="166">absent evidence reported, never passed</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 172 L452 196" marker-end="url(#ar)"/></g>
+      <text class="svg-big" x="412" y="214" fill="currentColor">CLAUDE</text>
+      <text class="svg-small" x="320" y="236" fill="currentColor" opacity="0.9">writes the service, the migration, the pipeline</text>
+      <line x1="320" y1="254" x2="638" y2="254" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="320" y="272" fill="currentColor" opacity="0.95">Your judgment stays with you.</text>
+      <text class="svg-small" x="320" y="288" fill="currentColor" opacity="0.95">The checking does not have to.</text>
+    </svg>
+    <figcaption>Nothing here removes an engineering decision from your team. What moves is the work between the decisions: reviewing after the fact, taking a claim on trust, and redoing the arithmetic to see whether it holds. Those three are the whole product.</figcaption>
+  </figure>
+
+  <h3 id="painkiller">The painkiller: stop taking the agent's word for it</h3>
+
+  <p>Four things stop hurting in the first week.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="killer-title">
+      <title id="killer-title">Four transformations. You reviewing afterwards becomes design happening first. You trusting a claim becomes a gate reading a receipt. You re-deriving a number becomes the number carrying a second derivation. You guessing how much rigour applies becomes a tier computed from five questions.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Without</text><text x="326" y="14">With</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor">
+        <text x="0" y="54">YOU review after</text><text x="0" y="108">YOU take its word</text><text x="0" y="162">YOU re-derive</text><text x="0" y="216">YOU guess the rigour</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="0" y="70">reading a diff of a decision you were not in</text>
+        <text x="0" y="124">done, because the agent said done</text>
+        <text x="0" y="178">checking the figure by hand, again</text>
+        <text x="0" y="232">seven artifacts, or none, by mood</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.4"><path d="M258 48 L316 48"/><path d="M258 102 L316 102"/><path d="M258 156 L316 156"/><path d="M258 210 L316 210"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="322" y="32" width="316" height="34" rx="3"/><rect x="322" y="86" width="316" height="34" rx="3"/>
+        <rect x="322" y="140" width="316" height="34" rx="3"/><rect x="322" y="194" width="316" height="34" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="336" y="54">DESIGN happens first</text><text x="336" y="108">the GATE reads a receipt</text>
+        <text x="336" y="162">the NUMBER carries its proof</text><text x="336" y="216">the TIER is computed</text>
+      </g>
+    </svg>
+    <figcaption>Read the left column as the job your senior engineer quietly absorbed when the team started shipping with AI. Read the right as what a design phase, a receipt, a second derivation and five objective questions actually buy back.</figcaption>
+  </figure>
+
+  <p class="statement">A small team. More output. Less taking it on faith.</p>
+
+  <p class="evidence">The design checks, the four hard gates and the silent-failure linter each ship with named tests and run in CI on Linux and Windows. The tier computation is re-derived from the diff and compared against what was declared. Act five prints the whole register with the gap beside each entry.</p>
+
+  <h3 id="medicine">The medicine: stop the same class of wrong from becoming normal</h3>
+
+  <p>Catching this week's bad migration is worth something. It is not the interesting part.</p>
+
+  <p>The interesting part is that four failures keep coming back on backend and data teams, every one of them silent, and each is closed by a different phase of the same loop.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 344" role="img" aria-labelledby="med-title">
+      <title id="med-title">A six phase loop from purpose to verification, with four recurring silent failures placed beside the phase that closes each: the wrong grain at data, the undeclared contract at process and architecture, the unrehearsed rollback and the unprovable number at verification.</title>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="150" y="8" width="150" height="30" rx="3"/><rect x="150" y="64" width="150" height="30" rx="3"/>
+        <rect x="150" y="120" width="150" height="30" rx="3"/><rect x="150" y="176" width="150" height="30" rx="3"/>
+        <rect x="150" y="232" width="150" height="30" rx="3"/><rect x="150" y="288" width="150" height="30" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="164" y="28">PURPOSE</text><text x="164" y="84">PROCESS</text><text x="164" y="140">ARCHITECTURE</text>
+        <text x="164" y="196">DATA</text><text x="164" y="252">EXPRESSION</text><text x="164" y="308">VERIFICATION</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M225 38 L225 64" marker-end="url(#ar)"/><path d="M225 94 L225 120" marker-end="url(#ar)"/>
+        <path d="M225 150 L225 176" marker-end="url(#ar)"/><path d="M225 206 L225 232" marker-end="url(#ar)"/>
+        <path d="M225 262 L225 288" marker-end="url(#ar)"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.4" fill="none">
+        <path d="M300 135 L360 135"/><path d="M300 191 L360 191"/><path d="M300 303 L360 303"/><path d="M300 315 L360 315"/>
+      </g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="139">THE UNDECLARED CONTRACT</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="155">two consumers nobody enumerated</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="195">THE WRONG GRAIN</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="211">a join fans out and revenue overstates</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="299">THE UNREHEARSED ROLLBACK</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="315">the reverse leg was never run</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="335">THE UNPROVABLE NUMBER</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="351">nobody can re-derive the figure</text></g>
+      <text class="svg-small" x="0" y="28" fill="currentColor" opacity="0.9">what the</text>
+      <text class="svg-small" x="0" y="42" fill="currentColor" opacity="0.9">work is for</text>
+      <text class="svg-small" x="0" y="196" fill="currentColor" opacity="0.9">where most</text>
+      <text class="svg-small" x="0" y="210" fill="currentColor" opacity="0.9">of the money</text>
+      <text class="svg-small" x="0" y="224" fill="currentColor" opacity="0.9">is lost</text>
+      <text class="svg-small" x="0" y="308" fill="currentColor" opacity="0.9">last, never</text>
+      <text class="svg-small" x="0" y="322" fill="currentColor" opacity="0.9">the theme</text>
+    </svg>
+    <figcaption>The order is the argument. Every one of these four is decided long before there is a diff to review, which is why reviewing the diff catches none of them. Verification sits at the end because a check installed before the work is a control, and a check written afterwards is written by somebody who already believes the work is right.</figcaption>
+  </figure>
+
+  <h3 id="the-number">The number that agreed with itself</h3>
+
+  <div class="scene">
+    <p>A daily revenue figure had been in the board pack for five months. Finance queried it once, in March, and an engineer checked it by re-running the model. The model returned the same number. Everyone moved on.</p>
+    <p>In August somebody joined orders to order lines to answer a different question, and the total came out lower. Not by a rounding error. By eleven per cent.</p>
+    <p>The model had been fanning out on a join since the week it was written. Re-running it had confirmed nothing, because the check and the thing being checked were the same query.</p>
+  </div>
+
+  <p>Nobody was careless. The engineer who checked it did exactly what checking looks like. The failure was structural: a second derivation that walks the same path is not a second derivation, and nothing in the pipeline knew the difference.</p>
+
+  <p class="statement wide">A check that reads the same path as the work is not a check. It is the work, run twice.</p>
+
+  <p>This is what the numbers gate exists for, and it is also the clearest example of an honest limit. The gate demands a second derivation whose text genuinely differs from the first, re-run to zero drift against a pinned snapshot. It cannot read which tables each derivation touches. Two queries over the same broken view still agree, and the gate still passes them.</p>
+
+  <p>That floor is worth having and it is worth knowing the height of. A team that believes the gate proves independence will trust it at exactly the wrong moment, which is why the limit is printed on every run rather than kept in a footnote.</p>
+
+  <h3 id="pillars">Designs, checks, proves</h3>
+
+  <p>Three words on the cover, and each is a different mechanism.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Pillar</th><th>What it means concretely</th><th>What enforces it</th></tr></thead>
+    <tbody>
+      <tr><th>Designs</th><td>Six phases run in order before code: purpose, process, architecture, data, expression, verification. The output is a dossier of at most eight files in one directory.</td><td>Five design checks, blocking in CI: artifacts, decision record, data model, diagrams, and no file left as the shipped template.</td></tr>
+      <tr><th>Checks</th><td>Four failure classes get a structural gate, chosen because each fails silently: numbers, migration, approval, and whether a check actually ran.</td><td><code>sbe_gate.py</code>, advisory in a session, blocking under <code>--strict</code> in CI.</td></tr>
+      <tr><th>Proves</th><td>A claim is backed by a receipt naming what ran, its exit code and its duration, or it is labelled UNVERIFIED next to the item.</td><td>The evidence store and the <code>ran</code> gate. A check that took no time did not run.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Underneath all three sits one rule that is easier to state than to find elsewhere.</p>
+
+  <p class="statement">Absent evidence is NO-DATA. NO-DATA is never a pass.</p>
+
+  <p>Three verdicts, not two. Something passed. Something failed. And something was never there to read, which is reported by name, and which never decides an exit code in either direction. Most tooling has two states and quietly sorts "did not run" into the good one. That collapse is where wrong results live.</p>
+
+  <p class="evidence">Enforced at construction rather than by convention: a check is refused registration if it declares PASS as its empty state, and a meta-test enumerates the registries rather than a written list, so a check added next year is covered on the day it is registered.</p>
+
+  <h3 id="whatitis">What it is, and three things it is not</h3>
+
+  <p>BrotherSBE is a Claude Code plugin that behaves like a senior backend and data engineering colleague. You describe the outcome in plain language. It decides the method, works in the order the engineering actually runs, and refuses to call anything finished until a check has run and left a receipt.</p>
+
+  <p><strong>It is not a prompt pack.</strong> A skill pack changes how the model writes. This changes what has to exist on disk before a merge is allowed. A rule in a prompt is not a control; a control is a check that runs.</p>
+
+  <p><strong>It is not a linter.</strong> A linter reads the diff, which means it arrives after the grain was chosen and the boundary was drawn. There is a linter inside this, hunting the patterns that swallow errors, but it is one of the smaller parts.</p>
+
+  <p><strong>It is not a replacement for your reviewers.</strong> It routes reviewers deterministically from the diff and gives each a narrow brief, and every one of them is read-only by construction. It does not approve anything. Nothing here detects that a change needed a human approval in the first place.</p>
+
+  <p>It is the domain specialist sibling of BrotherMode, the general orchestrator. They share a spine and diverge on scope. BrotherSBE is standalone: clone it and it works with nothing else installed.</p>
+</section>
+<!-- =================== ACT TWO =================== -->
+<section class="part" id="sprint">
+  <span class="part-label">Act two</span>
+  <h2 class="part-head">One team, one sprint</h2>
+  <p class="part-blurb">Four people, five days. Finance says the daily revenue figure disagrees with the ledger. Fixing it turns out to mean a data model, a schema migration, a service contract and a test suite nobody trusts. Every command appears where the sprint needs it, not before.</p>
+
+  <p>The team: Priya on the warehouse, Tom on the service, Adaeze on infrastructure and release, and Marc, the Technical BA who owns what the business actually asked for. Nobody has a spare week.</p>
+
+  <span class="daymark">Monday</span>
+  <h3 id="mon">The work is sized before it is scoped</h3>
+
+  <p>Marc opens the session and says what happened, in the words Finance used.</p>
+
+  <pre><code>/brothersbe:start</code></pre>
+
+  <p>One question comes back. Not which tier, not which command. What outcome do you want?</p>
+
+  <div class="scene">
+    <p>Finance says the daily revenue figure in the dashboard disagrees with the ledger. We need the number to be reproducible, and we need to know why the two disagree.</p>
+  </div>
+
+  <p>Then five objective questions, answered in under a minute.</p>
+
+  <pre><code>mkdir -p design/daily-revenue
+python3 tools/sbe_intake.py design/daily-revenue
+
+<span class="c">Does this change a data model, an API contract, or a file interface others depend on? (y/n)</span> y
+<span class="c">Does it cross a service, system, or team boundary? (y/n)</span> y
+<span class="c">Is it reversible in under an hour? (y/n)</span> n
+<span class="c">Does it touch money, partner data, personal data, or production state? (y/n)</span> y
+<span class="c">How many downstream consumers break if it is wrong? (none/some/many)</span> many
+
+<span class="c">tier T3 (artifacts required: 01, 02, 03, 04, 05, 06, 07)</span></code></pre>
+
+  <p>Nobody negotiated that. It touches money, so the first match is T3 and all seven design artifacts are owed. Marc did not have to know what a tier was, and Tom did not get to argue it down because the sprint is tight.</p>
+
+  <p class="statement wide">The person in a hurry does not get to decide how much rigour applies.</p>
+
+  <p>An override exists, and it is deliberately awkward: three fields have to agree and a written reason of at least three words has to sit beside them. A half-declared override fails and names the fields that disagree. Whether the reason is a good one is human review, and the tool says so rather than pretending to judge it.</p>
+
+  <p class="evidence">The tier rule is first-match-wins over five booleans, computed by <code>sbe_intake.py</code> and re-derived from the diff by <code>sbe impact</code>, which reports when the declared tier and the change disagree.</p>
+
+  <span class="daymark">Tuesday</span>
+  <h3 id="tue">The grain, written in words, before anybody writes SQL</h3>
+
+  <p>Priya writes the data model artifact. It takes forty minutes and it is the highest-value forty minutes of the sprint.</p>
+
+  <div class="scene">
+    <p><code>fct_daily_revenue</code> is one row per order date, product line and currency.</p>
+    <p>The system of record for order amounts is the billing system, not the CRM.</p>
+    <p>Order to order line is one-to-many, mandatory.</p>
+  </div>
+
+  <p>That third line is where the eleven per cent went. Writing the cardinality down forces the question that a query never asks: if one order has three lines, what happens to the amount when the two are joined?</p>
+
+  <pre><code>python3 tools/sbe_design.py design/daily-revenue
+
+<span class="c">datamodel  PASS  6 entities, each with a system of record;</span>
+<span class="c">                 5 relationship line(s) read, each carrying cardinality</span>
+<span class="c">diagrams   FAIL  diagram element(s) trace to no declared entity: BillingLedger</span></code></pre>
+
+  <p>The diagrams check just caught something real. Priya's context diagram names <code>BillingLedger</code>, and no artifact declares it. Either it is an entity with an owner, or it is a component, and until somebody says which, two artifacts already disagree on day two.</p>
+
+  <p>That is the whole point of design-phase checking. The disagreement is one line of text on Tuesday. It is a reconciliation project in November.</p>
+
+  <p class="evidence">Five design checks run over a dossier directory: artifacts, decision record, data model, diagrams, placeholder. All five are gate severity and block under <code>--strict</code>. A tier requiring no artifacts reports NO-DATA rather than PASS.</p>
+
+  <span class="daymark">Wednesday, morning</span>
+  <h3 id="wed">The rollback nobody had run</h3>
+
+  <p>The fix needs a schema change: the aggregate gains a currency column and the old one is retired. Adaeze writes the migration. Claude writes it quickly and correctly, and says it is done.</p>
+
+  <p>It is not done, and this is where the gate does something a reviewer usually cannot.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 214" role="img" aria-labelledby="mig-title">
+      <title id="mig-title">The migration gate compared with a code review. A review reads the forward migration and the reverse migration as text. The gate requires a receipt showing both legs executed against a restored copy, with a rehearsal identifier and matching row counts before and after.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">What a review can see</text><text x="330" y="14">What the gate requires</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="36" width="270" height="46" rx="3"/><rect x="0" y="94" width="270" height="46" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor"><text x="14" y="58">UP MIGRATION</text><text x="14" y="116">DOWN MIGRATION</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="14" y="74">reads correct</text><text x="14" y="132">reads correct</text>
+      </g>
+      <text class="svg-small" x="0" y="166" fill="currentColor" opacity="0.9">Both legs look right on the page.</text>
+      <text class="svg-small" x="0" y="182" fill="currentColor" opacity="0.9">Neither has ever been executed.</text>
+      <text class="svg-small" x="0" y="204" fill="currentColor" opacity="0.95">This is the state most rollbacks are in.</text>
+
+      <line x1="300" y1="0" x2="300" y2="206" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="330" y="36" width="308" height="104" rx="3"/></g>
+      <text class="svg-title" x="344" y="58" fill="currentColor">MIGRATION RECEIPT</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="344" y="78">forward leg ran against a restored copy</text>
+        <text x="344" y="94">reverse leg ran against a restored copy</text>
+        <text x="344" y="110">rehearsal id recorded as a string</text>
+        <text x="344" y="126">row counts before and after, whole and matching</text>
+      </g>
+      <text class="svg-small" x="330" y="166" fill="currentColor" opacity="0.9">No row counts is NO-DATA, not a pass:</text>
+      <text class="svg-small" x="330" y="182" fill="currentColor" opacity="0.9">the gate says what it compared, rather than</text>
+      <text class="svg-small" x="330" y="198" fill="currentColor" opacity="0.9">asserting a comparison it never made.</text>
+    </svg>
+    <figcaption>The distinction the gate draws is between a migration that reads correct and a migration that has been run backwards on real data. Nothing here resolves the rehearsal identifier against your job system, so that id is a pointer for a human to follow, and the gate says so on every run.</figcaption>
+  </figure>
+
+  <p>Adaeze restores a copy, runs both legs, records the receipt through the evidence wrapper, and the gate passes on evidence rather than on reading.</p>
+
+  <pre><code>sbe evidence run --check migration-rehearsal -- \
+  scripts/rehearse_migration.sh --restore nightly-2026-08-05
+
+sbe gate migration design/daily-revenue
+<span class="c">migration  PASS  forward and reverse both recorded against restore</span>
+<span class="c">                 nightly-2026-08-05; rehearsal id RH-4471; 8,412,905 rows</span>
+<span class="c">                 before and after [severity: gate]</span></code></pre>
+
+  <p class="statement wide">The reverse leg is not documentation. It is a thing that has either run or not.</p>
+
+  <span class="daymark">Wednesday, afternoon</span>
+  <h3 id="wed-pm">Two writers, one file</h3>
+
+  <p>Tom is changing the service that serves the figure. Priya is changing the model underneath it. Both need to touch the same transformation file, and both have an agent working.</p>
+
+  <p>On a small team this is the failure that costs an afternoon and nobody writes a post-mortem about it, because it is embarrassing rather than interesting.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 190" role="img" aria-labelledby="fence-title">
+      <title id="fence-title">Two writers approaching one file. Without a claim, the second write silently overwrites the first. With the task registry, the second writer is refused by name and told who holds the path.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Without a claim</text><text x="330" y="14">With the registry</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor"><text x="0" y="52">AGENT A</text><text x="180" y="52">AGENT B</text></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M30 60 L86 86" marker-end="url(#ar)"/><path d="M204 60 L134 86" marker-end="url(#ar)"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="60" y="92" width="120" height="30" rx="3"/></g>
+      <text class="svg-title" x="74" y="112" fill="currentColor">revenue.sql</text>
+      <text class="svg-small" x="0" y="146" fill="currentColor" opacity="0.9">Last write wins.</text>
+      <text class="svg-small" x="0" y="162" fill="currentColor" opacity="0.9">Nobody is told.</text>
+      <text class="svg-small" x="0" y="182" fill="currentColor" opacity="0.95">Found on Friday, if at all.</text>
+
+      <line x1="300" y1="0" x2="300" y2="182" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <g class="svg-title" fill="currentColor"><text x="330" y="52">AGENT A</text><text x="520" y="52">AGENT B</text></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M360 60 L416 86" marker-end="url(#ar)"/></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.5" fill="none"><path d="M544 60 L478 86"/></g>
+      <g stroke="currentColor" stroke-width="1.4" opacity="0.75"><path d="M498 68 L516 82"/><path d="M516 68 L498 82"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="390" y="92" width="120" height="30" rx="3"/></g>
+      <text class="svg-title" x="404" y="112" fill="currentColor">revenue.sql</text>
+      <text class="svg-small" x="330" y="146" fill="currentColor" opacity="0.9">Claimed by task DR-12, owner Priya.</text>
+      <text class="svg-small" x="330" y="162" fill="currentColor" opacity="0.9">Agent B is refused, by name, at write time.</text>
+      <text class="svg-small" x="330" y="182" fill="currentColor" opacity="0.95">Found in one second.</text>
+    </svg>
+    <figcaption>One writer per file, claimed before an agent launches rather than after. The honest scope: the hook gates file writes and does not gate shell commands, so a write through a shell crosses the claim unrefused and is caught afterwards by the scope check rather than at the moment it happens.</figcaption>
+  </figure>
+
+  <pre><code>sbe task open DR-12 --agent priya --paths models/revenue.sql
+sbe fences
+<span class="c">DR-12  priya  models/revenue.sql  open</span></code></pre>
+
+  <span class="daymark">Thursday</span>
+  <h3 id="thu">Prove the number, or label it</h3>
+
+  <p>The model is fixed. The figure moves. Now somebody has to be able to say why the new one is right, and "we re-ran it" is what failed in March.</p>
+
+  <p>The numbers gate wants three things: a pinned snapshot so the re-run reads the same bytes, a second derivation whose text genuinely differs, and zero drift between the two real numbers.</p>
+
+  <pre><code><span class="c">-- derivation A, the model, pinned to a Delta version</span>
+SELECT order_date, SUM(net_amount) FROM analytics.fct_daily_revenue
+VERSION AS OF 412 GROUP BY order_date;
+
+<span class="c">-- derivation B, from the source, deliberately a different path</span>
+SELECT o.order_date, SUM(l.quantity * l.unit_price - l.discount)
+FROM raw.orders o JOIN raw.order_lines l ON l.order_id = o.order_id
+GROUP BY o.order_date;</code></pre>
+
+  <p>Derivation B walks a different path on purpose. That is the part a person has to get right, because the gate cannot check it.</p>
+
+  <div class="panel warn">
+    <h4>The limit, stated where it bites</h4>
+    <p>The gate compares the two derivations as text and requires them to differ by more than case, whitespace and comments. It does not read which tables they touch. Renaming an alias passes. Two queries over the same broken view agree perfectly and pass.</p>
+    <p>That is a floor, not a proof of independence, and it is printed on every run. A team that believes otherwise will trust it at exactly the wrong moment.</p>
+  </div>
+
+  <p>Marc, meanwhile, is doing the part that has no gate at all. He writes the acceptance criteria against what Finance actually asked for, and the QA traceability review maps each one to a test that exists.</p>
+
+  <pre><code>sbe review-route --base main
+<span class="c">data-reviewer      models/, *.sql changed</span>
+<span class="c">migration-reviewer migrations/ changed</span>
+<span class="c">at most two specialists; zero is a legal result</span></code></pre>
+
+  <p>No model chose those two. The router read the diff.</p>
+
+  <span class="daymark">Friday</span>
+  <h3 id="fri">Merge, or do not</h3>
+
+  <p>Adaeze opens the pull request. CI runs the same checks the team has been running locally all week, this time under <code>--strict</code>.</p>
+
+  <pre><code>sbe status
+
+<span class="c">BROKEN CLAIMS:   clean</span>
+<span class="c">MERGE BLOCKERS:  clean</span>
+<span class="c">MISSING EVIDENCE: NO-DATA. dossier daily-revenue: no receipt declares</span>
+<span class="c">                 an approval, and nothing here detects that one was needed</span>
+<span class="c">NEXT ACTION: nothing blocking here that this tool can see.</span></code></pre>
+
+  <p>Read that last block carefully, because it is the register this whole product is written in. Nothing is blocking. That is not the same claim as everything having been inspected, and the output says which is which rather than letting the reader assume.</p>
+
+  <p class="statement">Blockers first. Then, plainly, what was never looked at.</p>
+
+  <p>The approval line is NO-DATA rather than PASS because the team has not wired signing keys into CI yet. It does not block, it is not hidden, and it will still be there next Friday until somebody does something about it.</p>
+
+  <h3 id="sprint-pic">The sprint in one picture</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="wk-title">
+      <title id="wk-title">The five days mapped against the six phases and the four gates. Monday sizes the work at purpose. Tuesday settles the data model. Wednesday runs the migration rehearsal and claims the shared file. Thursday proves the number. Friday merges under the strict gates.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">Mon</text><text x="128" y="14">Tue</text><text x="256" y="14">Wed</text><text x="384" y="14">Thu</text><text x="512" y="14">Fri</text>
+      </g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="36" width="116" height="52" rx="3"/><rect x="128" y="36" width="116" height="52" rx="3"/>
+        <rect x="256" y="36" width="116" height="52" rx="3"/><rect x="384" y="36" width="116" height="52" rx="3"/>
+        <rect x="512" y="36" width="116" height="52" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="56">PURPOSE</text><text x="140" y="56">DATA</text><text x="268" y="56">ARCH</text><text x="396" y="56">VERIFY</text><text x="524" y="56">MERGE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="12" y="76">tier computed</text><text x="140" y="76">grain in words</text><text x="268" y="76">rollback run</text><text x="396" y="76">second derivation</text><text x="524" y="76">strict in CI</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M116 62 L126 62" marker-end="url(#ar)"/><path d="M244 62 L254 62" marker-end="url(#ar)"/>
+        <path d="M372 62 L382 62" marker-end="url(#ar)"/><path d="M500 62 L510 62" marker-end="url(#ar)"/>
+      </g>
+      <line x1="0" y1="108" x2="638" y2="108" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+      <text class="svg-label" x="0" y="128" fill="currentColor" opacity="0.85">What fired, and when</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="0" y="150">intake, five questions, tier T3</text>
+        <text x="0" y="168">design checks: datamodel PASS, diagrams FAIL on an undeclared node</text>
+        <text x="0" y="186">migration gate: both legs against a restore, row counts matching</text>
+        <text x="0" y="204">task registry: second writer refused by name</text>
+        <text x="0" y="222">numbers gate: two derivations, pinned snapshot, zero drift</text>
+        <text x="0" y="240">status: blockers clean, approval NO-DATA and printed rather than hidden</text>
+      </g>
+    </svg>
+    <figcaption>Nothing in the week was extra ceremony. Every gate that fired corresponded to a failure this team had already lived through once, and the two that caught something real, the undeclared diagram node and the unrehearsed reverse, both fired before the code was written rather than after it shipped.</figcaption>
+  </figure>
+</section>
+<!-- =================== ACT THREE =================== -->
+<section class="part" id="seats">
+  <span class="part-label">Act three</span>
+  <h2 class="part-head">Five seats at the table</h2>
+  <p class="part-blurb">On a small team one person often holds two of these. Find the seat you actually sit in: the pain in your own words, the gate that fires for you, and what changes on Monday.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-labelledby="seats-title">
+      <title id="seats-title">Five seats around one change, each with the phase it owns and the control that fires for it. The Technical BA owns purpose, the backend engineer owns process and architecture, the data engineer owns the data model, infrastructure owns the migration, and QA owns verification. Only four of the five have a mechanical gate behind them.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">Seat</text><text x="186" y="14">The phase they own</text><text x="386" y="14">What fires for them</text>
+      </g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor">
+        <text x="0" y="52">TECHNICAL BA</text><text x="0" y="90">BACKEND</text><text x="0" y="128">DATA</text>
+        <text x="0" y="166">INFRASTRUCTURE</text><text x="0" y="204">QA</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="186" y="52">purpose</text><text x="186" y="90">process, architecture</text><text x="186" y="128">the data model</text>
+        <text x="186" y="166">the migration</text><text x="186" y="204">verification</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
+        <rect x="380" y="34" width="258" height="24" rx="3"/><rect x="380" y="72" width="258" height="24" rx="3"/>
+        <rect x="380" y="110" width="258" height="24" rx="3"/><rect x="380" y="148" width="258" height="24" rx="3"/>
+        <rect x="380" y="186" width="258" height="24" rx="3"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.95">
+        <text x="390" y="51">no gate at all, which is why the phase exists</text>
+        <text x="390" y="89">the decision record, and its flip condition</text>
+        <text x="390" y="127">the datamodel check, and the numbers gate</text>
+        <text x="390" y="165">the migration gate, both legs on a restore</text>
+        <text x="390" y="203">the ran gate: exit zero, nonzero duration</text>
+      </g>
+      <line x1="0" y1="220" x2="638" y2="220" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="236" fill="currentColor" opacity="0.95">One change, five seats. On a team of four, somebody is holding two of these rows at once.</text>
+    </svg>
+    <figcaption>Read the top row twice. The Technical BA is the only seat with no mechanical gate behind it, and that is not an oversight: no tool can check whether a problem statement describes the real problem. The design phase exists precisely because that seat cannot be automated, and every phase below it inherits whatever it got wrong.</figcaption>
+  </figure>
+
+  <span class="seat">Seat one</span>
+  <h3 id="seat-backend">Backend engineer</h3>
+
+  <p class="lede">Your expensive mistakes are a boundary drawn in the wrong place and a contract changed without knowing who consumed it.</p>
+
+  <p><strong>The pain.</strong> Claude will happily change an endpoint's response shape. It cannot know that a partner batch job parses that response at 2am, because nobody wrote that down anywhere it could read. You find out from the partner.</p>
+
+  <p><strong>What fires for you.</strong> The intake asks whether this changes a contract others depend on and how many consumers break if it is wrong. Answer yes and many and you are at T2, owing six artifacts, one of which is a decision record with two genuinely distinct rejected alternatives and a flip condition.</p>
+
+  <p><strong>The part that pays.</strong> The flip condition, which is the field teams skip.</p>
+
+  <div class="scene">
+    <p>Revisit toward a split if a second team comes to need independent deployment of the pricing path, or if the consistency requirement moves from eventual to strict for order totals.</p>
+    <p>Neither is true today: one team deploys this, and Finance reconciles daily rather than continuously.</p>
+  </div>
+
+  <p>Six months later that paragraph is the difference between revisiting a decision and re-litigating it from nothing.</p>
+
+  <p><strong>On the exception path.</strong> The process artifact asks for it by name, and on service work the exception path is the document. "On a timeout the order stays in <code>pending_payment</code> and a reconciliation job resolves it within fifteen minutes, never retried inline, because the provider is not idempotent on this endpoint without an idempotency key and we do not send one today" is the sentence that prevents a double charge. It exists because a template demanded it.</p>
+
+  <p><strong>Your reviewer.</strong> <code>backend-reviewer</code>, read-only, covering contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance. Touch auth, money, partner APIs, file upload, secrets or personal data and <code>security-reviewer</code> joins it automatically.</p>
+
+  <p class="evidence">Reviewer selection is deterministic: <code>sbe review-route</code> reads the diff, no model chooses, at most two specialists, and zero is a legal result rather than a claim of a clean review.</p>
+
+  <span class="seat">Seat two</span>
+  <h3 id="seat-data">Data engineer</h3>
+
+  <p class="lede">Every failure in your work is silent by construction. A wrong number is formatted exactly like a right one.</p>
+
+  <p><strong>The pain.</strong> Four traps, and you have probably hit at least two.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Trap</th><th>How it presents</th><th>Where it is caught</th></tr></thead>
+    <tbody>
+      <tr><th>The grain</th><td>A join fans out, one order becomes three rows, revenue overstates by the average line count. Passes every null and type check.</td><td>Data phase. The grain written in words, and the datamodel check refusing a relationship with no cardinality.</td></tr>
+      <tr><th>Two owners</th><td>The CRM and billing both believe they own <code>customer</code>. Two dashboards disagree and both are internally consistent.</td><td>Data phase. Every entity names its system of record, or the check fails.</td></tr>
+      <tr><th>The unrehearsed reverse</th><td>The migration ran. Nobody ever ran the rollback. You learn this during the incident.</td><td>Migration gate. Both legs against a restored copy, matching row counts.</td></tr>
+      <tr><th>The unprovable figure</th><td>Somebody asks where the number came from. The answer is a notebook that no longer runs.</td><td>Numbers gate. A pinned snapshot and a genuinely different second derivation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><strong>Per platform, concretely.</strong> The BrotherSBE commands are the same everywhere; what changes is how you pin a snapshot.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Platform</th><th>How you pin the snapshot</th><th>What bites hardest</th></tr></thead>
+    <tbody>
+      <tr><th>Snowflake</th><td>A query id, or a time-travel offset, so the re-run reads the same bytes.</td><td>The numbers gate. Also the conflict-skipping upsert lint, on dimension loads.</td></tr>
+      <tr><th>Databricks</th><td><code>VERSION AS OF</code> on a Delta table, the cleanest pin of the four.</td><td>The numbers gate, and the migration gate on a repartition.</td></tr>
+      <tr><th>Power BI</th><td>Not where the figure is computed. Reconcile the measure against the warehouse table underneath it.</td><td>A DAX measure filtering on a role-playing date dimension, quietly disagreeing with a correct table.</td></tr>
+      <tr><th>Azure Data Factory, Fabric</th><td>Register the reconciliation as a check and run it through the evidence wrapper.</td><td>The <code>ran</code> gate. A pipeline that succeeded is not a pipeline that processed rows.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="evidence">UNVERIFIED: the vendor-side SQL shapes in this booklet illustrate the pattern and were not executed against a Snowflake, Databricks, Power BI or Azure estate by this project. The BrotherSBE commands beside them are covered by tests that run in CI.</p>
+
+  <p><strong>The lint that matters most in a warehouse.</strong> The silent-failure linter reads SQL wherever it is written, in a <code>.sql</code> file or embedded in Python.</p>
+
+  <pre><code>INSERT INTO analytics.dim_customer (customer_id, name)
+SELECT customer_id, name FROM staging.customers
+ON CONFLICT (customer_id) DO NOTHING;   <span class="c">&lt;- updates stop arriving, silently</span></code></pre>
+
+  <p>If the skip is genuinely what you want, say why where a reviewer sees it. A bare marker waives nothing and a marker carrying a refused token like <code>tbd</code> waives nothing, and the hit says why.</p>
+
+  <pre><code><span class="c">-- sbe: allow-silent replays are idempotent, the row is immutable after insert</span></code></pre>
+
+  <span class="seat">Seat three</span>
+  <h3 id="seat-infra">Infrastructure engineer</h3>
+
+  <p class="lede">You are the one who has to believe the rollback, and you are the one holding the pager when it turns out nobody tested it.</p>
+
+  <p><strong>The pain.</strong> A migration that reads correct is not a migration that has been run backwards on real data. Expand and contract compressed into one release is the single most common way a rollback becomes impossible, and it looks completely fine in review.</p>
+
+  <p><strong>The sequence that survives.</strong></p>
+
+  <ol>
+    <li>Expand. Add the new column nullable, deploy, write to both.</li>
+    <li>Backfill, with the reconciliation registered as a check and run through the evidence wrapper.</li>
+    <li>Read from the new column, deploy.</li>
+    <li>Contract. Drop the old column, in a <em>later</em> release, only once the previous one is no longer deployable.</li>
+  </ol>
+
+  <p>Step four in the same release as step one is the failure. <code>migration-reviewer</code> covers exactly this: forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</p>
+
+  <p><strong>Where the blast radius rule sits with you.</strong> BrotherSBE never gets apply rights on production state. It drafts the exact command with its rollback and hands it to a human. Credentials are never typed, stored or logged.</p>
+
+  <div class="panel hot">
+    <h4>Say this out loud before you adopt it</h4>
+    <p>That rule is a stated discipline plus whatever access control your estate already has. Nothing in this plugin can revoke a credential your shell already holds. If your real requirement is that an agent physically cannot deploy, that is your CI permissions and your cloud IAM, not a line in a skill file.</p>
+  </div>
+
+  <p><strong>What you must supply yourself.</strong> No CODEOWNERS and no branch protection ships here. The CI workflow guards nothing until you copy it into your own repository, and <code>--strict</code> moves only by a human editing that workflow, visible in the diff. That last property is deliberate: a session instruction can never waive a hard gate.</p>
+
+  <span class="seat">Seat four</span>
+  <h3 id="seat-qa">QA engineer</h3>
+
+  <p class="lede">Your problem is not writing tests. It is that a green suite and a correct system are two different claims, and only one of them is being made.</p>
+
+  <p><strong>The pain.</strong> An agent writes tests alongside the code, and they pass. Of course they pass: they were written from the same understanding that produced the code. A test that encodes the same misunderstanding as the implementation is worse than no test, because it converts an open question into a settled one.</p>
+
+  <p><strong>What fires for you.</strong> The <code>ran</code> gate, which is blunter than it sounds and more useful than it sounds. Each recorded check must name what ran, exit zero, and take a nonzero duration. A check that took no time did not run.</p>
+
+  <p>Underneath it sits a defect worth understanding, because it is the reason the evidence layer is shaped the way it is.</p>
+
+  <div class="scene">
+    <p>A receipt used to prove that a process started, was timed, and exited. So <code>-- true</code> minted a clean, sealed, commit-bound receipt.</p>
+    <p>The command ran. That was provable.</p>
+    <p>The command was the check this change owed. That was not.</p>
+  </div>
+
+  <p>Now the check registry names the executable, its exact argument vector, its working directory, the files it is evidence for, and the runner files whose bytes are the check. <code>sbe evidence run --check &lt;id&gt;</code> resolves all of that from the registry, and there is no argument on that path that changes what runs.</p>
+
+  <p><strong>Your reviewer.</strong> <code>qa-reviewer</code> maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say. On interface and service work the missing coverage is almost always the failure path: the network error, the declined card, the expired session.</p>
+
+  <p><strong>The rule that changes your review verdicts.</strong> A verdict counts only when it names the falsification actually executed: the command re-run, the defect reproduced, the number re-derived. Reasoning alone is NO-DATA, not a finding.</p>
+
+  <p class="evidence">That rule is graded at the weekly review and nothing parses a verdict, so it is a discipline rather than a control. It is listed among the honest limits for exactly that reason.</p>
+
+  <span class="seat">Seat five</span>
+  <h3 id="seat-ba">Technical BA</h3>
+
+  <p class="lede">You are the only person in the room whose output has no gate at all, and that is precisely why the design phase was built.</p>
+
+  <p><strong>The pain.</strong> The business asks for something in its own words. By the time it reaches a schema, three translations have happened and nobody recorded any of them. When the delivered thing is wrong, the argument is about what was asked for, and there is no artifact to settle it.</p>
+
+  <p><strong>Where you own the document.</strong> The purpose brief is yours, and it has four parts that each stop a specific argument.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Section</th><th>The argument it prevents</th></tr></thead>
+    <tbody>
+      <tr><td>Problem, stated with no solution in it</td><td>Building the first idea somebody had instead of the thing that is broken</td></tr>
+      <tr><td>Users, and what they do today instead</td><td>Solving for a user who does not exist</td></tr>
+      <tr><td>Success criteria, observable</td><td>"It feels faster" as an acceptance criterion</td></tr>
+      <tr><td>Non-goals, explicit</td><td>The scope creep that turns a fix into a quarter of work</td></tr>
+      <tr><td>What breaks if this is wrong</td><td>Discovering the blast radius during the incident</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The non-goals section earns its place fastest. "This does not change how revenue is recognised" is one line, and it is the line that stops a reporting fix becoming an accounting project.</p>
+
+  <p><strong>Observable, concretely.</strong> "A user can complete checkout without leaving the page, and a failed payment leaves no orphaned order" is checkable by somebody who was not in the room. "The checkout feels faster" is not, and no gate downstream can rescue it.</p>
+
+  <p><strong>What you get back.</strong> The verification artifact turns your acceptance criteria into a table of one row per claim, the check that proves it, and when it runs. A claim with no check is listed as having none, rather than omitted, which is the difference between a plan and a wish.</p>
+
+  <h3 id="overhead">When it earns its overhead</h3>
+
+  <p>An honest test, because a control your team switches off protects nothing.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Adopt it when</th><th>Do not bother when</th></tr></thead>
+    <tbody>
+      <tr><td>Wrong output would be silent: a figure nobody re-derives, a pipeline that drops rows, a migration whose reverse was never run</td><td>The work is purely presentational, with no data or service behind it</td></tr>
+      <tr><td>More than one consumer depends on a shape you are about to change</td><td>The codebase is a spike nobody intends to keep</td></tr>
+      <tr><td>The work touches a warehouse, a service contract, a schema migration, personal or partner data, or money</td><td>Your team does not review pull requests, so the learning loop never turns</td></tr>
+      <tr><td>Agents are writing engineering work and you have no mechanical way to tell whether it is true</td><td>You need something that deploys for you, which this refuses to do on purpose</td></tr>
+      <tr><td>Decisions keep being re-litigated because nobody recorded what was rejected</td><td>Almost none of your changes are ever T2 or above</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement wide">On a T0 change it costs five questions and owes nothing. That is the common case, and it is meant to be.</p>
+
+  <p>On a T2 or T3 change the cost is real: six or seven artifacts, each a piece of thinking somebody has to do. The argument is not that this is free. It is that you were going to pay for those decisions anyway, and design time is cheaper than incident time.</p>
+
+  <p>If your changes are almost never T2 or T3, you probably do not need this. That is a legitimate answer and nothing here is going to argue you out of it.</p>
+</section>
+<!-- =================== ACT FOUR =================== -->
+<section class="part" id="fit">
+  <span class="part-label">Act four</span>
+  <h2 class="part-head">Where it fits</h2>
+  <p class="part-blurb">What it optimises for, how that differs from the rest of the ecosystem, and where the boundary of the product sits.</p>
+
+  <h3 id="why-plugin">Why another Claude Code plugin</h3>
+
+  <p>Most of what exists in this space is good, and most of it is solving a different problem. The question is not which is better. It is which layer your team is missing.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-labelledby="map-title">
+      <title id="map-title">Four layers placed along the life of a change. A skill pack shapes how the model writes. An orchestrator coordinates who works on what. A linter and CI read the diff after it exists. BrotherSBE covers the design phase before code and the evidence gates before merge.</title>
+      <line x1="0" y1="40" x2="638" y2="40" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="26">Decide</text><text x="180" y="26">Write</text><text x="360" y="26">Review</text><text x="524" y="26">Merge</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
+        <rect x="180" y="56" width="240" height="26" rx="3"/>
+        <rect x="120" y="90" width="220" height="26" rx="3"/>
+        <rect x="360" y="124" width="278" height="26" rx="3"/>
+        <rect x="0" y="158" width="420" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="192" y="74">SKILL PACK</text><text x="132" y="108">ORCHESTRATOR</text>
+        <text x="372" y="142">LINTER AND CI</text><text x="12" y="176">BROTHERSBE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="290" y="74">how the model writes</text><text x="252" y="108">who works on what</text>
+        <text x="486" y="142">what the diff says</text><text x="120" y="176">what must be true before the diff exists, and before it merges</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.35" fill="none">
+        <path d="M420 158 L600 158"/><path d="M600 158 L600 184"/><path d="M420 184 L600 184"/>
+      </g>
+      <text class="svg-small" x="430" y="176" fill="currentColor" opacity="0.85">and the gates that stop the merge</text>
+    </svg>
+    <figcaption>The layers do not compete for the same minute. If you already run a skill pack you like, keep it. This sits underneath, in the part of the timeline where the expensive decisions are made and where nothing else is looking.</figcaption>
+  </figure>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th></th><th>Skill pack</th><th>Linter, CI</th><th>Orchestrator</th><th>BrotherSBE</th></tr></thead>
+    <tbody>
+      <tr><th>Covers the phase where expensive mistakes are made</th><td>No, it shapes output</td><td>No, it reads the diff</td><td>Partly, it coordinates</td><td>Yes, six phases before verification</td></tr>
+      <tr><th>Effort is computed rather than chosen</th><td>No</td><td>Fixed for everything</td><td>No</td><td>Five questions produce a tier</td></tr>
+      <tr><th>Distinguishes absent evidence from passing evidence</th><td>No</td><td>Rarely; absent usually reads green</td><td>No</td><td>NO-DATA is a verdict, never a pass</td></tr>
+      <tr><th>Every rule names what enforces it</th><td>No</td><td>Implicitly, the rule is the code</td><td>No</td><td>Yes, and rules with no enforcer are filed as advice</td></tr>
+      <tr><th>Blocks a merge on evidence rather than on style</th><td>No</td><td>On lint findings</td><td>No</td><td>Four hard gates reading receipts</td></tr>
+      <tr><th>Domain judgement for warehouse and service work</th><td>Sometimes</td><td>No</td><td>No</td><td>Decision tables plus specialist reviewers</td></tr>
+      <tr><th>States its own limits mechanically</th><td>No</td><td>No</td><td>No</td><td>Yes, including that its own merged PRs carry no independent review</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Three of those rows are hard to copy, because they are structural rather than a matter of writing better prompts.</p>
+
+  <p><strong>Absent evidence is a verdict.</strong> Enforced when a check is written, not when it runs: a check declaring PASS as its empty state is refused registration, and a meta-test walks the registries rather than a written list.</p>
+
+  <p><strong>Every rule names its enforcer.</strong> Each law ends in <code>[checked: some_tool.py]</code> or <code>[human]</code>. That is not a documentation convention, it changes what you are permitted to believe. The spine itself is <code>[human]</code>.</p>
+
+  <p><strong>The ceremony is computed.</strong> Five objective questions, first match wins, and the declared tier is re-derived from the diff and compared. A tool that lets the person in a hurry decide how much rigour applies is a tool that applies none on the day it matters.</p>
+
+  <h3 id="summary">Pain, painkiller, medicine</h3>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>The pain</th><th>The painkiller, week one</th><th>The medicine, month three</th></tr></thead>
+    <tbody>
+      <tr><td>Your senior engineer is the design review for a machine</td><td>Design happens in six ordered phases before code, sized automatically</td><td>Decisions carry rejected alternatives and a flip condition, so they are revisited rather than re-argued</td></tr>
+      <tr><td>Done means the agent said done</td><td>Four hard gates read receipts, advisory locally, blocking in CI</td><td>Nobody on the team discusses whether something is done. They read the receipt</td></tr>
+      <tr><td>A figure nobody can re-derive</td><td>The numbers gate demands a pinned snapshot and a second derivation</td><td>Every figure reaching a decision has one, and month end stops being an argument</td></tr>
+      <tr><td>A rollback nobody has run</td><td>The migration gate demands both legs against a restored copy</td><td>Expand and contract is the default shape, and rollback time is known before it is needed</td></tr>
+      <tr><td>Checks that did not run, reported as green</td><td>NO-DATA is printed by name and never decides an exit code</td><td>Repeated NO-DATA on one check becomes a standing agenda item, because it means the evidence is not being produced</td></tr>
+      <tr><td>The same mistake, on the next project</td><td>Nothing, honestly. Week one does not fix this</td><td>A lesson becomes a shared rule only through a reviewed pull request, so no colleague's tool changes behaviour silently</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="notdo">What it does not do</h3>
+
+  <p>Stated here rather than discovered in month two.</p>
+
+  <ul>
+    <li><strong>It does not deploy.</strong> No apply rights on production state, ever. It drafts the exact command and its rollback for a human to run.</li>
+    <li><strong>It does not notice that a change needed an approval.</strong> The gate verifies an approval that was declared. A money-path change that declares nothing sails past it. What you need there is CODEOWNERS and branch protection, and neither ships here.</li>
+    <li><strong>It does not prove two derivations are independent.</strong> It proves their text differs. That is a floor.</li>
+    <li><strong>It does not resolve a rehearsal identifier</strong> against your job system. A human follows that pointer.</li>
+    <li><strong>It does not judge whether a stated reason is a good one.</strong> It checks that a reviewable reason exists and is not a refused token.</li>
+    <li><strong>It does not measure the spine.</strong> "Design before verification" and "install the check before writing the work" are disciplines. No tool computes whether you followed them.</li>
+    <li><strong>It has no opinion on visual design, typography or accessibility.</strong> Different toolchain, no overlap.</li>
+    <li><strong>It does not replace your judgement about your own domain.</strong> The datamodel check enforces that every entity names an owner. It cannot tell you that you named the wrong one.</li>
+  </ul>
+
+  <p class="statement wide">A control whose limits are hidden is a control you will over-trust at exactly the wrong moment.</p>
+</section>
+<!-- =================== ACT FIVE =================== -->
+<section class="part" id="how">
+  <span class="part-label">Act five</span>
+  <h2 class="part-head">How it works, and why trust it</h2>
+  <p class="part-blurb">Now the machinery, once you have a reason to care about it. Four of the tables in this act are generated from the repository rather than typed, and a check in CI fails when a source moves without this booklet being rebuilt.</p>
+
+  <h3 id="arch">The architecture, by responsibility</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="arch-title">
+      <title id="arch-title">Four layers. A guided surface of slash commands sits above a command line of subcommands. Both drive a design layer and an evidence layer. Underneath, a registry of checks declares what each one reads and what its empty state is, and CI runs the same checks under strict.</title>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="8" width="300" height="42" rx="3"/><rect x="338" y="8" width="300" height="42" rx="3"/>
+        <rect x="0" y="76" width="300" height="60" rx="3"/><rect x="338" y="76" width="300" height="60" rx="3"/>
+        <rect x="0" y="162" width="638" height="42" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="14" y="28">GUIDED SURFACE</text><text x="352" y="28">COMMAND LINE</text>
+        <text x="14" y="96">DESIGN</text><text x="352" y="96">EVIDENCE</text>
+        <text x="14" y="182">THE CHECK REGISTRY</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="14" y="44">slash commands, one recommended action at a time</text>
+        <text x="352" y="44">subcommands, what CI actually runs</text>
+        <text x="14" y="112">intake, tier, dossier, decision tables</text>
+        <text x="14" y="128">five checks over a directory</text>
+        <text x="352" y="112">receipts, four hard gates, the linter</text>
+        <text x="352" y="128">a receipt binds a run to a registered command</text>
+        <text x="14" y="198">every check declares what it reads and what its empty state is; PASS is refused as an empty state</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M150 50 L150 74" marker-end="url(#ar)"/><path d="M488 50 L488 74" marker-end="url(#ar)"/>
+        <path d="M150 136 L150 160" marker-end="url(#ar)"/><path d="M488 136 L488 160" marker-end="url(#ar)"/>
+      </g>
+      <line x1="0" y1="222" x2="638" y2="222" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="240" fill="currentColor" opacity="0.95">Advisory in a session: print the verdict, exit zero. Enforcing in CI under --strict: exit nonzero, stop the merge.</text>
+    </svg>
+    <figcaption>The registry at the bottom is the part that makes the rest trustworthy. A check is not a function somebody remembered to call; it is an entry declaring what it reads and what verdict it returns when that evidence is absent, and the declaration is validated when the check is constructed.</figcaption>
+  </figure>
+
+  <h3 id="controls">The controls, the commands and the reviewers</h3>
+
+  <h4>The guided surface, which is where a new joiner starts</h4>
+
+  <p>Nobody on your team needs the command line to use this. These are the slash commands, and one of them is enough on day one.</p>
+
+  <p class="derived">Generated from skills/*/SKILL.md. Not typed.</p>
+<!-- BEGIN GENERATED FIELDBOOK guided-commands -->
+<div class="tw">
+<table>
+<thead><tr><th>Command</th><th>When to reach for it</th></tr></thead>
+<tbody>
+<tr><th><code>/brothersbe:adopt</code></th><td>Use when installing BrotherSBE into a repository that has not used it before, or when checking whether an existing installation is actually wired up</td></tr>
+<tr><th><code>/brothersbe:design</code></th><td>Use when the shape of a system is being decided or reviewed: a purpose brief, a process map, an architecture decision record, a technology map, a conceptual to logical to physical data model, diagrams as code, or a verification plan</td></tr>
+<tr><th><code>/brothersbe:handover</code></th><td>Use when someone wants to hand this change's ownership to another named human, or when a receiver wants to inspect and accept or reject a handover already prepared for them</td></tr>
+<tr><th><code>/brothersbe:help</code></th><td>Use when someone asks what BrotherSBE is, how it works, or which command or skill to use</td></tr>
+<tr><th><code>/brothersbe:kickoff</code></th><td>Use at the start of any backend, infrastructure, or data engineering task, before designing or writing anything</td></tr>
+<tr><th><code>/brothersbe:learn</code></th><td>Use when a lesson from an incident, a repeated correction, a review finding or a measured outcome should become a shared rule, or when a session wants to propose an amendment to the laws</td></tr>
+<tr><th><code>/brothersbe:next</code></th><td>Use when someone asks what to do next in a BrotherSBE project</td></tr>
+<tr><th><code>/brothersbe:review</code></th><td>Use when reviewing a diff, a pull request, or a colleague's change against the design it claims to implement</td></tr>
+<tr><th><code>/brothersbe:start</code></th><td>Use as the single entry point when someone wants to begin or resume work with BrotherSBE and does not know, or does not care, which command comes next</td></tr>
+<tr><th><code>/brothersbe:status</code></th><td>Use when someone wants to know where a BrotherSBE project stands</td></tr>
+<tr><th><code>/brothersbe:verify</code></th><td>Use when work is about to be called done, a figure that could reach a decision has been produced, a schema migration is part of the change, the change touches money or a partner path, or a verification plan is being written</td></tr>
+<tr><th><code>/brothersbe:work</code></th><td>Use when someone wants BrotherSBE to execute ready plan tasks with implementation workers, not just recommend or design them</td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK guided-commands -->
+
+  <p>If your team remembers one, make it <code>/brothersbe:start</code>. It reads the ground, works out whether you are resuming or beginning, and returns exactly one recommended next action: what it is, why it is the one, what happens automatically, what decision stays yours, and how success will be checked.</p>
+
+  <h4>The command line, which is what CI runs</h4>
+
+  <p class="derived">Generated from the CLI command table itself, imported rather than parsed.</p>
+<!-- BEGIN GENERATED FIELDBOOK cli-commands -->
+<div class="tw">
+<table>
+<thead><tr><th>Command</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><th><code>sbe adopt</code></th><td>inspect a repository for installation readiness, dry run by default</td></tr>
+<tr><th><code>sbe book</code></th><td>the booklet: rebuild the team explainer whose command, role, check and limit tables are derived from canonical state; `--check` fails when a bound source moved without a rebuild</td></tr>
+<tr><th><code>sbe converge</code></th><td>does the code between two commits still match the approved dossier: scope, contracts, data, architecture, verification</td></tr>
+<tr><th><code>sbe decide</code></th><td>run a decision table (delegates to sbe_decide.py)</td></tr>
+<tr><th><code>sbe design</code></th><td>the design completeness check (delegates to sbe_design.py)</td></tr>
+<tr><th><code>sbe doctor</code></th><td>check this installation and the environment it will run in</td></tr>
+<tr><th><code>sbe evidence</code></th><td>run a command and write the receipt it earned, verify one, or show one</td></tr>
+<tr><th><code>sbe exceptions</code></th><td>list exceptions, their owners and their expiry</td></tr>
+<tr><th><code>sbe explain</code></th><td>print the decision package for a decision id, or for a gate or check name, regenerating one from the shipped registry when no run has written it</td></tr>
+<tr><th><code>sbe fences</code></th><td>print the live fences the write hook would enforce</td></tr>
+<tr><th><code>sbe gate</code></th><td>one hard gate by name, or all of them over a directory</td></tr>
+<tr><th><code>sbe handover</code></th><td>explicit human handover: prepare, show, acknowledge, reject; ownership stays with the outgoing owner until a named human receiver acknowledges</td></tr>
+<tr><th><code>sbe impact</code></th><td>read the git diff and reconcile it with the declared intake tier</td></tr>
+<tr><th><code>sbe init</code></th><td>install BrotherSBE's local footprint into a repository, dry run by default</td></tr>
+<tr><th><code>sbe inspect-change</code></th><td>alias of impact, the name the finalization brief uses</td></tr>
+<tr><th><code>sbe instruction-surface</code></th><td>did a changed CLAUDE.md, .claude/**, .mcp.json, .claude-plugin/**, hooks/**, agent or skill definition, CODEOWNERS or CI workflow stay inside declared, reviewed scope (delegates to sbe_instruction_surface.py)</td></tr>
+<tr><th><code>sbe intake</code></th><td>score the five intake questions into a tier</td></tr>
+<tr><th><code>sbe lineage</code></th><td>walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, with an evidence pointer on every hop</td></tr>
+<tr><th><code>sbe map</code></th><td>a deterministic, offline HTML status page built from canonical state only: sbe map --out FILE</td></tr>
+<tr><th><code>sbe plan</code></th><td>derive the task plan from a dossier and validate it (delegates to sbe_plan.py)</td></tr>
+<tr><th><code>sbe policy</code></th><td>evaluate .sbe/policy.yml against a diff: which checks, tiers and approvals this change is REQUIRED to carry, and whether they are there</td></tr>
+<tr><th><code>sbe pr</code></th><td>pull-request surfaces: pr verify &lt;number&gt; --repo owner/name checks live GitHub approval evidence, bound to the head commit</td></tr>
+<tr><th><code>sbe program</code></th><td>program-wide status from the ledger: gantt, finished, in flight, blocked, risks with mitigations, docs, budget; `check` fails when STATUS.md drifted</td></tr>
+<tr><th><code>sbe protections</code></th><td>is the repository itself protecting the control plane: protections verify --repository owner/name --branch main reads CODEOWNERS locally and the branch ruleset through gh api</td></tr>
+<tr><th><code>sbe review</code></th><td>run the scored surface including soft findings, plus the gates</td></tr>
+<tr><th><code>sbe review-route</code></th><td>deterministic reviewer selection from a diff: no model chooses, at most two specialists, zero is a legal result, never claims a clean review</td></tr>
+<tr><th><code>sbe scope</code></th><td>did the changes that survived stay inside declared scope: scope verify --base REF [--head REF] [--strict] is the CI backstop for the Bash and Stop write boundary, scope report says what the Stop hook would decide right now (delegates to sbe_session_reconcile.py)</td></tr>
+<tr><th><code>sbe score</code></th><td>the scored surface (delegates to sbe_score.py)</td></tr>
+<tr><th><code>sbe status</code></th><td>blocker-first summary of where a change stands, read from recorded state</td></tr>
+<tr><th><code>sbe task</code></th><td>the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition</td></tr>
+<tr><th><code>sbe verify</code></th><td>run the design check and the hard gates over a directory</td></tr>
+<tr><th><code>sbe version</code></th><td>print the version, or move every version declaration site at once (version bump &lt;new&gt;)</td></tr>
+<tr><th><code>sbe work</code></th><td>isolated implementation for one plan task: start, check, finish, remove, and never a merge</td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK cli-commands -->
+
+  <p>Out of that whole list, a working engineer touches four.</p>
+
+  <pre><code>sbe status                                    <span class="c"># where this stands, blockers first</span>
+sbe verify .                                  <span class="c"># design check plus the hard gates</span>
+sbe review                                    <span class="c"># the scored surface, soft findings included</span>
+sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run a registered check, mint its receipt</span></code></pre>
+
+  <h4>The reviewers, as routing rather than a cast of characters</h4>
+
+  <p>Selection is deterministic. <code>sbe review-route</code> reads the diff and picks at most two specialists, and zero is a legal result rather than a claim of a clean review.</p>
+
+  <p class="derived">Generated from the agent definitions in agents/. Read the tools column: it is the argument.</p>
+<!-- BEGIN GENERATED FIELDBOOK roles -->
+<div class="tw">
+<table>
+<thead><tr><th>Role</th><th>What it is for</th><th>What it covers</th><th>Tools it may use</th></tr></thead>
+<tbody>
+<tr><th><code>backend-reviewer</code></th><td>Read-only backend change review</td><td>Use when a service, API, endpoint, queue consumer or transactional path changes. Covers contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>data-reviewer</code></th><td>Read-only data and warehouse change review</td><td>Use when a data model, SQL transformation, dbt model, pipeline or reported figure changes. Covers grain, joins and fan-out, keys, systems of record, historization, reconciliation, freshness, quality and cost.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>evidence-auditor</code></th><td>Read-only audit of evidence provenance</td><td>Use when a receipt, a gate verdict, a test result, a rehearsal identifier or an approval is being relied on. Its job is to try to disprove the evidence, not to confirm it. It must never generate the evidence it audits.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>implementation-worker</code></th><td>Implementation worker for one sbe work brief</td><td>Use when a plan task has already been briefed (`sbe work brief`) and someone needs to write the code, not review it. Reads the brief, edits only inside its declared scope, runs the named verification, and returns a compact result contract. It is not a reviewer, never approves or blocks anyone else's change, and holds no merge, rebase, push or deploy rights of its own.</td><td><code>[Read, Grep, Glob, Edit, Write, Bash]</code></td></tr>
+<tr><th><code>migration-reviewer</code></th><td>Read-only database migration review</td><td>Use when a schema migration, backfill or destructive data operation is part of a change. Covers forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>principal-architect</code></th><td>Read-only architecture review</td><td>Use when a system boundary, a service split, a technology choice or a reversibility question is on the table, or when an ADR needs a second opinion before it is committed to. Returns a recommendation, the first and second alternative, and what would flip it.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>qa-reviewer</code></th><td>Read-only test coverage and traceability review</td><td>Use when a change is about to be called testable or done. Maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>security-reviewer</code></th><td>Read-only security and privacy review</td><td>Use when authentication, authorization, partner APIs, money movement, file upload, secrets, dependencies or personal data are touched. Covers threat model impact, authorization coverage, secret exposure, input validation, data classification and audit logging.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK roles -->
+
+  <p>Every reviewer is read-only, holding <code>Read, Grep, Glob, Bash</code> and nothing else. Exactly one role in that table holds <code>Edit</code> and <code>Write</code>, and it is the implementation worker, which writes code and reviews nothing.</p>
+
+  <p>That separation is structural rather than instructional, and it is the cheapest control in the system. A reviewer that can edit will fix what it finds, and a finding fixed in silence is a finding nobody recorded.</p>
+
+  <h3 id="tier">The tier, and why you do not pick it</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 216" role="img" aria-labelledby="tier-title">
+      <title id="tier-title">Five questions feeding a first-match-wins ladder. Sensitive or slow to reverse gives tier three and seven artifacts. A contract change or many consumers gives tier two and six. One boundary or some consumers gives tier one and the purpose brief. Otherwise tier zero, which owes nothing.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Five objective questions</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="0" y="44">changes a contract others depend on</text>
+        <text x="0" y="60">crosses a service, system or team boundary</text>
+        <text x="0" y="76">reversible in under an hour</text>
+        <text x="0" y="92">touches money, partner data, personal data, production state</text>
+        <text x="0" y="108">how many consumers break if it is wrong</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M300 76 L346 76" marker-end="url(#ar)"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="356" y="30" width="282" height="26" rx="3"/><rect x="356" y="62" width="282" height="26" rx="3"/>
+        <rect x="356" y="94" width="282" height="26" rx="3"/><rect x="356" y="126" width="282" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="368" y="48">T3</text><text x="368" y="80">T2</text><text x="368" y="112">T1</text><text x="368" y="144">T0</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="404" y="48">sensitive, or not reversible in an hour: all seven</text>
+        <text x="404" y="80">a contract change, or many consumers: six</text>
+        <text x="404" y="112">one boundary, or some consumers: the purpose brief</text>
+        <text x="404" y="144">none of the above: nothing at all</text>
+      </g>
+      <line x1="0" y1="170" x2="638" y2="170" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="188" fill="currentColor" opacity="0.95">First match wins, top down. T0 is the common case, and it is meant to be.</text>
+      <text class="svg-small" x="0" y="206" fill="currentColor" opacity="0.95">An override moves three fields that must agree, plus a written reason. A half-declared override fails and names the missing field.</text>
+    </svg>
+    <figcaption>A tool that taxes every change equally gets switched off in a fortnight, which is why T0 owes nothing and is expected to be most of your work. The awkwardness of the override is the design: it is not hard because somebody was punitive, it is hard because the alternative is the tier quietly becoming whatever the deadline needs.</figcaption>
+  </figure>
+
+  <h3 id="register">What is proven, and how strongly</h3>
+
+  <p>Every check that ships, with the severity it declared at write time and the verdict it returns when its evidence is absent. Severity changes the exit code and nothing else: it never changes what a check examines.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Stamp</th><th>What it means here</th></tr></thead>
+    <tbody>
+      <tr><td><span class="stamp s-certified">gate</span></td><td>A FAIL blocks a <code>--strict</code> run. This is what stops a merge.</td></tr>
+      <tr><td><span class="stamp s-beta">soft</span></td><td>A FAIL is graded and blocks only under the opt-in <code>--strict-soft</code>.</td></tr>
+      <tr><td><span class="stamp s-experimental">NO-DATA</span></td><td>The empty state. Reported by name, never decides an exit code in either direction.</td></tr>
+      <tr><td><span class="stamp s-unsupported">FAIL</span></td><td>The empty state for a check where absence is itself a broken claim.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="derived">Generated by walking the check registries, the same discovery rule the honesty meta-test applies. A check registered next year appears here the day it is registered.</p>
+<!-- BEGIN GENERATED FIELDBOOK checks -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>Check</th><th>Declared in</th><th>Severity</th><th>When its evidence is absent</th></tr></thead>
+<tbody>
+<tr><th><code>acceptance</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>adr</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>approval</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>artifacts</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>budget-vs-tier</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>cache-economy</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>calculation</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>citation-inventory</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>citations</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>compatibility</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>correction-latency</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>datamodel</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>diagrams</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>felt-outcome-ratings</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>fence-hygiene</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>freshness</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>graph</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>instruction-surface</code></th><td><code>tools/sbe_instruction_surface.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ledger-coverage</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>migration</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>migration</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>nonempty</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>numbers</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ownership</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>placeholder</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>prediction-seals</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ran</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>release-invariant</code></th><td><code>tools/sbe_release_invariant.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>review-cadence</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>schema-2-uniform</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>silent-failure-lints</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>vault-log-per-active-day</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK checks -->
+
+  <p>No row in that table can carry PASS in the last column. That is not a convention anybody polices; a check declaring PASS as its empty state is refused registration at construction.</p>
+
+  <h3 id="limits">What it will not tell you</h3>
+
+  <p>The honest half of the product, collected in one place so it is not the hardest part to find. The body of each limit lives in the limits file, so there is one copy and this page cannot quietly soften it.</p>
+
+  <p class="derived">Generated from docs/KNOWN-LIMITS.md.</p>
+<!-- BEGIN GENERATED FIELDBOOK limits -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>The limit, as the project states it</th><th>Law it qualifies</th></tr></thead>
+<tbody>
+<tr><th>The spine is a discipline, not a control</th><td><em>no law named</em></td></tr>
+<tr><th>Nothing detects that a change needed an approval</th><td><code>L9</code></td></tr>
+<tr><th>This repository's own merged pull requests carry no independent review</th><td><code>L9</code></td></tr>
+<tr><th>Only one tag is published on origin</th><td><em>no law named</em></td></tr>
+<tr><th>The tier comes from answers about contracts that no checker reads</th><td><em>no law named</em></td></tr>
+<tr><th>The forcing conditions are read by a person</th><td><code>L6</code></td></tr>
+<tr><th>The fence checks read registries, not the world</th><td><code>L13</code></td></tr>
+<tr><th>The case-fold confirmation trusts one probe of the project's own volume</th><td><em>no law named</em></td></tr>
+<tr><th>Blast radius revokes nothing</th><td><code>L14</code></td></tr>
+<tr><th>The CI workflow guards nothing until you copy it</th><td><code>L16</code></td></tr>
+<tr><th>Most of the close is human</th><td><code>L17</code></td></tr>
+<tr><th>Telemetry observes, it never decides</th><td><em>no law named</em></td></tr>
+<tr><th>The UNVERIFIED label is the agent's to write</th><td><em>no law named</em></td></tr>
+<tr><th>The doc-honesty guard reads proximity, not grammar</th><td><em>no law named</em></td></tr>
+<tr><th>Published figures are derived only where a page says so</th><td><em>no law named</em></td></tr>
+<tr><th>The hollowing sweep is not a proof</th><td><em>no law named</em></td></tr>
+<tr><th>Never run in anyone else's CI</th><td><em>no law named</em></td></tr>
+<tr><th>The ledger rewrite guard leaves one instant uncovered</th><td><em>no law named</em></td></tr>
+<tr><th>The writer lock needs a filesystem that honors flock</th><td><em>no law named</em></td></tr>
+<tr><th>The approval identity proof has a measured refusal remainder</th><td><code>L9</code></td></tr>
+<tr><th>The citation check never opens a page</th><td><em>no law named</em></td></tr>
+<tr><th>Windows CI runs, with named gaps</th><td><em>no law named</em></td></tr>
+<tr><th>Windows: the install-checker family is CLOSED and proven; one new cause is open (OWED-4)</th><td><em>no law named</em></td></tr>
+<tr><th>Every threshold was measured on one estate</th><td><em>no law named</em></td></tr>
+<tr><th>The impact scan proposes a floor, and reads paths more than it reads code</th><td><em>no law named</em></td></tr>
+<tr><th>The evidence wrapper binds a run to a commit, and proves less than that sounds</th><td><em>no law named</em></td></tr>
+<tr><th>Evidence covering evidence (T6)</th><td><em>no law named</em></td></tr>
+<tr><th>The privacy controls are defaults and patterns, not guarantees</th><td><em>no law named</em></td></tr>
+<tr><th>A green bypass suite covers the scenarios it covers</th><td><em>no law named</em></td></tr>
+<tr><th>The task registry only governs writers who register</th><td><em>no law named</em></td></tr>
+<tr><th>The registry file itself has no lock</th><td><em>no law named</em></td></tr>
+<tr><th>The registry exempts its own file from the postcondition</th><td><em>no law named</em></td></tr>
+<tr><th>Task expiry is informational, and nothing writes "abandoned" yet</th><td><em>no law named</em></td></tr>
+<tr><th>The fence view is one-directional</th><td><em>no law named</em></td></tr>
+<tr><th>The adoption kit proposes, and verifies only what a filesystem can answer</th><td><em>no law named</em></td></tr>
+<tr><th>The release candidate ships packaging, not a release</th><td><em>no law named</em></td></tr>
+<tr><th>The recommended install path has an undo now, and here is exactly how much of one</th><td><em>no law named</em></td></tr>
+<tr><th>A gate exemption cannot tell a real reason from a well-formed fake one</th><td><em>no law named</em></td></tr>
+<tr><th>A dossier's binding only resolves a commit held as a loose object</th><td><em>no law named</em></td></tr>
+<tr><th>Two honest narrowings from the baseline repair (2026-07-30)</th><td><em>no law named</em></td></tr>
+<tr><th>sbe plan derives structures, not intent</th><td><em>no law named</em></td></tr>
+<tr><th>sbe work isolates, it does not merge</th><td><em>no law named</em></td></tr>
+<tr><th>pr verify reads GitHub, it does not police it</th><td><em>no law named</em></td></tr>
+<tr><th>converge compares structures, not intent</th><td><em>no law named</em></td></tr>
+<tr><th>status --team reads the estate, it does not phone anyone</th><td><em>no law named</em></td></tr>
+<tr><th>What the first external round taught converge and plan (2026-07-31)</th><td><em>no law named</em></td></tr>
+<tr><th>The zero-network scan now walks the whole tree, not only tools/</th><td><em>no law named</em></td></tr>
+<tr><th>Every suite that existed now runs in CI, except one, and that is a choice</th><td><em>no law named</em></td></tr>
+<tr><th>A hard-gate receipt with no headCommit still passes unbound</th><td><em>no law named</em></td></tr>
+<tr><th>check-update follows a linked worktree, not a broken one</th><td><em>no law named</em></td></tr>
+<tr><th>The authority-file guard cannot always tell a worker from a human (LT-402)</th><td><em>no law named</em></td></tr>
+<tr><th>The authority guard's case-fold confirmation covers named segments, not a powerset</th><td><em>no law named</em></td></tr>
+<tr><th>Per-task worktree evidence under team status and converge (LT-501; both engine gaps fixed in rc.11, one true boundary remains)</th><td><em>no law named</em></td></tr>
+<tr><th>Plugin interoperability rests on platform behavior this repository cannot drive in a test (LT-502)</th><td><em>no law named</em></td></tr>
+<tr><th>Evidence obligations under CR-06 multi-dossier status, fixed (LANE B-004)</th><td><em>no law named</em></td></tr>
+<tr><th>The no-server promise is amended to no-remote-server (2026-08-05, gate LP-0301)</th><td><em>no law named</em></td></tr>
+<tr><th>A refused overlap on `sbe task open` leaves no durable record</th><td><em>no law named</em></td></tr>
+<tr><th>Task identity becomes (change, taskId); the headline collision it closes, and what remains (card 1)</th><td><em>no law named</em></td></tr>
+<tr><th>A registered check binds a command, and cannot say the command is a good check (BR-1012)</th><td><em>no law named</em></td></tr>
+<tr><th>There is no protected evidence level in this release</th><td><em>no law named</em></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK limits -->
+
+  <div class="panel accent">
+    <h4>The four that matter most to a small team</h4>
+    <p><strong>Nothing detects that a change needed an approval.</strong> The gate verifies an approval that was declared. What you actually need is CODEOWNERS and branch protection on your own repository.</p>
+    <p><strong>Two derivations differing in text is a floor, not a proof of independence.</strong> Two queries over the same broken view agree perfectly.</p>
+    <p><strong>A rehearsal identifier is a pointer, not a resolution.</strong> Nothing calls your job system to confirm the rehearsal happened.</p>
+    <p><strong>This repository's own merged pull requests carry no independent review.</strong> Applied to its own history, the approval law reports NO-DATA, not PASS. That is disclosed rather than hidden, and it is the honest answer to whether the project practises what it sells on that one axis: not yet, and it says so.</p>
+  </div>
+
+  <p><strong>The measurement caveat.</strong> Every threshold this project ships, and every baseline in its rubric, was measured on one estate. One. They are starting points rather than constants, and the honest instruction is to re-measure them on yours.</p>
+
+  <p class="statement wide">Stating the limits is what makes the rest of the claims worth anything.</p>
+
+  <h3 id="first">Your first sprint</h3>
+
+  <p>One repository. One lane of work. Two weeks advisory, then strict. Do not roll this across an estate before one team has an opinion, because a control that arrives everywhere at once gets switched off everywhere at once the first time it is inconvenient.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>When</th><th>What you do</th><th>What you should see</th></tr></thead>
+    <tbody>
+      <tr><th>Week 0</th><td><code>sbe adopt .</code>, which is a dry run and changes nothing. Read it. Then <code>--apply</code>.</td><td>A list of what would be installed, and nothing installed until you say so.</td></tr>
+      <tr><th>Week 1</th><td>Copy the CI workflow in, without <code>--strict</code>. Run the sprint normally.</td><td>Verdicts printed, nothing blocked. This week exists to find what is noisy on your codebase.</td></tr>
+      <tr><th>Week 2</th><td>Agree two sentences out loud, as a team, before turning it on.</td><td>"A FAIL blocks, a NO-DATA does not." And: "Nobody edits the workflow to make red go away."</td></tr>
+      <tr><th>Week 3</th><td>Turn on <code>--strict</code>.</td><td>One uncomfortable pull request. That is the system working.</td></tr>
+      <tr><th>Month 3</th><td>Read the weekly review honestly.</td><td>Most changes T0. Repeated NO-DATA treated as a workflow problem rather than a tool problem. Flip conditions occasionally met.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>That second sentence in week two is the entire control. It is why <code>--strict</code> moves only by a human editing the workflow file, where a reviewer sees it in the diff, and why a session instruction can never waive a hard gate.</p>
+
+  <p class="statement">Try it on the change you would be most embarrassed to get wrong.</p>
+
+  <h4>Keeping this booklet true</h4>
+
+  <p>Four tables in this act are generated from the repository. Rebuild them at every loop close, and let CI catch you when you forget.</p>
+
+  <pre><code>sbe book            <span class="c"># regenerate every derived table</span>
+sbe book --check    <span class="c"># does any bound source disagree with this booklet</span></code></pre>
+
+  <p>Under <code>--strict</code> in CI, a bound source that moved without a rebuild is a FAIL naming the section and the file. A stale prose stamp is NO-DATA: it reports that nobody has reread the words, and it never claims the words are wrong, because no tool can compute that.</p>
+
+  <p class="derived">Provenance for this booklet is printed below, one line per generated section, naming every file it was read from.</p>
+<!-- BEGIN GENERATED FIELDBOOK provenance -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>Section</th><th>Verdict</th><th>Items</th><th>Read from</th></tr></thead>
+<tbody>
+<tr><th><code>guided-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>12</td><td><code>skills/adopt/SKILL.md</code> <code>skills/design/SKILL.md</code> <code>skills/handover/SKILL.md</code> <code>skills/help/SKILL.md</code> <code>skills/kickoff/SKILL.md</code> <code>skills/learn/SKILL.md</code> <code>skills/next/SKILL.md</code> <code>skills/review/SKILL.md</code> <code>skills/start/SKILL.md</code> <code>skills/status/SKILL.md</code> <code>skills/verify/SKILL.md</code> <code>skills/work/SKILL.md</code></td></tr>
+<tr><th><code>cli-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>33</td><td><code>src/brothersbe/cli.py</code></td></tr>
+<tr><th><code>roles</code></th><td><span class="stamp s-certified">PASS</span></td><td>8</td><td><code>agents/backend-reviewer.md</code> <code>agents/data-reviewer.md</code> <code>agents/evidence-auditor.md</code> <code>agents/implementation-worker.md</code> <code>agents/migration-reviewer.md</code> <code>agents/principal-architect.md</code> <code>agents/qa-reviewer.md</code> <code>agents/security-reviewer.md</code></td></tr>
+<tr><th><code>checks</code></th><td><span class="stamp s-certified">PASS</span></td><td>32</td><td><code>tools/sbe_plan.py</code> <code>tools/sbe_design.py</code> <code>tools/sbe_gate.py</code> <code>tools/sbe_score.py</code> <code>tools/sbe_instruction_surface.py</code> <code>tools/sbe_release_invariant.py</code></td></tr>
+<tr><th><code>limits</code></th><td><span class="stamp s-certified">PASS</span></td><td>60</td><td><code>docs/KNOWN-LIMITS.md</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK provenance -->
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>

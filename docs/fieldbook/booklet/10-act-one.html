@@ -1,0 +1,212 @@
+<!-- =================== ACT ONE =================== -->
+<section class="part" id="pain">
+  <span class="part-label">Act one</span>
+  <h2 class="part-head">The pain</h2>
+  <p class="part-blurb">Six short sections. What is going wrong on teams shipping backend and data work with AI, what stops it immediately, what stops it coming back, and the one incident that started all of this.</p>
+
+  <h3 id="reviewer">Your team did not agree to become the reviewer of record for a machine</h3>
+
+  <p class="lede">The more engineering you hand to Claude, the more of your week goes to deciding whether what came back is true.</p>
+
+  <p>Your team is small. Two engineers, maybe five, maybe eight. Between you there is a backend, some infrastructure, a warehouse, a report the business actually looks at, and a test suite somebody has to believe in. Claude now writes a great deal of that, and it writes it fast. That is the good news, and it is genuinely good.</p>
+
+  <p>Here is the part nobody warns you about. More AI-written engineering creates more verification, and verification is the expensive kind of work.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>What your team ends up doing</th><th>How often it shows up</th></tr></thead>
+    <tbody>
+      <tr><td>Re-deriving a number by hand to see whether the first one was right</td><td>Every figure that reaches a decision</td></tr>
+      <tr><td>Reading a migration to work out whether the rollback would survive</td><td>Every schema change</td></tr>
+      <tr><td>Reconstructing why a table has the grain it has</td><td>Every time the model is questioned</td></tr>
+      <tr><td>Working out who actually consumes an endpoint before changing it</td><td>Every contract change</td></tr>
+      <tr><td>Deciding whether a test proves the thing it claims to prove</td><td>Every review</td></tr>
+      <tr><td>Re-running the check yourself because you do not trust the report</td><td>Every time done is asserted</td></tr>
+      <tr><td>Explaining to Finance where a figure came from</td><td>Every month end</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement wide">Eventually your senior engineer is the design review, the migration gate and the reconciliation, for a machine that never gets tired.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 300" role="img" aria-labelledby="pain-title">
+      <title id="pain-title">Two arrangements compared. In the first, the team personally carries design review, evidence checking and re-derivation between themselves and Claude. In the second, those three jobs move into BrotherSBE, and the team keeps only judgment and domain knowledge.</title>
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="8" refX="8.2" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.4 0.7 L9 4 L0.4 7.3 L2.4 4 z" fill="currentColor" opacity="0.62"/>
+        </marker>
+      </defs>
+
+      <text class="svg-label" x="0" y="12" fill="currentColor" opacity="0.85">Today</text>
+      <text class="svg-big" x="104" y="40" fill="currentColor">YOUR TEAM</text>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M118 50 L52 74" marker-end="url(#ar)"/><path d="M130 50 L130 74" marker-end="url(#ar)"/><path d="M142 50 L208 74" marker-end="url(#ar)"/>
+      </g>
+      <g class="svg-body" fill="currentColor" opacity="0.95">
+        <text x="4" y="90">design review</text><text x="104" y="90">evidence</text><text x="188" y="90">re-derivation</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="4" y="106">you read it after</text><text x="104" y="106">you take its word</text><text x="188" y="106">you redo the maths</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M34 116 L118 142" marker-end="url(#ar)"/><path d="M130 116 L130 142" marker-end="url(#ar)"/><path d="M216 116 L146 142" marker-end="url(#ar)"/>
+      </g>
+      <text class="svg-big" x="96" y="160" fill="currentColor">CLAUDE</text>
+      <text class="svg-small" x="0" y="186" fill="currentColor" opacity="0.9">Three jobs nobody was hired for,</text>
+      <text class="svg-small" x="0" y="200" fill="currentColor" opacity="0.9">all of them after the mistake was made.</text>
+
+      <line x1="290" y1="0" x2="290" y2="290" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <text class="svg-label" x="320" y="12" fill="currentColor" opacity="0.85">With BrotherSBE</text>
+      <text class="svg-big" x="424" y="40" fill="currentColor">YOUR TEAM</text>
+      <text class="svg-small" x="320" y="60" fill="currentColor" opacity="0.9">domain knowledge, judgment, the calls only you can make</text>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 70 L452 94" marker-end="url(#ar)"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"><rect x="320" y="98" width="276" height="74" rx="3"/></g>
+      <text class="svg-title" x="334" y="120" fill="currentColor">BROTHERSBE</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="334" y="138">a design phase that runs before the code</text>
+        <text x="334" y="152">gates that read receipts, not assurances</text>
+        <text x="334" y="166">absent evidence reported, never passed</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M452 172 L452 196" marker-end="url(#ar)"/></g>
+      <text class="svg-big" x="412" y="214" fill="currentColor">CLAUDE</text>
+      <text class="svg-small" x="320" y="236" fill="currentColor" opacity="0.9">writes the service, the migration, the pipeline</text>
+      <line x1="320" y1="254" x2="638" y2="254" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="320" y="272" fill="currentColor" opacity="0.95">Your judgment stays with you.</text>
+      <text class="svg-small" x="320" y="288" fill="currentColor" opacity="0.95">The checking does not have to.</text>
+    </svg>
+    <figcaption>Nothing here removes an engineering decision from your team. What moves is the work between the decisions: reviewing after the fact, taking a claim on trust, and redoing the arithmetic to see whether it holds. Those three are the whole product.</figcaption>
+  </figure>
+
+  <h3 id="painkiller">The painkiller: stop taking the agent's word for it</h3>
+
+  <p>Four things stop hurting in the first week.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="killer-title">
+      <title id="killer-title">Four transformations. You reviewing afterwards becomes design happening first. You trusting a claim becomes a gate reading a receipt. You re-deriving a number becomes the number carrying a second derivation. You guessing how much rigour applies becomes a tier computed from five questions.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Without</text><text x="326" y="14">With</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor">
+        <text x="0" y="54">YOU review after</text><text x="0" y="108">YOU take its word</text><text x="0" y="162">YOU re-derive</text><text x="0" y="216">YOU guess the rigour</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="0" y="70">reading a diff of a decision you were not in</text>
+        <text x="0" y="124">done, because the agent said done</text>
+        <text x="0" y="178">checking the figure by hand, again</text>
+        <text x="0" y="232">seven artifacts, or none, by mood</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.4"><path d="M258 48 L316 48"/><path d="M258 102 L316 102"/><path d="M258 156 L316 156"/><path d="M258 210 L316 210"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="322" y="32" width="316" height="34" rx="3"/><rect x="322" y="86" width="316" height="34" rx="3"/>
+        <rect x="322" y="140" width="316" height="34" rx="3"/><rect x="322" y="194" width="316" height="34" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="336" y="54">DESIGN happens first</text><text x="336" y="108">the GATE reads a receipt</text>
+        <text x="336" y="162">the NUMBER carries its proof</text><text x="336" y="216">the TIER is computed</text>
+      </g>
+    </svg>
+    <figcaption>Read the left column as the job your senior engineer quietly absorbed when the team started shipping with AI. Read the right as what a design phase, a receipt, a second derivation and five objective questions actually buy back.</figcaption>
+  </figure>
+
+  <p class="statement">A small team. More output. Less taking it on faith.</p>
+
+  <p class="evidence">The design checks, the four hard gates and the silent-failure linter each ship with named tests and run in CI on Linux and Windows. The tier computation is re-derived from the diff and compared against what was declared. Act five prints the whole register with the gap beside each entry.</p>
+
+  <h3 id="medicine">The medicine: stop the same class of wrong from becoming normal</h3>
+
+  <p>Catching this week's bad migration is worth something. It is not the interesting part.</p>
+
+  <p>The interesting part is that four failures keep coming back on backend and data teams, every one of them silent, and each is closed by a different phase of the same loop.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 344" role="img" aria-labelledby="med-title">
+      <title id="med-title">A six phase loop from purpose to verification, with four recurring silent failures placed beside the phase that closes each: the wrong grain at data, the undeclared contract at process and architecture, the unrehearsed rollback and the unprovable number at verification.</title>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="150" y="8" width="150" height="30" rx="3"/><rect x="150" y="64" width="150" height="30" rx="3"/>
+        <rect x="150" y="120" width="150" height="30" rx="3"/><rect x="150" y="176" width="150" height="30" rx="3"/>
+        <rect x="150" y="232" width="150" height="30" rx="3"/><rect x="150" y="288" width="150" height="30" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="164" y="28">PURPOSE</text><text x="164" y="84">PROCESS</text><text x="164" y="140">ARCHITECTURE</text>
+        <text x="164" y="196">DATA</text><text x="164" y="252">EXPRESSION</text><text x="164" y="308">VERIFICATION</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M225 38 L225 64" marker-end="url(#ar)"/><path d="M225 94 L225 120" marker-end="url(#ar)"/>
+        <path d="M225 150 L225 176" marker-end="url(#ar)"/><path d="M225 206 L225 232" marker-end="url(#ar)"/>
+        <path d="M225 262 L225 288" marker-end="url(#ar)"/>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.4" fill="none">
+        <path d="M300 135 L360 135"/><path d="M300 191 L360 191"/><path d="M300 303 L360 303"/><path d="M300 315 L360 315"/>
+      </g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="139">THE UNDECLARED CONTRACT</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="155">two consumers nobody enumerated</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="195">THE WRONG GRAIN</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="211">a join fans out and revenue overstates</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="299">THE UNREHEARSED ROLLBACK</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="315">the reverse leg was never run</text></g>
+      <g class="svg-title" fill="currentColor"><text x="366" y="335">THE UNPROVABLE NUMBER</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88"><text x="366" y="351">nobody can re-derive the figure</text></g>
+      <text class="svg-small" x="0" y="28" fill="currentColor" opacity="0.9">what the</text>
+      <text class="svg-small" x="0" y="42" fill="currentColor" opacity="0.9">work is for</text>
+      <text class="svg-small" x="0" y="196" fill="currentColor" opacity="0.9">where most</text>
+      <text class="svg-small" x="0" y="210" fill="currentColor" opacity="0.9">of the money</text>
+      <text class="svg-small" x="0" y="224" fill="currentColor" opacity="0.9">is lost</text>
+      <text class="svg-small" x="0" y="308" fill="currentColor" opacity="0.9">last, never</text>
+      <text class="svg-small" x="0" y="322" fill="currentColor" opacity="0.9">the theme</text>
+    </svg>
+    <figcaption>The order is the argument. Every one of these four is decided long before there is a diff to review, which is why reviewing the diff catches none of them. Verification sits at the end because a check installed before the work is a control, and a check written afterwards is written by somebody who already believes the work is right.</figcaption>
+  </figure>
+
+  <h3 id="the-number">The number that agreed with itself</h3>
+
+  <div class="scene">
+    <p>A daily revenue figure had been in the board pack for five months. Finance queried it once, in March, and an engineer checked it by re-running the model. The model returned the same number. Everyone moved on.</p>
+    <p>In August somebody joined orders to order lines to answer a different question, and the total came out lower. Not by a rounding error. By eleven per cent.</p>
+    <p>The model had been fanning out on a join since the week it was written. Re-running it had confirmed nothing, because the check and the thing being checked were the same query.</p>
+  </div>
+
+  <p>Nobody was careless. The engineer who checked it did exactly what checking looks like. The failure was structural: a second derivation that walks the same path is not a second derivation, and nothing in the pipeline knew the difference.</p>
+
+  <p class="statement wide">A check that reads the same path as the work is not a check. It is the work, run twice.</p>
+
+  <p>This is what the numbers gate exists for, and it is also the clearest example of an honest limit. The gate demands a second derivation whose text genuinely differs from the first, re-run to zero drift against a pinned snapshot. It cannot read which tables each derivation touches. Two queries over the same broken view still agree, and the gate still passes them.</p>
+
+  <p>That floor is worth having and it is worth knowing the height of. A team that believes the gate proves independence will trust it at exactly the wrong moment, which is why the limit is printed on every run rather than kept in a footnote.</p>
+
+  <h3 id="pillars">Designs, checks, proves</h3>
+
+  <p>Three words on the cover, and each is a different mechanism.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Pillar</th><th>What it means concretely</th><th>What enforces it</th></tr></thead>
+    <tbody>
+      <tr><th>Designs</th><td>Six phases run in order before code: purpose, process, architecture, data, expression, verification. The output is a dossier of at most eight files in one directory.</td><td>Five design checks, blocking in CI: artifacts, decision record, data model, diagrams, and no file left as the shipped template.</td></tr>
+      <tr><th>Checks</th><td>Four failure classes get a structural gate, chosen because each fails silently: numbers, migration, approval, and whether a check actually ran.</td><td><code>sbe_gate.py</code>, advisory in a session, blocking under <code>--strict</code> in CI.</td></tr>
+      <tr><th>Proves</th><td>A claim is backed by a receipt naming what ran, its exit code and its duration, or it is labelled UNVERIFIED next to the item.</td><td>The evidence store and the <code>ran</code> gate. A check that took no time did not run.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Underneath all three sits one rule that is easier to state than to find elsewhere.</p>
+
+  <p class="statement">Absent evidence is NO-DATA. NO-DATA is never a pass.</p>
+
+  <p>Three verdicts, not two. Something passed. Something failed. And something was never there to read, which is reported by name, and which never decides an exit code in either direction. Most tooling has two states and quietly sorts "did not run" into the good one. That collapse is where wrong results live.</p>
+
+  <p class="evidence">Enforced at construction rather than by convention: a check is refused registration if it declares PASS as its empty state, and a meta-test enumerates the registries rather than a written list, so a check added next year is covered on the day it is registered.</p>
+
+  <h3 id="whatitis">What it is, and three things it is not</h3>
+
+  <p>BrotherSBE is a Claude Code plugin that behaves like a senior backend and data engineering colleague. You describe the outcome in plain language. It decides the method, works in the order the engineering actually runs, and refuses to call anything finished until a check has run and left a receipt.</p>
+
+  <p><strong>It is not a prompt pack.</strong> A skill pack changes how the model writes. This changes what has to exist on disk before a merge is allowed. A rule in a prompt is not a control; a control is a check that runs.</p>
+
+  <p><strong>It is not a linter.</strong> A linter reads the diff, which means it arrives after the grain was chosen and the boundary was drawn. There is a linter inside this, hunting the patterns that swallow errors, but it is one of the smaller parts.</p>
+
+  <p><strong>It is not a replacement for your reviewers.</strong> It routes reviewers deterministically from the diff and gives each a narrow brief, and every one of them is read-only by construction. It does not approve anything. Nothing here detects that a change needed a human approval in the first place.</p>
+
+  <p>It is the domain specialist sibling of BrotherMode, the general orchestrator. They share a spine and diverge on scope. BrotherSBE is standalone: clone it and it works with nothing else installed.</p>
+</section>

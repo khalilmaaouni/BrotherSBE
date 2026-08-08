@@ -1,0 +1,250 @@
+<!-- =================== ACT TWO =================== -->
+<section class="part" id="sprint">
+  <span class="part-label">Act two</span>
+  <h2 class="part-head">One team, one sprint</h2>
+  <p class="part-blurb">Four people, five days. Finance says the daily revenue figure disagrees with the ledger. Fixing it turns out to mean a data model, a schema migration, a service contract and a test suite nobody trusts. Every command appears where the sprint needs it, not before.</p>
+
+  <p>The team: Priya on the warehouse, Tom on the service, Adaeze on infrastructure and release, and Marc, the Technical BA who owns what the business actually asked for. Nobody has a spare week.</p>
+
+  <span class="daymark">Monday</span>
+  <h3 id="mon">The work is sized before it is scoped</h3>
+
+  <p>Marc opens the session and says what happened, in the words Finance used.</p>
+
+  <pre><code>/brothersbe:start</code></pre>
+
+  <p>One question comes back. Not which tier, not which command. What outcome do you want?</p>
+
+  <div class="scene">
+    <p>Finance says the daily revenue figure in the dashboard disagrees with the ledger. We need the number to be reproducible, and we need to know why the two disagree.</p>
+  </div>
+
+  <p>Then five objective questions, answered in under a minute.</p>
+
+  <pre><code>mkdir -p design/daily-revenue
+python3 tools/sbe_intake.py design/daily-revenue
+
+<span class="c">Does this change a data model, an API contract, or a file interface others depend on? (y/n)</span> y
+<span class="c">Does it cross a service, system, or team boundary? (y/n)</span> y
+<span class="c">Is it reversible in under an hour? (y/n)</span> n
+<span class="c">Does it touch money, partner data, personal data, or production state? (y/n)</span> y
+<span class="c">How many downstream consumers break if it is wrong? (none/some/many)</span> many
+
+<span class="c">tier T3 (artifacts required: 01, 02, 03, 04, 05, 06, 07)</span></code></pre>
+
+  <p>Nobody negotiated that. It touches money, so the first match is T3 and all seven design artifacts are owed. Marc did not have to know what a tier was, and Tom did not get to argue it down because the sprint is tight.</p>
+
+  <p class="statement wide">The person in a hurry does not get to decide how much rigour applies.</p>
+
+  <p>An override exists, and it is deliberately awkward: three fields have to agree and a written reason of at least three words has to sit beside them. A half-declared override fails and names the fields that disagree. Whether the reason is a good one is human review, and the tool says so rather than pretending to judge it.</p>
+
+  <p class="evidence">The tier rule is first-match-wins over five booleans, computed by <code>sbe_intake.py</code> and re-derived from the diff by <code>sbe impact</code>, which reports when the declared tier and the change disagree.</p>
+
+  <span class="daymark">Tuesday</span>
+  <h3 id="tue">The grain, written in words, before anybody writes SQL</h3>
+
+  <p>Priya writes the data model artifact. It takes forty minutes and it is the highest-value forty minutes of the sprint.</p>
+
+  <div class="scene">
+    <p><code>fct_daily_revenue</code> is one row per order date, product line and currency.</p>
+    <p>The system of record for order amounts is the billing system, not the CRM.</p>
+    <p>Order to order line is one-to-many, mandatory.</p>
+  </div>
+
+  <p>That third line is where the eleven per cent went. Writing the cardinality down forces the question that a query never asks: if one order has three lines, what happens to the amount when the two are joined?</p>
+
+  <pre><code>python3 tools/sbe_design.py design/daily-revenue
+
+<span class="c">datamodel  PASS  6 entities, each with a system of record;</span>
+<span class="c">                 5 relationship line(s) read, each carrying cardinality</span>
+<span class="c">diagrams   FAIL  diagram element(s) trace to no declared entity: BillingLedger</span></code></pre>
+
+  <p>The diagrams check just caught something real. Priya's context diagram names <code>BillingLedger</code>, and no artifact declares it. Either it is an entity with an owner, or it is a component, and until somebody says which, two artifacts already disagree on day two.</p>
+
+  <p>That is the whole point of design-phase checking. The disagreement is one line of text on Tuesday. It is a reconciliation project in November.</p>
+
+  <p class="evidence">Five design checks run over a dossier directory: artifacts, decision record, data model, diagrams, placeholder. All five are gate severity and block under <code>--strict</code>. A tier requiring no artifacts reports NO-DATA rather than PASS.</p>
+
+  <span class="daymark">Wednesday, morning</span>
+  <h3 id="wed">The rollback nobody had run</h3>
+
+  <p>The fix needs a schema change: the aggregate gains a currency column and the old one is retired. Adaeze writes the migration. Claude writes it quickly and correctly, and says it is done.</p>
+
+  <p>It is not done, and this is where the gate does something a reviewer usually cannot.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 214" role="img" aria-labelledby="mig-title">
+      <title id="mig-title">The migration gate compared with a code review. A review reads the forward migration and the reverse migration as text. The gate requires a receipt showing both legs executed against a restored copy, with a rehearsal identifier and matching row counts before and after.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">What a review can see</text><text x="330" y="14">What the gate requires</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="36" width="270" height="46" rx="3"/><rect x="0" y="94" width="270" height="46" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor"><text x="14" y="58">UP MIGRATION</text><text x="14" y="116">DOWN MIGRATION</text></g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="14" y="74">reads correct</text><text x="14" y="132">reads correct</text>
+      </g>
+      <text class="svg-small" x="0" y="166" fill="currentColor" opacity="0.9">Both legs look right on the page.</text>
+      <text class="svg-small" x="0" y="182" fill="currentColor" opacity="0.9">Neither has ever been executed.</text>
+      <text class="svg-small" x="0" y="204" fill="currentColor" opacity="0.95">This is the state most rollbacks are in.</text>
+
+      <line x1="300" y1="0" x2="300" y2="206" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="330" y="36" width="308" height="104" rx="3"/></g>
+      <text class="svg-title" x="344" y="58" fill="currentColor">MIGRATION RECEIPT</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="344" y="78">forward leg ran against a restored copy</text>
+        <text x="344" y="94">reverse leg ran against a restored copy</text>
+        <text x="344" y="110">rehearsal id recorded as a string</text>
+        <text x="344" y="126">row counts before and after, whole and matching</text>
+      </g>
+      <text class="svg-small" x="330" y="166" fill="currentColor" opacity="0.9">No row counts is NO-DATA, not a pass:</text>
+      <text class="svg-small" x="330" y="182" fill="currentColor" opacity="0.9">the gate says what it compared, rather than</text>
+      <text class="svg-small" x="330" y="198" fill="currentColor" opacity="0.9">asserting a comparison it never made.</text>
+    </svg>
+    <figcaption>The distinction the gate draws is between a migration that reads correct and a migration that has been run backwards on real data. Nothing here resolves the rehearsal identifier against your job system, so that id is a pointer for a human to follow, and the gate says so on every run.</figcaption>
+  </figure>
+
+  <p>Adaeze restores a copy, runs both legs, records the receipt through the evidence wrapper, and the gate passes on evidence rather than on reading.</p>
+
+  <pre><code>sbe evidence run --check migration-rehearsal -- \
+  scripts/rehearse_migration.sh --restore nightly-2026-08-05
+
+sbe gate migration design/daily-revenue
+<span class="c">migration  PASS  forward and reverse both recorded against restore</span>
+<span class="c">                 nightly-2026-08-05; rehearsal id RH-4471; 8,412,905 rows</span>
+<span class="c">                 before and after [severity: gate]</span></code></pre>
+
+  <p class="statement wide">The reverse leg is not documentation. It is a thing that has either run or not.</p>
+
+  <span class="daymark">Wednesday, afternoon</span>
+  <h3 id="wed-pm">Two writers, one file</h3>
+
+  <p>Tom is changing the service that serves the figure. Priya is changing the model underneath it. Both need to touch the same transformation file, and both have an agent working.</p>
+
+  <p>On a small team this is the failure that costs an afternoon and nobody writes a post-mortem about it, because it is embarrassing rather than interesting.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 190" role="img" aria-labelledby="fence-title">
+      <title id="fence-title">Two writers approaching one file. Without a claim, the second write silently overwrites the first. With the task registry, the second writer is refused by name and told who holds the path.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Without a claim</text><text x="330" y="14">With the registry</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor"><text x="0" y="52">AGENT A</text><text x="180" y="52">AGENT B</text></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M30 60 L86 86" marker-end="url(#ar)"/><path d="M204 60 L134 86" marker-end="url(#ar)"/>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="60" y="92" width="120" height="30" rx="3"/></g>
+      <text class="svg-title" x="74" y="112" fill="currentColor">revenue.sql</text>
+      <text class="svg-small" x="0" y="146" fill="currentColor" opacity="0.9">Last write wins.</text>
+      <text class="svg-small" x="0" y="162" fill="currentColor" opacity="0.9">Nobody is told.</text>
+      <text class="svg-small" x="0" y="182" fill="currentColor" opacity="0.95">Found on Friday, if at all.</text>
+
+      <line x1="300" y1="0" x2="300" y2="182" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+
+      <g class="svg-title" fill="currentColor"><text x="330" y="52">AGENT A</text><text x="520" y="52">AGENT B</text></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M360 60 L416 86" marker-end="url(#ar)"/></g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.5" fill="none"><path d="M544 60 L478 86"/></g>
+      <g stroke="currentColor" stroke-width="1.4" opacity="0.75"><path d="M498 68 L516 82"/><path d="M516 68 L498 82"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42"><rect x="390" y="92" width="120" height="30" rx="3"/></g>
+      <text class="svg-title" x="404" y="112" fill="currentColor">revenue.sql</text>
+      <text class="svg-small" x="330" y="146" fill="currentColor" opacity="0.9">Claimed by task DR-12, owner Priya.</text>
+      <text class="svg-small" x="330" y="162" fill="currentColor" opacity="0.9">Agent B is refused, by name, at write time.</text>
+      <text class="svg-small" x="330" y="182" fill="currentColor" opacity="0.95">Found in one second.</text>
+    </svg>
+    <figcaption>One writer per file, claimed before an agent launches rather than after. The honest scope: the hook gates file writes and does not gate shell commands, so a write through a shell crosses the claim unrefused and is caught afterwards by the scope check rather than at the moment it happens.</figcaption>
+  </figure>
+
+  <pre><code>sbe task open DR-12 --agent priya --paths models/revenue.sql
+sbe fences
+<span class="c">DR-12  priya  models/revenue.sql  open</span></code></pre>
+
+  <span class="daymark">Thursday</span>
+  <h3 id="thu">Prove the number, or label it</h3>
+
+  <p>The model is fixed. The figure moves. Now somebody has to be able to say why the new one is right, and "we re-ran it" is what failed in March.</p>
+
+  <p>The numbers gate wants three things: a pinned snapshot so the re-run reads the same bytes, a second derivation whose text genuinely differs, and zero drift between the two real numbers.</p>
+
+  <pre><code><span class="c">-- derivation A, the model, pinned to a Delta version</span>
+SELECT order_date, SUM(net_amount) FROM analytics.fct_daily_revenue
+VERSION AS OF 412 GROUP BY order_date;
+
+<span class="c">-- derivation B, from the source, deliberately a different path</span>
+SELECT o.order_date, SUM(l.quantity * l.unit_price - l.discount)
+FROM raw.orders o JOIN raw.order_lines l ON l.order_id = o.order_id
+GROUP BY o.order_date;</code></pre>
+
+  <p>Derivation B walks a different path on purpose. That is the part a person has to get right, because the gate cannot check it.</p>
+
+  <div class="panel warn">
+    <h4>The limit, stated where it bites</h4>
+    <p>The gate compares the two derivations as text and requires them to differ by more than case, whitespace and comments. It does not read which tables they touch. Renaming an alias passes. Two queries over the same broken view agree perfectly and pass.</p>
+    <p>That is a floor, not a proof of independence, and it is printed on every run. A team that believes otherwise will trust it at exactly the wrong moment.</p>
+  </div>
+
+  <p>Marc, meanwhile, is doing the part that has no gate at all. He writes the acceptance criteria against what Finance actually asked for, and the QA traceability review maps each one to a test that exists.</p>
+
+  <pre><code>sbe review-route --base main
+<span class="c">data-reviewer      models/, *.sql changed</span>
+<span class="c">migration-reviewer migrations/ changed</span>
+<span class="c">at most two specialists; zero is a legal result</span></code></pre>
+
+  <p>No model chose those two. The router read the diff.</p>
+
+  <span class="daymark">Friday</span>
+  <h3 id="fri">Merge, or do not</h3>
+
+  <p>Adaeze opens the pull request. CI runs the same checks the team has been running locally all week, this time under <code>--strict</code>.</p>
+
+  <pre><code>sbe status
+
+<span class="c">BROKEN CLAIMS:   clean</span>
+<span class="c">MERGE BLOCKERS:  clean</span>
+<span class="c">MISSING EVIDENCE: NO-DATA. dossier daily-revenue: no receipt declares</span>
+<span class="c">                 an approval, and nothing here detects that one was needed</span>
+<span class="c">NEXT ACTION: nothing blocking here that this tool can see.</span></code></pre>
+
+  <p>Read that last block carefully, because it is the register this whole product is written in. Nothing is blocking. That is not the same claim as everything having been inspected, and the output says which is which rather than letting the reader assume.</p>
+
+  <p class="statement">Blockers first. Then, plainly, what was never looked at.</p>
+
+  <p>The approval line is NO-DATA rather than PASS because the team has not wired signing keys into CI yet. It does not block, it is not hidden, and it will still be there next Friday until somebody does something about it.</p>
+
+  <h3 id="sprint-pic">The sprint in one picture</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="wk-title">
+      <title id="wk-title">The five days mapped against the six phases and the four gates. Monday sizes the work at purpose. Tuesday settles the data model. Wednesday runs the migration rehearsal and claims the shared file. Thursday proves the number. Friday merges under the strict gates.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">Mon</text><text x="128" y="14">Tue</text><text x="256" y="14">Wed</text><text x="384" y="14">Thu</text><text x="512" y="14">Fri</text>
+      </g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="36" width="116" height="52" rx="3"/><rect x="128" y="36" width="116" height="52" rx="3"/>
+        <rect x="256" y="36" width="116" height="52" rx="3"/><rect x="384" y="36" width="116" height="52" rx="3"/>
+        <rect x="512" y="36" width="116" height="52" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="12" y="56">PURPOSE</text><text x="140" y="56">DATA</text><text x="268" y="56">ARCH</text><text x="396" y="56">VERIFY</text><text x="524" y="56">MERGE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="12" y="76">tier computed</text><text x="140" y="76">grain in words</text><text x="268" y="76">rollback run</text><text x="396" y="76">second derivation</text><text x="524" y="76">strict in CI</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M116 62 L126 62" marker-end="url(#ar)"/><path d="M244 62 L254 62" marker-end="url(#ar)"/>
+        <path d="M372 62 L382 62" marker-end="url(#ar)"/><path d="M500 62 L510 62" marker-end="url(#ar)"/>
+      </g>
+      <line x1="0" y1="108" x2="638" y2="108" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+      <text class="svg-label" x="0" y="128" fill="currentColor" opacity="0.85">What fired, and when</text>
+      <g class="svg-small" fill="currentColor" opacity="0.92">
+        <text x="0" y="150">intake, five questions, tier T3</text>
+        <text x="0" y="168">design checks: datamodel PASS, diagrams FAIL on an undeclared node</text>
+        <text x="0" y="186">migration gate: both legs against a restore, row counts matching</text>
+        <text x="0" y="204">task registry: second writer refused by name</text>
+        <text x="0" y="222">numbers gate: two derivations, pinned snapshot, zero drift</text>
+        <text x="0" y="240">status: blockers clean, approval NO-DATA and printed rather than hidden</text>
+      </g>
+    </svg>
+    <figcaption>Nothing in the week was extra ceremony. Every gate that fired corresponded to a failure this team had already lived through once, and the two that caught something real, the undeclared diagram node and the unrehearsed reverse, both fired before the code was written rather than after it shipped.</figcaption>
+  </figure>
+</section>

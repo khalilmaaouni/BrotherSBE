@@ -1,0 +1,211 @@
+<!-- =================== ACT THREE =================== -->
+<section class="part" id="seats">
+  <span class="part-label">Act three</span>
+  <h2 class="part-head">Five seats at the table</h2>
+  <p class="part-blurb">On a small team one person often holds two of these. Find the seat you actually sit in: the pain in your own words, the gate that fires for you, and what changes on Monday.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-labelledby="seats-title">
+      <title id="seats-title">Five seats around one change, each with the phase it owns and the control that fires for it. The Technical BA owns purpose, the backend engineer owns process and architecture, the data engineer owns the data model, infrastructure owns the migration, and QA owns verification. Only four of the five have a mechanical gate behind them.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="14">Seat</text><text x="186" y="14">The phase they own</text><text x="386" y="14">What fires for them</text>
+      </g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-title" fill="currentColor">
+        <text x="0" y="52">TECHNICAL BA</text><text x="0" y="90">BACKEND</text><text x="0" y="128">DATA</text>
+        <text x="0" y="166">INFRASTRUCTURE</text><text x="0" y="204">QA</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="186" y="52">purpose</text><text x="186" y="90">process, architecture</text><text x="186" y="128">the data model</text>
+        <text x="186" y="166">the migration</text><text x="186" y="204">verification</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
+        <rect x="380" y="34" width="258" height="24" rx="3"/><rect x="380" y="72" width="258" height="24" rx="3"/>
+        <rect x="380" y="110" width="258" height="24" rx="3"/><rect x="380" y="148" width="258" height="24" rx="3"/>
+        <rect x="380" y="186" width="258" height="24" rx="3"/>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.95">
+        <text x="390" y="51">no gate at all, which is why the phase exists</text>
+        <text x="390" y="89">the decision record, and its flip condition</text>
+        <text x="390" y="127">the datamodel check, and the numbers gate</text>
+        <text x="390" y="165">the migration gate, both legs on a restore</text>
+        <text x="390" y="203">the ran gate: exit zero, nonzero duration</text>
+      </g>
+      <line x1="0" y1="220" x2="638" y2="220" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="236" fill="currentColor" opacity="0.95">One change, five seats. On a team of four, somebody is holding two of these rows at once.</text>
+    </svg>
+    <figcaption>Read the top row twice. The Technical BA is the only seat with no mechanical gate behind it, and that is not an oversight: no tool can check whether a problem statement describes the real problem. The design phase exists precisely because that seat cannot be automated, and every phase below it inherits whatever it got wrong.</figcaption>
+  </figure>
+
+  <span class="seat">Seat one</span>
+  <h3 id="seat-backend">Backend engineer</h3>
+
+  <p class="lede">Your expensive mistakes are a boundary drawn in the wrong place and a contract changed without knowing who consumed it.</p>
+
+  <p><strong>The pain.</strong> Claude will happily change an endpoint's response shape. It cannot know that a partner batch job parses that response at 2am, because nobody wrote that down anywhere it could read. You find out from the partner.</p>
+
+  <p><strong>What fires for you.</strong> The intake asks whether this changes a contract others depend on and how many consumers break if it is wrong. Answer yes and many and you are at T2, owing six artifacts, one of which is a decision record with two genuinely distinct rejected alternatives and a flip condition.</p>
+
+  <p><strong>The part that pays.</strong> The flip condition, which is the field teams skip.</p>
+
+  <div class="scene">
+    <p>Revisit toward a split if a second team comes to need independent deployment of the pricing path, or if the consistency requirement moves from eventual to strict for order totals.</p>
+    <p>Neither is true today: one team deploys this, and Finance reconciles daily rather than continuously.</p>
+  </div>
+
+  <p>Six months later that paragraph is the difference between revisiting a decision and re-litigating it from nothing.</p>
+
+  <p><strong>On the exception path.</strong> The process artifact asks for it by name, and on service work the exception path is the document. "On a timeout the order stays in <code>pending_payment</code> and a reconciliation job resolves it within fifteen minutes, never retried inline, because the provider is not idempotent on this endpoint without an idempotency key and we do not send one today" is the sentence that prevents a double charge. It exists because a template demanded it.</p>
+
+  <p><strong>Your reviewer.</strong> <code>backend-reviewer</code>, read-only, covering contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance. Touch auth, money, partner APIs, file upload, secrets or personal data and <code>security-reviewer</code> joins it automatically.</p>
+
+  <p class="evidence">Reviewer selection is deterministic: <code>sbe review-route</code> reads the diff, no model chooses, at most two specialists, and zero is a legal result rather than a claim of a clean review.</p>
+
+  <span class="seat">Seat two</span>
+  <h3 id="seat-data">Data engineer</h3>
+
+  <p class="lede">Every failure in your work is silent by construction. A wrong number is formatted exactly like a right one.</p>
+
+  <p><strong>The pain.</strong> Four traps, and you have probably hit at least two.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Trap</th><th>How it presents</th><th>Where it is caught</th></tr></thead>
+    <tbody>
+      <tr><th>The grain</th><td>A join fans out, one order becomes three rows, revenue overstates by the average line count. Passes every null and type check.</td><td>Data phase. The grain written in words, and the datamodel check refusing a relationship with no cardinality.</td></tr>
+      <tr><th>Two owners</th><td>The CRM and billing both believe they own <code>customer</code>. Two dashboards disagree and both are internally consistent.</td><td>Data phase. Every entity names its system of record, or the check fails.</td></tr>
+      <tr><th>The unrehearsed reverse</th><td>The migration ran. Nobody ever ran the rollback. You learn this during the incident.</td><td>Migration gate. Both legs against a restored copy, matching row counts.</td></tr>
+      <tr><th>The unprovable figure</th><td>Somebody asks where the number came from. The answer is a notebook that no longer runs.</td><td>Numbers gate. A pinned snapshot and a genuinely different second derivation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p><strong>Per platform, concretely.</strong> The BrotherSBE commands are the same everywhere; what changes is how you pin a snapshot.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Platform</th><th>How you pin the snapshot</th><th>What bites hardest</th></tr></thead>
+    <tbody>
+      <tr><th>Snowflake</th><td>A query id, or a time-travel offset, so the re-run reads the same bytes.</td><td>The numbers gate. Also the conflict-skipping upsert lint, on dimension loads.</td></tr>
+      <tr><th>Databricks</th><td><code>VERSION AS OF</code> on a Delta table, the cleanest pin of the four.</td><td>The numbers gate, and the migration gate on a repartition.</td></tr>
+      <tr><th>Power BI</th><td>Not where the figure is computed. Reconcile the measure against the warehouse table underneath it.</td><td>A DAX measure filtering on a role-playing date dimension, quietly disagreeing with a correct table.</td></tr>
+      <tr><th>Azure Data Factory, Fabric</th><td>Register the reconciliation as a check and run it through the evidence wrapper.</td><td>The <code>ran</code> gate. A pipeline that succeeded is not a pipeline that processed rows.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="evidence">UNVERIFIED: the vendor-side SQL shapes in this booklet illustrate the pattern and were not executed against a Snowflake, Databricks, Power BI or Azure estate by this project. The BrotherSBE commands beside them are covered by tests that run in CI.</p>
+
+  <p><strong>The lint that matters most in a warehouse.</strong> The silent-failure linter reads SQL wherever it is written, in a <code>.sql</code> file or embedded in Python.</p>
+
+  <pre><code>INSERT INTO analytics.dim_customer (customer_id, name)
+SELECT customer_id, name FROM staging.customers
+ON CONFLICT (customer_id) DO NOTHING;   <span class="c">&lt;- updates stop arriving, silently</span></code></pre>
+
+  <p>If the skip is genuinely what you want, say why where a reviewer sees it. A bare marker waives nothing and a marker carrying a refused token like <code>tbd</code> waives nothing, and the hit says why.</p>
+
+  <pre><code><span class="c">-- sbe: allow-silent replays are idempotent, the row is immutable after insert</span></code></pre>
+
+  <span class="seat">Seat three</span>
+  <h3 id="seat-infra">Infrastructure engineer</h3>
+
+  <p class="lede">You are the one who has to believe the rollback, and you are the one holding the pager when it turns out nobody tested it.</p>
+
+  <p><strong>The pain.</strong> A migration that reads correct is not a migration that has been run backwards on real data. Expand and contract compressed into one release is the single most common way a rollback becomes impossible, and it looks completely fine in review.</p>
+
+  <p><strong>The sequence that survives.</strong></p>
+
+  <ol>
+    <li>Expand. Add the new column nullable, deploy, write to both.</li>
+    <li>Backfill, with the reconciliation registered as a check and run through the evidence wrapper.</li>
+    <li>Read from the new column, deploy.</li>
+    <li>Contract. Drop the old column, in a <em>later</em> release, only once the previous one is no longer deployable.</li>
+  </ol>
+
+  <p>Step four in the same release as step one is the failure. <code>migration-reviewer</code> covers exactly this: forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</p>
+
+  <p><strong>Where the blast radius rule sits with you.</strong> BrotherSBE never gets apply rights on production state. It drafts the exact command with its rollback and hands it to a human. Credentials are never typed, stored or logged.</p>
+
+  <div class="panel hot">
+    <h4>Say this out loud before you adopt it</h4>
+    <p>That rule is a stated discipline plus whatever access control your estate already has. Nothing in this plugin can revoke a credential your shell already holds. If your real requirement is that an agent physically cannot deploy, that is your CI permissions and your cloud IAM, not a line in a skill file.</p>
+  </div>
+
+  <p><strong>What you must supply yourself.</strong> No CODEOWNERS and no branch protection ships here. The CI workflow guards nothing until you copy it into your own repository, and <code>--strict</code> moves only by a human editing that workflow, visible in the diff. That last property is deliberate: a session instruction can never waive a hard gate.</p>
+
+  <span class="seat">Seat four</span>
+  <h3 id="seat-qa">QA engineer</h3>
+
+  <p class="lede">Your problem is not writing tests. It is that a green suite and a correct system are two different claims, and only one of them is being made.</p>
+
+  <p><strong>The pain.</strong> An agent writes tests alongside the code, and they pass. Of course they pass: they were written from the same understanding that produced the code. A test that encodes the same misunderstanding as the implementation is worse than no test, because it converts an open question into a settled one.</p>
+
+  <p><strong>What fires for you.</strong> The <code>ran</code> gate, which is blunter than it sounds and more useful than it sounds. Each recorded check must name what ran, exit zero, and take a nonzero duration. A check that took no time did not run.</p>
+
+  <p>Underneath it sits a defect worth understanding, because it is the reason the evidence layer is shaped the way it is.</p>
+
+  <div class="scene">
+    <p>A receipt used to prove that a process started, was timed, and exited. So <code>-- true</code> minted a clean, sealed, commit-bound receipt.</p>
+    <p>The command ran. That was provable.</p>
+    <p>The command was the check this change owed. That was not.</p>
+  </div>
+
+  <p>Now the check registry names the executable, its exact argument vector, its working directory, the files it is evidence for, and the runner files whose bytes are the check. <code>sbe evidence run --check &lt;id&gt;</code> resolves all of that from the registry, and there is no argument on that path that changes what runs.</p>
+
+  <p><strong>Your reviewer.</strong> <code>qa-reviewer</code> maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say. On interface and service work the missing coverage is almost always the failure path: the network error, the declined card, the expired session.</p>
+
+  <p><strong>The rule that changes your review verdicts.</strong> A verdict counts only when it names the falsification actually executed: the command re-run, the defect reproduced, the number re-derived. Reasoning alone is NO-DATA, not a finding.</p>
+
+  <p class="evidence">That rule is graded at the weekly review and nothing parses a verdict, so it is a discipline rather than a control. It is listed among the honest limits for exactly that reason.</p>
+
+  <span class="seat">Seat five</span>
+  <h3 id="seat-ba">Technical BA</h3>
+
+  <p class="lede">You are the only person in the room whose output has no gate at all, and that is precisely why the design phase was built.</p>
+
+  <p><strong>The pain.</strong> The business asks for something in its own words. By the time it reaches a schema, three translations have happened and nobody recorded any of them. When the delivered thing is wrong, the argument is about what was asked for, and there is no artifact to settle it.</p>
+
+  <p><strong>Where you own the document.</strong> The purpose brief is yours, and it has four parts that each stop a specific argument.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Section</th><th>The argument it prevents</th></tr></thead>
+    <tbody>
+      <tr><td>Problem, stated with no solution in it</td><td>Building the first idea somebody had instead of the thing that is broken</td></tr>
+      <tr><td>Users, and what they do today instead</td><td>Solving for a user who does not exist</td></tr>
+      <tr><td>Success criteria, observable</td><td>"It feels faster" as an acceptance criterion</td></tr>
+      <tr><td>Non-goals, explicit</td><td>The scope creep that turns a fix into a quarter of work</td></tr>
+      <tr><td>What breaks if this is wrong</td><td>Discovering the blast radius during the incident</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The non-goals section earns its place fastest. "This does not change how revenue is recognised" is one line, and it is the line that stops a reporting fix becoming an accounting project.</p>
+
+  <p><strong>Observable, concretely.</strong> "A user can complete checkout without leaving the page, and a failed payment leaves no orphaned order" is checkable by somebody who was not in the room. "The checkout feels faster" is not, and no gate downstream can rescue it.</p>
+
+  <p><strong>What you get back.</strong> The verification artifact turns your acceptance criteria into a table of one row per claim, the check that proves it, and when it runs. A claim with no check is listed as having none, rather than omitted, which is the difference between a plan and a wish.</p>
+
+  <h3 id="overhead">When it earns its overhead</h3>
+
+  <p>An honest test, because a control your team switches off protects nothing.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Adopt it when</th><th>Do not bother when</th></tr></thead>
+    <tbody>
+      <tr><td>Wrong output would be silent: a figure nobody re-derives, a pipeline that drops rows, a migration whose reverse was never run</td><td>The work is purely presentational, with no data or service behind it</td></tr>
+      <tr><td>More than one consumer depends on a shape you are about to change</td><td>The codebase is a spike nobody intends to keep</td></tr>
+      <tr><td>The work touches a warehouse, a service contract, a schema migration, personal or partner data, or money</td><td>Your team does not review pull requests, so the learning loop never turns</td></tr>
+      <tr><td>Agents are writing engineering work and you have no mechanical way to tell whether it is true</td><td>You need something that deploys for you, which this refuses to do on purpose</td></tr>
+      <tr><td>Decisions keep being re-litigated because nobody recorded what was rejected</td><td>Almost none of your changes are ever T2 or above</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="statement wide">On a T0 change it costs five questions and owes nothing. That is the common case, and it is meant to be.</p>
+
+  <p>On a T2 or T3 change the cost is real: six or seven artifacts, each a piece of thinking somebody has to do. The argument is not that this is free. It is that you were going to pay for those decisions anyway, and design time is cheaper than incident time.</p>
+
+  <p>If your changes are almost never T2 or T3, you probably do not need this. That is a legitimate answer and nothing here is going to argue you out of it.</p>
+</section>

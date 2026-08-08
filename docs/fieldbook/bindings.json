@@ -34,7 +34,7 @@
     "sources": [
       {
         "path": "src/brothersbe/cli.py",
-        "sha256": "aa1bc88924bce111bee004e089c7e1773b4aecf6af6645b274a92e8fb6d39df6"
+        "sha256": "49a41c3e5ff196c3a3688c5a34ef1a02663022ae3752214d51f7cadfb2839609"
       }
     ],
     "verdict": "PASS"
@@ -99,6 +99,16 @@
       {
         "path": "docs/KNOWN-LIMITS.md",
         "sha256": "d9626d2b436465ac6db4d398c3f6b0a398248cef0599e9cce422397e8626c21b"
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "provenance": {
+    "item_count": 5,
+    "sources": [
+      {
+        "path": "VERSION",
+        "sha256": "7bb5e0e70b947c47feae84a342b8999a8816fde220d760a03781e89963bdac82"
       }
     ],
     "verdict": "PASS"

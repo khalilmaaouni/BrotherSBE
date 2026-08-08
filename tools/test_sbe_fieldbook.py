@@ -1,10 +1,10 @@
-"""The field book's own tests.
+"""The booklet's own tests.
 
 Every claim in `design/field-book/07-verification.md` that names a test names
 one of these. The pattern throughout: each renderer is checked against an
 INDEPENDENT reading of its source, not against itself. A test that asks the
 renderer what it rendered proves the renderer is consistent with itself, which
-is exactly the tautology this project spends its time refusing elsewhere.
+is the tautology this project spends its time refusing elsewhere.
 """
 import io
 import json
@@ -21,9 +21,8 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from brothersbe import book as book_mod  # noqa: E402
 
-#: The one place the two dash characters are written in this repository's tests,
-#: so the sweep below cannot be defeated by the sweep's own source being edited
-#: to look for something else.
+#: The two dash characters, written here once so the sweep below cannot be
+#: defeated by somebody editing the sweep to look for something else.
 EM_DASH, EN_DASH = u"—", u"–"
 
 
@@ -33,7 +32,7 @@ class TestCommandsRenderer(unittest.TestCase):
         from brothersbe import cli as cli_mod
         expected = set(name for name, _, _ in cli_mod.COMMANDS)
         section = book_mod.render_cli_commands(ROOT)
-        rendered = set(re.findall(r"`sbe ([a-z-]+)`", section.markdown))
+        rendered = set(re.findall(r"<code>sbe ([a-z-]+)</code>", section.html))
         self.assertEqual(expected, rendered,
                          "the rendered command table and brothersbe.cli.COMMANDS disagree")
         self.assertEqual(section.verdict, "PASS")
@@ -51,7 +50,7 @@ class TestCommandsRenderer(unittest.TestCase):
         expected = set(n for n in os.listdir(skills)
                        if os.path.isfile(os.path.join(skills, n, "SKILL.md")))
         section = book_mod.render_guided_commands(ROOT)
-        rendered = set(re.findall(r"`/brothersbe:([a-z-]+)`", section.markdown))
+        rendered = set(re.findall(r"<code>/brothersbe:([a-z-]+)</code>", section.html))
         self.assertEqual(expected, rendered)
 
 
@@ -60,14 +59,14 @@ class TestRolesRenderer(unittest.TestCase):
         expected = set(n[:-3] for n in os.listdir(os.path.join(ROOT, "agents"))
                        if n.endswith(".md"))
         section = book_mod.render_roles(ROOT)
-        rendered = set(re.findall(r"^\| `([a-z-]+)` \|", section.markdown, re.M))
+        rendered = set(re.findall(r"<tr><th><code>([a-z-]+)</code></th>", section.html))
         self.assertEqual(expected, rendered)
 
     def test_every_reviewer_role_is_read_only_and_only_the_worker_writes(self):
-        """The claim chapter 04 makes in prose, asserted against the frontmatter.
+        """The claim act five makes in prose, asserted against the frontmatter.
 
-        This is the test that would have caught the defect the first generated
-        run exposed: the chapter said every role was read-only while
+        This is the test that would have caught the defect the first build
+        exposed: the prose said every role was read-only while
         `implementation-worker` shipped Edit and Write.
         """
         agents = os.path.join(ROOT, "agents")
@@ -84,30 +83,33 @@ class TestRolesRenderer(unittest.TestCase):
             if "Write" in tools or "Edit" in tools:
                 writers.append(name[:-3])
         self.assertEqual(writers, ["implementation-worker"],
-                         "chapter 04 states exactly one role may write; the agent "
-                         "definitions now say otherwise, so the chapter is wrong")
+                         "act five states exactly one role may write; the agent "
+                         "definitions now say otherwise, so the booklet is wrong")
 
 
 class TestChecksRenderer(unittest.TestCase):
     def test_checks_renderer_reports_declared_severity(self):
         section = book_mod.render_checks(ROOT)
         self.assertEqual(section.verdict, "PASS")
-        for row in re.findall(r"^\| `[^`]+` \| [^|]+ \| ([^|]+) \|", section.markdown, re.M):
-            self.assertIn(row.strip(), ("gate", "soft"),
-                          "a check reached the book without a declared severity")
+        severities = re.findall(r'<span class="stamp s-\w+">(gate|soft|\(not declared\))'
+                                r"</span>", section.html)
+        self.assertTrue(severities, "no severity column was rendered")
+        self.assertNotIn("(not declared)", severities,
+                         "a check reached the booklet without a declared severity")
 
     def test_no_check_row_claims_pass_as_its_empty_state(self):
-        """NO-DATA is never a pass, asserted over what the book actually prints."""
+        """NO-DATA is never a pass, asserted over what the booklet prints."""
         section = book_mod.render_checks(ROOT)
-        empties = re.findall(r"^\| `[^`]+` \| [^|]+ \| [^|]+ \| ([^|]+) \|",
-                             section.markdown, re.M)
-        self.assertTrue(empties, "no empty-state column was rendered")
-        self.assertNotIn("PASS", [e.strip() for e in empties])
+        rows = re.findall(r"<tr><th><code>[^<]+</code></th>.*?</tr>", section.html)
+        self.assertTrue(rows)
+        for row in rows:
+            cells = re.findall(r"<td>(.*?)</td>", row)
+            self.assertNotIn("PASS", cells[-1],
+                             "a check declares PASS as its empty state: %s" % row)
 
     def test_no_source_path_is_rendered_twice_over(self):
-        """The `tools/tools/...` defect the first run exposed, pinned."""
-        section = book_mod.render_checks(ROOT)
-        self.assertNotIn("tools/tools/", section.markdown)
+        """The `tools/tools/...` defect an earlier build exposed, pinned."""
+        self.assertNotIn("tools/tools/", book_mod.render_checks(ROOT).html)
 
 
 class TestLimitsRenderer(unittest.TestCase):
@@ -120,12 +122,26 @@ class TestLimitsRenderer(unittest.TestCase):
         self.assertGreater(expected, 0)
 
 
+class TestProvenance(unittest.TestCase):
+    def test_provenance_accounts_for_every_declared_renderer(self):
+        sections = [renderer(ROOT) for _, renderer in book_mod.RENDERERS]
+        prov = book_mod.render_provenance(ROOT, sections)
+        self.assertEqual(prov.item_count, len(book_mod.RENDERERS))
+        for name, _ in book_mod.RENDERERS:
+            self.assertIn("<code>%s</code>" % name, prov.html)
+
+    def test_provenance_binds_to_version_so_a_release_forces_a_rebuild(self):
+        sections = [renderer(ROOT) for _, renderer in book_mod.RENDERERS]
+        prov = book_mod.render_provenance(ROOT, sections)
+        self.assertEqual([path for path, _ in prov.sources], ["VERSION"])
+
+
 class TestDriftCheck(unittest.TestCase):
     """These build their own tree, so nothing here depends on the state of the
     working copy and nothing here writes into it."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="sbe-fieldbook-")
+        self.tmp = tempfile.mkdtemp(prefix="sbe-booklet-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.tree = os.path.join(self.tmp, "repo")
         for rel in ("VERSION", "DIGEST.md", "docs/KNOWN-LIMITS.md"):
@@ -139,137 +155,117 @@ class TestDriftCheck(unittest.TestCase):
         self.version = io.open(os.path.join(self.tree, "VERSION"),
                                encoding="utf-8").read().strip()
 
-    def _generate(self):
-        """Generate in a SUBPROCESS whose package resolves to the copied tree.
+    def _run(self, *argv):
+        """Run in a SUBPROCESS whose package resolves to the copied tree.
 
         Not a convenience. Registry discovery mounts `tools/` from wherever
-        `brothersbe` was imported, so generating in this process would document
+        `brothersbe` was imported, so building in this process would document
         THIS repository's checks while writing them into the copy, and the
         renderer now refuses exactly that. A fresh interpreter with the copy on
-        its path makes the tree self-consistent, which is the only honest way
-        to test a generator whose whole job is deriving from its own repository.
+        its path makes the tree self-consistent, which is the only honest way to
+        test a generator whose whole job is deriving from its own repository.
         """
         env = dict(os.environ, PYTHONPATH=os.path.join(self.tree, "src"))
         env.pop("BROTHERSBE_REGISTRIES", None)
         out = subprocess.run(
             [sys.executable, "-c",
              "import sys; from brothersbe import book; sys.exit(book.main(sys.argv[1:]))",
-             self.tree],
-            capture_output=True, text=True, env=env, cwd=self.tree, timeout=300)
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-        return out.returncode
-
-    def _check(self, *flags):
-        env = dict(os.environ, PYTHONPATH=os.path.join(self.tree, "src"))
-        out = subprocess.run(
-            [sys.executable, "-c",
-             "import sys; from brothersbe import book; sys.exit(book.main(sys.argv[1:]))",
-             self.tree, "--check"] + list(flags),
+             self.tree] + list(argv),
             capture_output=True, text=True, env=env, cwd=self.tree, timeout=300)
         return out.returncode, out.stdout + out.stderr
 
+    def _build(self):
+        code, output = self._run()
+        self.assertEqual(code, 0, output)
+
     def test_check_fails_when_a_bound_source_moves(self):
-        self.assertEqual(self._generate(), 0)
+        self._build()
         agent = os.path.join(self.tree, "agents", "qa-reviewer.md")
-        text = io.open(agent, encoding="utf-8").read()
-        io.open(agent, "w", encoding="utf-8").write(text + "\nA later edit.\n")
+        io.open(agent, "a", encoding="utf-8").write("\nA later edit.\n")
         results = book_mod.check(self.tree, self.version)
         fails = [(name, sentence) for verdict, name, sentence in results
                  if verdict == "FAIL"]
         self.assertTrue(fails, "a moved bound source must FAIL, not pass quietly")
-        self.assertTrue(any("roles" == name for name, _ in fails))
-        self.assertTrue(any("agents/qa-reviewer.md" in sentence for _, sentence in fails),
+        self.assertTrue(any(name == "roles" for name, _ in fails))
+        self.assertTrue(any("agents/qa-reviewer.md" in s for _, s in fails),
                         "the FAIL must name the file that moved: %s" % fails)
 
     def test_a_deleted_bound_source_fails_naming_it(self):
-        self.assertEqual(self._generate(), 0)
+        self._build()
         os.remove(os.path.join(self.tree, "agents", "qa-reviewer.md"))
         fails = [s for v, _, s in book_mod.check(self.tree, self.version) if v == "FAIL"]
         self.assertTrue(any("no longer exist" in s for s in fails), fails)
 
-    def test_a_stale_stamp_is_no_data_and_never_fail(self):
-        self.assertEqual(self._generate(), 0)
-        chapter = os.path.join(self.tree, "docs", "fieldbook", "chapters",
-                               "00-the-brief.md")
-        text = io.open(chapter, encoding="utf-8").read()
-        io.open(chapter, "w", encoding="utf-8").write(
-            text.replace("verified-against: %s" % self.version,
-                         "verified-against: 0.0.1-ancient"))
-        results = book_mod.check(self.tree, self.version)
-        stale = [(v, s) for v, n, s in results if n == "the-brief"]
-        self.assertEqual(len(stale), 1)
-        self.assertEqual(stale[0][0], "NO-DATA",
+    def test_a_stale_cover_version_is_no_data_and_never_fail(self):
+        self._build()
+        cover = os.path.join(self.tree, book_mod.PARTS_REL, "01-cover.html")
+        text = io.open(cover, encoding="utf-8").read()
+        io.open(cover, "w", encoding="utf-8").write(
+            text.replace("<b>Describes</b> v%s" % self.version,
+                         "<b>Describes</b> v0.0.1-ancient"))
+        verdicts = [(v, s) for v, n, s in book_mod.check(self.tree, self.version)
+                    if n == "cover-version"]
+        self.assertEqual(len(verdicts), 1)
+        self.assertEqual(verdicts[0][0], "NO-DATA",
                          "prose staleness is reported, never enforced")
 
     def test_an_unparseable_bindings_file_is_fail_not_no_data(self):
-        self.assertEqual(self._generate(), 0)
-        path = os.path.join(self.tree, book_mod.BINDINGS_REL)
-        io.open(path, "w", encoding="utf-8").write("{not json")
-        results = book_mod.check(self.tree, self.version)
-        self.assertEqual(results[0][0], "FAIL",
+        self._build()
+        io.open(os.path.join(self.tree, book_mod.BINDINGS_REL), "w",
+                encoding="utf-8").write("{not json")
+        self.assertEqual(book_mod.check(self.tree, self.version)[0][0], "FAIL",
                          "a broken claim is not an absent one")
 
     def test_a_missing_bindings_file_is_no_data_not_fail(self):
-        self.assertEqual(self._generate(), 0)
+        self._build()
         os.remove(os.path.join(self.tree, book_mod.BINDINGS_REL))
-        results = book_mod.check(self.tree, self.version)
-        self.assertEqual(results[0][0], "NO-DATA")
+        self.assertEqual(book_mod.check(self.tree, self.version)[0][0], "NO-DATA")
 
     def test_strict_exits_nonzero_on_fail_and_zero_on_no_data(self):
-        self.assertEqual(self._generate(), 0)
-        chapter = os.path.join(self.tree, "docs", "fieldbook", "chapters",
-                               "00-the-brief.md")
-        text = io.open(chapter, encoding="utf-8").read()
-        io.open(chapter, "w", encoding="utf-8").write(
-            text.replace("verified-against: %s" % self.version,
-                         "verified-against: 0.0.1-ancient"))
-        self.assertEqual(book_mod.main([self.tree, "--check", "--strict"]), 0,
-                         "NO-DATA must never decide the exit code")
-        agent = os.path.join(self.tree, "agents", "qa-reviewer.md")
-        io.open(agent, "a", encoding="utf-8").write("\ndrift\n")
-        self.assertEqual(book_mod.main([self.tree, "--check", "--strict"]), 1)
+        self._build()
+        cover = os.path.join(self.tree, book_mod.PARTS_REL, "01-cover.html")
+        text = io.open(cover, encoding="utf-8").read()
+        io.open(cover, "w", encoding="utf-8").write(
+            text.replace("<b>Describes</b> v%s" % self.version,
+                         "<b>Describes</b> v0.0.1-ancient"))
+        code, output = self._run("--check", "--strict")
+        self.assertEqual(code, 0, "NO-DATA must never decide the exit code: %s" % output)
+        io.open(os.path.join(self.tree, "agents", "qa-reviewer.md"), "a",
+                encoding="utf-8").write("\ndrift\n")
+        code, output = self._run("--check", "--strict")
+        self.assertEqual(code, 1, output)
 
-    def test_two_runs_produce_byte_identical_output(self):
-        self.assertEqual(self._generate(), 0)
+    def test_two_builds_produce_byte_identical_output(self):
+        self._build()
         html = os.path.join(self.tree, book_mod.BOOK_REL, book_mod.HTML_NAME)
         first_html = io.open(html, encoding="utf-8").read()
         first_bind = io.open(os.path.join(self.tree, book_mod.BINDINGS_REL),
                              encoding="utf-8").read()
-        self.assertEqual(self._generate(), 0)
+        self._build()
         self.assertEqual(first_html, io.open(html, encoding="utf-8").read(),
-                         "generation is not deterministic")
+                         "the build is not deterministic")
         self.assertEqual(first_bind,
                          io.open(os.path.join(self.tree, book_mod.BINDINGS_REL),
                                  encoding="utf-8").read())
 
-    def test_author_prose_survives_a_regenerate(self):
-        self.assertEqual(self._generate(), 0)
-        chapter = os.path.join(self.tree, "docs", "fieldbook", "chapters",
-                               "03-the-commands.md")
-        sentinel = "\nA sentinel sentence the generator must never touch.\n"
-        io.open(chapter, "a", encoding="utf-8").write(sentinel)
-        self.assertEqual(self._generate(), 0)
-        self.assertIn(sentinel, io.open(chapter, encoding="utf-8").read())
+    def test_author_prose_survives_a_rebuild(self):
+        self._build()
+        part = os.path.join(self.tree, book_mod.PARTS_REL, "50-act-five.html")
+        sentinel = "\n<p>A sentinel the builder must never touch.</p>\n"
+        io.open(part, "a", encoding="utf-8").write(sentinel)
+        self._build()
+        self.assertIn(sentinel, io.open(part, encoding="utf-8").read())
 
     def test_a_section_with_no_home_fails_rather_than_rendering_nowhere(self):
-        chapter = os.path.join(self.tree, "docs", "fieldbook", "chapters",
-                               "04-the-roles.md")
-        text = io.open(chapter, encoding="utf-8").read()
-        io.open(chapter, "w", encoding="utf-8").write(
+        part = os.path.join(self.tree, book_mod.PARTS_REL, "50-act-five.html")
+        text = io.open(part, encoding="utf-8").read()
+        io.open(part, "w", encoding="utf-8").write(
             text.replace(book_mod.BEGIN_FMT % "roles", "").replace(
                 book_mod.END_FMT % "roles", ""))
-        try:
-            book_mod.generate(self.tree)
-        except book_mod.SourceUnreadable as exc:
-            # Asserted on the message, not merely on the exception type: the
-            # renderers run in a fixed order and `roles` splices before
-            # `checks` renders, so a bare assertRaises here would also be
-            # satisfied by an unrelated failure later in the same run.
-            self.assertIn("roles", str(exc))
-            self.assertIn("nowhere to", str(exc))
-        else:
-            self.fail("a section whose markers are gone must be raised, not "
-                      "rendered into nothing")
+        code, output = self._run()
+        self.assertEqual(code, 1, output)
+        self.assertIn("nowhere to", output)
+        self.assertIn("roles", output)
 
 
 class TestEmittedHtml(unittest.TestCase):
@@ -283,37 +279,57 @@ class TestEmittedHtml(unittest.TestCase):
                 self.assertFalse(match.startswith(("http://", "https://", "//")),
                                  "the page must open offline; %s reaches a host" % match)
 
-    def test_every_chapter_reaches_the_page(self):
-        chapters = book_mod.read_chapters(ROOT)
-        self.assertGreaterEqual(len(chapters), 16)
-        for chapter in chapters:
-            self.assertIn('id="%s"' % chapter["slug"], self.html)
+    def test_every_act_reaches_the_page(self):
+        for anchor in ("pain", "sprint", "seats", "fit", "how"):
+            self.assertIn('id="%s"' % anchor, self.html)
+
+    def test_every_contents_link_resolves_to_an_anchor_on_the_page(self):
+        """A table of contents whose links go nowhere is worse than none."""
+        ids = set(re.findall(r'id="([^"]+)"', self.html))
+        broken = [href for href in re.findall(r'href="#([^"]+)"', self.html)
+                  if href not in ids]
+        self.assertEqual(broken, [])
 
     def test_the_page_names_the_sources_every_generated_table_came_from(self):
         self.assertIn("src/brothersbe/cli.py", self.html)
         self.assertIn("docs/KNOWN-LIMITS.md", self.html)
 
+    def test_the_fragment_and_the_page_carry_the_same_booklet(self):
+        fragment = io.open(os.path.join(ROOT, book_mod.BOOK_REL,
+                                        book_mod.FRAGMENT_NAME), encoding="utf-8").read()
+        self.assertNotIn("<!doctype", fragment.lower())
+        for anchor in ("pain", "sprint", "seats", "fit", "how"):
+            self.assertIn('id="%s"' % anchor, fragment)
+
+    def test_both_themes_are_defined_and_the_toggle_can_win(self):
+        for token in ("prefers-color-scheme: dark", ':root[data-theme="dark"]',
+                      ':root[data-theme="light"]'):
+            self.assertIn(token, self.html,
+                          "the viewer's theme toggle must override the media query")
+
 
 class TestProseHygiene(unittest.TestCase):
-    def test_no_em_or_en_dash_in_any_chapter(self):
+    def test_no_em_or_en_dash_in_any_part(self):
         offenders = []
-        for chapter in book_mod.read_chapters(ROOT):
-            text = io.open(chapter["path"], encoding="utf-8").read()
+        for path, text in book_mod.read_parts(ROOT):
             if EM_DASH in text or EN_DASH in text:
-                offenders.append(chapter["name"])
+                offenders.append(os.path.basename(path))
         self.assertEqual(offenders, [])
 
-    def test_every_chapter_declares_a_part_that_parts_json_names(self):
-        parts = book_mod.read_parts(ROOT)
-        for chapter in book_mod.read_chapters(ROOT):
-            self.assertIn(chapter["part"], parts,
-                          "%s declares part %r, which parts.json does not name"
-                          % (chapter["name"], chapter["part"]))
+    def test_every_svg_figure_carries_a_title_for_a_screen_reader(self):
+        untitled = []
+        for path, text in book_mod.read_parts(ROOT):
+            for svg in re.findall(r"<svg\b.*?</svg>", text, re.DOTALL):
+                if "<title" not in svg:
+                    untitled.append(os.path.basename(path))
+        self.assertEqual(untitled, [],
+                         "every figure must be describable without seeing it")
 
-    def test_the_bindings_file_records_every_declared_renderer(self):
+    def test_the_bindings_file_records_every_declared_section(self):
         bindings = json.loads(io.open(os.path.join(ROOT, book_mod.BINDINGS_REL),
                                       encoding="utf-8").read())
-        self.assertEqual(sorted(bindings), sorted(n for n, _ in book_mod.RENDERERS))
+        expected = sorted([n for n, _ in book_mod.RENDERERS] + [book_mod.PROVENANCE])
+        self.assertEqual(sorted(bindings), expected)
 
 
 class TestCliSurface(unittest.TestCase):
@@ -322,7 +338,7 @@ class TestCliSurface(unittest.TestCase):
                               "book", "--check"],
                              capture_output=True, text=True, cwd=ROOT, timeout=180)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-        self.assertIn("FIELD BOOK DRIFT CHECK", out.stdout)
+        self.assertIn("BOOKLET DRIFT CHECK", out.stdout)
 
 
 if __name__ == "__main__":

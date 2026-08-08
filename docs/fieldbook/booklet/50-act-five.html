@@ -1,0 +1,372 @@
+<!-- =================== ACT FIVE =================== -->
+<section class="part" id="how">
+  <span class="part-label">Act five</span>
+  <h2 class="part-head">How it works, and why trust it</h2>
+  <p class="part-blurb">Now the machinery, once you have a reason to care about it. Four of the tables in this act are generated from the repository rather than typed, and a check in CI fails when a source moves without this booklet being rebuilt.</p>
+
+  <h3 id="arch">The architecture, by responsibility</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 250" role="img" aria-labelledby="arch-title">
+      <title id="arch-title">Four layers. A guided surface of slash commands sits above a command line of subcommands. Both drive a design layer and an evidence layer. Underneath, a registry of checks declares what each one reads and what its empty state is, and CI runs the same checks under strict.</title>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="0" y="8" width="300" height="42" rx="3"/><rect x="338" y="8" width="300" height="42" rx="3"/>
+        <rect x="0" y="76" width="300" height="60" rx="3"/><rect x="338" y="76" width="300" height="60" rx="3"/>
+        <rect x="0" y="162" width="638" height="42" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="14" y="28">GUIDED SURFACE</text><text x="352" y="28">COMMAND LINE</text>
+        <text x="14" y="96">DESIGN</text><text x="352" y="96">EVIDENCE</text>
+        <text x="14" y="182">THE CHECK REGISTRY</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.88">
+        <text x="14" y="44">slash commands, one recommended action at a time</text>
+        <text x="352" y="44">subcommands, what CI actually runs</text>
+        <text x="14" y="112">intake, tier, dossier, decision tables</text>
+        <text x="14" y="128">five checks over a directory</text>
+        <text x="352" y="112">receipts, four hard gates, the linter</text>
+        <text x="352" y="128">a receipt binds a run to a registered command</text>
+        <text x="14" y="198">every check declares what it reads and what its empty state is; PASS is refused as an empty state</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none">
+        <path d="M150 50 L150 74" marker-end="url(#ar)"/><path d="M488 50 L488 74" marker-end="url(#ar)"/>
+        <path d="M150 136 L150 160" marker-end="url(#ar)"/><path d="M488 136 L488 160" marker-end="url(#ar)"/>
+      </g>
+      <line x1="0" y1="222" x2="638" y2="222" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="240" fill="currentColor" opacity="0.95">Advisory in a session: print the verdict, exit zero. Enforcing in CI under --strict: exit nonzero, stop the merge.</text>
+    </svg>
+    <figcaption>The registry at the bottom is the part that makes the rest trustworthy. A check is not a function somebody remembered to call; it is an entry declaring what it reads and what verdict it returns when that evidence is absent, and the declaration is validated when the check is constructed.</figcaption>
+  </figure>
+
+  <h3 id="controls">The controls, the commands and the reviewers</h3>
+
+  <h4>The guided surface, which is where a new joiner starts</h4>
+
+  <p>Nobody on your team needs the command line to use this. These are the slash commands, and one of them is enough on day one.</p>
+
+  <p class="derived">Generated from skills/*/SKILL.md. Not typed.</p>
+<!-- BEGIN GENERATED FIELDBOOK guided-commands -->
+<div class="tw">
+<table>
+<thead><tr><th>Command</th><th>When to reach for it</th></tr></thead>
+<tbody>
+<tr><th><code>/brothersbe:adopt</code></th><td>Use when installing BrotherSBE into a repository that has not used it before, or when checking whether an existing installation is actually wired up</td></tr>
+<tr><th><code>/brothersbe:design</code></th><td>Use when the shape of a system is being decided or reviewed: a purpose brief, a process map, an architecture decision record, a technology map, a conceptual to logical to physical data model, diagrams as code, or a verification plan</td></tr>
+<tr><th><code>/brothersbe:handover</code></th><td>Use when someone wants to hand this change's ownership to another named human, or when a receiver wants to inspect and accept or reject a handover already prepared for them</td></tr>
+<tr><th><code>/brothersbe:help</code></th><td>Use when someone asks what BrotherSBE is, how it works, or which command or skill to use</td></tr>
+<tr><th><code>/brothersbe:kickoff</code></th><td>Use at the start of any backend, infrastructure, or data engineering task, before designing or writing anything</td></tr>
+<tr><th><code>/brothersbe:learn</code></th><td>Use when a lesson from an incident, a repeated correction, a review finding or a measured outcome should become a shared rule, or when a session wants to propose an amendment to the laws</td></tr>
+<tr><th><code>/brothersbe:next</code></th><td>Use when someone asks what to do next in a BrotherSBE project</td></tr>
+<tr><th><code>/brothersbe:review</code></th><td>Use when reviewing a diff, a pull request, or a colleague's change against the design it claims to implement</td></tr>
+<tr><th><code>/brothersbe:start</code></th><td>Use as the single entry point when someone wants to begin or resume work with BrotherSBE and does not know, or does not care, which command comes next</td></tr>
+<tr><th><code>/brothersbe:status</code></th><td>Use when someone wants to know where a BrotherSBE project stands</td></tr>
+<tr><th><code>/brothersbe:verify</code></th><td>Use when work is about to be called done, a figure that could reach a decision has been produced, a schema migration is part of the change, the change touches money or a partner path, or a verification plan is being written</td></tr>
+<tr><th><code>/brothersbe:work</code></th><td>Use when someone wants BrotherSBE to execute ready plan tasks with implementation workers, not just recommend or design them</td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK guided-commands -->
+
+  <p>If your team remembers one, make it <code>/brothersbe:start</code>. It reads the ground, works out whether you are resuming or beginning, and returns exactly one recommended next action: what it is, why it is the one, what happens automatically, what decision stays yours, and how success will be checked.</p>
+
+  <h4>The command line, which is what CI runs</h4>
+
+  <p class="derived">Generated from the CLI command table itself, imported rather than parsed.</p>
+<!-- BEGIN GENERATED FIELDBOOK cli-commands -->
+<div class="tw">
+<table>
+<thead><tr><th>Command</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><th><code>sbe adopt</code></th><td>inspect a repository for installation readiness, dry run by default</td></tr>
+<tr><th><code>sbe book</code></th><td>the booklet: rebuild the team explainer whose command, role, check and limit tables are derived from canonical state; `--check` fails when a bound source moved without a rebuild</td></tr>
+<tr><th><code>sbe converge</code></th><td>does the code between two commits still match the approved dossier: scope, contracts, data, architecture, verification</td></tr>
+<tr><th><code>sbe decide</code></th><td>run a decision table (delegates to sbe_decide.py)</td></tr>
+<tr><th><code>sbe design</code></th><td>the design completeness check (delegates to sbe_design.py)</td></tr>
+<tr><th><code>sbe doctor</code></th><td>check this installation and the environment it will run in</td></tr>
+<tr><th><code>sbe evidence</code></th><td>run a command and write the receipt it earned, verify one, or show one</td></tr>
+<tr><th><code>sbe exceptions</code></th><td>list exceptions, their owners and their expiry</td></tr>
+<tr><th><code>sbe explain</code></th><td>print the decision package for a decision id, or for a gate or check name, regenerating one from the shipped registry when no run has written it</td></tr>
+<tr><th><code>sbe fences</code></th><td>print the live fences the write hook would enforce</td></tr>
+<tr><th><code>sbe gate</code></th><td>one hard gate by name, or all of them over a directory</td></tr>
+<tr><th><code>sbe handover</code></th><td>explicit human handover: prepare, show, acknowledge, reject; ownership stays with the outgoing owner until a named human receiver acknowledges</td></tr>
+<tr><th><code>sbe impact</code></th><td>read the git diff and reconcile it with the declared intake tier</td></tr>
+<tr><th><code>sbe init</code></th><td>install BrotherSBE's local footprint into a repository, dry run by default</td></tr>
+<tr><th><code>sbe inspect-change</code></th><td>alias of impact, the name the finalization brief uses</td></tr>
+<tr><th><code>sbe instruction-surface</code></th><td>did a changed CLAUDE.md, .claude/**, .mcp.json, .claude-plugin/**, hooks/**, agent or skill definition, CODEOWNERS or CI workflow stay inside declared, reviewed scope (delegates to sbe_instruction_surface.py)</td></tr>
+<tr><th><code>sbe intake</code></th><td>score the five intake questions into a tier</td></tr>
+<tr><th><code>sbe lineage</code></th><td>walk the chain for one artifact oldest to newest: binding, receipts, decisions, notes and commits, with an evidence pointer on every hop</td></tr>
+<tr><th><code>sbe map</code></th><td>a deterministic, offline HTML status page built from canonical state only: sbe map --out FILE</td></tr>
+<tr><th><code>sbe plan</code></th><td>derive the task plan from a dossier and validate it (delegates to sbe_plan.py)</td></tr>
+<tr><th><code>sbe policy</code></th><td>evaluate .sbe/policy.yml against a diff: which checks, tiers and approvals this change is REQUIRED to carry, and whether they are there</td></tr>
+<tr><th><code>sbe pr</code></th><td>pull-request surfaces: pr verify &lt;number&gt; --repo owner/name checks live GitHub approval evidence, bound to the head commit</td></tr>
+<tr><th><code>sbe program</code></th><td>program-wide status from the ledger: gantt, finished, in flight, blocked, risks with mitigations, docs, budget; `check` fails when STATUS.md drifted</td></tr>
+<tr><th><code>sbe protections</code></th><td>is the repository itself protecting the control plane: protections verify --repository owner/name --branch main reads CODEOWNERS locally and the branch ruleset through gh api</td></tr>
+<tr><th><code>sbe review</code></th><td>run the scored surface including soft findings, plus the gates</td></tr>
+<tr><th><code>sbe review-route</code></th><td>deterministic reviewer selection from a diff: no model chooses, at most two specialists, zero is a legal result, never claims a clean review</td></tr>
+<tr><th><code>sbe scope</code></th><td>did the changes that survived stay inside declared scope: scope verify --base REF [--head REF] [--strict] is the CI backstop for the Bash and Stop write boundary, scope report says what the Stop hook would decide right now (delegates to sbe_session_reconcile.py)</td></tr>
+<tr><th><code>sbe score</code></th><td>the scored surface (delegates to sbe_score.py)</td></tr>
+<tr><th><code>sbe status</code></th><td>blocker-first summary of where a change stands, read from recorded state</td></tr>
+<tr><th><code>sbe task</code></th><td>the write-scope registry: open, list, fence, check, and close with the diff-against-declaration postcondition</td></tr>
+<tr><th><code>sbe verify</code></th><td>run the design check and the hard gates over a directory</td></tr>
+<tr><th><code>sbe version</code></th><td>print the version, or move every version declaration site at once (version bump &lt;new&gt;)</td></tr>
+<tr><th><code>sbe work</code></th><td>isolated implementation for one plan task: start, check, finish, remove, and never a merge</td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK cli-commands -->
+
+  <p>Out of that whole list, a working engineer touches four.</p>
+
+  <pre><code>sbe status                                    <span class="c"># where this stands, blockers first</span>
+sbe verify .                                  <span class="c"># design check plus the hard gates</span>
+sbe review                                    <span class="c"># the scored surface, soft findings included</span>
+sbe evidence run --check &lt;id&gt; -- &lt;command&gt;    <span class="c"># run a registered check, mint its receipt</span></code></pre>
+
+  <h4>The reviewers, as routing rather than a cast of characters</h4>
+
+  <p>Selection is deterministic. <code>sbe review-route</code> reads the diff and picks at most two specialists, and zero is a legal result rather than a claim of a clean review.</p>
+
+  <p class="derived">Generated from the agent definitions in agents/. Read the tools column: it is the argument.</p>
+<!-- BEGIN GENERATED FIELDBOOK roles -->
+<div class="tw">
+<table>
+<thead><tr><th>Role</th><th>What it is for</th><th>What it covers</th><th>Tools it may use</th></tr></thead>
+<tbody>
+<tr><th><code>backend-reviewer</code></th><td>Read-only backend change review</td><td>Use when a service, API, endpoint, queue consumer or transactional path changes. Covers contract compatibility, idempotency, concurrency, transaction boundaries, error paths, retries, observability and performance.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>data-reviewer</code></th><td>Read-only data and warehouse change review</td><td>Use when a data model, SQL transformation, dbt model, pipeline or reported figure changes. Covers grain, joins and fan-out, keys, systems of record, historization, reconciliation, freshness, quality and cost.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>evidence-auditor</code></th><td>Read-only audit of evidence provenance</td><td>Use when a receipt, a gate verdict, a test result, a rehearsal identifier or an approval is being relied on. Its job is to try to disprove the evidence, not to confirm it. It must never generate the evidence it audits.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>implementation-worker</code></th><td>Implementation worker for one sbe work brief</td><td>Use when a plan task has already been briefed (`sbe work brief`) and someone needs to write the code, not review it. Reads the brief, edits only inside its declared scope, runs the named verification, and returns a compact result contract. It is not a reviewer, never approves or blocks anyone else's change, and holds no merge, rebase, push or deploy rights of its own.</td><td><code>[Read, Grep, Glob, Edit, Write, Bash]</code></td></tr>
+<tr><th><code>migration-reviewer</code></th><td>Read-only database migration review</td><td>Use when a schema migration, backfill or destructive data operation is part of a change. Covers forward and reverse evidence, expand and contract compatibility, lock duration, mixed-schema deployment and rollback time.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>principal-architect</code></th><td>Read-only architecture review</td><td>Use when a system boundary, a service split, a technology choice or a reversibility question is on the table, or when an ADR needs a second opinion before it is committed to. Returns a recommendation, the first and second alternative, and what would flip it.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>qa-reviewer</code></th><td>Read-only test coverage and traceability review</td><td>Use when a change is about to be called testable or done. Maps requirements and acceptance criteria to executable tests, finds missing negative and non-functional coverage, and validates that the test evidence says what it is claimed to say.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+<tr><th><code>security-reviewer</code></th><td>Read-only security and privacy review</td><td>Use when authentication, authorization, partner APIs, money movement, file upload, secrets, dependencies or personal data are touched. Covers threat model impact, authorization coverage, secret exposure, input validation, data classification and audit logging.</td><td><code>[Read, Grep, Glob, Bash]</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK roles -->
+
+  <p>Every reviewer is read-only, holding <code>Read, Grep, Glob, Bash</code> and nothing else. Exactly one role in that table holds <code>Edit</code> and <code>Write</code>, and it is the implementation worker, which writes code and reviews nothing.</p>
+
+  <p>That separation is structural rather than instructional, and it is the cheapest control in the system. A reviewer that can edit will fix what it finds, and a finding fixed in silence is a finding nobody recorded.</p>
+
+  <h3 id="tier">The tier, and why you do not pick it</h3>
+
+  <figure>
+    <svg viewBox="0 0 640 216" role="img" aria-labelledby="tier-title">
+      <title id="tier-title">Five questions feeding a first-match-wins ladder. Sensitive or slow to reverse gives tier three and seven artifacts. A contract change or many consumers gives tier two and six. One boundary or some consumers gives tier one and the purpose brief. Otherwise tier zero, which owes nothing.</title>
+      <g class="svg-label" fill="currentColor" opacity="0.85"><text x="0" y="14">Five objective questions</text></g>
+      <line x1="0" y1="24" x2="638" y2="24" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="0" y="44">changes a contract others depend on</text>
+        <text x="0" y="60">crosses a service, system or team boundary</text>
+        <text x="0" y="76">reversible in under an hour</text>
+        <text x="0" y="92">touches money, partner data, personal data, production state</text>
+        <text x="0" y="108">how many consumers break if it is wrong</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45" fill="none"><path d="M300 76 L346 76" marker-end="url(#ar)"/></g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.42">
+        <rect x="356" y="30" width="282" height="26" rx="3"/><rect x="356" y="62" width="282" height="26" rx="3"/>
+        <rect x="356" y="94" width="282" height="26" rx="3"/><rect x="356" y="126" width="282" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="368" y="48">T3</text><text x="368" y="80">T2</text><text x="368" y="112">T1</text><text x="368" y="144">T0</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.9">
+        <text x="404" y="48">sensitive, or not reversible in an hour: all seven</text>
+        <text x="404" y="80">a contract change, or many consumers: six</text>
+        <text x="404" y="112">one boundary, or some consumers: the purpose brief</text>
+        <text x="404" y="144">none of the above: nothing at all</text>
+      </g>
+      <line x1="0" y1="170" x2="638" y2="170" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+      <text class="svg-small" x="0" y="188" fill="currentColor" opacity="0.95">First match wins, top down. T0 is the common case, and it is meant to be.</text>
+      <text class="svg-small" x="0" y="206" fill="currentColor" opacity="0.95">An override moves three fields that must agree, plus a written reason. A half-declared override fails and names the missing field.</text>
+    </svg>
+    <figcaption>A tool that taxes every change equally gets switched off in a fortnight, which is why T0 owes nothing and is expected to be most of your work. The awkwardness of the override is the design: it is not hard because somebody was punitive, it is hard because the alternative is the tier quietly becoming whatever the deadline needs.</figcaption>
+  </figure>
+
+  <h3 id="register">What is proven, and how strongly</h3>
+
+  <p>Every check that ships, with the severity it declared at write time and the verdict it returns when its evidence is absent. Severity changes the exit code and nothing else: it never changes what a check examines.</p>
+
+  <div class="tw">
+  <table class="tight">
+    <thead><tr><th>Stamp</th><th>What it means here</th></tr></thead>
+    <tbody>
+      <tr><td><span class="stamp s-certified">gate</span></td><td>A FAIL blocks a <code>--strict</code> run. This is what stops a merge.</td></tr>
+      <tr><td><span class="stamp s-beta">soft</span></td><td>A FAIL is graded and blocks only under the opt-in <code>--strict-soft</code>.</td></tr>
+      <tr><td><span class="stamp s-experimental">NO-DATA</span></td><td>The empty state. Reported by name, never decides an exit code in either direction.</td></tr>
+      <tr><td><span class="stamp s-unsupported">FAIL</span></td><td>The empty state for a check where absence is itself a broken claim.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="derived">Generated by walking the check registries, the same discovery rule the honesty meta-test applies. A check registered next year appears here the day it is registered.</p>
+<!-- BEGIN GENERATED FIELDBOOK checks -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>Check</th><th>Declared in</th><th>Severity</th><th>When its evidence is absent</th></tr></thead>
+<tbody>
+<tr><th><code>acceptance</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>adr</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>approval</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>artifacts</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>budget-vs-tier</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>cache-economy</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>calculation</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>citation-inventory</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>citations</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>compatibility</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>correction-latency</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>datamodel</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>diagrams</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>felt-outcome-ratings</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>fence-hygiene</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>freshness</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>graph</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>instruction-surface</code></th><td><code>tools/sbe_instruction_surface.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ledger-coverage</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>migration</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>migration</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>nonempty</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>numbers</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ownership</code></th><td><code>tools/sbe_plan.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>placeholder</code></th><td><code>tools/sbe_design.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-unsupported">FAIL</span></td></tr>
+<tr><th><code>prediction-seals</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>ran</code></th><td><code>tools/sbe_gate.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>release-invariant</code></th><td><code>tools/sbe_release_invariant.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>review-cadence</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>schema-2-uniform</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>silent-failure-lints</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-certified">gate</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+<tr><th><code>vault-log-per-active-day</code></th><td><code>tools/sbe_score.py</code></td><td><span class="stamp s-beta">soft</span></td><td><span class="stamp s-experimental">NO-DATA</span></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK checks -->
+
+  <p>No row in that table can carry PASS in the last column. That is not a convention anybody polices; a check declaring PASS as its empty state is refused registration at construction.</p>
+
+  <h3 id="limits">What it will not tell you</h3>
+
+  <p>The honest half of the product, collected in one place so it is not the hardest part to find. The body of each limit lives in the limits file, so there is one copy and this page cannot quietly soften it.</p>
+
+  <p class="derived">Generated from docs/KNOWN-LIMITS.md.</p>
+<!-- BEGIN GENERATED FIELDBOOK limits -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>The limit, as the project states it</th><th>Law it qualifies</th></tr></thead>
+<tbody>
+<tr><th>The spine is a discipline, not a control</th><td><em>no law named</em></td></tr>
+<tr><th>Nothing detects that a change needed an approval</th><td><code>L9</code></td></tr>
+<tr><th>This repository's own merged pull requests carry no independent review</th><td><code>L9</code></td></tr>
+<tr><th>Only one tag is published on origin</th><td><em>no law named</em></td></tr>
+<tr><th>The tier comes from answers about contracts that no checker reads</th><td><em>no law named</em></td></tr>
+<tr><th>The forcing conditions are read by a person</th><td><code>L6</code></td></tr>
+<tr><th>The fence checks read registries, not the world</th><td><code>L13</code></td></tr>
+<tr><th>The case-fold confirmation trusts one probe of the project's own volume</th><td><em>no law named</em></td></tr>
+<tr><th>Blast radius revokes nothing</th><td><code>L14</code></td></tr>
+<tr><th>The CI workflow guards nothing until you copy it</th><td><code>L16</code></td></tr>
+<tr><th>Most of the close is human</th><td><code>L17</code></td></tr>
+<tr><th>Telemetry observes, it never decides</th><td><em>no law named</em></td></tr>
+<tr><th>The UNVERIFIED label is the agent's to write</th><td><em>no law named</em></td></tr>
+<tr><th>The doc-honesty guard reads proximity, not grammar</th><td><em>no law named</em></td></tr>
+<tr><th>Published figures are derived only where a page says so</th><td><em>no law named</em></td></tr>
+<tr><th>The hollowing sweep is not a proof</th><td><em>no law named</em></td></tr>
+<tr><th>Never run in anyone else's CI</th><td><em>no law named</em></td></tr>
+<tr><th>The ledger rewrite guard leaves one instant uncovered</th><td><em>no law named</em></td></tr>
+<tr><th>The writer lock needs a filesystem that honors flock</th><td><em>no law named</em></td></tr>
+<tr><th>The approval identity proof has a measured refusal remainder</th><td><code>L9</code></td></tr>
+<tr><th>The citation check never opens a page</th><td><em>no law named</em></td></tr>
+<tr><th>Windows CI runs, with named gaps</th><td><em>no law named</em></td></tr>
+<tr><th>Windows: the install-checker family is CLOSED and proven; one new cause is open (OWED-4)</th><td><em>no law named</em></td></tr>
+<tr><th>Every threshold was measured on one estate</th><td><em>no law named</em></td></tr>
+<tr><th>The impact scan proposes a floor, and reads paths more than it reads code</th><td><em>no law named</em></td></tr>
+<tr><th>The evidence wrapper binds a run to a commit, and proves less than that sounds</th><td><em>no law named</em></td></tr>
+<tr><th>Evidence covering evidence (T6)</th><td><em>no law named</em></td></tr>
+<tr><th>The privacy controls are defaults and patterns, not guarantees</th><td><em>no law named</em></td></tr>
+<tr><th>A green bypass suite covers the scenarios it covers</th><td><em>no law named</em></td></tr>
+<tr><th>The task registry only governs writers who register</th><td><em>no law named</em></td></tr>
+<tr><th>The registry file itself has no lock</th><td><em>no law named</em></td></tr>
+<tr><th>The registry exempts its own file from the postcondition</th><td><em>no law named</em></td></tr>
+<tr><th>Task expiry is informational, and nothing writes "abandoned" yet</th><td><em>no law named</em></td></tr>
+<tr><th>The fence view is one-directional</th><td><em>no law named</em></td></tr>
+<tr><th>The adoption kit proposes, and verifies only what a filesystem can answer</th><td><em>no law named</em></td></tr>
+<tr><th>The release candidate ships packaging, not a release</th><td><em>no law named</em></td></tr>
+<tr><th>The recommended install path has an undo now, and here is exactly how much of one</th><td><em>no law named</em></td></tr>
+<tr><th>A gate exemption cannot tell a real reason from a well-formed fake one</th><td><em>no law named</em></td></tr>
+<tr><th>A dossier's binding only resolves a commit held as a loose object</th><td><em>no law named</em></td></tr>
+<tr><th>Two honest narrowings from the baseline repair (2026-07-30)</th><td><em>no law named</em></td></tr>
+<tr><th>sbe plan derives structures, not intent</th><td><em>no law named</em></td></tr>
+<tr><th>sbe work isolates, it does not merge</th><td><em>no law named</em></td></tr>
+<tr><th>pr verify reads GitHub, it does not police it</th><td><em>no law named</em></td></tr>
+<tr><th>converge compares structures, not intent</th><td><em>no law named</em></td></tr>
+<tr><th>status --team reads the estate, it does not phone anyone</th><td><em>no law named</em></td></tr>
+<tr><th>What the first external round taught converge and plan (2026-07-31)</th><td><em>no law named</em></td></tr>
+<tr><th>The zero-network scan now walks the whole tree, not only tools/</th><td><em>no law named</em></td></tr>
+<tr><th>Every suite that existed now runs in CI, except one, and that is a choice</th><td><em>no law named</em></td></tr>
+<tr><th>A hard-gate receipt with no headCommit still passes unbound</th><td><em>no law named</em></td></tr>
+<tr><th>check-update follows a linked worktree, not a broken one</th><td><em>no law named</em></td></tr>
+<tr><th>The authority-file guard cannot always tell a worker from a human (LT-402)</th><td><em>no law named</em></td></tr>
+<tr><th>The authority guard's case-fold confirmation covers named segments, not a powerset</th><td><em>no law named</em></td></tr>
+<tr><th>Per-task worktree evidence under team status and converge (LT-501; both engine gaps fixed in rc.11, one true boundary remains)</th><td><em>no law named</em></td></tr>
+<tr><th>Plugin interoperability rests on platform behavior this repository cannot drive in a test (LT-502)</th><td><em>no law named</em></td></tr>
+<tr><th>Evidence obligations under CR-06 multi-dossier status, fixed (LANE B-004)</th><td><em>no law named</em></td></tr>
+<tr><th>The no-server promise is amended to no-remote-server (2026-08-05, gate LP-0301)</th><td><em>no law named</em></td></tr>
+<tr><th>A refused overlap on `sbe task open` leaves no durable record</th><td><em>no law named</em></td></tr>
+<tr><th>Task identity becomes (change, taskId); the headline collision it closes, and what remains (card 1)</th><td><em>no law named</em></td></tr>
+<tr><th>A registered check binds a command, and cannot say the command is a good check (BR-1012)</th><td><em>no law named</em></td></tr>
+<tr><th>There is no protected evidence level in this release</th><td><em>no law named</em></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK limits -->
+
+  <div class="panel accent">
+    <h4>The four that matter most to a small team</h4>
+    <p><strong>Nothing detects that a change needed an approval.</strong> The gate verifies an approval that was declared. What you actually need is CODEOWNERS and branch protection on your own repository.</p>
+    <p><strong>Two derivations differing in text is a floor, not a proof of independence.</strong> Two queries over the same broken view agree perfectly.</p>
+    <p><strong>A rehearsal identifier is a pointer, not a resolution.</strong> Nothing calls your job system to confirm the rehearsal happened.</p>
+    <p><strong>This repository's own merged pull requests carry no independent review.</strong> Applied to its own history, the approval law reports NO-DATA, not PASS. That is disclosed rather than hidden, and it is the honest answer to whether the project practises what it sells on that one axis: not yet, and it says so.</p>
+  </div>
+
+  <p><strong>The measurement caveat.</strong> Every threshold this project ships, and every baseline in its rubric, was measured on one estate. One. They are starting points rather than constants, and the honest instruction is to re-measure them on yours.</p>
+
+  <p class="statement wide">Stating the limits is what makes the rest of the claims worth anything.</p>
+
+  <h3 id="first">Your first sprint</h3>
+
+  <p>One repository. One lane of work. Two weeks advisory, then strict. Do not roll this across an estate before one team has an opinion, because a control that arrives everywhere at once gets switched off everywhere at once the first time it is inconvenient.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>When</th><th>What you do</th><th>What you should see</th></tr></thead>
+    <tbody>
+      <tr><th>Week 0</th><td><code>sbe adopt .</code>, which is a dry run and changes nothing. Read it. Then <code>--apply</code>.</td><td>A list of what would be installed, and nothing installed until you say so.</td></tr>
+      <tr><th>Week 1</th><td>Copy the CI workflow in, without <code>--strict</code>. Run the sprint normally.</td><td>Verdicts printed, nothing blocked. This week exists to find what is noisy on your codebase.</td></tr>
+      <tr><th>Week 2</th><td>Agree two sentences out loud, as a team, before turning it on.</td><td>"A FAIL blocks, a NO-DATA does not." And: "Nobody edits the workflow to make red go away."</td></tr>
+      <tr><th>Week 3</th><td>Turn on <code>--strict</code>.</td><td>One uncomfortable pull request. That is the system working.</td></tr>
+      <tr><th>Month 3</th><td>Read the weekly review honestly.</td><td>Most changes T0. Repeated NO-DATA treated as a workflow problem rather than a tool problem. Flip conditions occasionally met.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>That second sentence in week two is the entire control. It is why <code>--strict</code> moves only by a human editing the workflow file, where a reviewer sees it in the diff, and why a session instruction can never waive a hard gate.</p>
+
+  <p class="statement">Try it on the change you would be most embarrassed to get wrong.</p>
+
+  <h4>Keeping this booklet true</h4>
+
+  <p>Four tables in this act are generated from the repository. Rebuild them at every loop close, and let CI catch you when you forget.</p>
+
+  <pre><code>sbe book            <span class="c"># regenerate every derived table</span>
+sbe book --check    <span class="c"># does any bound source disagree with this booklet</span></code></pre>
+
+  <p>Under <code>--strict</code> in CI, a bound source that moved without a rebuild is a FAIL naming the section and the file. A stale prose stamp is NO-DATA: it reports that nobody has reread the words, and it never claims the words are wrong, because no tool can compute that.</p>
+
+  <p class="derived">Provenance for this booklet is printed below, one line per generated section, naming every file it was read from.</p>
+<!-- BEGIN GENERATED FIELDBOOK provenance -->
+<div class="tw">
+<table class="tight">
+<thead><tr><th>Section</th><th>Verdict</th><th>Items</th><th>Read from</th></tr></thead>
+<tbody>
+<tr><th><code>guided-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>12</td><td><code>skills/adopt/SKILL.md</code> <code>skills/design/SKILL.md</code> <code>skills/handover/SKILL.md</code> <code>skills/help/SKILL.md</code> <code>skills/kickoff/SKILL.md</code> <code>skills/learn/SKILL.md</code> <code>skills/next/SKILL.md</code> <code>skills/review/SKILL.md</code> <code>skills/start/SKILL.md</code> <code>skills/status/SKILL.md</code> <code>skills/verify/SKILL.md</code> <code>skills/work/SKILL.md</code></td></tr>
+<tr><th><code>cli-commands</code></th><td><span class="stamp s-certified">PASS</span></td><td>33</td><td><code>src/brothersbe/cli.py</code></td></tr>
+<tr><th><code>roles</code></th><td><span class="stamp s-certified">PASS</span></td><td>8</td><td><code>agents/backend-reviewer.md</code> <code>agents/data-reviewer.md</code> <code>agents/evidence-auditor.md</code> <code>agents/implementation-worker.md</code> <code>agents/migration-reviewer.md</code> <code>agents/principal-architect.md</code> <code>agents/qa-reviewer.md</code> <code>agents/security-reviewer.md</code></td></tr>
+<tr><th><code>checks</code></th><td><span class="stamp s-certified">PASS</span></td><td>32</td><td><code>tools/sbe_plan.py</code> <code>tools/sbe_design.py</code> <code>tools/sbe_gate.py</code> <code>tools/sbe_score.py</code> <code>tools/sbe_instruction_surface.py</code> <code>tools/sbe_release_invariant.py</code></td></tr>
+<tr><th><code>limits</code></th><td><span class="stamp s-certified">PASS</span></td><td>60</td><td><code>docs/KNOWN-LIMITS.md</code></td></tr>
+</tbody></table></div>
+<!-- END GENERATED FIELDBOOK provenance -->
+</section>
+
+</main>
+</div>
+</div>

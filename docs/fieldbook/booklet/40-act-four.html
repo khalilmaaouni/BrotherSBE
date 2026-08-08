@@ -1,0 +1,95 @@
+<!-- =================== ACT FOUR =================== -->
+<section class="part" id="fit">
+  <span class="part-label">Act four</span>
+  <h2 class="part-head">Where it fits</h2>
+  <p class="part-blurb">What it optimises for, how that differs from the rest of the ecosystem, and where the boundary of the product sits.</p>
+
+  <h3 id="why-plugin">Why another Claude Code plugin</h3>
+
+  <p>Most of what exists in this space is good, and most of it is solving a different problem. The question is not which is better. It is which layer your team is missing.</p>
+
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-labelledby="map-title">
+      <title id="map-title">Four layers placed along the life of a change. A skill pack shapes how the model writes. An orchestrator coordinates who works on what. A linter and CI read the diff after it exists. BrotherSBE covers the design phase before code and the evidence gates before merge.</title>
+      <line x1="0" y1="40" x2="638" y2="40" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+      <g class="svg-label" fill="currentColor" opacity="0.85">
+        <text x="0" y="26">Decide</text><text x="180" y="26">Write</text><text x="360" y="26">Review</text><text x="524" y="26">Merge</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
+        <rect x="180" y="56" width="240" height="26" rx="3"/>
+        <rect x="120" y="90" width="220" height="26" rx="3"/>
+        <rect x="360" y="124" width="278" height="26" rx="3"/>
+        <rect x="0" y="158" width="420" height="26" rx="3"/>
+      </g>
+      <g class="svg-title" fill="currentColor">
+        <text x="192" y="74">SKILL PACK</text><text x="132" y="108">ORCHESTRATOR</text>
+        <text x="372" y="142">LINTER AND CI</text><text x="12" y="176">BROTHERSBE</text>
+      </g>
+      <g class="svg-small" fill="currentColor" opacity="0.85">
+        <text x="290" y="74">how the model writes</text><text x="252" y="108">who works on what</text>
+        <text x="486" y="142">what the diff says</text><text x="120" y="176">what must be true before the diff exists, and before it merges</text>
+      </g>
+      <g stroke="currentColor" stroke-width="1" opacity="0.35" fill="none">
+        <path d="M420 158 L600 158"/><path d="M600 158 L600 184"/><path d="M420 184 L600 184"/>
+      </g>
+      <text class="svg-small" x="430" y="176" fill="currentColor" opacity="0.85">and the gates that stop the merge</text>
+    </svg>
+    <figcaption>The layers do not compete for the same minute. If you already run a skill pack you like, keep it. This sits underneath, in the part of the timeline where the expensive decisions are made and where nothing else is looking.</figcaption>
+  </figure>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th></th><th>Skill pack</th><th>Linter, CI</th><th>Orchestrator</th><th>BrotherSBE</th></tr></thead>
+    <tbody>
+      <tr><th>Covers the phase where expensive mistakes are made</th><td>No, it shapes output</td><td>No, it reads the diff</td><td>Partly, it coordinates</td><td>Yes, six phases before verification</td></tr>
+      <tr><th>Effort is computed rather than chosen</th><td>No</td><td>Fixed for everything</td><td>No</td><td>Five questions produce a tier</td></tr>
+      <tr><th>Distinguishes absent evidence from passing evidence</th><td>No</td><td>Rarely; absent usually reads green</td><td>No</td><td>NO-DATA is a verdict, never a pass</td></tr>
+      <tr><th>Every rule names what enforces it</th><td>No</td><td>Implicitly, the rule is the code</td><td>No</td><td>Yes, and rules with no enforcer are filed as advice</td></tr>
+      <tr><th>Blocks a merge on evidence rather than on style</th><td>No</td><td>On lint findings</td><td>No</td><td>Four hard gates reading receipts</td></tr>
+      <tr><th>Domain judgement for warehouse and service work</th><td>Sometimes</td><td>No</td><td>No</td><td>Decision tables plus specialist reviewers</td></tr>
+      <tr><th>States its own limits mechanically</th><td>No</td><td>No</td><td>No</td><td>Yes, including that its own merged PRs carry no independent review</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Three of those rows are hard to copy, because they are structural rather than a matter of writing better prompts.</p>
+
+  <p><strong>Absent evidence is a verdict.</strong> Enforced when a check is written, not when it runs: a check declaring PASS as its empty state is refused registration, and a meta-test walks the registries rather than a written list.</p>
+
+  <p><strong>Every rule names its enforcer.</strong> Each law ends in <code>[checked: some_tool.py]</code> or <code>[human]</code>. That is not a documentation convention, it changes what you are permitted to believe. The spine itself is <code>[human]</code>.</p>
+
+  <p><strong>The ceremony is computed.</strong> Five objective questions, first match wins, and the declared tier is re-derived from the diff and compared. A tool that lets the person in a hurry decide how much rigour applies is a tool that applies none on the day it matters.</p>
+
+  <h3 id="summary">Pain, painkiller, medicine</h3>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>The pain</th><th>The painkiller, week one</th><th>The medicine, month three</th></tr></thead>
+    <tbody>
+      <tr><td>Your senior engineer is the design review for a machine</td><td>Design happens in six ordered phases before code, sized automatically</td><td>Decisions carry rejected alternatives and a flip condition, so they are revisited rather than re-argued</td></tr>
+      <tr><td>Done means the agent said done</td><td>Four hard gates read receipts, advisory locally, blocking in CI</td><td>Nobody on the team discusses whether something is done. They read the receipt</td></tr>
+      <tr><td>A figure nobody can re-derive</td><td>The numbers gate demands a pinned snapshot and a second derivation</td><td>Every figure reaching a decision has one, and month end stops being an argument</td></tr>
+      <tr><td>A rollback nobody has run</td><td>The migration gate demands both legs against a restored copy</td><td>Expand and contract is the default shape, and rollback time is known before it is needed</td></tr>
+      <tr><td>Checks that did not run, reported as green</td><td>NO-DATA is printed by name and never decides an exit code</td><td>Repeated NO-DATA on one check becomes a standing agenda item, because it means the evidence is not being produced</td></tr>
+      <tr><td>The same mistake, on the next project</td><td>Nothing, honestly. Week one does not fix this</td><td>A lesson becomes a shared rule only through a reviewed pull request, so no colleague's tool changes behaviour silently</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="notdo">What it does not do</h3>
+
+  <p>Stated here rather than discovered in month two.</p>
+
+  <ul>
+    <li><strong>It does not deploy.</strong> No apply rights on production state, ever. It drafts the exact command and its rollback for a human to run.</li>
+    <li><strong>It does not notice that a change needed an approval.</strong> The gate verifies an approval that was declared. A money-path change that declares nothing sails past it. What you need there is CODEOWNERS and branch protection, and neither ships here.</li>
+    <li><strong>It does not prove two derivations are independent.</strong> It proves their text differs. That is a floor.</li>
+    <li><strong>It does not resolve a rehearsal identifier</strong> against your job system. A human follows that pointer.</li>
+    <li><strong>It does not judge whether a stated reason is a good one.</strong> It checks that a reviewable reason exists and is not a refused token.</li>
+    <li><strong>It does not measure the spine.</strong> "Design before verification" and "install the check before writing the work" are disciplines. No tool computes whether you followed them.</li>
+    <li><strong>It has no opinion on visual design, typography or accessibility.</strong> Different toolchain, no overlap.</li>
+    <li><strong>It does not replace your judgement about your own domain.</strong> The datamodel check enforces that every entity names an owner. It cannot tell you that you named the wrong one.</li>
+  </ul>
+
+  <p class="statement wide">A control whose limits are hidden is a control you will over-trust at exactly the wrong moment.</p>
+</section>
