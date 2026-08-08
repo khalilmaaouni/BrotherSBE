@@ -50,9 +50,38 @@
 # outcome is a working installation, while this one's default outcome moves an
 # installation BACKWARD, and a destructive default is not a shape to inherit.
 #
-# IT REFUSES RATHER THAN GUESSES. TEN refusals, every one of them evaluated
-# BEFORE the first write, so a refused run leaves both directories byte for
-# byte as it found them:
+# WHAT --install-dir ON AN UNRECORDED DIRECTORY USED TO DO, AND WHY THAT WAS
+# REMOVED RATHER THAN KEPT. Before this fix, --install-dir replaced only the
+# directory this script operated on; the version, commit, and marketplace it
+# printed and rolled back kept coming from whichever entry the harness record
+# already had (the one install on the machine, or the first one this script
+# happened to choose among several). Pointed at a directory the record did
+# not name, the script still ran to completion: it attached A RECORDED
+# INSTALLATION'S IDENTITY to bytes that installation never produced, verified
+# and reported that identity, and exited 0. That is the defect: a rollback
+# claiming to describe the directory named on the command line while actually
+# describing a different, unrelated installation. Unrecorded directories are
+# refused now, by design (refusal 3 below), not guessed at.
+#
+# Rejected alternative: keep running, but report the directory's identity as
+# UNKNOWN instead of borrowing a recorded one, then roll back release history
+# against it anyway. That removes the false identity claim but not the
+# wrong-state action underneath it: this script would still check out git
+# history and reinstall over a directory it cannot verify was ever a
+# brothersbe install, only now silently, with nothing left to compare
+# afterward. Refusing holds the same invariant the other ten refusals hold:
+# nothing is written until this script can correctly name what it is about to
+# change. Constrain, do not widen.
+#
+# ORDERING CONSEQUENCE: on a machine with at least one brothersbe install
+# recorded, an --install-dir naming a path that is BOTH not on disk AND not a
+# recorded installPath now fails at refusal 3 (no matching record), never
+# reaching refusal 5 (not on disk). Refusal 5 only fires for a path that DOES
+# match a recorded installPath but whose directory has since been deleted.
+#
+# IT REFUSES RATHER THAN GUESSES. ELEVEN refusals, every one of them
+# evaluated BEFORE the first write, so a refused run leaves both directories
+# byte for byte as it found them:
 #
 #   1. git is not on PATH. Every step between here and the first write is a
 #      git call (rev-parse, status, tag, merge-base), so this is the boundary
@@ -62,23 +91,30 @@
 #      script reads them with python3 for the same reason install.sh parses
 #      `sbe init --json` with python3 rather than jq: python3 is already a
 #      hard prerequisite of this project and jq is not.
-#   3. the harness's installation record is missing, unreadable, or names no
+#   3. --install-dir names a directory that disagrees with the harness's own
+#      record: the record names a different installPath (or none at all) for
+#      every brothersbe install it knows about. Rejected alternative,
+#      recorded rather than taken: make the override consistent by
+#      recomputing version/commit/marketplace from the named directory
+#      itself. That widens what an unverified path can assert about itself;
+#      this script constrains instead and refuses, naming both paths.
+#   4. the harness's installation record is missing, unreadable, or names no
 #      brothersbe install (and no --install-dir was given to answer for it).
-#   4. the installation directory that record names is not on disk.
-#   5. no marketplace source is on disk for that install, so there is no git
+#   5. the installation directory that record names is not on disk.
+#   6. no marketplace source is on disk for that install, so there is no git
 #      history holding earlier releases to roll back through.
-#   6. the source is not a git clone (an extracted archive or copied tree has
+#   7. the source is not a git clone (an extracted archive or copied tree has
 #      no earlier version to return to).
-#   7. the source working tree carries uncommitted changes, which a checkout
+#   8. the source working tree carries uncommitted changes, which a checkout
 #      would clobber.
-#   8. an explicit --to names something that is not an earlier release on this
+#   9. an explicit --to names something that is not an earlier release on this
 #      line of history.
-#   9. there is no earlier release tag at all. This is the refusal this script
+#  10. there is no earlier release tag at all. This is the refusal this script
 #      exists to be honest about: a fresh install whose history carries one
 #      release has nothing to go back to, and inventing a target (the previous
 #      commit, the default branch, a tag from another line of history) would be
 #      a guess dressed as an undo.
-#  10. --apply only: `claude` is not on PATH, and re-installing the rolled-back
+#  11. --apply only: `claude` is not on PATH, and re-installing the rolled-back
 #      plugin needs it. Discovering that after the checkout would leave the
 #      source moved and the harness still loading the version it had.
 #
@@ -108,10 +144,11 @@
 #   scripts/rollback-install.sh --apply              performs the rollback and
 #                                                     verifies the INSTALLED
 #                                                     result, not the source
-#   scripts/rollback-install.sh --install-dir <path> rolls back the
-#                                                     installation at <path>
-#                                                     instead of the one the
-#                                                     harness records
+#   scripts/rollback-install.sh --install-dir <path> selects, by path, WHICH
+#                                                     recorded installation to
+#                                                     roll back; a path matching
+#                                                     no record is REFUSED
+#                                                     (refusal 3), never adopted
 #   scripts/rollback-install.sh --source-dir <path>  takes release history from
 #                                                     <path> instead of the
 #                                                     marketplace source the
@@ -205,8 +242,8 @@ fi
 # The resolver. Emits `sh` assignments this script evals, with every value
 # single-quoted and every embedded quote escaped, because a path is attacker-
 # adjacent data (it comes off disk, not out of this file) and eval of an
-# unquoted value would be a shell injection. Refusals 3, 4 and 5 are decided
-# here, where the records are actually read, and reported back as a status
+# unquoted value would be a shell injection. Refusals 3, 4, 5 and 6 are
+# decided here, where the records are actually read, and reported back as a status
 # plus a one-line reason rather than as a traceback: a boundary that cannot
 # answer says what it could not read and what to do instead.
 #
@@ -261,13 +298,13 @@ record_sha = ""
 record_key = ""
 marketplace = ""
 record_note = ""
+entries = []
 
 data, why = read_json(plugins_path, "the installed-plugin record")
 if data is None:
     record_note = why
 else:
     plugins = data.get("plugins") or {}
-    entries = []
     for key in sorted(plugins):
         if key.split("@")[0] != "brothersbe":
             continue
@@ -298,6 +335,38 @@ else:
             record_note = "%d brothersbe installs are recorded (%s); this run takes %s" % (
                 len(entries), ", ".join(sorted(k for k, _ in entries)), record_dir)
 
+# --- refusal 3: --install-dir must never borrow ANOTHER installations
+# identity. Before this check, --install-dir only ever replaced install_dir;
+# record_version, record_sha, record_key and marketplace kept coming from
+# whichever entry the harness record happened to name (record_dir above), so
+# pointing the flag at installation B while the record named A rolled B back
+# using A version, A commit, and A tag history, an A-shaped undo performed
+# against B bytes and reported as B. When the record names at least one
+# brothersbe install, the override is matched against it (by realpath, so a
+# trailing slash or a symlink cannot hide a real match) and only accepted
+# when it agrees; the matched entry own fields are then used instead of
+# "chosen", so a --install-dir naming a real but non-default entry (a second
+# scope, say) still gets its own identity rather than the first one. A
+# record naming no install at all (entries empty) has nothing to disagree
+# with, and refusal 4 below covers that case on its own.
+if install_arg and entries:
+    install_arg_real = os.path.realpath(install_arg)
+    matched = None
+    for key, item in entries:
+        path = item.get("installPath") or ""
+        if path and os.path.realpath(path) == install_arg_real:
+            matched = (key, item)
+            break
+    if matched is None:
+        refuse(3, "--install-dir %s does not match any installPath Claude Code has on record for brothersbe (%s: %s). Nothing has been changed. Rolling back a directory the harness never recorded there would attach a DIFFERENT installation version and commit identity to it, which is the wrong-install rewrite this refusal exists to prevent. Re-run without --install-dir to use the recorded installation, or point --install-dir at one of the paths just named." % (
+            install_arg, plugins_path,
+            ", ".join(sorted((item.get("installPath") or "(no installPath)") for _, item in entries))))
+    record_key, item = matched
+    record_dir = item.get("installPath") or ""
+    record_version = item.get("version") or ""
+    record_sha = item.get("gitCommitSha") or ""
+    marketplace = record_key.split("@")[-1]
+
 if install_arg:
     install_dir = install_arg
     install_source = "--install-dir"
@@ -305,13 +374,13 @@ else:
     install_dir = record_dir
     install_source = "the harness record at %s" % plugins_path
 
-# --- refusal 3:
-if not install_dir:
-    refuse(3, "Claude Code has no record of a brothersbe install on this machine (%s). Nothing has been changed. This is the record `claude plugin install` writes, so either the plugin is not installed under this HOME (%s), or you are rolling back a copy that lives somewhere else, in which case name it: --install-dir /path/to/installation." % (record_note or plugins_path, home))
-
 # --- refusal 4:
+if not install_dir:
+    refuse(4, "Claude Code has no record of a brothersbe install on this machine (%s). Nothing has been changed. This is the record `claude plugin install` writes, so either the plugin is not installed under this HOME (%s), or you are rolling back a copy that lives somewhere else, in which case name it: --install-dir /path/to/installation." % (record_note or plugins_path, home))
+
+# --- refusal 5:
 if not os.path.isdir(install_dir):
-    refuse(4, "the installation directory %s (from %s) is not on disk, so there is nothing here to roll back. Nothing has been changed. If the plugin was removed by hand, re-install it before rolling back; if it lives elsewhere, name it with --install-dir." % (install_dir, install_source))
+    refuse(5, "the installation directory %s (from %s) is not on disk, so there is nothing here to roll back. Nothing has been changed. If the plugin was removed by hand, re-install it before rolling back; if it lives elsewhere, name it with --install-dir." % (install_dir, install_source))
 
 install_dir = os.path.realpath(install_dir)
 
@@ -347,9 +416,9 @@ else:
         source_dir = install_dir
         source_from = "the installation itself, which is a git clone"
 
-# --- refusal 5:
+# --- refusal 6:
 if not source_dir or not os.path.isdir(source_dir):
-    refuse(5, "no release history is reachable for the install at %s: %s, and that installation is not itself a git clone. Nothing has been changed. A marketplace install carries no git history of its own, so the rollback needs the repository it was installed FROM; name it with --source-dir /path/to/brothersbe-repository, or re-add it with `claude plugin marketplace add <repository>`." % (install_dir, market_note or ("the source %s named is not a directory" % (source_dir or "(none)"))))
+    refuse(6, "no release history is reachable for the install at %s: %s, and that installation is not itself a git clone. Nothing has been changed. A marketplace install carries no git history of its own, so the rollback needs the repository it was installed FROM; name it with --source-dir /path/to/brothersbe-repository, or re-add it with `claude plugin marketplace add <repository>`." % (install_dir, market_note or ("the source %s named is not a directory" % (source_dir or "(none)"))))
 
 emit(STATUS="ok",
      INSTALL_DIR=install_dir,
@@ -397,7 +466,7 @@ fi
 INSTALL_DIR="$SBE_RB_INSTALL_DIR"
 SOURCE_DIR="$SBE_RB_SOURCE_DIR"
 
-# --- refusal 6: the source has to be a git clone, because every remaining
+# --- refusal 7: the source has to be a git clone, because every remaining
 # step is a git operation on it and a release tag is the only target this
 # script will accept.
 if ! git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -405,7 +474,7 @@ if ! git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     exit 1
 fi
 
-# --- refusal 7: uncommitted changes in the source. `git checkout` would
+# --- refusal 8: uncommitted changes in the source. `git checkout` would
 # either clobber them or fail halfway; refusing up front is the only outcome
 # that leaves the tree exactly as it was found.
 DIRTY=$(git -C "$SOURCE_DIR" status --porcelain 2>/dev/null || true)
@@ -457,7 +526,7 @@ is_earlier_release() {
 
 TARGET_TAG=""
 if [ -n "$TO_ARG" ]; then
-    # --- refusal 8: an explicit target is checked, never trusted.
+    # --- refusal 9: an explicit target is checked, never trusted.
     if ! is_earlier_release "$TO_ARG"; then
         echo "rollback-install: REFUSED: --to '$TO_ARG' is not an earlier release of this installation. It has to name a tag that exists in $SOURCE_DIR, is an ancestor of the installed commit ($BASIS_SHORT), and is not that same commit. Nothing has been changed. Run 'git -C $SOURCE_DIR tag --list' to see what is actually there."
         exit 1
@@ -481,7 +550,7 @@ else
     done
 fi
 
-# --- refusal 9: nothing to roll back TO. The honest end of this script, and
+# --- refusal 10: nothing to roll back TO. The honest end of this script, and
 # the reason it exists in this shape.
 if [ -z "$TARGET_TAG" ]; then
     echo "rollback-install: REFUSED: no earlier release to roll back to."
@@ -493,7 +562,7 @@ fi
 
 TARGET_VERSION=$(git -C "$SOURCE_DIR" show "$TARGET_TAG:VERSION" 2>/dev/null || printf '%s' "unknown (no VERSION file at that tag)")
 
-# --- refusal 10: (--apply only) the re-install step needs `claude`, and
+# --- refusal 11: (--apply only) the re-install step needs `claude`, and
 # discovering that AFTER the checkout would leave the source moved with the
 # harness still loading the version it had.
 if [ "$APPLY" = "1" ] && ! command -v claude >/dev/null 2>&1; then

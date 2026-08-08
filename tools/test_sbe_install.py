@@ -1103,6 +1103,56 @@ class TestRollbackInstallScript(unittest.TestCase):
         self.assertIn("--install-dir", out, out)
         self.assertNotIn("would roll back to", out, out)
 
+    def test_unrecorded_install_dir_is_refused_and_borrows_no_identity(self):
+        """--install-dir naming a real directory the harness's record does not
+        know about must be refused, never adopted: printing a recorded
+        installation's version or commit next to an unverified directory is
+        exactly the wrong-install identity borrow refusal 3 exists to
+        prevent (see the header note on what --install-dir used to do)."""
+        source, install, decoy = self._estate(["1.0.0", "1.0.1"])
+        record = self._record()
+        stray = os.path.join(self.tmp, "stray-directory")
+        os.makedirs(stray)
+        code, out, err = self._run("--install-dir", stray)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("REFUSED", out, out)
+        self.assertIn(stray, out, out)
+        self.assertIn(install, out, out)
+        # Not "record['version'] not in out": the recorded installPath itself
+        # contains the version number (.../brothersbe/1.0.1), so that bare
+        # substring is expected in the named path. What must never appear is
+        # the version stated AS AN IDENTITY, the phrasing a successful
+        # preview uses ("installed now:  version 1.0.1"), and the commit sha,
+        # which appears nowhere in a path.
+        self.assertNotIn("version %s" % record["version"], out, out)
+        self.assertNotIn(record["gitCommitSha"], out, out)
+
+    def test_install_dir_matching_a_recorded_entry_adopts_that_entrys_own_identity(self):
+        """Two installs recorded under the same key at different scopes, the
+        way a user and a project scope both hold one. --install-dir names the
+        SECOND one, which the harness would not pick by default (the resolver
+        chooses the first entry whose installPath exists); the preview must
+        report the second entry's own version, never the first (default-
+        chosen) entry's, which is the borrow refusal 3 exists to prevent."""
+        source, install1, decoy = self._estate(["1.0.0", "1.0.1"])
+        install2 = os.path.join(self.home, ".claude", "plugins", "cache",
+                                "brothersbe", "brothersbe-second", "9.9.9")
+        os.makedirs(install2)
+        record_path = os.path.join(self.home, ".claude", "plugins",
+                                   "installed_plugins.json")
+        with io.open(record_path, encoding="utf-8") as fh:
+            record = json.load(fh)
+        record["plugins"]["brothersbe@brothersbe"].append(
+            {"scope": "project", "installPath": install2, "version": "9.9.9",
+             "gitCommitSha": "d" * 40})
+        with io.open(record_path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, indent=1))
+
+        code, out, err = self._run("--install-dir", install2)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("rollback-install: installed now:  version 9.9.9", out, out)
+        self.assertNotIn("version 1.0.1", out, out)
+
     def test_an_install_with_no_release_history_is_refused(self):
         """A marketplace install whose marketplace is gone: no source, no
         history, no earlier version. Refused with the remedy, never served
