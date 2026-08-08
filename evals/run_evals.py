@@ -2013,6 +2013,53 @@ def gd_vinstall_metachar_path(root):
     return "clean tree reads clean"
 
 
+@case("a-glob-metacharacter-in-the-install-root-does-not-accuse-a-clean-tree",
+      "guard", "clean tree reads clean")
+def gd_vinstall_glob_root(root):
+    # The fourth defect of the same path-as-syntax shape in this script's
+    # history (CRLF manifest, sed regex splice, GNU coreutils escaping): both
+    # `find` walks built every exclusion as `-path "$TARGET/.claude/*"`,
+    # splicing the install root into a GLOB PATTERN. A root such as
+    # /tmp/sbe-glob/x[1]/inst turns the `[1]` directory-name fragment into a
+    # character-class test, so the intended `.claude/*` exclusion stops
+    # matching the real .claude directory: .claude/settings.json, a
+    # documented exclusion (the harness-written local config), walks through
+    # unexcluded and reports EXTRA over an installation where nothing is
+    # wrong. Fixed the same way the sed-regex splice above it was: TARGET is
+    # never fed to a pattern-matching construct again. Both walks now `cd
+    # "$TARGET"` and enumerate the relative path `.`, so every `-path`
+    # exclusion is a literal, TARGET-independent string no character in the
+    # install root can reinterpret.
+    #
+    # Calibration, run against a scratch copy with the walks reverted to
+    # `find "$TARGET" ... -path "$TARGET/.claude/*"`: this case returns "a
+    # clean tree was accused: ... 1 extra (exit 1)". With the cd-relative
+    # walk it returns "clean tree reads clean".
+    import hashlib, shutil
+    inst = os.path.join(root, "x[1]", "inst")
+    os.makedirs(os.path.join(inst, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(inst, "scripts", "verify-install.sh"))
+    write(root, os.path.join("x[1]", "inst", "hello.txt"), "hi\n")
+    write(root, os.path.join("x[1]", "inst", ".claude", "settings.json"),
+          '{"documented":"exclusion"}')
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(inst, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(inst, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    out = subprocess.run(["sh", os.path.join(inst, "scripts", "verify-install.sh"),
+                          os.path.join(inst, "CHECKSUMS.sha256"), inst],
+                         capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        return ("a clean tree was accused: %s (exit %d)"
+                % (_re_missing_extra(out.stdout), out.returncode))
+    if "%d file(s) match" % len(rels) not in out.stdout:
+        return ("the tree exited clean without verifying both files, so nothing "
+                "here establishes the paths were compared: %s" % out.stdout[-200:])
+    return "clean tree reads clean"
+
+
 @case("no-checksum-tool-is-handed-a-filename-it-would-escape", "guard",
       "both scripts hash from stdin")
 def gd_hash_from_stdin(root):
@@ -2383,6 +2430,81 @@ def gd_vinstall_symlink(root):
     if "NON-REGULAR" not in planted.stdout or "backdoor.py" not in planted.stdout:
         return "the failure does not name the symlinked module: %s" % planted.stdout[-200:]
     return "named and failed"
+
+
+@case("a-symlinked-install-root-does-not-accuse-itself", "guard", "root clean, plant caught")
+def gd_vinstall_symlinked_root(root):
+    # Defect 6, the REAL version (a prior audit misdescribed it; fixing that
+    # misdescribed version would have been scope creep, not this fix).
+    # `find "$TARGET" ...` given a symlink as its OWN starting argument, with
+    # neither -H nor -L, does not follow it: it reports the argument itself
+    # as a single `-type l` entry and does not descend into what it points at
+    # at all (confirmed directly on this project's own dev host: `find
+    # /a/symlink` prints exactly that one line, nothing beneath it). The
+    # relative-path stripping, `rel=${full#"$TARGET/"}`, could not strip that
+    # entry either, because `full` equalled `$TARGET` exactly with no
+    # trailing slash to match against, so [ -L "$full" ] fired on the ROOT
+    # and the whole installation was reported NON-REGULAR and FAILED on that
+    # one entry, every real file inside left unchecked. The comment beside
+    # the walk scopes the non-regular rule to entries INSIDE the tree, and
+    # install.sh (lines 36 and 88) says a symlinked clone is supported, so a
+    # supported installation could never pass its own verifier.
+    #
+    # `cd "$TARGET"` dereferences the symlink as part of changing into it
+    # (the kernel resolves it), so `find .` then walks the REAL directory's
+    # actual contents, and `-mindepth 1` never emits an entry for the root at
+    # all. A symlink PLANTED INSIDE the tree is still lstat'd during the walk
+    # exactly as before and is still reported, which this case checks in the
+    # same run so the fix is not proven to overcorrect into silence.
+    #
+    # Calibration, run against a scratch copy with the walks reverted to
+    # `find "$TARGET" ...` (no cd, no relative walk): the first half of this
+    # case returns "a symlinked root accused itself: ... non-regular (exit
+    # 1)". With the cd-relative walk it returns "root clean, plant caught".
+    if os.name != "posix":
+        # Same platform gap as gd_vinstall_symlink above: os.symlink writes an
+        # NTFS reparse point, and nothing here establishes that the
+        # Git-for-Windows shell's own `cd` and `find` dereference a
+        # command-line symlink argument the same way a POSIX shell does, so
+        # this case is measured on the POSIX legs only.
+        return ("PLATFORM-GAP: os.symlink writes an NTFS reparse point and "
+                "nothing here establishes that the Git-for-Windows shell's "
+                "cd/find dereference a symlinked root the same way a POSIX "
+                "shell does, so this case is measured on the POSIX legs only")
+    import hashlib, shutil
+    real = os.path.join(root, "real", "inst")
+    os.makedirs(os.path.join(real, "scripts"))
+    shutil.copy(os.path.join(_REPO, "scripts", "verify-install.sh"),
+                os.path.join(real, "scripts", "verify-install.sh"))
+    write(root, os.path.join("real", "inst", "hello.txt"), "hi\n")
+    rels = ("hello.txt", "scripts/verify-install.sh")
+    with open(os.path.join(real, "CHECKSUMS.sha256"), "w") as f:
+        for rel in rels:
+            h = hashlib.sha256(open(os.path.join(real, rel), "rb").read()).hexdigest()
+            f.write("%s  %s\n" % (h, rel))
+    link = os.path.join(root, "link")
+    os.symlink(real, link)
+    clean = subprocess.run(["sh", os.path.join(link, "scripts", "verify-install.sh"),
+                            os.path.join(link, "CHECKSUMS.sha256"), link],
+                           capture_output=True, text=True, timeout=120)
+    if clean.returncode != 0:
+        return ("a symlinked root accused itself: %s (exit %d)"
+                % (_re_missing_extra(clean.stdout), clean.returncode))
+    if "0 non-regular" not in clean.stdout:
+        return ("the symlinked root was not reported as 0 non-regular: %s"
+                % clean.stdout[-200:])
+    payload = os.path.join(root, "outside-payload.py")
+    write(root, "outside-payload.py", "print('PLANTED')\n")
+    os.symlink(payload, os.path.join(real, "planted.py"))
+    planted = subprocess.run(["sh", os.path.join(link, "scripts", "verify-install.sh"),
+                              os.path.join(link, "CHECKSUMS.sha256"), link],
+                             capture_output=True, text=True, timeout=120)
+    if planted.returncode == 0:
+        return "a symlinked plant inside a symlinked root still passes"
+    if "NON-REGULAR" not in planted.stdout or "planted.py" not in planted.stdout:
+        return ("the plant inside the symlinked root was not named: %s"
+                % planted.stdout[-200:])
+    return "root clean, plant caught"
 
 
 @case("a-symlinked-module-under-tools-fails-the-honesty-suite", "guard", "refused unwalked")
