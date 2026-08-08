@@ -1,0 +1,31 @@
+id: LOOP-3
+title: "Public surfaces say what they do"
+why: >
+  A CLI doc, a skill description, or an agent role that overstates or
+  misstates what it does is a trust defect for anyone reading it before
+  they read the code. This loop reconciles the three public-facing lanes
+  with what the tool actually does.
+persona_need: "P2 small engineering team, P4 solo engineer reading docs before code"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: in_progress
+wave: loop-3
+milestone: M1
+depends_on:
+  - "LOOP-2"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "CLI docs lane reconciled"
+  - "skills lane reconciled"
+  - "agent roles lane reconciled"
+acceptance_met: null
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "in flight, three lanes"
+risks: []
+blocked_by: []
+alerts: []

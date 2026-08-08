@@ -1,0 +1,37 @@
+id: LOOP-0
+title: "One main, staged safely"
+why: >
+  The V1 final mile starts from one clean main rather than a scatter of
+  worktree diffs nobody can point at. This loop lands that main and archives
+  what preceded it, so every later loop has a known starting point.
+persona_need: "P3 agent orchestrator, and P1 founder who needs one trustworthy main"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: done
+wave: loop-0
+milestone: M1
+depends_on: []
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "PR 30 merged"
+  - "main at 1.0.0-rc.28"
+  - "work/v1-stability retired"
+  - "45 dirty worktree diffs archived"
+acceptance_met:
+  - 0
+  - 1
+  - 2
+  - 3
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "PR 30 merged"
+  - "main at 1.0.0-rc.28"
+  - "work/v1-stability retired"
+  - "45 dirty worktree diffs archived"
+risks: []
+blocked_by: []
+alerts: []

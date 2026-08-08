@@ -1,0 +1,33 @@
+id: LOOP-6
+title: "One clean repository"
+why: >
+  A repository carrying duplicate truth (a stale plan file nobody reads
+  against a live one, branches with no owner, worktrees nobody accounts
+  for) is a repository where "current" is a guess. This loop makes the
+  repository state itself legible, including this program record and its
+  board renderer.
+persona_need: "P3 agent orchestrator, P1 founder who needs one clean repository to hand off"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: in_progress
+wave: loop-6
+milestone: M1
+depends_on:
+  - "LOOP-0"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "duplicate truth deleted"
+  - "branches and worktrees accounted for"
+  - "board renderer built inside sbe program, rendering the existing program record"
+acceptance_met:
+  - 2
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "board renderer subcommand added to sbe program, tests in tools/test_sbe_program.py green"
+risks: []
+blocked_by: []
+alerts: []

@@ -1,0 +1,32 @@
+id: LOOP-2
+title: "Install honesty"
+why: >
+  An install path that claims to work but was never run end to end is the
+  exact overclaim this project exists to refuse. This loop verifies the
+  bracket root, the symlinked root, rollback refusal, and the install.sh
+  claim, all against a real run rather than a read of the script.
+persona_need: "P4 solo engineer installing for the first time, P2 small engineering team"
+owner: fable-orchestrator
+reviewer: independent-refuter
+status: in_progress
+wave: loop-2
+milestone: M1
+depends_on:
+  - "LOOP-1"
+spec: program/MASTER-PLAN-2026-08-06.md
+acceptance:
+  - "bracket root install verified"
+  - "symlinked root install verified"
+  - "rollback refusal verified"
+  - "install.sh claim verified true"
+acceptance_met: null
+estimated_days: null
+token_budget: null
+tokens_used: null
+started_at: null
+completed_at: null
+evidence:
+  - "in flight on PR 31"
+risks: []
+blocked_by: []
+alerts: []
