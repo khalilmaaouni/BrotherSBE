@@ -2346,14 +2346,30 @@ class TestPluginSurface(unittest.TestCase):
 
     def test_every_agent_declares_itself_and_stays_read_only(self):
         """The reviewer agents claim to be read-only in their own prose. A claim
-        in prose is not a restriction, but the tools list IS one, so the two are
-        pinned together here: an agent that grows a write tool has to change this
-        test, which is the moment somebody notices. The evidence auditor matters
-        most, because an auditor that can write the evidence it approves is not
-        an auditor. A writer agent is legal ONLY when named in WRITER_AGENTS
-        above, and it must say what it is in its first two words: a worker that
-        could be mistaken for a reviewer is exactly the confusion the lean plan
-        forbids."""
+        in prose is not a restriction, but banning Write, Edit, MultiEdit and
+        NotebookEdit from the tools list IS one: an agent that grows any of
+        those four has to change this test, which is the moment somebody
+        notices. [checked: tool] for those four, and only those four.
+
+        Bash is not banned here, and six of the seven reviewers keep it: their
+        own instructions call for git history, timestamps, row counts, test
+        runs or dependency checks that Read, Grep and Glob cannot do alone.
+        Bash can also write a file (`>`, `rm`, `sed -i`), and nothing in this
+        test or in `tools` stops that. Read-only for a Bash-bearing reviewer
+        is [human]: a stated discipline in the agent's own prose, not a
+        mechanical control. principal-architect is the one reviewer with no
+        command, timestamp, or test-run need in its instructions, so it
+        carries no Bash at all, closing that gap for itself specifically
+        rather than leaving an unused write vector on the claim that the
+        agent merely does not choose to use it.
+
+        The evidence auditor matters most among the Bash-bearing six, because
+        an auditor that can write the evidence it approves is not an auditor,
+        and its read-only claim rests on the same [human] footing as the
+        other five. A writer agent is legal ONLY when named in WRITER_AGENTS
+        above, and it must say what it is in its first two words: a worker
+        that could be mistaken for a reviewer is exactly the confusion the
+        lean plan forbids."""
         write_tools = ("Write", "Edit", "MultiEdit", "NotebookEdit")
         agents = sorted(glob.glob(os.path.join(self.ROOT, "agents", "*.md")))
         reviewers = [p for p in agents
